@@ -51,11 +51,13 @@
     onProgress: null,
     onNeedAdvance: null,
     hostFn: null,
+    viewEngineFn: null,
     format: '',
     ttsHlStyle: 'highlight',
     ttsHlColor: 'grey',
 
     _pauseStartedAt: 0,
+    _pauseNeedsRespeak: false,
 
     initDone: false,
     initPromise: null,
@@ -224,7 +226,6 @@
 
   function getDrawFn() {
     var style = state.ttsHlStyle || 'highlight';
-    var engines = window.booksReaderEngines;
     // Overlayer is imported from foliate vendor; get static methods via prototype
     // We access it dynamically since it's an ES module class
     var Overlayer = null;
@@ -300,9 +301,13 @@
 
   // ── foliate-js TTS init ──────────────────────────────────────
 
+  // TTS_REWRITE: get the foliate view engine instance via callback from reader_tts_ui
+  function _getViewEngine() {
+    return (typeof state.viewEngineFn === 'function') ? state.viewEngineFn() : null;
+  }
+
   async function _initFoliateTTS() {
-    var engines = window.booksReaderEngines;
-    var eng = engines && engines.foliate || engines && engines.epub;
+    var eng = _getViewEngine();
     if (!eng) return false;
     var view = typeof eng.getFoliateView === 'function' ? eng.getFoliateView() : null;
     if (!view) return false;
@@ -328,8 +333,7 @@
   }
 
   async function _reinitFoliateTTS() {
-    var engines = window.booksReaderEngines;
-    var eng = engines && engines.foliate || engines && engines.epub;
+    var eng = _getViewEngine();
     if (!eng) return false;
     var view = typeof eng.getFoliateView === 'function' ? eng.getFoliateView() : null;
     if (!view) return false;
@@ -593,6 +597,7 @@
     state.initPromise = (async function () {
       var o = (opts && typeof opts === 'object') ? opts : {};
       state.hostFn = o.getHost || null;
+      state.viewEngineFn = o.getViewEngine || null;
       state.format = String(o.format || '').toLowerCase();
       state.onNeedAdvance = o.onNeedAdvance || null;
       state.fallbackInfo = { used: false, from: '', to: '', reason: null, at: 0 };
@@ -725,6 +730,12 @@
     _lastToggleAt = Date.now();
     state._pauseStartedAt = Date.now();
     state.engine.pause();
+    // TTS_REWRITE: verify engine actually paused — if it silently failed,
+    // audio is still audible. Force cancel + mark as needing re-speak on resume.
+    if (typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
+      try { state.engine.cancel(); } catch {}
+      state._pauseNeedsRespeak = true;
+    }
     state.status = PAUSED;
     releaseWakeLock();
     fire();
@@ -735,27 +746,32 @@
     if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
     _lastToggleAt = Date.now();
 
-    // WebSpeech long-pause workaround: cancel + re-speak from current position
-    if (state.engineId === 'webspeech') {
+    // TTS_REWRITE: if pause had to force-cancel (engine didn't obey pause),
+    // or WebSpeech was paused >10s (Chromium bug), re-speak from current position.
+    var needsRespeak = !!state._pauseNeedsRespeak;
+    if (!needsRespeak && state.engineId === 'webspeech') {
       var pauseDuration = Date.now() - (state._pauseStartedAt || 0);
-      if (pauseDuration > 10000) {
-        try { state.engine.cancel(); } catch {}
-        state.status = PLAYING;
-        state._pauseStartedAt = 0;
-        acquireWakeLock();
-        // Re-speak current block from last mark position
-        if (state.format !== 'txt' && _fol.tts) {
-          var ssml = _fol.tts.resume();
-          if (ssml) { speakCurrentBlock(ssml); }
-        } else if (state.currentText) {
-          state.engine.speak(state.currentText);
-        }
-        fire();
-        return;
+      needsRespeak = pauseDuration > 10000;
+    }
+
+    if (needsRespeak) {
+      try { state.engine.cancel(); } catch {}
+      state.status = PLAYING;
+      state._pauseStartedAt = 0;
+      state._pauseNeedsRespeak = false;
+      acquireWakeLock();
+      if (state.format !== 'txt' && _fol.tts) {
+        var ssml = _fol.tts.resume();
+        if (ssml) { speakCurrentBlock(ssml); }
+      } else if (state.currentText) {
+        state.engine.speak(state.currentText);
       }
+      fire();
+      return;
     }
 
     state._pauseStartedAt = 0;
+    state._pauseNeedsRespeak = false;
     state.engine.resume();
     state.status = PLAYING;
     acquireWakeLock();
@@ -778,6 +794,7 @@
     state.wordEnd = -1;
     state.status = IDLE;
     state._pauseStartedAt = 0;
+    state._pauseNeedsRespeak = false;
     _fol.marks = [];
     _fol.blockRange = null;
     _txt.segIdx = -1;
@@ -921,8 +938,7 @@
 
   function _getIframeSelectionRange() {
     try {
-      var engines = window.booksReaderEngines;
-      var eng = engines && (engines.foliate || engines.epub);
+      var eng = _getViewEngine();
       if (!eng || !eng.getFoliateRenderer) return null;
       var renderer = eng.getFoliateRenderer();
       if (!renderer) return null;
@@ -1045,6 +1061,7 @@
     _txt.segments = [];
     _txt.segIdx = -1;
     state.hostFn = null;
+    state.viewEngineFn = null;
     state.onNeedAdvance = null;
     state.initDone = false;
     state.initPromise = null;

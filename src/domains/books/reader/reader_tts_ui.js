@@ -47,13 +47,13 @@
 
     await tts.init({
       getHost: function () { return els.host; },
+      getViewEngine: function () { return state.engine || null; },
       format: state.book ? state.book.format : '',
       onNeedAdvance: function () {
         if (!state.engine) return Promise.resolve(false);
         // TTS_REWRITE: wait for actual relocate event instead of blind 400ms delay
         return new Promise(function (resolve) {
-          var engines = window.booksReaderEngines;
-          var eng = engines && (engines.foliate || engines.epub);
+          var eng = state.engine;
           var foliateView = (eng && typeof eng.getFoliateView === 'function') ? eng.getFoliateView() : null;
           if (!foliateView || typeof state.engine.nextSection !== 'function') {
             // Fallback for non-foliate engines
