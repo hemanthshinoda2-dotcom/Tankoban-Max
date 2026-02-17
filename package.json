@@ -1,0 +1,213 @@
+{
+    "name": "tankoban-max",
+    "version": "0.1.31",
+    "private": true,
+    "description": "Tankoban Max - Books + Comics + Videos",
+    "main": "main.js",
+    "scripts": {
+        "prestart": "..\\..\\scripts\\windows\\ensure_mpv_windows.bat",
+        "start": "electron .",
+        "predist": "..\\..\\scripts\\windows\\ensure_mpv_windows.bat",
+        "dist": "npm run release:prep && electron-builder",
+        "dist:with-static-media": "npm run release:prep && electron-builder --config.extraMetadata.buildProfile=with-static-media --config.asarUnpack[0]=node_modules/node-unrar-js/** --config.asarUnpack[1]=node_modules/ffmpeg-static/** --config.asarUnpack[2]=node_modules/ffprobe-static/**",
+        "prepack": "..\\..\\scripts\\windows\\ensure_mpv_windows.bat",
+        "pack": "npm run release:prep && electron-builder --dir",
+        "pack:folder": "electron-packager . \"Tankoban Max\" --platform=win32 --arch=x64 --out=dist --overwrite --asar --asar.unpackDir=\"resources/mpv\" --icon=build/icon.ico",
+        "zip:folder": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if(Test-Path dist\\\\Tankoban Max-win32-x64.zip){Remove-Item dist\\\\Tankoban Max-win32-x64.zip -Force}; Compress-Archive -Path 'dist\\\\Tankoban Max-win32-x64\\\\*' -DestinationPath 'dist\\\\Tankoban Max-win32-x64.zip'\"",
+        "doctor": "node tools/doctor.js",
+        "map": "node tools/repo_map.js",
+        "smoke": "node tools/smoke_check.js",
+        "phase8:verify": "node tools/books_phase8_verify.js",
+        "build:player": "cd player_qt && build_player.bat",
+        "validate:player": "node tools/validate_player_artifacts.js",
+        "release:prep": "npm run build:player && npm run validate:player"
+    },
+    "devDependencies": {
+        "electron": "30.0.0",
+        "electron-builder": "24.13.3",
+        "electron-packager": "17.1.2"
+    },
+    "build": {
+        "appId": "com.tankoban.max",
+        "productName": "Tankoban Max",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "library_scan_worker.js",
+            "books_scan_worker.js",
+            "video_scan_worker.js",
+            "workers/**/*",
+            "preload.js",
+            "main/**/*",
+            "preload/**/*",
+            "shared/**/*",
+            "resources/**/*",
+            "!resources/mpv/**/*",
+            "build/**/*",
+            "src/**/*",
+            "package.json"
+        ],
+        "asar": true,
+        "asarUnpack": [
+            "node_modules/node-unrar-js/**"
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                },
+                {
+                    "target": "portable",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "build/icon.ico"
+        },
+        "fileAssociations": [
+            {
+                "ext": "cbz",
+                "name": "CBZ",
+                "description": "Comic Book ZIP Archive",
+                "role": "Viewer"
+            },
+            {
+                "ext": "cbr",
+                "name": "CBR",
+                "description": "Comic Book RAR Archive",
+                "role": "Viewer"
+            },
+            {
+                "ext": "mp4",
+                "name": "MP4 Video",
+                "description": "MPEG-4 Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "mkv",
+                "name": "MKV Video",
+                "description": "Matroska Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "avi",
+                "name": "AVI Video",
+                "description": "AVI Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "mov",
+                "name": "MOV Video",
+                "description": "QuickTime Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "m4v",
+                "name": "M4V Video",
+                "description": "MPEG-4 Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "webm",
+                "name": "WebM Video",
+                "description": "WebM Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "ts",
+                "name": "TS Video",
+                "description": "MPEG Transport Stream",
+                "role": "Viewer"
+            },
+            {
+                "ext": "m2ts",
+                "name": "M2TS Video",
+                "description": "Blu-ray Transport Stream",
+                "role": "Viewer"
+            },
+            {
+                "ext": "wmv",
+                "name": "WMV Video",
+                "description": "Windows Media Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "flv",
+                "name": "FLV Video",
+                "description": "Flash Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "mpeg",
+                "name": "MPEG Video",
+                "description": "MPEG Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "mpg",
+                "name": "MPG Video",
+                "description": "MPEG Video",
+                "role": "Viewer"
+            },
+            {
+                "ext": "3gp",
+                "name": "3GP Video",
+                "description": "3GPP Video",
+                "role": "Viewer"
+            },
+            {
+                "description": "EPUB eBook",
+                "name": "EPUB",
+                "ext": "epub",
+                "role": "Viewer"
+            },
+            {
+                "description": "PDF Document",
+                "name": "PDF",
+                "ext": "pdf",
+                "role": "Viewer"
+            },
+            {
+                "description": "Text Document",
+                "name": "TXT",
+                "ext": "txt",
+                "role": "Viewer"
+            }
+        ],
+        "nsis": {
+            "oneClick": false,
+            "perMachine": true,
+            "allowToChangeInstallationDirectory": true,
+            "artifactName": "${productName}-Setup-${version}.${ext}"
+        },
+        "portable": {
+            "artifactName": "${productName}-${version}-${arch}-Portable.${ext}"
+        },
+        "extraResources": [
+            {
+                "from": "resources/mpv/windows",
+                "to": "mpv/windows"
+            },
+            {
+                "from": "player_qt/dist/TankobanPlayer",
+                "to": "player/TankobanPlayer"
+            }
+        ]
+    },
+    "dependencies": {
+        "@shoelace-style/shoelace": "^2.20.1",
+        "epubjs": "^0.3.93",
+        "lucide": "^0.566.0",
+        "msedge-tts": "^2.0.4",
+        "node-unrar-js": "^2.0.2",
+        "pdfjs-dist": "^3.11.174",
+        "ws": "^8.18.0"
+    },
+    "productName": "Tankoban Max"
+}

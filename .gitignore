@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+player_qt/
+resources/
+Books
+Books/
+*.log
+.DS_Store
+Thumbs.db

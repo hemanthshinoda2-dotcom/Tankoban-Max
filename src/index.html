@@ -1,0 +1,1450 @@
+<!--
+AI_NAV: index.html
+OWNERSHIP: Renderer markup skeleton. Owns the top header area, mode switch controls, and containers for library views + video stage.
+
+HOW TO NAVIGATE
+- Search: AI_ANCHOR:
+- Search: AI_HEADER / AI_VIDEO_STAGE / AI_SIDEBAR / AI_CONTINUE_SHELF
+- Navigation comments only. Do not change behavior unless a work order explicitly says so.
+
+COMMON ANCHORS
+- AI_ANCHOR: Header title element (Library)
+- AI_ANCHOR: Mode switch controls (Comics/Videos)
+- AI_ANCHOR: Video stage container (#videoStage / #mpvHost)
+- AI_ANCHOR: Continue Watching shelf container
+-->
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Tankoban</title>
+  <link rel="stylesheet" href="../node_modules/@shoelace-style/shoelace/dist/themes/light.css"/>
+  <link rel="stylesheet" href="./styles/styles.css"/>
+  <link rel="stylesheet" href="./styles/ui-tokens.css"/>
+  <link rel="stylesheet" href="./styles/ui-bridge.css"/>
+  <!-- EXPERIMENT: visual overhaul layer (loaded after baseline styles) -->
+  <link rel="stylesheet" href="./styles/overhaul.css"/>
+  <!-- Video library refinements (matches comic library UI) -->
+  <link rel="stylesheet" href="./styles/video-library-match.css"/>
+  <!-- BUILD_OVERHAUL: Books reader standard layout -->
+  <link rel="stylesheet" href="./styles/books-reader.css"/>
+  <!-- Comic reader-only UI enhancement pack -->
+</head>
+<body>
+  <!-- EXPERIMENT: background layer (purely visual; never touched by JS) -->
+  <div class="bgFx" aria-hidden="true"></div>
+  <div id="app">
+    <header class="topbar">
+      <div class="tbLeft">
+        <button id="libMenuBtn" class="iconBtn" title="Library menu" aria-label="Library menu" aria-expanded="false">Menu</button>
+        <button id="libBackBtn" class="iconBtn" title="Back" aria-label="Back">Back</button>
+        <button id="libForwardBtn" class="iconBtn" title="Forward" aria-label="Forward" disabled>Forward</button>
+        <button id="refreshBtn" class="iconBtn" title="Refresh" aria-label="Refresh">Refresh</button>
+      </div>
+
+      <div class="tbCenter">        <!-- AI_HEADER: Top bar / mode switch markup starts around here. -->
+        <!-- AI_ANCHOR: Header title and spacing issues are usually fixed in styles.css rules for this region. -->
+        <div class="modeSwitch" aria-label="Mode switch">
+          <sl-button id="modeComicsBtn" class="modeBtn active" size="small" title="Comics">Comics</sl-button>
+          <sl-button id="modeBooksBtn" class="modeBtn" size="small" title="Books">Books</sl-button>
+          <sl-button id="modeVideosBtn" class="modeBtn" size="small" title="Videos">Videos</sl-button>
+        </div>
+      </div>
+
+      <div class="tbRight">
+        <sl-button id="tileDensityBtn" class="btn btn-ghost btn-sm" size="small" title="Tile size">Tiles: Large</sl-button>
+        <sl-button id="hiddenSeriesBtn" class="btn btn-ghost btn-sm" size="small" title="Hidden series">Hidden</sl-button>
+
+        <!-- Global search across library -->
+        <div class="globalSearchWrap compact">
+          <sl-input id="globalSearch" class="search globalSearch" size="small" placeholder="Search..." autocomplete="off"></sl-input>
+          <div id="globalSearchResults" class="searchResults hidden" role="listbox" aria-label="Search results"></div>
+        </div>
+
+        <!-- Build 36: Windows provides native title bar controls now (hidden, but kept for legacy bindings). -->
+        <button id="minimizeBtn" class="iconBtn winChromeHidden" title="Minimize" aria-label="Minimize">_</button>
+        <button id="libFsBtn" class="iconBtn winChromeHidden" title="Exit fullscreen" aria-label="Exit fullscreen">Fullscreen</button>
+        <button id="closeBtn" class="iconBtn winChromeHidden" title="Close" aria-label="Close">Close</button>
+      </div>
+    </header>
+
+    <!-- Off-canvas library drawer backdrop (used when sidebar is hidden) -->
+    <div id="libDrawerBackdrop" class="drawerBackdrop" aria-hidden="true"></div>
+
+    <main>
+      <!-- Library view -->
+      <section id="libraryView" class="view">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Library navigation">
+            <div class="navSection">
+              <div class="navHeader">Libraries</div>
+              <div class="navItems">
+                <sl-button id="addRootBtn" class="navBtn" title="Add root library folder">Add root...</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Folders</div>
+              <div class="navItems">
+                <sl-button id="addSeriesBtn" class="navBtn" title="Add series folder">Add series...</sl-button>
+                <div id="sidebarFoldersTree" class="folderTree" role="tree" aria-label="Folders"></div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">App</div>
+              <div class="navItems">
+                <sl-button id="openFileBtn" class="navBtn" title="Open File">Open file...</sl-button>
+                <sl-button id="openSettingsBtn" class="navBtn" title="Settings">Settings</sl-button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="libContent">
+            <div id="homeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Reading...</div>
+                  <div class="contTools">
+                    <sl-switch id="hideFinishedToggle" class="toggle muted tiny" size="small" title="Hide finished items">Hide finished</sl-switch>
+        <div id="libraryScanPill" class="scanPill hidden" title="Refreshing library in background">
+          <span id="libraryScanText">Refreshing...</span>
+          <sl-button id="libraryScanCancel" class="scanPillBtn btn btn-ghost btn-sm" size="small" title="Cancel refresh" aria-label="Cancel refresh">Cancel</sl-button>
+        </div>
+                    <sl-button id="clearContinueBtn" class="btn btn-ghost btn-sm" size="small" title="Clear all continue items">Clear all</sl-button>
+                  </div>
+                </div>
+                <div id="continueRow" class="continueRow continueYacRow"></div>
+                <div id="continueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+
+              <div id="seriesPanel" class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Series</div>
+                </div>
+
+                <div id="seriesGrid" class="seriesGrid"></div>
+                <div id="seriesEmpty" class="muted tiny hidden">No series yet. Add a root library folder or a series folder.</div>
+              </div>
+            </div>
+
+            <div id="seriesView" class="seriesView hidden">
+              <div id="seriesDetailPanel" class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Volumes</div>
+                  <div class="crumb hidden" id="crumb">
+                    <sl-button id="seriesBackBtn" class="btn btn-ghost btn-sm" size="small">Back</sl-button>
+                    <span id="crumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <div id="volumesWrap" class="hidden volSplit">
+                  <div id="volPreviewPane" class="volPreviewPane" aria-label="Preview">
+                    <div id="volPreviewInfo" class="volPreviewInfo muted tiny">-</div>
+                    <div class="volPreviewCenter">
+                      <img id="volPreviewImg" class="volPreviewImg" alt="cover preview" />
+                    </div>
+                  </div>
+
+                  <div class="volActionStrip" role="toolbar" aria-label="Volume actions">
+                    <div class="volActionLeft">
+                      <sl-button id="volOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Open selected" aria-label="Open selected">Open</sl-button>
+                      <div class="volActionSep"></div>
+
+                      <label class="muted tiny" for="volSort">Sort</label>
+                      <sl-select id="volSort" class="select select-sm" size="small">
+                        <sl-option value="numerical">Numerical</sl-option>
+                        <sl-option value="alphabetical">Alphabetical</sl-option>
+                        <sl-option value="newest">Newest</sl-option>
+                        <sl-option value="lastread">Last read</sl-option>
+                      </sl-select>
+
+                      <sl-input id="volSearch" class="search search-sm" size="small" placeholder="Search volumes (try: vol 12)"></sl-input>
+                      <sl-button id="clearVolSearch" class="iconBtn btn btn-ghost btn-sm" size="small" title="Clear search" aria-label="Clear search">Clear</sl-button>
+                    </div>
+
+                    <div class="volActionRight">
+                      <sl-switch id="volHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
+                    </div>
+                  </div>
+
+                  <div class="volTableWrap" role="table" aria-label="Volumes">
+                    <div class="volTableHead" id="volTableHead" role="row">
+                      <div class="cell num" role="columnheader">#</div>
+                      <div class="cell title" role="columnheader">Title</div>
+                      <div class="cell file" role="columnheader">File Name</div>
+                      <div class="cell pages" role="columnheader">Pages</div>
+                      <div class="cell size" role="columnheader">Size</div>
+                      <div class="cell read" role="columnheader">Read</div>
+                      <div class="cell cur" role="columnheader">Current Page</div>
+                      <div class="cell date" role="columnheader">Publication Date</div>
+                    </div>
+
+                    <div class="volTableBody" id="volumesGrid" role="rowgroup"></div>
+                    <div id="volumesEmpty" class="muted tiny hidden">No CBZ files found in this folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Manga library tips overlay (K to toggle) -->
+        <div id="mangaLibTipsOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+          <div class="keysCard">
+            <div class="keysTop">
+              <div class="keysTitle">Tips</div>
+              <sl-button id="mangaLibTipsClose" class="btn btn-ghost btn-sm" size="small">Close</sl-button>
+            </div>
+
+            <div class="keysCols">
+              <div class="keysCol">
+                <div class="keysHead">Library</div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Actions on any tile or row</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Mark finished / in-progress</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Open volume in new window</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Clear from Continue Reading</span></div>
+                <div class="keysLine"><span class="key">Sort dropdown</span><span class="desc">Sort by numerical, alpha, newest, last read</span></div>
+                <div class="keysLine"><span class="key">Toggle</span><span class="desc">Hide finished volumes</span></div>
+                <div class="keysLine"><span class="key">Toolbar</span><span class="desc">Tile density control</span></div>
+                <div class="keysLine"><span class="key">Sidebar</span><span class="desc">Restore hidden series</span></div>
+                <div class="keysLine"><span class="key">Right-click sidebar</span><span class="desc">Rescan series for new volumes</span></div>
+                <div class="keysLine"><span class="key">Right-click row</span><span class="desc">Copy volume path</span></div>
+                <div class="keysLine"><span class="key">Arrows / Enter</span><span class="desc">Keyboard-navigate volume list</span></div>
+              </div>
+
+              <div class="keysCol">
+                <div class="keysHead">Keys</div>
+                <div class="keysLine"><span class="key">A</span><span class="desc">Add series folder</span></div>
+                <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / clear selection</span></div>
+                <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+                <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+                <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+                <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+                <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+                <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay</span></div>
+              </div>
+            </div>
+
+            <div class="keysHint muted tiny">Press K again or Escape to close.</div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Books library view -->
+      <section id="booksLibraryView" class="view hidden">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Books library navigation">
+            <div class="navSection">
+              <div class="navHeader">Libraries</div>
+              <div class="navItems">
+                <sl-button id="booksAddRootBtn" class="navBtn" title="Add root books folder">Add root...</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Folders</div>
+              <div class="navItems">
+                <sl-button id="booksAddSeriesBtn" class="navBtn" title="Add series folder">Add series...</sl-button>
+                <div id="booksFoldersList" class="folderTree" role="tree" aria-label="Folders"></div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">App</div>
+              <div class="navItems">
+                <sl-button id="booksAddFilesBtn" class="navBtn" title="Add single book files">Add files...</sl-button>
+                <sl-button id="booksRestoreHiddenBtn" class="navBtn" title="Restore hidden series" disabled aria-disabled="true">Restore hidden</sl-button>
+                <sl-button id="booksOpenFileBtn" class="navBtn" title="Open book file">Open file...</sl-button>
+                <sl-button id="booksRefreshBtn" class="navBtn" title="Refresh books library">Refresh</sl-button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="libContent">
+            <div id="booksHomeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Reading...</div>
+                  <div class="contTools">
+                    <sl-switch id="booksHideFinishedToggle" class="toggle muted tiny" size="small" title="Hide finished items">Hide finished</sl-switch>
+                    <div id="booksScanPill" class="scanPill hidden" title="Refreshing books library">
+                      <span id="booksScanText">Refreshing...</span>
+                      <sl-button id="booksScanCancel" class="scanPillBtn btn btn-ghost btn-sm" size="small" title="Cancel refresh" aria-label="Cancel refresh">Cancel</sl-button>
+                    </div>
+                  </div>
+                </div>
+                <div id="booksContinuePanel" class="continueRow continueYacRow"></div>
+                <div id="booksContinueList" class="videoContinueList"></div>
+                <div id="booksContinueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+
+              <div id="booksShowsPanel" class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Series</div>
+                  <div id="booksRootLabel" class="muted tiny">All folders</div>
+                </div>
+                <div id="booksShowsGrid" class="seriesGrid"></div>
+                <div id="booksShowsEmpty" class="muted tiny hidden">No series yet. Add a root library folder or a series folder.</div>
+              </div>
+            </div>
+
+            <div id="booksShowView" class="seriesView hidden">
+              <div id="booksShowDetailPanel" class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Volumes</div>
+                  <div class="crumb hidden" id="booksCrumb">
+                    <sl-button id="booksShowBackBtn" class="btn btn-ghost btn-sm" size="small">Back</sl-button>
+                    <span id="booksCrumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <!-- R10: folder-level continue helper -->
+                <div id="booksFolderContinue" class="booksFolderContinue hidden"></div>
+
+                <div id="booksEpisodesWrap" class="hidden volSplit">
+                  <div id="booksEpPreviewPane" class="volPreviewPane" aria-label="Preview">
+                    <div id="booksEpPreviewInfo" class="volPreviewInfo muted tiny">-</div>
+                    <div class="volPreviewCenter">
+                      <img id="booksEpPreviewImg" class="volPreviewImg" alt="book preview" />
+                    </div>
+                  </div>
+
+                  <div class="volActionStrip" role="toolbar" aria-label="Volume actions">
+                    <div class="volActionLeft">
+                      <sl-button id="booksEpOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Open selected" aria-label="Open selected">Open</sl-button>
+                      <div class="volActionSep"></div>
+                      <label class="muted tiny" for="booksEpSort">Sort</label>
+                      <sl-select id="booksEpSort" class="select select-sm" size="small">
+                        <sl-option value="title_asc">Title (A-Z)</sl-option>
+                        <sl-option value="modified_desc">Newest</sl-option>
+                        <sl-option value="modified_asc">Oldest</sl-option>
+                      </sl-select>
+                      <sl-input id="booksEpSearch" class="search search-sm" size="small" placeholder="Search volumes"></sl-input>
+                      <sl-button id="booksEpSearchClear" class="iconBtn btn btn-ghost btn-sm" size="small" title="Clear search" aria-label="Clear search">Clear</sl-button>
+                    </div>
+                    <div class="volActionRight">
+                      <sl-switch id="booksEpHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
+                    </div>
+                  </div>
+
+                  <div class="volTableWrap" role="table" aria-label="Volumes">
+                    <div id="booksEpTableHead" class="volTableHead" role="row">
+                      <div class="cell num" role="columnheader">#</div>
+                      <div class="cell title" role="columnheader">Title</div>
+                      <div class="cell size" role="columnheader">Size</div>
+                      <div class="cell duration" role="columnheader">Format</div>
+                      <div class="cell progress" role="columnheader">Progress</div>
+                      <div class="cell date" role="columnheader">Modified</div>
+                    </div>
+                    <div id="booksEpisodesGrid" class="volTableBody" role="rowgroup"></div>
+                    <div id="booksEpisodesEmpty" class="muted tiny hidden" style="padding:10px">No volumes found in this folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- R8: Books library tips overlay (K to toggle) -->
+            <div id="booksLibTipsOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+              <div class="keysCard">
+                <div class="keysTop">
+                  <div class="keysTitle">Tips</div>
+                  <sl-button id="booksLibTipsClose" class="btn btn-ghost btn-sm" size="small">Close</sl-button>
+                </div>
+                <div class="keysCols">
+                  <div class="keysCol">
+                    <div class="keysHead">Library</div>
+                    <div class="keysLine"><span class="key">Right-click series</span><span class="desc">Open, hide, mark finished, clear progress</span></div>
+                    <div class="keysLine"><span class="key">Right-click volume</span><span class="desc">Open, continue, mark finished, clear progress</span></div>
+                    <div class="keysLine"><span class="key">Double-click volume</span><span class="desc">Open in reader</span></div>
+                    <div class="keysLine"><span class="key">Sort dropdown</span><span class="desc">Sort volumes by title or date</span></div>
+                    <div class="keysLine"><span class="key">Sidebar</span><span class="desc">Restore hidden series</span></div>
+                  </div>
+                  <div class="keysCol">
+                    <div class="keysHead">Keys</div>
+                    <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+                    <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / go to home</span></div>
+                    <div class="keysLine"><span class="key">Ctrl+F</span><span class="desc">Global search</span></div>
+                    <div class="keysLine"><span class="key">Ctrl+R</span><span class="desc">Refresh library</span></div>
+                    <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+                    <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay</span></div>
+                  </div>
+                </div>
+                <div class="keysHint muted tiny">Press K again or Escape to close.</div>
+              </div>
+            </div>
+
+            <!-- BUILD_OVERHAUL: Book reader — standard layout (toolbar + sidebar + reading area + footer) -->
+            <div id="booksReaderView" class="br-reader hidden">
+
+              <!-- Toolbar (always visible) -->
+              <div class="br-toolbar">
+                <div class="br-toolbar-left">
+                  <button id="booksReaderBackBtn" class="br-btn" title="Back to library (Esc)" aria-label="Back"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.1,19.9L10.2,12l7.9-7.9L16,2L6,12l10,10L18.1,19.9z" fill="currentColor"/></svg></button>
+                  <button id="booksReaderTocNavBtn" class="br-btn" title="Toggle sidebar (O)" aria-label="Toggle sidebar"><svg viewBox="0 0 12 9" xmlns="http://www.w3.org/2000/svg"><path d="M8.40625 8.10938C8.40625 8.28342 8.33711 8.45034 8.21404 8.57341C8.09097 8.69648 7.92405 8.76562 7.75 8.76562H1.1875C1.01345 8.76562 0.846532 8.69648 0.723462 8.57341C0.600391 8.45034 0.53125 8.28342 0.53125 8.10938C0.53125 7.93533 0.600391 7.76841 0.723462 7.64534C0.846532 7.52227 1.01345 7.45312 1.1875 7.45312L7.75 7.45313C7.92405 7.45313 8.09097 7.52227 8.21404 7.64534C8.33711 7.76841 8.40625 7.93533 8.40625 8.10938ZM1.1875 5.26562L7.75 5.26563C7.92405 5.26563 8.09097 5.19648 8.21404 5.07341C8.33711 4.95034 8.40625 4.78342 8.40625 4.60938C8.40625 4.43533 8.33711 4.26841 8.21404 4.14534C8.09097 4.02227 7.92405 3.95313 7.75 3.95313L1.1875 3.95312C1.01345 3.95312 0.846532 4.02227 0.723462 4.14534C0.600391 4.26841 0.53125 4.43533 0.53125 4.60938C0.53125 4.78342 0.600391 4.95034 0.723462 5.07341C0.846532 5.19648 1.01345 5.26562 1.1875 5.26562ZM1.1875 1.76562L7.75 1.76563C7.92405 1.76563 8.09097 1.69648 8.21404 1.57341C8.33711 1.45034 8.40625 1.28342 8.40625 1.10938C8.40625 0.935327 8.33711 0.768407 8.21404 0.645336C8.09097 0.522265 7.92405 0.453125 7.75 0.453125H1.1875C1.01345 0.453125 0.846532 0.522265 0.723462 0.645336C0.600391 0.768407 0.53125 0.935327 0.53125 1.10938C0.53125 1.28342 0.600391 1.45034 0.723462 1.57341C0.846532 1.69648 1.01345 1.76562 1.1875 1.76562ZM9.9375 8.76563H10.8125C10.9865 8.76563 11.1535 8.69648 11.2765 8.57341C11.3996 8.45034 11.4688 8.28342 11.4688 8.10938C11.4688 7.93533 11.3996 7.76841 11.2765 7.64534C11.1535 7.52227 10.9865 7.45313 10.8125 7.45313L9.9375 7.45313C9.76345 7.45313 9.59653 7.52227 9.47346 7.64534C9.35039 7.76841 9.28125 7.93533 9.28125 8.10938C9.28125 8.28342 9.35039 8.45034 9.47346 8.57341C9.59653 8.69648 9.76345 8.76563 9.9375 8.76563ZM9.9375 5.26563H10.8125C10.9865 5.26563 11.1535 5.19648 11.2765 5.07341C11.3996 4.95034 11.4688 4.78342 11.4688 4.60938C11.4688 4.43533 11.3996 4.26841 11.2765 4.14534C11.1535 4.02227 10.9865 3.95313 10.8125 3.95313H9.9375C9.76345 3.95313 9.59653 4.02227 9.47346 4.14534C9.35039 4.26841 9.28125 4.43533 9.28125 4.60938C9.28125 4.78342 9.35039 4.95034 9.47346 5.07341C9.59653 5.19648 9.76345 5.26563 9.9375 5.26563ZM9.9375 1.76563H10.8125C10.9865 1.76563 11.1535 1.69648 11.2765 1.57341C11.3996 1.45034 11.4688 1.28342 11.4688 1.10938C11.4688 0.935327 11.3996 0.768407 11.2765 0.645336C11.1535 0.522265 10.9865 0.453125 10.8125 0.453125H9.9375C9.76345 0.453125 9.59653 0.522265 9.47346 0.645336C9.35039 0.768407 9.28125 0.935327 9.28125 1.10938C9.28125 1.28342 9.35039 1.45034 9.47346 1.57341C9.59653 1.69648 9.76345 1.76563 9.9375 1.76563Z" fill="currentColor"/></svg></button>
+                  <div class="br-book-meta">
+                    <div id="booksReaderTitle" class="br-title">&#8212;</div>
+                    <div id="booksReaderSubtitle" class="br-subtitle">&#8212;</div>
+                  </div>
+                </div>
+                <div class="br-toolbar-right">
+                  <button id="booksReaderTtsLaunch" class="br-btn booksReaderTtsLaunch" title="Read aloud (T)" aria-label="Read aloud"><svg viewBox="0 0 18 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.9945 2.73022C13.816 1.54418 12.3119 0.734756 10.6728 0.404562C9.03376 0.0743673 7.33356 0.238268 5.78775 0.875486C4.24194 1.5127 2.92014 2.59455 1.98989 3.98387C1.05965 5.37319 0.56286 7.00744 0.5625 8.67943V13.0544C0.5625 13.6346 0.792968 14.191 1.2032 14.6012C1.61344 15.0115 2.16984 15.2419 2.75 15.2419H4C4.58016 15.2419 5.13656 15.0115 5.5468 14.6012C5.95703 14.191 6.1875 13.6346 6.1875 13.0544V9.92943C6.1875 9.34927 5.95703 8.79287 5.5468 8.38264C5.13656 7.9724 4.58016 7.74193 4 7.74193H2.50312C2.72938 6.18012 3.51053 4.75202 4.70361 3.71905C5.89669 2.68608 7.42188 2.11734 9 2.11693H9.05C10.6211 2.12366 12.1372 2.69582 13.3211 3.72873C14.5049 4.76164 15.2773 6.18625 15.4969 7.74193H14C13.4198 7.74193 12.8634 7.9724 12.4532 8.38264C12.043 8.79287 11.8125 9.34927 11.8125 9.92943V13.0544C11.8125 13.6346 12.043 14.191 12.4532 14.6012C12.8634 15.0115 13.4198 15.2419 14 15.2419H15.25C15.5373 15.2419 15.8217 15.1854 16.0871 15.0754C16.3525 14.9655 16.5937 14.8044 16.7968 14.6012C16.9999 14.3981 17.1611 14.157 17.271 13.8916C17.3809 13.6262 17.4375 13.3417 17.4375 13.0544V8.67943C17.4418 7.57583 17.2282 6.48222 16.809 5.46133C16.3898 4.44043 15.7732 3.51232 14.9945 2.73022ZM4 9.61693C4.08288 9.61693 4.16237 9.64986 4.22097 9.70846C4.27958 9.76707 4.3125 9.84655 4.3125 9.92943V13.0544C4.3125 13.1373 4.27958 13.2168 4.22097 13.2754C4.16237 13.334 4.08288 13.3669 4 13.3669H2.75C2.66712 13.3669 2.58763 13.334 2.52903 13.2754C2.47042 13.2168 2.4375 13.1373 2.4375 13.0544V9.61693H4ZM15.5625 13.0544C15.5625 13.1373 15.5296 13.2168 15.471 13.2754C15.4124 13.334 15.3329 13.3669 15.25 13.3669H14C13.9171 13.3669 13.8376 13.334 13.779 13.2754C13.7204 13.2168 13.6875 13.1373 13.6875 13.0544V9.92943C13.6875 9.84655 13.7204 9.76707 13.779 9.70846C13.8376 9.64986 13.9171 9.61693 14 9.61693H15.5625V13.0544Z" fill="currentColor"/></svg></button>
+                  <button id="booksReaderSearchBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="search" title="Search (Ctrl+F)" aria-label="Search"><svg viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg"><path d="M0 0.75C0 0.551088 0.0790178 0.360322 0.21967 0.21967C0.360322 0.0790178 0.551088 0 0.75 0H17.25C17.4489 0 17.6397 0.0790178 17.7803 0.21967C17.921 0.360322 18 0.551088 18 0.75C18 0.948912 17.921 1.13968 17.7803 1.28033C17.6397 1.42098 17.4489 1.5 17.25 1.5H0.75C0.551088 1.5 0.360322 1.42098 0.21967 1.28033C0.0790178 1.13968 0 0.948912 0 0.75ZM0.75 7.5H7.5C7.69891 7.5 7.88968 7.42098 8.03033 7.28033C8.17098 7.13968 8.25 6.94891 8.25 6.75C8.25 6.55109 8.17098 6.36032 8.03033 6.21967C7.88968 6.07902 7.69891 6 7.5 6H0.75C0.551088 6 0.360322 6.07902 0.21967 6.21967C0.0790178 6.36032 0 6.55109 0 6.75C0 6.94891 0.0790178 7.13968 0.21967 7.28033C0.360322 7.42098 0.551088 7.5 0.75 7.5ZM9 12H0.75C0.551088 12 0.360322 12.079 0.21967 12.2197C0.0790178 12.3603 0 12.5511 0 12.75C0 12.9489 0.0790178 13.1397 0.21967 13.2803C0.360322 13.421 0.551088 13.5 0.75 13.5H9C9.19891 13.5 9.38968 13.421 9.53033 13.2803C9.67098 13.1397 9.75 12.9489 9.75 12.75C9.75 12.5511 9.67098 12.3603 9.53033 12.2197C9.38968 12.079 9.19891 12 9 12ZM19.2806 13.2806C19.211 13.3504 19.1283 13.4057 19.0372 13.4434C18.9462 13.4812 18.8486 13.5006 18.75 13.5006C18.6514 13.5006 18.5538 13.4812 18.4628 13.4434C18.3717 13.4057 18.289 13.3504 18.2194 13.2806L16.3125 11.3775C15.537 11.8891 14.5993 12.0947 13.6809 11.9543C12.7625 11.814 11.9289 11.3377 11.3416 10.6179C10.7544 9.89799 10.4552 8.98574 10.5022 8.05789C10.5491 7.13004 10.9388 6.25265 11.5957 5.59572C12.2526 4.93879 13.13 4.5491 14.0579 4.50216C14.9857 4.45522 15.898 4.75437 16.6179 5.34164C17.3377 5.92891 17.814 6.7625 17.9543 7.68088C18.0947 8.59925 17.8891 9.53703 17.3775 10.3125L19.2806 12.2156C19.3509 12.2853 19.4067 12.3683 19.4448 12.4597C19.4829 12.5511 19.5025 12.6491 19.5025 12.7481C19.5025 12.8471 19.4829 12.9452 19.4448 13.0366C19.4067 13.128 19.3509 13.2109 19.2806 13.2806ZM14.25 10.5C14.695 10.5 15.13 10.368 15.5 10.1208C15.87 9.87357 16.1584 9.52217 16.3287 9.11104C16.499 8.6999 16.5436 8.2475 16.4568 7.81105C16.37 7.37459 16.1557 6.97368 15.841 6.65901C15.5263 6.34434 15.1254 6.13005 14.689 6.04323C14.2525 5.95642 13.8001 6.00097 13.389 6.17127C12.9778 6.34157 12.6264 6.62996 12.3792 6.99997C12.132 7.36998 12 7.80499 12 8.25C12 8.84674 12.2371 9.41903 12.659 9.84099C13.081 10.2629 13.6533 10.5 14.25 10.5Z" fill="currentColor"/></svg></button>
+                  <button id="booksReaderFontBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="font" title="Font settings (?)" aria-label="Font settings"><svg viewBox="0 0 20 21" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#cTF)"><rect x="0.94" y="1.89605" width="18.12" height="18.1161" rx="1.06" stroke="currentColor" stroke-width="1.88" fill="none"/><path d="M4.60101 17.113C4.71254 17.1658 4.8334 17.1961 4.95666 17.2021C5.07992 17.2081 5.20315 17.1897 5.31928 17.1479C5.43542 17.1062 5.54217 17.042 5.63341 16.9589C5.72466 16.8758 5.7986 16.7755 5.85101 16.6638L7.06585 14.0771H12.9346L14.1518 16.6638C14.2577 16.8888 14.4486 17.0625 14.6826 17.1468C14.9166 17.231 15.1744 17.2189 15.3994 17.113C15.6245 17.0071 15.7982 16.8162 15.8825 16.5822C15.9667 16.3482 15.9545 16.0904 15.8487 15.8653L10.8487 5.24034C10.773 5.07928 10.653 4.94309 10.5027 4.8477C10.3525 4.75232 10.1782 4.70166 10.0002 4.70166C9.82226 4.70166 9.64797 4.75232 9.49773 4.8477C9.34748 4.94309 9.2275 5.07928 9.15179 5.24034L4.15179 15.8653C4.09934 15.9768 4.06935 16.0974 4.06354 16.2204C4.05773 16.3434 4.07622 16.4664 4.11793 16.5822C4.15965 16.6981 4.22378 16.8046 4.30667 16.8957C4.38956 16.9867 4.48957 17.0606 4.60101 17.113ZM10.0002 7.84112L12.0526 12.2021H7.94788L10.0002 7.84112Z" fill="currentColor"/></g><defs><clipPath id="cTF"><rect width="20" height="20" fill="currentColor" transform="translate(0 0.954102)"/></clipPath></defs></svg></button>
+                  <button id="booksReaderThemeBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="theme" title="Theme settings" aria-label="Theme settings"><svg viewBox="0 0 11 10" xmlns="http://www.w3.org/2000/svg"><path d="M10.875 0.5C10.875 0.400544 10.8355 0.305161 10.7652 0.234835C10.6949 0.164509 10.5995 0.125 10.5 0.125C8.43379 0.125 6.31363 2.45516 5.13613 3.99828C4.7156 3.86949 4.27073 3.84112 3.83725 3.91544C3.40376 3.98977 2.99375 4.16472 2.64014 4.42624C2.28654 4.68777 1.99919 5.02857 1.80119 5.42129C1.60318 5.81401 1.50004 6.24769 1.50004 6.6875C1.50004 8.135 0.584103 8.78422 0.540509 8.81422C0.473988 8.85914 0.423635 8.92421 0.396855 8.99988C0.370074 9.07555 0.368278 9.15781 0.391732 9.23458C0.415187 9.31134 0.462652 9.37855 0.52715 9.42633C0.591648 9.47411 0.669774 9.49993 0.750041 9.5H4.31254C4.75235 9.5 5.18603 9.39686 5.57875 9.19885C5.97147 9.00085 6.31227 8.7135 6.5738 8.3599C6.83532 8.00629 7.01027 7.59628 7.0846 7.16279C7.15892 6.72931 7.13055 6.28444 7.00176 5.86391C8.54535 4.68641 10.875 2.56625 10.875 0.5ZM4.31254 8.75H1.62332C1.93973 8.30047 2.25004 7.62125 2.25004 6.6875C2.25004 6.27958 2.371 5.88081 2.59763 5.54164C2.82427 5.20246 3.14638 4.9381 3.52326 4.782C3.90013 4.62589 4.31483 4.58505 4.71491 4.66463C5.115 4.74421 5.4825 4.94065 5.77095 5.22909C6.05939 5.51754 6.25583 5.88504 6.33541 6.28513C6.41499 6.68521 6.37415 7.09991 6.21804 7.47678C6.06194 7.85366 5.79758 8.17578 5.4584 8.40241C5.11923 8.62904 4.72046 8.75 4.31254 8.75ZM5.83223 4.32266C5.99285 4.11453 6.15051 3.91844 6.3052 3.73438C6.68382 3.99018 7.00986 4.31622 7.26567 4.69484C7.08129 4.84922 6.8852 5.00688 6.67738 5.16781C6.45886 4.82929 6.17075 4.54118 5.83223 4.32266ZM7.83379 4.19703C7.55068 3.79756 7.20201 3.44889 6.80254 3.16578C8.29223 1.54719 9.41582 1.05641 10.0791 0.92C9.94551 1.58375 9.45238 2.70734 7.83379 4.19703Z" fill="currentColor"/></svg></button>
+                  <button id="booksReaderFsBtn" class="br-btn" title="Toggle fullscreen (F)" aria-label="Toggle fullscreen"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M21.7092 2.29502C21.8041 2.3904 21.8757 2.50014 21.9241 2.61722C21.9727 2.73425 21.9996 2.8625 22 2.997L22 3V9C22 9.55228 21.5523 10 21 10C20.4477 10 20 9.55228 20 9V5.41421L14.7071 10.7071C14.3166 11.0976 13.6834 11.0976 13.2929 10.7071C12.9024 10.3166 12.9024 9.68342 13.2929 9.29289L18.5858 4H15C14.4477 4 14 3.55228 14 3C14 2.44772 14.4477 2 15 2H20.9998C21.2749 2 21.5242 2.11106 21.705 2.29078L21.7092 2.29502Z" fill="currentColor"/><path d="M10.7071 14.7071L5.41421 20H9C9.55228 20 10 20.4477 10 21C10 21.5523 9.55228 22 9 22H3.00069L2.997 22C2.74301 21.9992 2.48924 21.9023 2.29502 21.7092L2.29078 21.705C2.19595 21.6096 2.12432 21.4999 2.07588 21.3828C2.02699 21.2649 2 21.1356 2 21V15C2 14.4477 2.44772 14 3 14C3.55228 14 4 14.4477 4 15V18.5858L9.29289 13.2929C9.68342 12.9024 10.3166 12.9024 10.7071 13.2929C11.0976 13.6834 11.0976 14.3166 10.7071 14.7071Z" fill="currentColor"/></svg></button>
+                  <button id="booksReaderCloseBtn" class="br-btn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                </div>
+              </div>
+
+              <!-- Main area: sidebar + reading -->
+              <div class="br-main">
+                <!-- Sidebar (collapsible, tabbed) -->
+                <aside id="booksSidebar" class="br-sidebar collapsed">
+                  <!-- Tab strip -->
+                  <div class="br-sidebar-tabs" role="tablist" aria-label="Sidebar navigation">
+                    <button class="br-sidebar-tab active" data-sidebar-tab="toc" role="tab" aria-selected="true" title="Table of Contents"><svg viewBox="0 0 12 9" xmlns="http://www.w3.org/2000/svg"><path d="M8.40625 8.10938C8.40625 8.28342 8.33711 8.45034 8.21404 8.57341C8.09097 8.69648 7.92405 8.76562 7.75 8.76562H1.1875C1.01345 8.76562 0.846532 8.69648 0.723462 8.57341C0.600391 8.45034 0.53125 8.28342 0.53125 8.10938C0.53125 7.93533 0.600391 7.76841 0.723462 7.64534C0.846532 7.52227 1.01345 7.45312 1.1875 7.45312L7.75 7.45313C7.92405 7.45313 8.09097 7.52227 8.21404 7.64534C8.33711 7.76841 8.40625 7.93533 8.40625 8.10938ZM1.1875 5.26562L7.75 5.26563C7.92405 5.26563 8.09097 5.19648 8.21404 5.07341C8.33711 4.95034 8.40625 4.78342 8.40625 4.60938C8.40625 4.43533 8.33711 4.26841 8.21404 4.14534C8.09097 4.02227 7.92405 3.95313 7.75 3.95313L1.1875 3.95312C1.01345 3.95312 0.846532 4.02227 0.723462 4.14534C0.600391 4.26841 0.53125 4.43533 0.53125 4.60938C0.53125 4.78342 0.600391 4.95034 0.723462 5.07341C0.846532 5.19648 1.01345 5.26562 1.1875 5.26562ZM1.1875 1.76562L7.75 1.76563C7.92405 1.76563 8.09097 1.69648 8.21404 1.57341C8.33711 1.45034 8.40625 1.28342 8.40625 1.10938C8.40625 0.935327 8.33711 0.768407 8.21404 0.645336C8.09097 0.522265 7.92405 0.453125 7.75 0.453125H1.1875C1.01345 0.453125 0.846532 0.522265 0.723462 0.645336C0.600391 0.768407 0.53125 0.935327 0.53125 1.10938C0.53125 1.28342 0.600391 1.45034 0.723462 1.57341C0.846532 1.69648 1.01345 1.76562 1.1875 1.76562ZM9.9375 8.76563H10.8125C10.9865 8.76563 11.1535 8.69648 11.2765 8.57341C11.3996 8.45034 11.4688 8.28342 11.4688 8.10938C11.4688 7.93533 11.3996 7.76841 11.2765 7.64534C11.1535 7.52227 10.9865 7.45313 10.8125 7.45313L9.9375 7.45313C9.76345 7.45313 9.59653 7.52227 9.47346 7.64534C9.35039 7.76841 9.28125 7.93533 9.28125 8.10938C9.28125 8.28342 9.35039 8.45034 9.47346 8.57341C9.59653 8.69648 9.76345 8.76563 9.9375 8.76563ZM9.9375 5.26563H10.8125C10.9865 5.26563 11.1535 5.19648 11.2765 5.07341C11.3996 4.95034 11.4688 4.78342 11.4688 4.60938C11.4688 4.43533 11.3996 4.26841 11.2765 4.14534C11.1535 4.02227 10.9865 3.95313 10.8125 3.95313H9.9375C9.76345 3.95313 9.59653 4.02227 9.47346 4.14534C9.35039 4.26841 9.28125 4.43533 9.28125 4.60938C9.28125 4.78342 9.35039 4.95034 9.47346 5.07341C9.59653 5.19648 9.76345 5.26563 9.9375 5.26563ZM9.9375 1.76563H10.8125C10.9865 1.76563 11.1535 1.69648 11.2765 1.57341C11.3996 1.45034 11.4688 1.28342 11.4688 1.10938C11.4688 0.935327 11.3996 0.768407 11.2765 0.645336C11.1535 0.522265 10.9865 0.453125 10.8125 0.453125H9.9375C9.76345 0.453125 9.59653 0.522265 9.47346 0.645336C9.35039 0.768407 9.28125 0.935327 9.28125 1.10938C9.28125 1.28342 9.35039 1.45034 9.47346 1.57341C9.59653 1.69648 9.76345 1.76563 9.9375 1.76563Z" fill="currentColor"/></svg><span class="br-sidebar-tab-label">Contents</span></button>
+                    <div class="br-sidebar-tab-sep"></div>
+                    <button class="br-sidebar-tab" data-sidebar-tab="bookmarks" role="tab" aria-selected="false" title="Bookmarks"><svg viewBox="0 0 12 17" xmlns="http://www.w3.org/2000/svg"><path d="M10.375 0.742188H1.625C1.2106 0.742188 0.813171 0.906808 0.520146 1.19983C0.22712 1.49286 0.0625001 1.89029 0.0625001 2.30469V16.0547C0.0624439 16.2221 0.107198 16.3864 0.192114 16.5306C0.277031 16.6749 0.399013 16.7937 0.545392 16.8749C0.691772 16.9561 0.857211 16.9966 1.02453 16.9922C1.19185 16.9878 1.35494 16.9387 1.49688 16.85L5.99922 14.0375L10.5031 16.85C10.6451 16.9387 10.8082 16.9878 10.9755 16.9922C11.1428 16.9966 11.3082 16.9561 11.4546 16.8749C11.601 16.7937 11.723 16.6749 11.8079 16.5306C11.8928 16.3864 11.9376 16.2221 11.9375 16.0547V2.30469C11.9375 1.89029 11.7729 1.49286 11.4799 1.19983C11.1868 0.906808 10.7894 0.742188 10.375 0.742188ZM10.0625 14.3633L6.49609 12.1344C6.3471 12.0413 6.17492 11.9919 5.99922 11.9919C5.82351 11.9919 5.65134 12.0413 5.50234 12.1344L1.9375 14.3633V2.61719H10.0625V14.3633Z" fill="currentColor"/></svg><span class="br-sidebar-tab-label">Bookmarks</span></button>
+                    <button class="br-sidebar-tab" data-sidebar-tab="annotations" role="tab" aria-selected="false" title="Notes"><svg viewBox="0 0 12 13" xmlns="http://www.w3.org/2000/svg"><path d="M8.40625 6.39062C8.40625 6.56467 8.33711 6.73159 8.21404 6.85466C8.09097 6.97773 7.92405 7.04688 7.75 7.04688H4.25C4.07595 7.04688 3.90903 6.97773 3.78596 6.85466C3.66289 6.73159 3.59375 6.56467 3.59375 6.39062C3.59375 6.21658 3.66289 6.04966 3.78596 5.92659C3.90903 5.80352 4.07595 5.73438 4.25 5.73438H7.75C7.92405 5.73438 8.09097 5.80352 8.21404 5.92659C8.33711 6.04966 8.40625 6.21658 8.40625 6.39062ZM7.75 7.92188H4.25C4.07595 7.92188 3.90903 7.99102 3.78596 8.11409C3.66289 8.23716 3.59375 8.40408 3.59375 8.57812C3.59375 8.75217 3.66289 8.91909 3.78596 9.04216C3.90903 9.16523 4.07595 9.23438 4.25 9.23438H7.75C7.92405 9.23438 8.09097 9.16523 8.21404 9.04216C8.33711 8.91909 8.40625 8.75217 8.40625 8.57812C8.40625 8.40408 8.33711 8.23716 8.21404 8.11409C8.09097 7.99102 7.92405 7.92188 7.75 7.92188ZM11.0312 2.23438V10.5469C11.0312 11.069 10.8238 11.5698 10.4546 11.939C10.0854 12.3082 9.58465 12.5156 9.0625 12.5156H2.9375C2.41535 12.5156 1.9146 12.3082 1.54538 11.939C1.17617 11.5698 0.96875 11.069 0.96875 10.5469V2.23438C0.96875 1.94429 1.08398 1.66609 1.2891 1.46098C1.49422 1.25586 1.77242 1.14062 2.0625 1.14062H2.9375V0.921875C2.9375 0.747827 3.00664 0.580907 3.12971 0.457836C3.25278 0.334765 3.4197 0.265625 3.59375 0.265625C3.7678 0.265625 3.93472 0.334765 4.05779 0.457836C4.18086 0.580907 4.25 0.747827 4.25 0.921875V1.14062H5.34375V0.921875C5.34375 0.747827 5.41289 0.580907 5.53596 0.457836C5.65903 0.334765 5.82595 0.265625 6 0.265625C6.17405 0.265625 6.34097 0.334765 6.46404 0.457836C6.58711 0.580907 6.65625 0.747827 6.65625 0.921875V1.14062H7.75V0.921875C7.75 0.747827 7.81914 0.580907 7.94221 0.457836C8.06528 0.334765 8.2322 0.265625 8.40625 0.265625C8.5803 0.265625 8.74722 0.334765 8.87029 0.457836C8.99336 0.580907 9.0625 0.747827 9.0625 0.921875V1.14062H9.9375C10.2276 1.14062 10.5058 1.25586 10.7109 1.46098C10.916 1.66609 11.0312 1.94429 11.0312 2.23438ZM9.71875 2.45312H9.0625V2.67188C9.0625 2.84592 8.99336 3.01284 8.87029 3.13591C8.74722 3.25898 8.5803 3.32812 8.40625 3.32812C8.2322 3.32812 8.06528 3.25898 7.94221 3.13591C7.81914 3.01284 7.75 2.84592 7.75 2.67188V2.45312H6.65625V2.67188C6.65625 2.84592 6.58711 3.01284 6.46404 3.13591C6.34097 3.25898 6.17405 3.32812 6 3.32812C5.82595 3.32812 5.65903 3.25898 5.53596 3.13591C5.41289 3.01284 5.34375 2.84592 5.34375 2.67188V2.45312H4.25V2.67188C4.25 2.84592 4.18086 3.01284 4.05779 3.13591C3.93472 3.25898 3.7678 3.32812 3.59375 3.32812C3.4197 3.32812 3.25278 3.25898 3.12971 3.13591C3.00664 3.01284 2.9375 2.84592 2.9375 2.67188V2.45312H2.28125V10.5469C2.28125 10.7209 2.35039 10.8878 2.47346 11.0109C2.59653 11.134 2.76345 11.2031 2.9375 11.2031H9.0625C9.23655 11.2031 9.40347 11.134 9.52654 11.0109C9.64961 10.8878 9.71875 10.7209 9.71875 10.5469V2.45312Z" fill="currentColor"/></svg><span class="br-sidebar-tab-label">Notes</span></button>
+                  </div>
+                  <!-- Content panels -->
+                  <div class="br-sidebar-content">
+                    <!-- TOC pane -->
+                    <div class="br-sidebar-pane" data-pane="toc">
+                      <div style="padding:8px 10px">
+                        <input id="booksTocSearch" class="br-search-input" placeholder="Filter chapters..." autocomplete="off" />
+                      </div>
+                      <div id="booksTocList" class="br-list" role="listbox" aria-label="Table of contents"></div>
+                    </div>
+                    <!-- Bookmarks pane -->
+                    <div class="br-sidebar-pane hidden" data-pane="bookmarks">
+                      <div class="br-bookmark-actions">
+                        <button id="booksUtilBookmarkToggle" class="br-bookmark-toggle" title="Toggle bookmark at current page">&#9734; Bookmark this page</button>
+                      </div>
+                      <div id="booksUtilBookmarkList" class="br-list" role="listbox" aria-label="Bookmarks"></div>
+                    </div>
+                    <!-- Annotations pane -->
+                    <div class="br-sidebar-pane hidden" data-pane="annotations">
+                      <div id="booksUtilAnnotationList" class="br-list" role="listbox" aria-label="Annotations"></div>
+                    </div>
+                  </div>
+                </aside>
+
+                <!-- Reading area -->
+                <div class="br-reading-area">
+                  <!-- Nav arrow left -->
+                  <button id="booksReaderPrevBtn" class="br-nav-arrow br-nav-left" title="Previous page (&#8592;)" aria-label="Previous page"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.1,19.9L10.2,12l7.9-7.9L16,2L6,12l10,10L18.1,19.9z" fill="currentColor"/></svg></button>
+
+                  <!-- Host (foliate mounts here — clearHost() empties this, so overlays live outside) -->
+                  <div id="booksReaderHost" class="br-host"></div>
+                    <!-- TTS bar (floats over host) -->
+                    <div id="booksReaderTtsBar" class="booksReaderTtsBar hidden" role="toolbar" aria-label="TTS controls">
+                      <button id="booksReaderTtsBack10" class="iconBtn booksReaderTtsBtn" title="Back 10s (~approx)" aria-label="Back 10 seconds"><svg viewBox="0 0 18 17" xmlns="http://www.w3.org/2000/svg"><path d="M17.8125 8.55482C17.8127 10.6088 17.004 12.5803 15.5614 14.0424C14.1188 15.5046 12.1585 16.3398 10.1047 16.3673H10C8.00552 16.3715 6.08591 15.6081 4.63906 14.2353C4.45828 14.0646 4.35273 13.829 4.34562 13.5804C4.33851 13.3319 4.43044 13.0907 4.60117 12.9099C4.7719 12.7291 5.00746 12.6236 5.25602 12.6165C5.50458 12.6094 5.74578 12.7013 5.92656 12.872C6.77519 13.6732 7.84111 14.2065 8.99112 14.4053C10.1411 14.6041 11.3242 14.4596 12.3926 13.9898C13.4609 13.5201 14.3671 12.7459 14.998 11.764C15.6288 10.7821 15.9563 9.63604 15.9395 8.46909C15.9227 7.30214 15.5623 6.16602 14.9035 5.2027C14.2446 4.23939 13.3165 3.4916 12.2351 3.05279C11.1536 2.61397 9.96684 2.5036 8.82303 2.73545C7.67922 2.9673 6.62911 3.53109 5.80391 4.35638C5.79375 4.36654 5.78438 4.37591 5.77344 4.38529L4.28828 5.74232H5.625C5.87364 5.74232 6.1121 5.84109 6.28791 6.01691C6.46373 6.19272 6.5625 6.43118 6.5625 6.67982C6.5625 6.92846 6.46373 7.16692 6.28791 7.34273C6.1121 7.51855 5.87364 7.61732 5.625 7.61732H1.875C1.62636 7.61732 1.3879 7.51855 1.21209 7.34273C1.03627 7.16692 0.9375 6.92846 0.9375 6.67982V2.92982C0.9375 2.68118 1.03627 2.44272 1.21209 2.26691C1.3879 2.09109 1.62636 1.99232 1.875 1.99232C2.12364 1.99232 2.3621 2.09109 2.53791 2.26691C2.71373 2.44272 2.8125 2.68118 2.8125 2.92982V4.54857L4.49062 3.01263C5.58508 1.92406 6.97748 1.18411 8.49209 0.886166C10.0067 0.588224 11.5756 0.74565 13.0008 1.33857C14.4261 1.93149 15.6437 2.93334 16.5001 4.21765C17.3564 5.50197 17.8131 7.01119 17.8125 8.55482Z" fill="currentColor"/></svg></button>
+                      <button id="booksReaderTtsRewind" class="iconBtn booksReaderTtsBtn" title="Previous sentence" aria-label="Previous sentence"><svg viewBox="0 0 14 16" xmlns="http://www.w3.org/2000/svg"><path d="M12.7617 0.439063C12.5177 0.303751 12.242 0.23623 11.9631 0.243511C11.6842 0.250792 11.4124 0.332611 11.1758 0.480469L2.3125 6.02344V1.17969C2.3125 0.931047 2.21373 0.69259 2.03791 0.516775C1.8621 0.34096 1.62364 0.242188 1.375 0.242188C1.12636 0.242188 0.887903 0.34096 0.712087 0.516775C0.536272 0.69259 0.4375 0.931047 0.4375 1.17969V14.9297C0.4375 15.1783 0.536272 15.4168 0.712087 15.5926C0.887903 15.7684 1.12636 15.8672 1.375 15.8672C1.62364 15.8672 1.8621 15.7684 2.03791 15.5926C2.21373 15.4168 2.3125 15.1783 2.3125 14.9297V10.0859L11.1758 15.6328C11.4118 15.7794 11.6826 15.8603 11.9603 15.8674C12.238 15.8745 12.5125 15.8074 12.7557 15.673C12.9988 15.5387 13.2018 15.3419 13.3436 15.1031C13.4854 14.8642 13.561 14.5918 13.5625 14.3141V1.79531C13.5622 1.51835 13.4878 1.24652 13.347 1.00802C13.2062 0.769532 13.0041 0.57308 12.7617 0.439063ZM11.6875 13.7367L2.60156 8.05469L11.6875 2.37266V13.7367Z" fill="currentColor"/></svg></button>
+                      <button id="booksReaderTtsPlayPause" class="iconBtn booksReaderTtsBtn" title="Play/Pause" aria-label="Play or pause TTS"><svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg></button>
+                      <button id="booksReaderTtsForward" class="iconBtn booksReaderTtsBtn" title="Next sentence" aria-label="Next sentence"><svg viewBox="0 0 14 16" xmlns="http://www.w3.org/2000/svg"><path d="M12.625 0.241921C12.3764 0.241921 12.1379 0.340693 11.9621 0.516509C11.7863 0.692324 11.6875 0.930781 11.6875 1.17942V6.02317L2.82422 0.476296C2.58822 0.329757 2.31743 0.248784 2.03973 0.241717C1.76202 0.23465 1.48746 0.301745 1.24432 0.436091C1.00117 0.570437 0.79824 0.767176 0.656425 1.00604C0.51461 1.24491 0.43904 1.51726 0.4375 1.79505V14.3138C0.43904 14.5916 0.51461 14.8639 0.656425 15.1028C0.79824 15.3417 1.00117 15.5384 1.24432 15.6728C1.48746 15.8071 1.76202 15.8742 2.03973 15.8671C2.31743 15.8601 2.58822 15.7791 2.82422 15.6325L11.6875 10.0857V14.9294C11.6875 15.1781 11.7863 15.4165 11.9621 15.5923C12.1379 15.7681 12.3764 15.8669 12.625 15.8669C12.8736 15.8669 13.1121 15.7681 13.2879 15.5923C13.4637 15.4165 13.5625 15.1781 13.5625 14.9294V1.17942C13.5625 0.930781 13.4637 0.692324 13.2879 0.516509C13.1121 0.340693 12.8736 0.241921 12.625 0.241921ZM2.3125 13.7365V2.37239L11.3984 8.05442L2.3125 13.7365Z" fill="currentColor"/></svg></button>
+                      <button id="booksReaderTtsFwd10" class="iconBtn booksReaderTtsBtn" title="Forward 10s (~approx)" aria-label="Forward 10 seconds"><svg viewBox="0 0 18 17" xmlns="http://www.w3.org/2000/svg"><path d="M17.0594 2.92989V6.67989C17.0594 6.92853 16.9607 7.16699 16.7848 7.3428C16.609 7.51862 16.3706 7.61739 16.1219 7.61739H12.3719C12.1233 7.61739 11.8848 7.51862 11.709 7.3428C11.5332 7.16699 11.4344 6.92853 11.4344 6.67989C11.4344 6.43125 11.5332 6.19279 11.709 6.01698C11.8848 5.84116 12.1233 5.74239 12.3719 5.74239H13.7079L12.2235 4.38458C12.2133 4.3752 12.2032 4.36583 12.1938 4.35567C11.5055 3.66782 10.6588 3.15968 9.72799 2.87593C8.79722 2.59219 7.81098 2.54156 6.85604 2.72848C5.90111 2.91541 5.00675 3.33416 4.25166 3.9479C3.49656 4.56164 2.90388 5.35156 2.52576 6.24814C2.14764 7.14473 1.99567 8.12051 2.08322 9.08962C2.17077 10.0587 2.49516 10.9915 3.02784 11.8058C3.56052 12.6201 4.28518 13.291 5.13804 13.7595C5.9909 14.2279 6.94583 14.4796 7.9188 14.4924H7.99693C9.51249 14.496 10.9713 13.9164 12.0711 12.8736C12.2519 12.7028 12.4932 12.6108 12.7418 12.6178C12.9904 12.6248 13.2261 12.7304 13.3969 12.9111C13.5678 13.0919 13.6598 13.3332 13.6528 13.5818C13.6457 13.8304 13.5402 14.0661 13.3594 14.2369C11.9117 15.6091 9.99164 16.3719 7.99693 16.3674H7.88989C6.61102 16.3494 5.35614 16.0176 4.23543 15.4013C3.11471 14.785 2.16245 13.903 1.46225 12.8327C0.762052 11.7624 0.335335 10.5365 0.21957 9.2628C0.103804 7.98905 0.302531 6.70636 0.798299 5.52736C1.29407 4.34836 2.07171 3.30911 3.06296 2.50085C4.0542 1.6926 5.22872 1.14008 6.48338 0.891787C7.73805 0.643499 9.03448 0.707044 10.2589 1.07684C11.4832 1.44664 12.5981 2.11138 13.5055 3.0127L15.1844 4.54864V2.92989C15.1844 2.68125 15.2832 2.44279 15.459 2.26698C15.6348 2.09116 15.8733 1.99239 16.1219 1.99239C16.3706 1.99239 16.609 2.09116 16.7848 2.26698C16.9607 2.44279 17.0594 2.68125 17.0594 2.92989Z" fill="currentColor"/></svg></button>
+                      <button id="booksReaderTtsSlower" class="iconBtn booksReaderTtsBtn" title="Slower" aria-label="Slower">&#8722;</button>
+                      <span id="booksReaderTtsSpeed" class="booksReaderTtsSpeed">1.0&times;</span>
+                      <button id="booksReaderTtsFaster" class="iconBtn booksReaderTtsBtn" title="Faster" aria-label="Faster">+</button>
+                      <div id="booksReaderTtsSnippet" class="booksReaderTtsSnippet"></div>
+                      <!-- FIX_TTSH: Settings mega overlay trigger -->
+                      <button id="booksReaderTtsSettingsBtn" class="iconBtn booksReaderTtsBtn" title="TTS settings" aria-label="TTS settings"><svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="7" cy="5" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="10" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="15" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/></svg></button>
+                      <button id="booksReaderTtsStop" class="iconBtn booksReaderTtsBtn" title="Stop" aria-label="Stop TTS"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.682 0.867188H2.31797C1.91888 0.867807 1.53632 1.02662 1.25413 1.30881C0.97193 1.59101 0.81312 1.97357 0.8125 2.37266V13.7367C0.81312 14.1358 0.97193 14.5184 1.25413 14.8006C1.53632 15.0828 1.91888 15.2416 2.31797 15.2422H13.682C14.0811 15.2416 14.4637 15.0828 14.7459 14.8006C15.0281 14.5184 15.1869 14.1358 15.1875 13.7367V2.37266C15.1869 1.97357 15.0281 1.59101 14.7459 1.30881C14.4637 1.02662 14.0811 0.867807 13.682 0.867188ZM13.3125 13.3672H2.6875V2.74219H13.3125V13.3672Z" fill="currentColor"/></svg></button>
+                    </div>
+                    <!-- FIX_TTSH: TTS mega settings overlay -->
+                    <div id="booksReaderTtsMega" class="booksReaderTtsMega hidden" role="dialog" aria-label="TTS settings">
+                      <div class="booksReaderTtsMegaHead">TTS Settings <button id="booksReaderTtsMegaClose" class="iconBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button></div>
+                      <div class="booksReaderTtsMegaBody">
+                        <div class="ttsMegaRow">
+                          <span class="ttsMegaLabel">Voice</span>
+                          <select id="booksReaderTtsVoice" class="booksReaderTtsVoice" title="Voice" aria-label="Select voice"></select>
+                          <button id="booksReaderTtsPreview" class="iconBtn booksReaderTtsBtn" title="Preview voice" aria-label="Preview voice"><svg viewBox="0 0 18 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.9945 2.73022C13.816 1.54418 12.3119 0.734756 10.6728 0.404562C9.03376 0.0743673 7.33356 0.238268 5.78775 0.875486C4.24194 1.5127 2.92014 2.59455 1.98989 3.98387C1.05965 5.37319 0.56286 7.00744 0.5625 8.67943V13.0544C0.5625 13.6346 0.792968 14.191 1.2032 14.6012C1.61344 15.0115 2.16984 15.2419 2.75 15.2419H4C4.58016 15.2419 5.13656 15.0115 5.5468 14.6012C5.95703 14.191 6.1875 13.6346 6.1875 13.0544V9.92943C6.1875 9.34927 5.95703 8.79287 5.5468 8.38264C5.13656 7.9724 4.58016 7.74193 4 7.74193H2.50312C2.72938 6.18012 3.51053 4.75202 4.70361 3.71905C5.89669 2.68608 7.42188 2.11734 9 2.11693H9.05C10.6211 2.12366 12.1372 2.69582 13.3211 3.72873C14.5049 4.76164 15.2773 6.18625 15.4969 7.74193H14C13.4198 7.74193 12.8634 7.9724 12.4532 8.38264C12.043 8.79287 11.8125 9.34927 11.8125 9.92943V13.0544C11.8125 13.6346 12.043 14.191 12.4532 14.6012C12.8634 15.0115 13.4198 15.2419 14 15.2419H15.25C15.5373 15.2419 15.8217 15.1854 16.0871 15.0754C16.3525 14.9655 16.5937 14.8044 16.7968 14.6012C16.9999 14.3981 17.1611 14.157 17.271 13.8916C17.3809 13.6262 17.4375 13.3417 17.4375 13.0544V8.67943C17.4418 7.57583 17.2282 6.48222 16.809 5.46133C16.3898 4.44043 15.7732 3.51232 14.9945 2.73022ZM4 9.61693C4.08288 9.61693 4.16237 9.64986 4.22097 9.70846C4.27958 9.76707 4.3125 9.84655 4.3125 9.92943V13.0544C4.3125 13.1373 4.27958 13.2168 4.22097 13.2754C4.16237 13.334 4.08288 13.3669 4 13.3669H2.75C2.66712 13.3669 2.58763 13.334 2.52903 13.2754C2.47042 13.2168 2.4375 13.1373 2.4375 13.0544V9.61693H4ZM15.5625 13.0544C15.5625 13.1373 15.5296 13.2168 15.471 13.2754C15.4124 13.334 15.3329 13.3669 15.25 13.3669H14C13.9171 13.3669 13.8376 13.334 13.779 13.2754C13.7204 13.2168 13.6875 13.1373 13.6875 13.0544V9.92943C13.6875 9.84655 13.7204 9.76707 13.779 9.70846C13.8376 9.64986 13.9171 9.61693 14 9.61693H15.5625V13.0544Z" fill="currentColor"/></svg></button>
+                        </div>
+                        <div class="ttsMegaRow">
+                          <span class="ttsMegaLabel">Preset</span>
+                          <select id="booksReaderTtsPresetSel" class="booksReaderTtsPresetSel" title="Preset" aria-label="TTS preset">
+                            <option value="">Custom</option>
+                            <option value="natural">Natural</option>
+                            <option value="clear">Clear</option>
+                            <option value="fast">Fast Study</option>
+                            <option value="slow">Slow &amp; Steady</option>
+                          </select>
+                          <span id="booksReaderTtsEngine" class="booksReaderTtsEngine" title="TTS engine"></span>
+                        </div>
+                        <div class="ttsMegaRow">
+                          <span class="ttsMegaLabel">Highlight</span>
+                          <select id="booksReaderTtsHlStyle" class="booksReaderTtsHlStyle" title="Highlight style" aria-label="Highlight style"></select>
+                          <div id="booksReaderTtsHlColors" class="booksReaderTtsHlColors" title="Highlight color"></div>
+                        </div>
+                        <div class="ttsMegaRow">
+                          <button id="booksReaderTtsFromSel" class="iconBtn booksReaderTtsBtn" title="Read from selection" aria-label="Read from selection"><svg viewBox="0 0 12 13" xmlns="http://www.w3.org/2000/svg"><path d="M11.058 2.51764L8.87055 0.330137C8.80956 0.269214 8.73716 0.220905 8.65749 0.187969C8.57783 0.155033 8.49246 0.138116 8.40625 0.138184H4.03125C3.74117 0.138184 3.46297 0.253418 3.25785 0.458536C3.05273 0.663654 2.9375 0.941853 2.9375 1.23193V2.32568H2.0625C1.77242 2.32568 1.49422 2.44092 1.2891 2.64604C1.08398 2.85115 0.96875 3.12935 0.96875 3.41943V11.0757C0.96875 11.3658 1.08398 11.644 1.2891 11.8491C1.49422 12.0542 1.77242 12.1694 2.0625 12.1694H7.96875C8.25883 12.1694 8.53703 12.0542 8.74215 11.8491C8.94727 11.644 9.0625 11.3658 9.0625 11.0757V9.98193H10.1562C10.4463 9.98193 10.7245 9.8667 10.9296 9.66158C11.1348 9.45646 11.25 9.17826 11.25 8.88818V2.98193C11.2501 2.89573 11.2332 2.81035 11.2002 2.73069C11.1673 2.65102 11.119 2.57863 11.058 2.51764ZM7.75 10.8569H2.28125V3.63818H5.94531L7.75 5.44287V10.8569ZM9.9375 8.66943H9.0625V5.16943C9.06257 5.08323 9.04565 4.99785 9.01271 4.91819C8.97978 4.83852 8.93147 4.76613 8.87055 4.70514L6.68305 2.51764C6.62206 2.45671 6.54966 2.40841 6.46999 2.37547C6.39033 2.34253 6.30496 2.32562 6.21875 2.32568H4.25V1.45068H8.13281L9.9375 3.25537V8.66943ZM6.875 7.13818C6.875 7.31223 6.80586 7.47915 6.68279 7.60222C6.55972 7.72529 6.3928 7.79443 6.21875 7.79443H3.8125C3.63845 7.79443 3.47153 7.72529 3.34846 7.60222C3.22539 7.47915 3.15625 7.31223 3.15625 7.13818C3.15625 6.96414 3.22539 6.79722 3.34846 6.67415C3.47153 6.55107 3.63845 6.48193 3.8125 6.48193H6.21875C6.3928 6.48193 6.55972 6.55107 6.68279 6.67415C6.80586 6.79722 6.875 6.96414 6.875 7.13818ZM6.875 9.32568C6.875 9.49973 6.80586 9.66665 6.68279 9.78972C6.55972 9.91279 6.3928 9.98193 6.21875 9.98193H3.8125C3.63845 9.98193 3.47153 9.91279 3.34846 9.78972C3.22539 9.66665 3.15625 9.49973 3.15625 9.32568C3.15625 9.15164 3.22539 8.98472 3.34846 8.86165C3.47153 8.73857 3.63845 8.66943 3.8125 8.66943H6.21875C6.3928 8.66943 6.55972 8.73857 6.68279 8.86165C6.80586 8.98472 6.875 9.15164 6.875 9.32568Z" fill="currentColor"/></svg></button>
+                          <button id="booksReaderTtsDiagBtn" class="iconBtn booksReaderTtsBtn" title="TTS diagnostics" aria-label="TTS diagnostics"><svg viewBox="0 0 19 20" xmlns="http://www.w3.org/2000/svg"><mask id="mCog2" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="0" y="0" width="19" height="20"><path fill-rule="evenodd" clip-rule="evenodd" d="M0 0H18.6138V20H0V0Z" fill="white"/></mask><g mask="url(#mCog2)"><path fill-rule="evenodd" clip-rule="evenodd" d="M5.02163 14.9027C5.24266 14.9027 5.46369 14.9307 5.6799 14.9886C6.33237 15.1643 6.89895 15.6006 7.23484 16.1864C7.45298 16.5542 7.57363 16.9837 7.57749 17.4219C7.57749 18.0493 8.08132 18.5522 8.70099 18.5522H9.91039C10.5272 18.5522 11.031 18.0522 11.0339 17.4354C11.03 16.754 11.2964 16.1063 11.7838 15.6189C12.2645 15.1382 12.9363 14.8496 13.6081 14.8689C14.0482 14.8795 14.4719 14.9983 14.8455 15.2106C15.3831 15.5185 16.0694 15.3351 16.3802 14.8043L17.021 13.7358C17.1639 13.4897 17.2054 13.1808 17.1292 12.8961C17.0539 12.6113 16.8647 12.3642 16.6099 12.2185C16.0134 11.8749 15.5877 11.3208 15.4111 10.6568C15.2364 10.0053 15.3319 9.29391 15.6727 8.70803C15.8947 8.32195 16.2199 7.99668 16.6099 7.77275C17.133 7.46678 17.3164 6.78245 17.0124 6.24966L16.413 5.20241C16.1051 4.66672 15.4198 4.48237 14.8822 4.78834C14.3011 5.13195 13.61 5.2304 12.946 5.0557C12.2829 4.88389 11.7269 4.46403 11.3804 3.87139C11.1584 3.50076 11.0377 3.06931 11.0339 2.63014C11.0426 2.30004 10.9267 2.00372 10.7163 1.78655C10.5069 1.57035 10.2125 1.44777 9.91039 1.44777H8.70099C8.40177 1.44777 8.12186 1.56456 7.91048 1.77497C7.70007 1.98635 7.58521 2.26723 7.58714 2.56644C7.56687 3.97757 6.41345 5.11361 5.0168 5.11361C4.56895 5.10879 4.1375 4.98814 3.763 4.76421C3.23696 4.465 2.54974 4.64935 2.24184 5.18504L1.58839 6.25931C1.28918 6.77859 1.47257 7.46485 2.00536 7.77468C2.79587 8.23219 3.28909 9.08543 3.28909 10.0004C3.28909 10.9155 2.79587 11.7677 2.00343 12.2262C1.47354 12.5331 1.29015 13.2155 1.59708 13.7464L2.20613 14.7965C2.3567 15.0678 2.60282 15.2637 2.88756 15.3438C3.17133 15.423 3.48406 15.3892 3.74466 15.2444C4.12785 15.0195 4.57377 14.9027 5.02163 14.9027ZM9.90994 20H8.70054C7.28265 20 6.12923 18.8475 6.12923 17.4297C6.1273 17.255 6.07711 17.0735 5.98349 16.9162C5.83195 16.6517 5.58679 16.4625 5.30398 16.3872C5.02311 16.312 4.71521 16.3535 4.46233 16.5002C3.85618 16.838 3.14289 16.92 2.49041 16.7366C1.8389 16.5523 1.27619 16.1044 0.946087 15.5108L0.342834 14.4713C-0.36273 13.2474 0.0571336 11.679 1.27908 10.9724C1.62559 10.7726 1.84083 10.4001 1.84083 10.0005C1.84083 9.60089 1.62559 9.22735 1.27908 9.02756C0.0561685 8.31717 -0.36273 6.74485 0.341869 5.52097L0.996277 4.4467C1.69219 3.23633 3.26547 2.80971 4.49225 3.51431C4.65923 3.61373 4.84069 3.66392 5.02504 3.66585C5.62636 3.66585 6.12923 3.16973 6.13889 2.55972C6.13503 1.88697 6.40046 1.24125 6.88402 0.753825C7.36952 0.267362 8.01428 0 8.70054 0H9.90994C10.601 0 11.2728 0.28377 11.7544 0.77699C12.2351 1.2731 12.5005 1.95357 12.4803 2.64369C12.4822 2.79909 12.5334 2.97862 12.626 3.13595C12.7795 3.39655 13.0218 3.57994 13.3094 3.65523C13.597 3.72665 13.8982 3.68805 14.1539 3.53651C15.3894 2.83094 16.9617 3.2537 17.6673 4.47951L18.2686 5.52097C18.9481 6.81145 18.5215 8.33164 17.3343 9.02563C17.1615 9.12504 17.0216 9.26403 16.925 9.43198C16.7754 9.69162 16.7339 10.0005 16.8092 10.2843C16.8864 10.5738 17.0708 10.8141 17.3304 10.9628C17.9163 11.2996 18.3535 11.8672 18.5282 12.5226C18.7029 13.177 18.6074 13.8874 18.2667 14.4732L17.6258 15.5408C16.9202 16.7531 15.3479 17.1729 14.125 16.4664C13.9619 16.3728 13.7737 16.3216 13.5864 16.3168H13.5806C13.3017 16.3168 13.015 16.4355 12.8065 16.643C12.5951 16.8544 12.4793 17.1362 12.4812 17.4355C12.4745 18.8533 11.3211 20 9.90994 20Z" fill="currentColor"/></g><path fill-rule="evenodd" clip-rule="evenodd" d="M9.30953 8.17925C8.30571 8.17925 7.48915 8.99678 7.48915 10.0006C7.48915 11.0044 8.30571 11.82 9.30953 11.82C10.3133 11.82 11.1299 11.0044 11.1299 10.0006C11.1299 8.99678 10.3133 8.17925 9.30953 8.17925ZM9.30903 13.2678C7.50699 13.2678 6.04085 11.8027 6.04085 10.0006C6.04085 8.19859 7.50699 6.73148 9.30903 6.73148C11.1111 6.73148 12.5772 8.19859 12.5772 10.0006C12.5772 11.8027 11.1111 13.2678 9.30903 13.2678Z" fill="currentColor"/></svg></button>
+                        </div>
+                      </div>
+                    </div>
+                    <!-- TTS diagnostics panel -->
+                    <div id="booksReaderTtsDiag" class="booksReaderTtsDiag hidden" role="dialog" aria-label="TTS diagnostics">
+                      <div class="booksReaderTtsDiagHead">TTS Diagnostics <button id="booksReaderTtsDiagClose" class="iconBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button></div>
+                      <div id="booksReaderTtsDiagBody" class="booksReaderTtsDiagBody"></div>
+                    </div>
+                    <!-- Dictionary popup -->
+                    <div id="booksReaderDictPopup" class="booksReaderDictPopup hidden" role="dialog" aria-label="Dictionary">
+                      <div class="booksReaderDictHead">
+                        <button id="booksReaderDictBack" class="iconBtn booksReaderDictBackBtn hidden" title="Back" aria-label="Back"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11 6H2.5m0 0L7 1.5M2.5 6l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                        <span id="booksReaderDictWord" class="booksReaderDictWord"></span>
+                        <button id="booksReaderDictClose" class="iconBtn booksReaderDictCloseBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div id="booksReaderDictBody" class="booksReaderDictBody"></div>
+                    </div>
+                    <!-- Annotation popup -->
+                    <div id="booksAnnotPopup" class="booksAnnotPopup hidden" role="dialog" aria-label="Annotation">
+                      <div class="booksAnnotPopupHead">
+                        <span class="booksAnnotPopupTitle">Highlight</span>
+                        <button id="booksAnnotClose" class="iconBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div id="booksAnnotColorPicker" class="booksAnnotColors"></div>
+                      <div id="booksAnnotStylePicker" class="booksAnnotStyles"></div>
+                      <textarea id="booksAnnotNote" class="booksAnnotNote" placeholder="Add a note..." rows="2"></textarea>
+                      <div class="booksAnnotActions">
+                        <button id="booksAnnotSave" class="btn btn-sm">Save</button>
+                        <button id="booksAnnotDelete" class="btn btn-sm btn-ghost hidden">Delete</button>
+                      </div>
+                    </div>
+
+                  <!-- Nav arrow right -->
+                  <button id="booksReaderNextBtn" class="br-nav-arrow br-nav-right" title="Next page (&#8594;)" aria-label="Next page"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5.9,4.1l7.9,7.9l-7.9,7.9L8,22l10-10L8,2L5.9,4.1z" fill="currentColor"/></svg></button>
+
+                  <!-- Overlay backdrop (click-outside dismissal) -->
+                  <div id="brOverlayBackdrop" class="br-overlay-backdrop hidden"></div>
+
+                  <!-- Search overlay -->
+                  <div id="brOverlaySearch" class="br-overlay hidden" data-overlay="search" role="dialog" aria-label="Search">
+                    <div class="br-overlay-panel">
+                      <div class="br-overlay-header">
+                        <span class="br-overlay-title">Search</span>
+                        <button class="br-overlay-close br-btn br-btn-sm" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div class="br-overlay-body">
+                        <div class="br-search-row">
+                          <input id="booksUtilSearchInput" class="br-search-input" placeholder="Search in book..." autocomplete="off" />
+                          <button id="booksUtilSearchBtn" class="br-btn br-btn-sm" title="Search">Go</button>
+                        </div>
+                        <div class="br-search-nav">
+                          <span id="booksUtilSearchCount" class="br-page-text" aria-live="polite"></span>
+                          <button id="booksUtilSearchPrev" class="br-btn br-btn-sm" title="Previous"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 15L12 9L18 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+                          <button id="booksUtilSearchNext" class="br-btn br-btn-sm" title="Next"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 9L12 15L18 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+
+                  <!-- Font overlay -->
+                  <div id="brOverlayFont" class="br-overlay hidden" data-overlay="font" role="dialog" aria-label="Font settings">
+                    <div class="br-overlay-panel br-overlay-panel--settings">
+                      <div class="br-overlay-header">
+                        <span class="br-overlay-title">Font Settings</span>
+                        <button class="br-overlay-close br-btn br-btn-sm" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div class="br-overlay-body">
+                        <!-- Font family -->
+                        <div class="br-settings-section">
+                          <div class="br-settings-label">Font</div>
+                          <select id="booksReaderFontFamily" class="br-settings-select">
+                            <option value="publisher">Publisher default</option>
+                            <option value="oldStyleTf">Serif (Old Style)</option>
+                            <option value="modernTf">Serif (Modern)</option>
+                            <option value="sansTf">Sans-serif</option>
+                            <option value="humanistTf">Sans-serif (Humanist)</option>
+                            <option value="monospaceTf">Monospace</option>
+                            <option value="AccessibleDfA">Accessible DfA</option>
+                            <option value="IAWriterDuospace">iA Writer Duospace</option>
+                          </select>
+                        </div>
+                        <!-- Font size -->
+                        <div class="br-settings-section">
+                          <div class="br-settings-label">Font size</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderFontSizeSlider" class="br-settings-slider" type="range" min="75" max="250" step="12.5" value="100" />
+                            <span id="booksReaderFontSizeValue" class="br-settings-value">100%</span>
+                          </div>
+                        </div>
+                        <!-- Line height -->
+                        <div class="br-settings-section">
+                          <div class="br-settings-label">Line spacing</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderLineHeightSlider" class="br-settings-slider" type="range" min="1.0" max="2.0" step="0.1" value="1.5" />
+                            <span id="booksReaderLineHeightValue" class="br-settings-value">1.5</span>
+                          </div>
+                        </div>
+                        <!-- Margin -->
+                        <div class="br-settings-section">
+                          <div class="br-settings-label">Margin</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderMarginSlider" class="br-settings-slider" type="range" min="0.5" max="2.0" step="0.25" value="1" />
+                            <span id="booksReaderMarginValue" class="br-settings-value">1.0</span>
+                          </div>
+                        </div>
+                        <!-- Columns -->
+                        <div class="br-settings-section">
+                          <label class="br-settings-toggle-row">
+                            <span class="br-settings-label">Spread (2-col)</span>
+                            <input id="booksReaderColumnToggle" type="checkbox" />
+                          </label>
+                        </div>
+                        <!-- RCSS_INTEGRATION: text alignment -->
+                        <div class="br-settings-section" id="brSettingsTextAlignSection">
+                          <div class="br-settings-label">Text align</div>
+                          <div class="br-settings-chips">
+                            <button class="br-settings-chip br-settings-chip--small" data-align="" title="Publisher default">Auto</button>
+                            <button class="br-settings-chip br-settings-chip--small" data-align="left" title="Left aligned">Left</button>
+                            <button class="br-settings-chip br-settings-chip--small" data-align="justify" title="Justified">Justify</button>
+                            <button class="br-settings-chip br-settings-chip--small" data-align="right" title="Right aligned">Right</button>
+                          </div>
+                        </div>
+                        <!-- RCSS_INTEGRATION: letter spacing -->
+                        <div class="br-settings-section" id="brSettingsLetterSpacingSection">
+                          <div class="br-settings-label">Letter spacing</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderLetterSpacingSlider" class="br-settings-slider" type="range" min="0" max="0.5" step="0.0625" value="0" />
+                            <span id="booksReaderLetterSpacingValue" class="br-settings-value">0</span>
+                          </div>
+                        </div>
+                        <!-- RCSS_INTEGRATION: word spacing -->
+                        <div class="br-settings-section" id="brSettingsWordSpacingSection">
+                          <div class="br-settings-label">Word spacing</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderWordSpacingSlider" class="br-settings-slider" type="range" min="0" max="1.0" step="0.125" value="0" />
+                            <span id="booksReaderWordSpacingValue" class="br-settings-value">0</span>
+                          </div>
+                        </div>
+                        <!-- RCSS_INTEGRATION: paragraph spacing -->
+                        <div class="br-settings-section" id="brSettingsParaSpacingSection">
+                          <div class="br-settings-label">Paragraph spacing</div>
+                          <div class="br-settings-slider-row">
+                            <input id="booksReaderParaSpacingSlider" class="br-settings-slider" type="range" min="0" max="2.0" step="0.25" value="0" />
+                            <span id="booksReaderParaSpacingValue" class="br-settings-value">0</span>
+                          </div>
+                        </div>
+                        <!-- RCSS_INTEGRATION: paragraph indent -->
+                        <div class="br-settings-section" id="brSettingsParaIndentSection">
+                          <div class="br-settings-label">Paragraph indent</div>
+                          <select id="booksReaderParaIndent" class="br-settings-select">
+                            <option value="">Publisher default</option>
+                            <option value="0">None</option>
+                            <option value="1em">1em</option>
+                            <option value="1.5em">1.5em</option>
+                            <option value="2em">2em</option>
+                          </select>
+                        </div>
+                        <!-- RCSS_INTEGRATION: hyphenation -->
+                        <div class="br-settings-section" id="brSettingsHyphensSection">
+                          <div class="br-settings-label">Hyphenation</div>
+                          <select id="booksReaderHyphens" class="br-settings-select">
+                            <option value="">Publisher default</option>
+                            <option value="auto">Auto</option>
+                            <option value="none">Off</option>
+                          </select>
+                        </div>
+                        <!-- PDF controls (shown only for PDF) -->
+                        <div id="booksMegaPdfGroup" class="br-settings-section hidden">
+                          <div class="br-settings-label">PDF</div>
+                          <div class="br-settings-chips">
+                            <button id="booksReaderFitPageBtn" class="br-settings-chip" title="Fit page" disabled>Fit Page</button>
+                            <button id="booksReaderFitWidthBtn" class="br-settings-chip" title="Fit width" disabled>Fit Width</button>
+                            <button id="booksReaderZoomDown" class="br-settings-chip" title="Zoom out" disabled>Zoom &minus;</button>
+                            <button id="booksReaderZoomUp" class="br-settings-chip" title="Zoom in" disabled>Zoom +</button>
+                          </div>
+                        </div>
+                        <!-- Flow mode -->
+                        <div class="br-settings-section">
+                          <label class="br-settings-toggle-row">
+                            <span class="br-settings-label">Scrolled mode</span>
+                            <input id="brSettingsFlowToggle" type="checkbox" />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Keyboard shortcuts overlay -->
+                  <div id="brOverlayKeys" class="br-overlay hidden" data-overlay="keys" role="dialog" aria-label="Keyboard shortcuts">
+                    <div class="br-overlay-panel br-overlay-panel--settings">
+                      <div class="br-overlay-header">
+                        <span class="br-overlay-title">Keyboard Shortcuts</span>
+                        <button class="br-overlay-close br-btn br-btn-sm" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div class="br-overlay-body">
+                        <div id="brSettingsShortcuts" class="br-shortcuts-list"></div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Theme overlay -->
+                  <div id="brOverlayTheme" class="br-overlay hidden" data-overlay="theme" role="dialog" aria-label="Theme settings">
+                    <div class="br-overlay-panel br-overlay-panel--settings">
+                      <div class="br-overlay-header">
+                        <span class="br-overlay-title">Theme Settings</span>
+                        <button class="br-overlay-close br-btn br-btn-sm" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button>
+                      </div>
+                      <div class="br-overlay-body">
+                        <div class="br-settings-section">
+                          <div class="br-settings-label">Theme</div>
+                          <div class="br-settings-chips br-settings-chips--themes">
+                            <button class="br-settings-chip" data-theme="light"><span class="br-theme-swatch" style="background:#f4f6fa;color:#1b2230;">A</span> Light</button>
+                            <button class="br-settings-chip" data-theme="sepia"><span class="br-theme-swatch" style="background:#faf4e8;color:#121212;">A</span> Sepia</button>
+                            <button class="br-settings-chip" data-theme="dark"><span class="br-theme-swatch" style="background:#000;color:#fefefe;">A</span> Dark</button>
+                            <button class="br-settings-chip" data-theme="paper"><span class="br-theme-swatch" style="background:#f8f4ec;color:#2c2c2c;">A</span> Paper</button>
+                            <button class="br-settings-chip" data-theme="contrast1"><span class="br-theme-swatch" style="background:#000;color:#ff0;">A</span> HC 1</button>
+                            <button class="br-settings-chip" data-theme="contrast2"><span class="br-theme-swatch" style="background:#0a0a3e;color:#ffd700;">A</span> HC 2</button>
+                            <button class="br-settings-chip" data-theme="contrast3"><span class="br-theme-swatch" style="background:#f5f5dc;color:#1a1a00;">A</span> HC 3</button>
+                            <button class="br-settings-chip" data-theme="contrast4"><span class="br-theme-swatch" style="background:#1a1a2e;color:#e0e0e0;">A</span> HC 4</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Go-to-page dialog -->
+                  <div id="booksGotoOverlay" class="booksGotoOverlay hidden" role="dialog" aria-modal="true" aria-label="Go to page">
+                    <div class="booksGotoCard">
+                      <div class="booksGotoTitle">Go to page</div>
+                      <input id="booksGotoInput" class="input input-sm" type="text" placeholder="Page or percentage (e.g. 42 or 50%)" autocomplete="off" />
+                      <div class="booksGotoActions">
+                        <button id="booksGotoSubmit" class="btn btn-sm">Go</button>
+                        <button id="booksGotoCancel" class="btn btn-sm btn-ghost">Cancel</button>
+                      </div>
+                      <div id="booksGotoHint" class="muted tiny"></div>
+                    </div>
+                  </div>
+                  <!-- Error banner -->
+                  <div id="booksReaderErrorBanner" class="booksReaderErrorBanner hidden" role="alert">
+                    <div class="booksReaderErrorMsg">
+                      <strong id="booksReaderErrorTitle" class="booksReaderErrorTitle">Unable to open book</strong>
+                      <span id="booksReaderErrorDetail" class="booksReaderErrorDetail"></span>
+                    </div>
+                    <div class="booksReaderErrorActions">
+                      <button id="booksReaderErrorRetry" class="iconBtn booksReaderErrorBtn" title="Retry" aria-label="Retry opening book">Retry</button>
+                      <button id="booksReaderErrorClose" class="iconBtn booksReaderErrorBtn" title="Close" aria-label="Close reader">Close</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Chapter transition card -->
+              <div id="booksChapterTransition" class="br-chapter-transition hidden">
+                <div class="br-chapter-transition-card">
+                  <div class="br-chapter-transition-done">End of chapter</div>
+                  <div id="booksChapterTransCurrent" class="br-chapter-transition-current">--</div>
+                  <div class="br-chapter-transition-sep">Next up</div>
+                  <div id="booksChapterTransNext" class="br-chapter-transition-next">--</div>
+                  <div class="br-chapter-transition-actions">
+                    <button id="booksChapterTransContinue" class="br-btn">Continue</button>
+                    <span id="booksChapterTransCountdown" class="br-chapter-transition-countdown"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Corner progress overlays -->
+              <div id="booksReaderCornerLeft" class="br-corner br-corner-left"></div>
+              <div id="booksReaderCornerRight" class="br-corner br-corner-right"></div>
+
+              <!-- Return to TTS location -->
+              <button id="booksReaderReturnTts" class="booksReaderReturnTts hidden" title="Return to TTS location">&#8617; Back to narration</button>
+
+              <!-- Hidden compatibility stubs -->
+              <select id="booksReaderTheme" class="hidden" aria-hidden="true">
+                <option value="light">Light</option>
+                <option value="sepia">Sepia</option>
+                <option value="dark">Dark</option>
+              </select>
+              <div id="booksReaderAaPanel" class="hidden" aria-hidden="true"></div>
+              <button id="booksReaderAaBtn" class="hidden" aria-hidden="true" aria-pressed="false">Aa</button>
+              <button id="booksReaderPlayBtn" class="hidden" aria-hidden="true"><svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg></button>
+              <div id="booksReaderStatus" class="booksReaderStatus" role="status" aria-live="polite" aria-atomic="true"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Video library view (Build 97) -->
+      <section id="videoLibraryView" class="view hidden">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Video library navigation">
+            <div class="navSection">
+              <div class="navHeader">Video Libraries</div>
+              <div class="navItems">
+                <sl-button id="videoAddFolderBtn" class="navBtn" title="Add root video folder">Add root folder...</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Shows</div>
+              <div class="navItems">
+                <sl-button id="videoAddShowFolderBtn" class="navBtn" title="Add show folder">Add show folder...</sl-button>
+                <div id="videoFoldersList" class="folderTree" role="tree" aria-label="Shows"></div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Actions</div>
+              <div class="navItems">
+                <sl-button id="videoAddFilesBtn" class="navBtn" title="Add video files">Add files...</sl-button>
+                <sl-button id="videoRestoreHiddenBtn" class="navBtn" title="Restore hidden shows">Restore hidden</sl-button>
+                <sl-button id="videoOpenFileBtn" class="navBtn" title="Open video file">Open file...</sl-button>
+                <sl-button id="videoRefreshBtn" class="navBtn" title="Refresh library">Refresh</sl-button>
+              </div>
+            </div>
+          </aside>
+
+          <div class="libContent">
+            <div id="videoHomeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Watching...</div>
+                  <div class="contTools">
+                    <sl-switch id="videoHideWatchedToggle" class="toggle muted tiny" size="small" title="Hide finished shows">Hide watched</sl-switch>
+                    <div id="videoScanPill" class="scanPill hidden" title="Refreshing library in background">
+                      <span id="videoScanText">Refreshing...</span>
+                      <sl-button id="videoScanCancel" class="scanPillBtn btn btn-ghost btn-sm" size="small" title="Cancel refresh" aria-label="Cancel refresh">Cancel</sl-button>
+                    </div>
+                  </div>
+                </div>
+                <div id="videoContinuePanel" class="continueRow continueYacRow"></div>
+                <div id="videoContinueList" class="videoContinueList"></div>
+                <div id="videoContinueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+
+              <div id="videoShowsPanel" class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Shows</div>
+                  <div id="videoRootLabel" class="muted tiny"></div>
+                </div>
+
+                <div id="videoShowsGrid" class="seriesGrid"></div>
+                <div id="videoShowsEmpty" class="muted tiny hidden">No shows yet. Add a root folder or a show folder.</div>
+              </div>
+            </div>
+
+            <div id="videoShowView" class="seriesView hidden">
+              <div id="videoShowDetailPanel" class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Episodes</div>
+                  <div class="crumb hidden" id="videoCrumb">
+                    <sl-button id="videoShowBackBtn" class="btn btn-ghost btn-sm" size="small">Back</sl-button>
+                    <span id="videoCrumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <div id="videoEpisodesWrap" class="hidden volSplit">
+                  <div id="videoEpPreviewPane" class="volPreviewPane" aria-label="Preview">
+                    <div id="videoEpPreviewInfo" class="volPreviewInfo muted tiny">-</div>
+                    <!-- Build 11: Videos folder "Continue watching" panel (replaces episode search). -->
+                    <div id="videoFolderContinue" class="videoFolderContinue hidden" aria-label="Continue watching"></div>
+                    <div class="volPreviewCenter">
+                      <img id="videoEpPreviewImg" class="volPreviewImg" alt="episode preview" />
+                    </div>
+                  </div>
+
+                  <div class="volActionStrip" role="toolbar" aria-label="Episode actions">
+                    <div class="volActionLeft">
+                      <sl-button id="videoEpOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Play selected" aria-label="Play selected">Play</sl-button>
+                      <div class="volActionSep"></div>
+
+                      <label class="muted tiny" for="videoEpSort">Sort</label>
+                      <sl-select id="videoEpSort" class="select select-sm" size="small">
+                        <sl-option value="title_asc">Title (A-Z)</sl-option>
+                        <sl-option value="title_desc">Title (Z-A)</sl-option>
+                        <sl-option value="date_new">Newest</sl-option>
+                        <sl-option value="date_old">Oldest</sl-option>
+                      </sl-select>
+
+                      <!-- Build 11: removed episode search (replaced by Continue watching in preview area) -->
+                    </div>
+
+                    <div class="volActionRight">
+                      <sl-switch id="videoEpHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
+                    </div>
+                  </div>
+
+                  <div class="volTableWrap" role="table" aria-label="Episodes">
+                    <div class="volTableHead" id="videoEpTableHead" role="row">
+                      <div class="cell num" role="columnheader">#</div>
+                      <div class="cell title" role="columnheader">Episode</div>
+                      <div class="cell size" role="columnheader">Size</div>
+                      <div class="cell duration" role="columnheader">Duration</div>
+                      <div class="cell resolution" role="columnheader">Resolution</div>
+                      <div class="cell progress" role="columnheader">Progress</div>
+                      <div class="cell date" role="columnheader">Modified</div>
+                    
+                    </div>
+
+                                        <div class="volTableBody" id="videoEpisodesGrid" role="rowgroup"></div>
+                    <div id="videoEpisodesEmpty" class="muted tiny hidden">No video files found in this folder.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video library tips overlay (K to toggle) -->
+        <div id="videoLibTipsOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+          <div class="keysCard">
+            <div class="keysTop">
+              <div class="keysTitle">Tips</div>
+              <sl-button id="videoLibTipsClose" class="btn btn-ghost btn-sm" size="small">Close</sl-button>
+            </div>
+
+            <div class="keysCols">
+              <div class="keysCol">
+                <div class="keysHead">Library</div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Set custom poster</span></div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Paste image as poster</span></div>
+                <div class="keysLine"><span class="key">Drag image onto tile</span><span class="desc">Drag-and-drop poster</span></div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Auto-generate thumbnail</span></div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Remove poster</span></div>
+                <div class="keysLine"><span class="key">Right-click</span><span class="desc">Dismiss from Continue Watching</span></div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Mark show watched / unwatched</span></div>
+                <div class="keysLine"><span class="key">Right-click show</span><span class="desc">Clear all show progress</span></div>
+                <div class="keysLine"><span class="key">Click subfolders</span><span class="desc">Browse seasons / subfolders</span></div>
+                <div class="keysLine"><span class="key">Sort dropdown</span><span class="desc">Sort episodes by title, date</span></div>
+                <div class="keysLine"><span class="key">Playlist panel</span><span class="desc">Auto-advance to next episode</span></div>
+                <div class="keysLine"><span class="key">Sidebar</span><span class="desc">Restore hidden shows</span></div>
+              </div>
+
+              <div class="keysCol">
+                <div class="keysHead">Keys</div>
+                <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+                <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / go to home</span></div>
+                <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+                <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+                <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+                <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+                <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+                <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay</span></div>
+              </div>
+            </div>
+
+            <div class="keysHint muted tiny">Press K again or Escape to close.</div>
+          </div>
+        </div>
+
+      </section>
+
+<!-- Video player view (Tankoban Plus Build 3) -->
+      <section id="videoPlayerView" class="view hidden">
+        <div class="videoPlayerShell">
+          <div class="videoPlayerBar">
+            <button id="videoBackBtn" class="iconBtn" title="Back to video library" aria-label="Back to video library">←</button>
+            <div id="videoNowTitle" class="videoNowTitle">—</div>
+            <div class="videoPlayerBarRight">
+              <button id="videoTracksBtnTop" class="chipBtn" title="Audio & Subtitles" aria-label="Audio & Subtitles">Tracks</button>
+              <button id="videoSpeedBtnTop" class="chipBtn" title="Playback speed" aria-label="Playback speed">1.0×</button>
+              <button id="videoPlaylistBtn" class="chipBtn" title="Playlist" aria-label="Playlist">List</button>
+              <button id="videoQualityBtnTop" class="chipBtn" title="Render quality" aria-label="Render quality">Balanced</button>
+              <button id="videoInfoBtnTop" class="chipBtn" title="Player information" aria-label="Player information">Info</button>
+              <button id="videoFullscreenBtnTop" class="chipBtn" title="Fullscreen" aria-label="Fullscreen">⤢</button>
+            </div>
+          </div>
+
+          <!-- AI_VIDEO_STAGE: Player stage markup. Canvas render will mount here. -->
+          <!-- AI_ANCHOR: videoStage, mpvHost, overlays (toast, center flash) live in this region. -->
+          <div id="videoStage" class="videoStage">
+            <div id="mpvDetachedPlaceholder" class="mpvDetachedPlaceholder hidden" role="status" aria-live="polite">Playing in the separate mpv window…</div>
+
+            <div id="mpvHost" class="mpvHost hidden"></div>
+
+            <div id="videoCenterFlash" class="videoCenterFlash hidden" aria-hidden="true"></div>
+
+            <div id="videoDiagnostics" class="videoDiagnostics hidden" aria-live="polite"></div>
+
+            <!-- BUILD 101: Fullscreen exit arrow (only visible when fullscreen + HUD shown) -->
+            <button id="videoExitFullscreenBtn" title="Exit fullscreen" aria-label="Exit fullscreen" type="button">←</button>
+
+            <!-- BUILD64: Comprehensive right-click context menu (VLC/PotPlayer baseline) -->
+            <div id="videoCtxMenu" class="videoCtxMenu hidden" role="menu" aria-label="Video menu">
+              <button class="ctxItem" data-act="togglePlay" role="menuitem">
+                <span class="ctxLabel">Play/Pause</span>
+                <span class="ctxHotkey">Space</span>
+              </button>
+              <button class="ctxItem" data-act="stop" role="menuitem">
+                <span class="ctxLabel">Stop</span>
+              </button>
+              <button class="ctxItem" data-act="restart" role="menuitem">
+                <span class="ctxLabel">Restart from beginning</span>
+                <span class="ctxHotkey">Home</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="seekBack10" role="menuitem">
+                <span class="ctxLabel">Jump back 10s</span>
+                <span class="ctxHotkey">←</span>
+              </button>
+              <button class="ctxItem" data-act="seekForward10" role="menuitem">
+                <span class="ctxLabel">Jump forward 10s</span>
+                <span class="ctxHotkey">→</span>
+              </button>
+              <button class="ctxItem" data-act="seekBack30" role="menuitem">
+                <span class="ctxLabel">Jump back 30s</span>
+                <span class="ctxHotkey">Shift+←</span>
+              </button>
+              <button class="ctxItem" data-act="seekForward30" role="menuitem">
+                <span class="ctxLabel">Jump forward 30s</span>
+                <span class="ctxHotkey">Shift+→</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="prevEpisode" role="menuitem">
+                <span class="ctxLabel">Previous</span>
+                <span class="ctxHotkey">P</span>
+              </button>
+              <button class="ctxItem" data-act="nextEpisode" role="menuitem">
+                <span class="ctxLabel">Next</span>
+                <span class="ctxHotkey">N</span>
+              </button>
+              <div class="ctxSep" role="separator"></div>
+              
+              <!-- Speed submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="speed" role="menuitem">
+                  <span class="ctxLabel">Speed</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="speed" role="menu">
+                  <button class="ctxItem" data-act="speed" data-speed="0.5" role="menuitem">0.5×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="0.75" role="menuitem">0.75×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1" role="menuitem">1.0× (Normal)</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.25" role="menuitem">1.25×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.5" role="menuitem">1.5×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="2" role="menuitem">2.0×</button>
+                </div>
+              </div>
+              
+              <!-- Audio submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="audio" role="menuitem">
+                  <span class="ctxLabel">Audio</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="audio" role="menu">
+                  <div id="ctxAudioTracks"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="audioDelayInc" role="menuitem">Delay +50ms</button>
+                  <button class="ctxItem" data-act="audioDelayDec" role="menuitem">Delay -50ms</button>
+                  <button class="ctxItem" data-act="audioDelayReset" role="menuitem">Reset delay</button>
+                </div>
+              </div>
+              
+              <!-- Subtitles submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="subtitles" role="menuitem">
+                  <span class="ctxLabel">Subtitles</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="subtitles" role="menu">
+                  <div id="ctxSubtitleTracks"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="subDelayInc" role="menuitem">Delay +50ms</button>
+                  <button class="ctxItem" data-act="subDelayDec" role="menuitem">Delay -50ms</button>
+                  <button class="ctxItem" data-act="subDelayReset" role="menuitem">Reset delay</button>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="loadSubtitle" role="menuitem">Load external subtitle...</button>
+                </div>
+              </div>
+              
+              <!-- Video submenu -->
+              <div class="ctxSubmenu">
+                <button class="ctxItem ctxExpandable" data-submenu="video" role="menuitem">
+                  <span class="ctxLabel">Video</span>
+                  <span class="ctxArrow">►</span>
+                </button>
+                <div class="ctxSubmenuPanel hidden" data-submenu-id="video" role="menu">
+                  <div id="ctxAspectRatios"></div>
+                  <div class="ctxSep" role="separator"></div>
+                  <button class="ctxItem" data-act="screenshot" role="menuitem">Screenshot</button>
+                </div>
+              </div>
+              
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="openFile" role="menuitem">
+                <span class="ctxLabel">Open File...</span>
+              </button>
+              
+              <div class="ctxSep" role="separator"></div>
+              
+              <button class="ctxItem" data-act="alwaysOnTop" role="menuitem">
+                <span class="ctxLabel" id="ctxAlwaysOnTopLabel">Always on Top</span>
+                <span class="ctxCheck" id="ctxAlwaysOnTopCheck">✓</span>
+              </button>
+              
+              <button class="ctxItem" data-act="toggleFullscreen" role="menuitem">
+                <span class="ctxLabel">Fullscreen</span>
+                <span class="ctxHotkey">F</span>
+              </button>
+            </div>
+
+
+            <!-- BUILD 66: Ultra-thin timeline with minimal play/pause button -->
+            <div id="videoHud" class="videoHud videoHud--minimal">
+              <button id="videoPrevHudBtn" class="minimalNavBtn" title="Previous episode" aria-label="Previous episode">⟵</button>
+              <button id="videoPlayBtn" class="minimalPlayBtn" title="Play or pause" aria-label="Play or pause">⏵</button>
+              <button id="videoNextHudBtn" class="minimalNavBtn" title="Next episode" aria-label="Next episode">⟶</button>
+              <div id="videoScrub" class="scrub videoScrub videoScrub--minimal" role="slider" tabindex="0"
+                   aria-label="Timeline"
+                   aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
+                <div id="videoScrubTrack" class="scrubTrack"></div>
+                <div id="videoScrubChapters" class="scrubChapters" aria-hidden="true"></div>
+                <div id="videoScrubFill" class="scrubFill"></div>
+                <div id="videoScrubThumb" class="scrubThumb">
+                  <div id="videoScrubBubble" class="scrubBubble mono">0:00</div>
+                </div>
+              </div>
+              <!-- BUILD 69: Always-visible time display -->
+              <div id="videoTimeNow" class="videoTimeDisplay mono">0:00 / 0:00</div>
+            </div>
+
+            <!-- Tankoban Plus Build 5.4A: Track selectors (mpv capabilities) -->
+            <div id="videoTracksPanel" class="videoTracksPanel hidden" role="dialog" aria-modal="false" aria-label="Audio and Subtitles">
+              <div class="videoTracksCard">
+                <div class="videoTracksHeader">
+                  <div class="videoTracksTitle">Audio & Subtitles</div>
+                  <button id="videoTracksCloseBtn" class="iconBtn" title="Close" aria-label="Close">✕</button>
+                </div>
+                <div class="videoTracksBody">
+                  <label class="tracksLabel" for="videoAudioTrackSelect">Audio</label>
+                  <select id="videoAudioTrackSelect" class="tracksSelect" aria-label="Audio track"></select>
+                  <label class="tracksLabel" for="videoSubtitleTrackSelect">Subtitles</label>
+                  <select id="videoSubtitleTrackSelect" class="tracksSelect" aria-label="Subtitle track"></select>
+
+                  
+                  <label class="tracksLabel" for="videoLoadSubtitleBtn">External subtitle</label>
+                  <button id="videoLoadSubtitleBtn" class="tracksBtn" title="Load subtitle file" aria-label="Load subtitle file">Load…</button>
+
+
+                  <div class="tracksDivider"></div>
+
+                  <label class="tracksLabel" for="videoRespectSubStylesToggle">Subtitle style</label>
+                  <label class="tracksToggle">
+                    <input id="videoRespectSubStylesToggle" type="checkbox" />
+                    <span>Respect embedded styles (ASS)</span>
+                  </label>
+                  <div class="tracksHint">If anime subtitles look too plain, enable this to preserve typesetting.</div>
+
+                  <div class="tracksDivider"></div>
+
+                  <!-- Build 60: Speed controls moved to separate panel -->
+
+                  <!-- Tankoban Plus Build 5.4B — Delay controls (mpv only)
+                       INTENT: Quick audio/subtitle sync delay adjustments without changing overlay behavior. -->
+                  <label class="tracksLabel" for="videoAudioDelayMinusBtn">Audio delay</label>
+                  <div id="videoAudioDelayControls" class="delayControls" aria-label="Audio delay controls">
+                    <button id="videoAudioDelayMinusBtn" class="delayBtn" title="Audio delay minus" aria-label="Audio delay minus">−</button>
+                    <span id="videoAudioDelayValue" class="delayValue" aria-label="Audio delay value">0.00s</span>
+                    <button id="videoAudioDelayPlusBtn" class="delayBtn" title="Audio delay plus" aria-label="Audio delay plus">+</button>
+                  </div>
+
+                  <label class="tracksLabel" for="videoSubtitleDelayMinusBtn">Subtitle delay</label>
+                  <div id="videoSubtitleDelayControls" class="delayControls" aria-label="Subtitle delay controls">
+                    <button id="videoSubtitleDelayMinusBtn" class="delayBtn" title="Subtitle delay minus" aria-label="Subtitle delay minus">−</button>
+                    <span id="videoSubtitleDelayValue" class="delayValue" aria-label="Subtitle delay value">0.00s</span>
+                    <button id="videoSubtitleDelayPlusBtn" class="delayBtn" title="Subtitle delay plus" aria-label="Subtitle delay plus">+</button>
+                  </div>
+
+<!-- Tankoban Plus Build 5.4C — Aspect / crop presets + reset (mpv only)
+     INTENT: Expose basic transform controls without changing the player overlay model. -->
+<div id="videoTransformsBlock" class="transformsBlock hidden">
+  <label class="tracksLabel" for="videoAspectSelect">Aspect</label>
+  <select id="videoAspectSelect" class="tracksSelect" aria-label="Aspect ratio preset">
+    <option value="auto">Auto</option>
+    <option value="16:9">16:9</option>
+    <option value="4:3">4:3</option>
+    <option value="1:1">1:1</option>
+    <option value="21:9">21:9</option>
+    <option value="custom" disabled>Custom</option>
+  </select>
+
+  <label class="tracksLabel" for="videoCropSelect">Crop</label>
+  <select id="videoCropSelect" class="tracksSelect" aria-label="Crop preset">
+    <option value="none">None</option>
+    <option value="16:9">16:9</option>
+    <option value="4:3">4:3</option>
+    <option value="1:1">1:1</option>
+    <option value="21:9">21:9</option>
+    <option value="custom" disabled>Custom</option>
+  </select>
+
+  <label class="tracksLabel" for="videoResetTransformsBtn">Transforms</label>
+  <button id="videoResetTransformsBtn" class="tracksBtn" title="Reset aspect and crop" aria-label="Reset aspect and crop">Reset</button>
+</div>
+
+                </div>
+              </div>
+            </div>
+
+            <!-- Build 67: Anchored speed popover -->
+            <div id="videoSpeedPanel" class="videoAnchoredPopover hidden" role="dialog" aria-label="Playback speed">
+              <div class="anchoredPopoverContent">
+                <button id="videoSpeedDownBtnPanel" class="popoverBtn" aria-label="Decrease speed">−</button>
+                <div id="videoSpeedPanelValue" class="popoverValue mono">1.0×</div>
+                <button id="videoSpeedUpBtnPanel" class="popoverBtn" aria-label="Increase speed">+</button>
+              </div>
+            </div>
+
+            <!-- Build 67: Anchored volume popover -->
+            <div id="videoVolPanel" class="videoAnchoredPopover hidden" role="dialog" aria-label="Volume">
+              <div class="anchoredPopoverContent anchoredPopoverVertical">
+                <div id="videoVolPct" class="popoverValue mono">100%</div>
+                <input id="videoVol" class="popoverSlider" type="range" min="0" max="100" value="100" step="1" orient="vertical" aria-label="Volume" />
+                <button id="videoVolMuteToggleBtn" class="popoverBtn" aria-label="Mute">🔇</button>
+              </div>
+            </div>
+
+            <div id="videoPlaylistPanel" class="hudPanel hidden" role="dialog" aria-label="Playlist">
+              <div class="panelHeader">
+                <div class="panelTitleWrap">
+                  <div class="panelTitle">Playlist</div>
+                  <div id="videoPlaylistFolder" class="panelSub mono"></div>
+                </div>
+
+                <div class="panelHeaderActions">
+                  <label class="panelToggle">
+                    <input id="videoAutoAdvanceToggle" type="checkbox" />
+                    <span>Auto-advance</span>
+                  </label>
+                  <button id="videoPlaylistCloseBtn" class="iconBtn panelCloseBtn" aria-label="Close">✕</button>
+                </div>
+              </div>
+
+              <div class="panelBody">
+                <div class="panelRow">
+                  <button id="videoPrevEpBtn" class="panelBtn" aria-label="Previous episode">← Prev</button>
+                  <button id="videoNextEpBtn" class="panelBtn" aria-label="Next episode">Next →</button>
+                </div>
+
+                <div id="videoPlaylistList" class="panelList" role="listbox" aria-label="Episodes"></div>
+              </div>
+            </div>
+
+<div id="videoToast" class="videoToast hidden" role="status" aria-live="polite"></div>
+
+            <div id="videoResumePrompt" class="videoPrompt hidden" role="dialog" aria-modal="true">
+              <div class="videoPromptCard">
+                <div class="videoPromptTitle">Resume playback?</div>
+                <div id="videoResumeText" class="videoPromptText">—</div>
+                <div class="videoPromptActions">
+                  <button id="videoResumeBtn" class="primaryBtn">Resume</button>
+                  <button id="videoRestartBtn" class="navBtn">Start over</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </section>
+
+      <!-- FIND_THIS:CONTEXT_MENU_CONTAINER -->
+      <div id="contextMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>
+
+      <!-- Player view (injected) -->
+      <div id="readerViewMount"></div>
+      <script>
+        (() => {
+          const mount = document.getElementById('readerViewMount');
+          if (!mount) return;
+          try {
+            const req = new XMLHttpRequest();
+            req.open('GET', './domains/reader/reader_view.html', false);
+            req.send(null);
+            if (req.status >= 200 && req.status < 400) {
+              mount.outerHTML = req.responseText;
+            } else {
+              console.error('Failed to load reader_view.html', req.status);
+            }
+          } catch (err) {
+            console.error('Failed to inject reader view markup', err);
+          }
+        })();
+      </script>
+    </main>
+
+    <!-- Library Settings overlay -->
+    <div id="librarySettingsOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settingsCard">
+        <div class="settingsTop">
+          <div class="settingsTitle">Settings</div>
+          <button id="settingsClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsAutoBase">Auto Scroll base seconds per screen (Preset 1)</label>
+          <input id="settingsAutoBase" type="number" min="5" max="60" step="1" class="search settingsNum" />
+          <div class="muted tiny">How long Auto Scroll takes to move one full screen at Preset 1.</div>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsAutoStep">Auto Scroll step percentage</label>
+          <input id="settingsAutoStep" type="number" min="1" max="50" step="1" class="search settingsNum" />
+          <div class="muted tiny">How much each speed step changes Auto Scroll (as a percent).</div>
+        </div>
+
+        <div class="settingsGroup">
+          <label class="settingsLabel" for="settingsScanIgnore">Library scan ignore patterns (one per line)</label>
+          <textarea id="settingsScanIgnore" class="search settingsTextArea" rows="4" spellcheck="false"></textarea>
+          <div class="muted tiny">
+            Matches are case-insensitive substring checks against full paths (folders + files). Hidden folders and common junk dirs are ignored automatically.
+          </div>
+        </div>
+
+        <div class="settingsActions">
+          <button id="settingsSave" class="btn">Save</button>
+          <button id="settingsReset" class="btn btn-ghost">Reset to defaults</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="hiddenSeriesOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Hidden series">
+      <div class="settingsCard">
+        <div class="settingsTop">
+          <div class="settingsTitle">Hidden series</div>
+          <button id="hiddenSeriesClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="muted tiny">
+          Hidden series are folders removed from the library and kept out of scans until restored.
+        </div>
+
+        <div id="hiddenSeriesList" class="hiddenSeriesList"></div>
+
+        <div class="settingsActions">
+          <button id="clearIgnoredBtn" class="btn btn-ghost">Clear ignore list…</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Debug overlay (default-off). Enabled via MANGA_SCROLLER_DEBUG=1 at launch. -->
+    <div id="debugOverlay" class="debugOverlay hidden" aria-hidden="true"></div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div id="warmupBar" class="warmupBar hidden">
+      <div id="warmupText" class="warmupText">Generating thumbnails…</div>
+      <button id="warmupCancel" class="btn btn-ghost btn-sm">Cancel</button>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loadingOverlay hidden" aria-live="polite">
+      <div class="loadingCard">
+        <div class="spinner" aria-hidden="true"></div>
+        <div class="loadingText">
+          <div id="loadingTitle" class="loadingTitle">Loading…</div>
+          <div id="loadingSub" class="loadingSub muted tiny"></div>
+          <div class="loadingBarWrap">
+            <div id="loadingBar" class="loadingBar"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Keymap overlay -->
+    <div id="keysOverlay" class="keysOverlay hidden" role="dialog" aria-modal="true">
+      <div class="keysCard">
+        <div class="keysTop">
+          <div class="keysTitle">Keys</div>
+          <button id="keysClose" class="btn btn-ghost btn-sm">Close</button>
+        </div>
+
+        <div class="keysCols">
+          <div class="keysCol">
+            <div class="keysHead">Player</div>
+            <div class="keysLine"><span class="key">M</span><span class="desc">Cycle reading mode</span></div>
+            <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+            <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">I</span><span class="desc">Invert next or previous sides (Two-Page flick modes only)</span></div>
+            <div class="keysLine"><span class="key">P</span><span class="desc">Coupling nudge toggle (shift pairing by 1 where supported)</span></div>
+            <div class="keysLine"><span class="key">L</span><span class="desc">Toggle Loupe (magnifier Heads Up Display)</span></div>
+            <div class="keysLine"><span class="key">Mouse wheel</span><span class="desc">Scroll (Long Strip) / Scrub pages (Auto)</span></div>
+            <div class="keysLine"><span class="key">Up / Down</span><span class="desc">Scroll (Long Strip / Double Page Scroll) • Pan overflow (MangaPlus Fit Width)</span></div>
+            <div class="keysLine"><span class="key">Shift + Up / Down</span><span class="desc">Bigger vertical steps (where supported)</span></div>
+            <div class="keysLine"><span class="key">Space / Enter</span><span class="desc">Play / pause (Auto + Auto Flip)</span></div>
+            <div class="keysLine"><span class="key">Numpad Enter</span><span class="desc">Confirm Go-to (when open)</span></div>
+            <div class="keysLine"><span class="key">, / .</span><span class="desc">Adjust scroll speed (Auto only)</span></div>
+            <div class="keysLine"><span class="key">Left / Right</span><span class="desc">Prev / next page</span></div>
+            <div class="keysLine"><span class="key">Page Up / Page Down</span><span class="desc">Prev / next page</span></div>
+            <div class="keysLine"><span class="key">Home / End</span><span class="desc">First / last page</span></div>
+            <div class="keysLine"><span class="key">Shift</span><span class="desc">Turbo scroll (Auto)</span></div>
+            <div class="keysLine"><span class="key">Control</span><span class="desc">Brake scroll (Auto)</span></div>
+            <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+            <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+            <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+            <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+            <div class="keysLine"><span class="key">H</span><span class="desc">Toggle Heads Up Display</span></div>
+            <div class="keysLine"><span class="key">O</span><span class="desc">Open Volume Navigator</span></div>
+            <div class="keysLine"><span class="key">Z</span><span class="desc">Replay</span></div>
+            <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back to library</span></div>
+            <div class="keysLine"><span class="key">R</span><span class="desc">Clear resume point</span></div>
+            <div class="keysLine"><span class="key">S</span><span class="desc">Save resume point</span></div>
+            <div class="keysLine"><span class="key">Escape</span><span class="desc">Hide HUD / close overlays / exit fullscreen</span></div>
+          </div>
+
+          <div class="keysCol">
+            <div class="keysHead">Library</div>
+            <div class="keysLine"><span class="key">A</span><span class="desc">Add series folder</span></div>
+            <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back / clear selection</span></div>
+            <div class="keysLine"><span class="key">F</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+            <div class="keysLine"><span class="key">Control + R</span><span class="desc">Refresh library</span></div>
+            <div class="keysLine"><span class="key">Control + 0</span><span class="desc">Reset to defaults</span></div>
+            <div class="keysLine"><span class="key">Control + M</span><span class="desc">Minimize</span></div>
+            <div class="keysLine"><span class="key">Control + Q</span><span class="desc">Quit</span></div>
+            <div class="keysLine"><span class="key">K</span><span class="desc">Show or hide this overlay</span></div>
+            <div class="keysLine"><span class="key">Escape</span><span class="desc">Close overlay (when open)</span></div>
+          </div>
+        </div>
+
+        <div class="keysHint muted tiny">Press K again or Escape to close. Keys do not override typing in search boxes.</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./ui/shoelace_boot.js"></script>
+  <script src="./ui/icons.js"></script>
+  <script src="./ui/control_adapters.js"></script>
+  <!-- Phase 6: Renderer API gateway (MUST load before all other scripts) -->
+  <script src="./services/api_gateway.js"></script>
+<script src="./services/health/monitor.js"></script>
+  <!-- BUILD 88 FIX 3.2: Health check monitoring -->
+
+  <!-- Phase 7: State + minimal bootstrap runtime -->
+  <script src="./state/bootstrap.js"></script>
+  <script src="./state/mode_router.js"></script>
+  <script src="./state/deferred_modules.js"></script>
+
+  <script src="./domains/shell/core.js"></script>
+  <script src="./domains/library/library.js"></script>
+  <script src="./state/reader.js"></script>
+  <script src="./domains/shell/shell_bindings.js"></script>
+</body>
+</html>
+
+
