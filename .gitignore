@@ -3,8 +3,8 @@ dist/
 build/
 player_qt/
 resources/
-Books
-Books/
+/Books
+/Books/
 *.log
 .DS_Store
 Thumbs.db

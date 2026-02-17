@@ -1,0 +1,427 @@
+// BUILD_OVERHAUL: Annotation functionality extracted from monolithic controller.js
+(function () {
+  'use strict';
+
+  var RS = window.booksReaderState;
+  var bus = window.booksReaderBus;
+
+  // BUILD_OVERHAUL: annotations require EPUB-compatible engine APIs
+  function annotationsSupported() {
+    var state = RS.state;
+    if (RS.isPdfOpen()) return false;
+    if (!state.engine) return false;
+    return typeof state.engine.getSelectionCFI === 'function'
+      && typeof state.engine.addAnnotation === 'function';
+  }
+
+  // ── loadAnnotations ─────────────────────────────────────────
+  async function loadAnnotations() {
+    var state = RS.state;
+    if (!state.book || !state.book.id) { state.annotations = []; return; }
+    try {
+      var result = await Tanko.api.booksAnnotations.get(state.book.id);
+      state.annotations = Array.isArray(result) ? result : [];
+    } catch (e) {
+      state.annotations = [];
+    }
+  }
+
+  // ── applyAnnotationsToView ──────────────────────────────────
+  function applyAnnotationsToView() {
+    var state = RS.state;
+    if (!annotationsSupported()) return;
+    if (!state.engine || !Array.isArray(state.annotations)) return;
+    for (var i = 0; i < state.annotations.length; i++) {
+      var ann = state.annotations[i];
+      if (!ann || !ann.cfi) continue;
+      try {
+        if (typeof state.engine.setAnnotationMeta === 'function') {
+          state.engine.setAnnotationMeta(ann.cfi, { color: ann.color, style: ann.style });
+        }
+        if (typeof state.engine.addAnnotation === 'function') {
+          state.engine.addAnnotation({ value: ann.cfi });
+        }
+      } catch (e) { /* swallow */ }
+    }
+  }
+
+  // ── saveAnnotation ──────────────────────────────────────────
+  async function saveAnnotation() {
+    var state = RS.state;
+    var els = RS.ensureEls();
+    if (!annotationsSupported()) return;
+    if (!state.book || !state.book.id) return;
+
+    var cfi = state.annotPendingCfi;
+    if (cfi && typeof cfi === 'object') cfi = cfi.cfi || cfi.value || '';
+    cfi = String(cfi || '').trim();
+    if (!cfi) return;
+    var text = state.annotPendingText || '';
+    var editId = state.annotEditId;
+
+    // Read color from active swatch
+    var color = state.annotColor || '#FEF3BD';
+    if (els.annotColorPicker) {
+      var activeSwatch = els.annotColorPicker.querySelector('.booksAnnotColorSwatch.active');
+      if (activeSwatch && activeSwatch.dataset.color) color = activeSwatch.dataset.color;
+    }
+
+    // Read style from active button
+    var style = state.annotStyle || 'highlight';
+    if (els.annotStylePicker) {
+      var activeBtn = els.annotStylePicker.querySelector('.booksAnnotStyleBtn.active');
+      if (activeBtn && activeBtn.dataset.style) style = activeBtn.dataset.style;
+    }
+
+    // Read note
+    var note = '';
+    if (els.annotNote) note = els.annotNote.value || '';
+
+    var ann = {
+      cfi: String(cfi),
+      text: text,
+      color: color,
+      style: style,
+      note: note,
+      ts: Date.now(),
+    };
+    if (editId) ann.id = editId;
+
+    try {
+      await Tanko.api.booksAnnotations.save(state.book.id, ann);
+    } catch (e) { /* swallow */ }
+
+    await loadAnnotations();
+    applyAnnotationsToView();
+    renderAnnotationList();
+    hideAnnotPopup();
+    RS.showToast(editId ? 'Annotation updated' : 'Annotation saved');
+  }
+
+  // ── deleteAnnotationById ────────────────────────────────────
+  async function deleteAnnotationById(annId) {
+    var state = RS.state;
+    if (!annotationsSupported()) return;
+    if (!annId || !state.book || !state.book.id) return;
+
+    var ann = null;
+    for (var i = 0; i < state.annotations.length; i++) {
+      if (state.annotations[i].id === annId) { ann = state.annotations[i]; break; }
+    }
+
+    if (ann && ann.cfi && state.engine) {
+      try {
+        if (typeof state.engine.deleteAnnotation === 'function') {
+          state.engine.deleteAnnotation({ value: ann.cfi });
+        }
+        if (typeof state.engine.removeAnnotationMeta === 'function') {
+          state.engine.removeAnnotationMeta(ann.cfi);
+        }
+      } catch (e) { /* swallow */ }
+    }
+
+    try {
+      await Tanko.api.booksAnnotations.delete(state.book.id, annId);
+    } catch (e) { /* swallow */ }
+
+    await loadAnnotations();
+    applyAnnotationsToView();
+    renderAnnotationList();
+    hideAnnotPopup();
+    RS.showToast('Annotation deleted');
+  }
+
+  // ── isAnnotPopupOpen ────────────────────────────────────────
+  function isAnnotPopupOpen() {
+    var els = RS.ensureEls();
+    return !!(els.annotPopup && !els.annotPopup.classList.contains('hidden'));
+  }
+
+  // ── hideAnnotPopup ──────────────────────────────────────────
+  function hideAnnotPopup() {
+    var els = RS.ensureEls();
+    var state = RS.state;
+    if (els.annotPopup) els.annotPopup.classList.add('hidden');
+    state.annotEditId = null;
+    state.annotPendingCfi = null;
+    state.annotPendingText = '';
+  }
+
+  // ── Color swatches ──────────────────────────────────────────
+  function renderColorSwatches(selectedHex) {
+    var els = RS.ensureEls();
+    if (!els.annotColorPicker) return;
+    els.annotColorPicker.innerHTML = '';
+    var colors = RS.ANNOT_COLORS;
+    for (var i = 0; i < colors.length; i++) {
+      var c = colors[i];
+      var swatch = document.createElement('div');
+      swatch.className = 'booksAnnotColorSwatch' + (c.hex === selectedHex ? ' active' : '');
+      swatch.style.background = c.hex;
+      swatch.dataset.color = c.hex;
+      swatch.title = c.id;
+      swatch.addEventListener('click', (function (hex) {
+        return function () { selectColor(hex); };
+      })(c.hex));
+      els.annotColorPicker.appendChild(swatch);
+    }
+  }
+
+  function selectColor(hex) {
+    RS.state.annotColor = hex;
+    var els = RS.ensureEls();
+    if (!els.annotColorPicker) return;
+    var swatches = els.annotColorPicker.querySelectorAll('.booksAnnotColorSwatch');
+    for (var i = 0; i < swatches.length; i++) {
+      swatches[i].classList.toggle('active', swatches[i].dataset.color === hex);
+    }
+  }
+
+  // ── Style buttons ───────────────────────────────────────────
+  function renderStyleButtons(selectedStyle) {
+    var els = RS.ensureEls();
+    if (!els.annotStylePicker) return;
+    els.annotStylePicker.innerHTML = '';
+    var styles = RS.ANNOT_STYLES;
+    for (var i = 0; i < styles.length; i++) {
+      var s = styles[i];
+      var btn = document.createElement('button');
+      btn.className = 'booksAnnotStyleBtn' + (s === selectedStyle ? ' active' : '');
+      btn.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+      btn.dataset.style = s;
+      btn.addEventListener('click', (function (style) {
+        return function () { selectStyle(style); };
+      })(s));
+      els.annotStylePicker.appendChild(btn);
+    }
+  }
+
+  function selectStyle(style) {
+    RS.state.annotStyle = style;
+    var els = RS.ensureEls();
+    if (!els.annotStylePicker) return;
+    var btns = els.annotStylePicker.querySelectorAll('.booksAnnotStyleBtn');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].classList.toggle('active', btns[i].dataset.style === style);
+    }
+  }
+
+  // ── showAnnotPopup ──────────────────────────────────────────
+  function showAnnotPopup(existingAnn) {
+    var els = RS.ensureEls();
+    var state = RS.state;
+    if (!annotationsSupported()) return;
+    if (!els.annotPopup) return;
+
+    if (existingAnn && existingAnn.id) {
+      // Editing existing annotation
+      state.annotEditId = existingAnn.id;
+      state.annotPendingCfi = existingAnn.cfi || null;
+      state.annotPendingText = existingAnn.text || '';
+      renderColorSwatches(existingAnn.color || '#FEF3BD');
+      renderStyleButtons(existingAnn.style || 'highlight');
+      if (els.annotNote) els.annotNote.value = existingAnn.note || '';
+    } else {
+      // New annotation — use last-used color/style
+      state.annotEditId = null;
+      renderColorSwatches(state.annotColor || '#FEF3BD');
+      renderStyleButtons(state.annotStyle || 'highlight');
+      if (els.annotNote) els.annotNote.value = '';
+    }
+
+    // Show/hide delete button
+    if (els.annotDelete) {
+      els.annotDelete.classList.toggle('hidden', !state.annotEditId);
+    }
+
+    // Position popup near selection or center of host
+    var positioned = false;
+    if (els.host) {
+      try {
+        var sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+          var rect = sel.getRangeAt(0).getBoundingClientRect();
+          if (rect && rect.width > 0) {
+            els.annotPopup.style.top = Math.max(8, rect.bottom + 8) + 'px';
+            els.annotPopup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 340)) + 'px';
+            positioned = true;
+          }
+        }
+      } catch (e) { /* swallow */ }
+
+      if (!positioned) {
+        var hostRect = els.host.getBoundingClientRect();
+        els.annotPopup.style.top = Math.max(8, hostRect.top + hostRect.height / 2 - 100) + 'px';
+        els.annotPopup.style.left = Math.max(8, hostRect.left + hostRect.width / 2 - 160) + 'px';
+      }
+    }
+
+    els.annotPopup.classList.remove('hidden');
+  }
+
+  // ── renderAnnotationList ────────────────────────────────────
+  function renderAnnotationList() {
+    var els = RS.ensureEls();
+    var state = RS.state;
+    if (!els.annotList) return;
+
+    if (!annotationsSupported()) {
+      els.annotList.innerHTML = '<div class="booksAnnotEmpty">Annotations are unavailable for this format</div>';
+      return;
+    }
+
+    if (!state.annotations || state.annotations.length === 0) {
+      els.annotList.innerHTML = '<div class="booksAnnotEmpty">No annotations yet</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < state.annotations.length; i++) {
+      var ann = state.annotations[i];
+      var textPreview = RS.escHtml(String(ann.text || '').substring(0, 80));
+      if (String(ann.text || '').length > 80) textPreview += '\u2026';
+      var notePreview = ann.note ? '<div class="booksAnnotItemNote">' + RS.escHtml(String(ann.note).substring(0, 60)) + '</div>' : '';
+      var dotColor = RS.escHtml(ann.color || '#FEF3BD');
+
+      html += '<div class="booksAnnotItem" data-annot-id="' + RS.escHtml(ann.id) + '">'
+        + '<span class="booksAnnotDot" style="background:' + dotColor + '"></span>'
+        + '<div class="booksAnnotItemBody">'
+        + '<div class="booksAnnotItemText">' + textPreview + '</div>'
+        + notePreview
+        + '</div>'
+        + '<button class="booksAnnotItemDelete" data-annot-delete="' + RS.escHtml(ann.id) + '" title="Delete">\u00D7</button>'
+        + '</div>';
+    }
+    els.annotList.innerHTML = html;
+
+    // Wire click-to-navigate
+    var items = els.annotList.querySelectorAll('.booksAnnotItem');
+    for (var j = 0; j < items.length; j++) {
+      (function (item) {
+        item.addEventListener('click', function (e) {
+          if (e.target.classList.contains('booksAnnotItemDelete')) return;
+          var id = item.getAttribute('data-annot-id');
+          var target = null;
+          for (var k = 0; k < state.annotations.length; k++) {
+            if (state.annotations[k].id === id) { target = state.annotations[k]; break; }
+          }
+          if (target && target.cfi && state.engine && typeof state.engine.showAnnotation === 'function') {
+            try { state.engine.showAnnotation({ value: target.cfi }); } catch (e2) { /* swallow */ }
+          }
+        });
+      })(items[j]);
+    }
+
+    // Wire delete buttons
+    var delBtns = els.annotList.querySelectorAll('.booksAnnotItemDelete');
+    for (var d = 0; d < delBtns.length; d++) {
+      (function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = btn.getAttribute('data-annot-delete');
+          if (id) deleteAnnotationById(id).catch(function () {});
+        });
+      })(delBtns[d]);
+    }
+  }
+
+  // ── bind ────────────────────────────────────────────────────
+  function bind() {
+    var els = RS.ensureEls();
+    var state = RS.state;
+
+    // Save button
+    if (els.annotSave) {
+      els.annotSave.addEventListener('click', function () { saveAnnotation().catch(function () {}); });
+    }
+
+    // Close button
+    if (els.annotClose) {
+      els.annotClose.addEventListener('click', function () { hideAnnotPopup(); });
+    }
+
+    // Delete button (in popup)
+    if (els.annotDelete) {
+      els.annotDelete.addEventListener('click', function () {
+        if (state.annotEditId) deleteAnnotationById(state.annotEditId).catch(function () {});
+      });
+    }
+    // BUILD_OVERHAUL: contextmenu bridge is wired by reader_core iframe callbacks
+
+    // Bus events
+    bus.on('annot:show-popup', function (ann) { showAnnotPopup(ann); });
+    bus.on('annot:hide-popup', function () { hideAnnotPopup(); });
+    bus.on('annot:save', function () { saveAnnotation().catch(function () {}); });
+    bus.on('annot:delete', function (id) { deleteAnnotationById(id).catch(function () {}); });
+
+    bus.on('annotations:render', function () { renderAnnotationList(); });
+
+    bus.on('sidebar:tab-changed', function (tab) {
+      if (tab === 'annotations') renderAnnotationList();
+    });
+  }
+
+  // ── onOpen ──────────────────────────────────────────────────
+  async function onOpen() {
+    var state = RS.state;
+    if (!annotationsSupported()) {
+      state.annotations = [];
+      hideAnnotPopup();
+      renderAnnotationList();
+      return;
+    }
+
+    await loadAnnotations();
+    applyAnnotationsToView();
+    renderAnnotationList();
+
+    // BUILD_OVERHAUL: wire engine callbacks with engine API methods
+    if (state.engine) {
+      if (typeof state.engine.onShowAnnotation === 'function') {
+        state.engine.onShowAnnotation(function (data) {
+          var cfi = data && (data.cfi || data.value) ? String(data.cfi || data.value) : '';
+          if (!cfi) return;
+          var found = null;
+          for (var i = 0; i < state.annotations.length; i++) {
+            if (state.annotations[i].cfi === cfi) { found = state.annotations[i]; break; }
+          }
+          if (found) showAnnotPopup(found);
+        });
+      }
+
+      if (typeof state.engine.onCreateOverlay === 'function') {
+        state.engine.onCreateOverlay(function () {
+          applyAnnotationsToView();
+        });
+      }
+    }
+  }
+
+  // ── onClose ─────────────────────────────────────────────────
+  function onClose() {
+    var state = RS.state;
+    if (state.engine) {
+      try {
+        if (typeof state.engine.onShowAnnotation === 'function') state.engine.onShowAnnotation(null);
+      } catch (e) { /* swallow */ }
+      try {
+        if (typeof state.engine.onCreateOverlay === 'function') state.engine.onCreateOverlay(null);
+      } catch (e2) { /* swallow */ }
+    }
+    RS.state.annotations = [];
+    hideAnnotPopup();
+  }
+
+  // ── Export ──────────────────────────────────────────────────
+  window.booksReaderAnnotations = {
+    bind: bind,
+    loadAnnotations: loadAnnotations,
+    applyAnnotationsToView: applyAnnotationsToView,
+    showAnnotPopup: showAnnotPopup,
+    hideAnnotPopup: hideAnnotPopup,
+    isAnnotPopupOpen: isAnnotPopupOpen,
+    renderAnnotationList: renderAnnotationList,
+    onOpen: onOpen,
+    onClose: onClose,
+  };
+})();
