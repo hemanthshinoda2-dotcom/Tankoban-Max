@@ -237,10 +237,60 @@
       state.voiceName = String(voiceURI || 'en-US-AriaNeural');
     }
 
+    // FIX-TTS08: Boundary scheduling state — survives pause/resume cycles.
+    // Stores pre-computed boundary entries and a polling timer that checks
+    // audio.currentTime to fire them at the right moment, even after pauses.
+    var _bd = {
+      entries: [],     // [{ offsetMs, charIndex, charLength }]
+      nextIdx: 0,      // next entry to fire
+      rafId: null,     // requestAnimationFrame / setTimeout id
+      reqId: '',       // matches state.requestId to invalidate on cancel
+    };
+
+    function _bdStop() {
+      if (_bd.rafId) { clearTimeout(_bd.rafId); _bd.rafId = null; }
+      _bd.entries = [];
+      _bd.nextIdx = 0;
+      _bd.reqId = '';
+    }
+
+    function _bdPoll() {
+      _bd.rafId = null;
+      if (_bd.reqId !== state.requestId) return;
+      if (!state.playing) return;
+      if (state.paused) {
+        // Re-check after a short delay when paused
+        _bd.rafId = setTimeout(_bdPoll, 100);
+        return;
+      }
+      var audio = state.audio;
+      if (!audio) return;
+      var currentMs = (audio.currentTime || 0) * 1000;
+      // Fire all boundaries whose offset has been reached
+      while (_bd.nextIdx < _bd.entries.length) {
+        var entry = _bd.entries[_bd.nextIdx];
+        if (entry.offsetMs <= currentMs) {
+          _bd.nextIdx++;
+          if (typeof state.onBoundary === 'function') {
+            try { state.onBoundary(entry.charIndex, entry.charLength, 'word'); } catch {}
+          }
+        } else {
+          break;
+        }
+      }
+      // Schedule next poll if there are remaining entries
+      if (_bd.nextIdx < _bd.entries.length) {
+        var nextDelay = Math.max(16, _bd.entries[_bd.nextIdx].offsetMs - currentMs);
+        _bd.rafId = setTimeout(_bdPoll, Math.min(nextDelay, 50));
+      }
+    }
+
     function fireBoundaries(reqId, boundaries, spokenText) {
+      _bdStop();
       var list = Array.isArray(boundaries) ? boundaries : [];
       var txt = String(spokenText || '');
       var searchFrom = 0;
+      var entries = [];
       for (var i = 0; i < list.length; i++) {
         var word = list[i] && list[i].text || '';
         var charIndex = 0;
@@ -253,17 +303,18 @@
             searchFrom = idx + word.length;
           }
         }
-        (function (b, ci, cl) {
-          var delay = Math.max(0, Number(b && b.offsetMs || 0));
-          setTimeout(function () {
-            if (reqId !== state.requestId) return;
-            if (!state.playing || state.paused) return;
-            if (state.abortCtrl && state.abortCtrl.signal.aborted) return;
-            if (typeof state.onBoundary === 'function') {
-              try { state.onBoundary(ci, cl, 'word'); } catch {}
-            }
-          }, delay);
-        })(list[i], charIndex, charLength);
+        entries.push({
+          offsetMs: Math.max(0, Number(list[i] && list[i].offsetMs || 0)),
+          charIndex: charIndex,
+          charLength: charLength,
+        });
+      }
+      _bd.entries = entries;
+      _bd.nextIdx = 0;
+      _bd.reqId = reqId;
+      // Start polling
+      if (entries.length) {
+        _bd.rafId = setTimeout(_bdPoll, 16);
       }
     }
 
@@ -460,6 +511,7 @@
     }
 
     function cancel() {
+      _bdStop(); // FIX-TTS08: stop boundary poller
       if (state.abortCtrl) {
         try { state.abortCtrl.abort(); } catch {}
         state.abortCtrl = null;

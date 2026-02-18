@@ -251,6 +251,26 @@
     return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }
 
+  // FIX-TTS08: Build the word ::highlight CSS rule based on current style + color.
+  // CSS Highlight API supports: background-color, color, text-decoration*, -webkit-text-stroke.
+  function _buildHighlightCss() {
+    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+    var sentenceCss = '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }';
+    var wordCss = '';
+    var style = state.ttsHlStyle;
+    if (style === 'underline') {
+      wordCss = '::highlight(tts-word) { text-decoration: underline 2px ' + colors.word + '; background-color: transparent; }';
+    } else if (style === 'squiggly') {
+      wordCss = '::highlight(tts-word) { text-decoration: underline wavy ' + colors.word + '; background-color: transparent; }';
+    } else if (style === 'strikethrough') {
+      wordCss = '::highlight(tts-word) { text-decoration: line-through 2px ' + colors.word + '; background-color: transparent; }';
+    } else {
+      // 'highlight' (default) and 'enlarge' — enlarge uses span wrapping, not CSS highlight
+      wordCss = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
+    }
+    return sentenceCss + '\n' + wordCss;
+  }
+
   // FIX-TTS05: Initialize BOTH sentence and word CSS highlights in the EPUB iframe
   function _ensureCssHighlights(iframeDoc) {
     if (!iframeDoc) return false;
@@ -270,13 +290,11 @@
       win.CSS.highlights.set('tts-word', _cssHl.word);
       win.CSS.highlights.set('tts-sentence', _cssHl.sentence);
 
-      // Inject ::highlight styles into the iframe
-      var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+      // FIX-TTS08: Inject style-aware ::highlight rules + enlarge class
       var style = iframeDoc.createElement('style');
       style.setAttribute('data-tts-hl', '1');
-      style.textContent =
-        '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }\n' +
-        '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
+      style.textContent = _buildHighlightCss() + '\n' +
+        '.tts-enlarge { font-size: 1.35em; display: inline; transition: font-size 0.12s ease-out; }';
       iframeDoc.head.appendChild(style);
       _cssHl.styleEl = style;
 
@@ -286,6 +304,7 @@
   }
 
   function _clearCssHighlights() {
+    _clearEnlargeSpan(); // FIX-TTS08: remove any enlarge span
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
     if (_cssHl.styleEl) { try { _cssHl.styleEl.remove(); } catch {} }
@@ -304,14 +323,49 @@
     _cssHl.styleEl = null;
   }
 
+  // FIX-TTS08: Update both style and color in the injected CSS
   function _updateCssHighlightColors() {
     if (!_cssHl.styleEl || !_cssHl.doc) return;
-    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
     try {
-      _cssHl.styleEl.textContent =
-        '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }\n' +
-        '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
+      _cssHl.styleEl.textContent = _buildHighlightCss() + '\n' +
+        '.tts-enlarge { font-size: 1.35em; display: inline; transition: font-size 0.12s ease-out; }';
     } catch {}
+  }
+
+  // FIX-TTS08: Enlarge style — wrap current word range in a <span class="tts-enlarge">,
+  // remove the previous one. This is the only style that mutates the DOM.
+  var _enlargeSpan = null;
+
+  function _applyEnlargeSpan(range) {
+    _clearEnlargeSpan();
+    if (!range) return;
+    try {
+      var doc = range.startContainer.ownerDocument || document;
+      var span = doc.createElement('span');
+      span.className = 'tts-enlarge';
+      span.setAttribute('data-tts-tmp', '1');
+      range.surroundContents(span);
+      _enlargeSpan = span;
+    } catch {
+      // surroundContents fails if range crosses element boundaries — fall back to highlight
+      _enlargeSpan = null;
+    }
+  }
+
+  function _clearEnlargeSpan() {
+    if (!_enlargeSpan) return;
+    try {
+      var parent = _enlargeSpan.parentNode;
+      if (parent) {
+        while (_enlargeSpan.firstChild) {
+          parent.insertBefore(_enlargeSpan.firstChild, _enlargeSpan);
+        }
+        parent.removeChild(_enlargeSpan);
+        // NOTE: do NOT call parent.normalize() — merging text nodes would
+        // invalidate Range references held in the pre-generated TTS queue.
+      }
+    } catch {}
+    _enlargeSpan = null;
   }
 
   // FIX-TTS05: Highlight the sentence (block range) via CSS Highlight API
@@ -326,14 +380,23 @@
     } catch {}
   }
 
-  // FIX-TTS05: Highlight the current word via CSS Highlight API
+  // FIX-TTS08: Highlight the current word — dispatches to enlarge or CSS Highlight API
   function highlightWord(range) {
     if (!range) return;
     try {
       var doc = range.startContainer.ownerDocument || document;
-      if (_ensureCssHighlights(doc) && _cssHl.word) {
-        _cssHl.word.clear();
-        _cssHl.word.add(range);
+      _ensureCssHighlights(doc);
+      if (state.ttsHlStyle === 'enlarge') {
+        // Enlarge mode: wrap word in a scaled span, clear CSS word highlight
+        if (_cssHl.word) _cssHl.word.clear();
+        _applyEnlargeSpan(range);
+      } else {
+        // All other styles: use CSS Highlight API
+        _clearEnlargeSpan();
+        if (_cssHl.word) {
+          _cssHl.word.clear();
+          _cssHl.word.add(range);
+        }
       }
     } catch {}
   }
@@ -361,6 +424,7 @@
     // FIX-TTS05: only clear CSS highlights — no overlayer for TTS
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
+    _clearEnlargeSpan(); // FIX-TTS08: also remove enlarge span
   }
 
   // FIX-TTS07: Scroll the paginator so the given range is visible and centered.
@@ -1113,11 +1177,14 @@
   }
 
   function setHighlightStyle(style) {
-    var valid = ['highlight', 'underline', 'squiggly', 'strikethrough'];
+    var valid = ['highlight', 'underline', 'squiggly', 'strikethrough', 'enlarge'];
     if (valid.indexOf(style) < 0) return;
+    // FIX-TTS08: When switching away from enlarge, remove the active span
+    if (state.ttsHlStyle === 'enlarge' && style !== 'enlarge') {
+      _clearEnlargeSpan();
+    }
     state.ttsHlStyle = style;
-    // FIX-TTS05: style affects overlayer only (which we no longer use for TTS)
-    // CSS highlights always use background — just update colors
+    // FIX-TTS08: Rebuild CSS rules — style determines word highlight decoration
     _updateCssHighlightColors();
   }
 
@@ -1384,7 +1451,7 @@
     switchEngine: switchEngine,
     setHighlightStyle: setHighlightStyle,
     setHighlightColor: setHighlightColor,
-    getHighlightStyles: function () { return ['highlight', 'underline', 'squiggly', 'strikethrough']; },
+    getHighlightStyles: function () { return ['highlight', 'underline', 'squiggly', 'strikethrough', 'enlarge']; },
     getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
     getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },

@@ -601,7 +601,7 @@
     if (els.ttsHlStyle) {
       var styles = typeof tts.getHighlightStyles === 'function' ? tts.getHighlightStyles() : [];
       if (els.ttsHlStyle.options.length === 0) {
-        var labels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough' };
+        var labels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough', enlarge: 'Enlarge' };
         for (var i = 0; i < styles.length; i++) {
           var o = document.createElement('option');
           o.value = styles[i];
@@ -649,7 +649,7 @@
     if (els.ttsWordHlStyle) {
       var wStyles = typeof tts.getHighlightStyles === 'function' ? tts.getHighlightStyles() : [];
       if (els.ttsWordHlStyle.options.length === 0) {
-        var wLabels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough' };
+        var wLabels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough', enlarge: 'Enlarge' };
         for (var wi = 0; wi < wStyles.length; wi++) {
           var wo = document.createElement('option');
           wo.value = wStyles[wi];
