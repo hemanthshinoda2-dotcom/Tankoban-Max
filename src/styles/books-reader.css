@@ -4,6 +4,43 @@
    All classes prefixed with br- to avoid video/comic player conflicts
    ══════════════════════════════════════════════════════════════ */
 
+/* ── LISTEN_P1: Books sub-mode tab strip (Reading / Listening) ── */
+.books-mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--lib-border, rgba(255,255,255,0.08));
+  flex-shrink: 0;
+}
+.books-mode-tab {
+  flex: 1;
+  padding: 5px 6px;
+  border: 1px solid var(--lib-border, rgba(255,255,255,0.08));
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted, rgba(255,255,255,0.55));
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+  text-align: center;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.books-mode-tab:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text, #e4e8ef);
+}
+.books-mode-tab.active {
+  background: rgba(255,255,255,0.1);
+  color: var(--text, #e4e8ef);
+  border-color: rgba(255,255,255,0.22);
+  font-weight: 500;
+}
+/* Keep reading content container transparent — it's just a grouping wrapper */
+#booksReadingContent {
+  display: contents;
+}
+
 /* ── Layout shell ─────────────────────────────────────────── */
 .br-reader {
   --br-reader-bg: #101216;

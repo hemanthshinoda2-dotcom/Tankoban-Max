@@ -244,6 +244,11 @@ COMMON ANCHORS
       <section id="booksLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Books library navigation">
+            <!-- LISTEN_P1: Books sub-mode toggle -->
+            <div class="books-mode-tabs">
+              <button id="booksModeReadBtn" class="books-mode-tab active" aria-pressed="true" title="Reading mode">Reading</button>
+              <button id="booksModeListenBtn" class="books-mode-tab" aria-pressed="false" title="Listening mode">Listening</button>
+            </div>
             <div class="navSection">
               <div class="navHeader">Libraries</div>
               <div class="navItems">
@@ -275,6 +280,8 @@ COMMON ANCHORS
           </aside>
 
           <div class="libContent">
+            <!-- LISTEN_P1: Reading mode content wrapper (toggled by listening_shell.js) -->
+            <div id="booksReadingContent">
             <div id="booksHomeView" class="homeView">
               <div class="panel continuePanel">
                 <div class="continueHead">
@@ -384,6 +391,17 @@ COMMON ANCHORS
                   </div>
                 </div>
                 <div class="keysHint muted tiny">Press K again or Escape to close.</div>
+              </div>
+            </div>
+            </div><!-- end #booksReadingContent -->
+
+            <!-- LISTEN_P1: Listening mode home view shell (Phase 2 will populate this) -->
+            <div id="booksListenView" class="homeView hidden">
+              <div class="panel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Listening</div>
+                </div>
+                <div class="muted tiny" style="padding:8px 0">Listening library coming soon.</div>
               </div>
             </div>
 

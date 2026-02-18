@@ -149,6 +149,7 @@
           './domains/books/reader/tts_core.js',
         ]);
         // Group 3: all reader modules (need state + bus, no cross-deps)
+        // LISTEN_P0: reader_tts_ui.js removed — TTS owned by Listening mode
         await loadScriptGroup([
           './domains/books/reader/reader_appearance.js',
           './domains/books/reader/reader_dict.js',
@@ -159,12 +160,13 @@
           './domains/books/reader/reader_nav.js',
           './domains/books/reader/reader_sidebar.js',
           './domains/books/reader/reader_overlays.js',
-          './domains/books/reader/reader_tts_ui.js',
           './domains/books/reader/reader_keyboard.js',
         ]);
         // Group 4-5: orchestrator then library (sequential, order matters)
         await loadScriptOnce('./domains/books/reader/reader_core.js');
         await loadScriptOnce('./domains/books/library.js');
+        // LISTEN_P1: mode toggle shell
+        await loadScriptOnce('./domains/books/listening_shell.js');
 
         window.__tankoBooksModulesLoaded = true;
 
