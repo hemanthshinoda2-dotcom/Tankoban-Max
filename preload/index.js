@@ -134,7 +134,6 @@ const api = {
     addSeriesFolder: () => ipcRenderer.invoke(CHANNEL.BOOKS_ADD_SERIES_FOLDER),
     removeSeriesFolder: (folderPath) => ipcRenderer.invoke(CHANNEL.BOOKS_REMOVE_SERIES_FOLDER, folderPath),
     addFiles: () => ipcRenderer.invoke(CHANNEL.BOOKS_ADD_FILES),
-    addFilePaths: (paths) => ipcRenderer.invoke(CHANNEL.BOOKS_ADD_FILE_PATHS, paths), // BUILD_DRAG_DROP
     removeFile: (filePath) => ipcRenderer.invoke(CHANNEL.BOOKS_REMOVE_FILE, filePath),
     openFileDialog: () => ipcRenderer.invoke(CHANNEL.BOOKS_OPEN_FILE_DIALOG),
     bookFromPath: (filePath) => ipcRenderer.invoke(CHANNEL.BOOKS_BOOK_FROM_PATH, filePath),

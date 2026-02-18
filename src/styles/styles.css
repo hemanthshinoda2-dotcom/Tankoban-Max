@@ -916,60 +916,6 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .seriesCard:hover .seriesRemove{ opacity: 1; }
 .seriesRemove:active{ transform: translateY(1px); }
 
-/* BUILD_LETTER_DIVIDERS: alphabetical section headers in series grid */
-.booksLetterDivider{
-  grid-column: 1 / -1;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--muted);
-  padding: 8px 2px 2px;
-  border-bottom: 1px solid rgba(255,255,255,.07);
-  pointer-events: none;
-  user-select: none;
-}
-.booksLetterDivider:first-child{ padding-top: 0; }
-
-/* BUILD_ACCENT: dominant-color gradient shimmer at bottom of cover images */
-.seriesCard .seriesCoverWrap .thumbWrap::after{
-  content: '';
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 45%;
-  background: linear-gradient(to bottom, transparent, var(--book-accent, transparent));
-  opacity: 0.28;
-  pointer-events: none;
-  border-radius: 0 0 10px 10px;
-  z-index: 2;
-}
-.contCover::after{
-  content: '';
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 45%;
-  background: linear-gradient(to bottom, transparent, var(--book-accent, transparent));
-  opacity: 0.28;
-  pointer-events: none;
-}
-
-/* BUILD_DRAG_DROP: drop-target overlay when dragging book files over library */
-.booksDragover::before{
-  content: 'Drop books here';
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  font-weight: 700;
-  color: rgba(255,255,255,.9);
-  background: rgba(59, 130, 246, 0.18);
-  border: 3px dashed rgba(59, 130, 246, 0.6);
-  border-radius: var(--lib-radius-sm);
-  pointer-events: none;
-}
-
 /* Volumes */
 .volBar{
   display:flex;
