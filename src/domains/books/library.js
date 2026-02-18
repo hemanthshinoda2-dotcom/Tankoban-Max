@@ -1009,6 +1009,12 @@
           if (items.length && items[0].book) openBook(items[0].book).catch(() => {});
           else openShow(show.id);
         }},
+        // LISTEN_P2: switch to Listening mode scoped to this series
+        { label: 'Listen to series', onClick: () => {
+          const shell = window.booksListeningShell;
+          if (shell && typeof shell.openListenShow === 'function') shell.openListenShow(show.id);
+          else if (shell) shell.setMode(shell.MODE_LISTEN);
+        }},
         { separator: true },
         { label: 'Mark all finished', disabled: !hasProgress, onClick: async () => {
           const books = getBooksForShow(show.id);
@@ -1777,6 +1783,12 @@
             delete state.progressAll[book.id];
             openBook(book).catch(() => {});
           }},
+          // LISTEN_P2: launch TTS player for this book
+          { label: 'Listen to book', onClick: () => {
+            const shell = window.booksListeningShell;
+            if (shell && typeof shell.openListenBook === 'function') shell.openListenBook(book);
+            else if (shell) shell.setMode(shell.MODE_LISTEN);
+          }},
           { separator: true },
           { label: isFinished ? 'Mark as in-progress' : 'Mark as finished',
             onClick: () => (isFinished ? markBookInProgress(book.id) : markBookFinished(book.id)) },
@@ -2525,6 +2537,11 @@
     openBook: (input) => openBook(input),
     renderGlobalSearchResults: () => renderGlobalSearchResults(),
     hideGlobalSearchResults: () => hideGlobalSearchResults(),
+    // LISTEN_P2: data accessors for listening_shell.js
+    getBooks: () => (state.derived.books || []).slice(),
+    getShows: () => (state.derived.shows || []).slice(),
+    getBookById: (id) => state.derived.bookById.get(String(id || '')) || null,
+    attachThumb: (imgEl, book) => attachThumb(imgEl, book),
     setGlobalSearchSelection: (idx) => setGlobalSearchSelection(idx),
     activateGlobalSearchSelection: () => activateGlobalSearchSelection(),
     setAllProgress: (p) => {

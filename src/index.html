@@ -395,13 +395,21 @@ COMMON ANCHORS
             </div>
             </div><!-- end #booksReadingContent -->
 
-            <!-- LISTEN_P1: Listening mode home view shell (Phase 2 will populate this) -->
+            <!-- LISTEN_P2: Listening mode home view -->
             <div id="booksListenView" class="homeView hidden">
-              <div class="panel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">Listening</div>
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Listening...</div>
                 </div>
-                <div class="muted tiny" style="padding:8px 0">Listening library coming soon.</div>
+                <div id="booksListenContinueRow" class="continueRow continueYacRow hidden"></div>
+                <div id="booksListenContinueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
+              </div>
+              <div class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Books</div>
+                </div>
+                <div id="booksListenGrid" class="seriesGrid listen-grid"></div>
+                <div id="booksListenGridEmpty" class="muted tiny hidden">No books yet. Add a root library folder in Reading mode.</div>
               </div>
             </div>
 
