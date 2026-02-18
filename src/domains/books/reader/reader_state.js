@@ -23,6 +23,9 @@
     ttsRate: 1.0,
     ttsVoice: '',
     ttsPreset: '',
+    ttsHlGranularity: 'sentence', // FIX-TTS05: 'sentence' or 'word'
+    ttsWordHlStyle: 'highlight',  // FIX-TTS05: independent word highlight style
+    ttsWordHlColor: 'blue',       // FIX-TTS05: independent word highlight color
   };
 
   var DEFAULT_SHORTCUTS = {
@@ -201,6 +204,9 @@
       ttsDiagBtn: qs('booksReaderTtsDiagBtn'),
       ttsHlStyle: qs('booksReaderTtsHlStyle'),
       ttsHlColors: qs('booksReaderTtsHlColors'),
+      ttsWordTracking: qs('booksReaderTtsWordTracking'),   // FIX-TTS05
+      ttsWordHlStyle: qs('booksReaderTtsWordHlStyle'),     // FIX-TTS05
+      ttsWordHlColors: qs('booksReaderTtsWordHlColors'),   // FIX-TTS05
       ttsDiag: qs('booksReaderTtsDiag'),
       ttsDiagBody: qs('booksReaderTtsDiagBody'),
       ttsDiagClose: qs('booksReaderTtsDiagClose'),

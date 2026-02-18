@@ -7,6 +7,7 @@
   var IDLE = 'idle';
   var PLAYING = 'playing';
   var PAUSED = 'paused';
+  var SECTION_TRANSITION = 'section_transition'; // FIX-TTS05: between sections
 
   // FIX-R08: deterministic priority order.
   var ENGINE_PRIORITY = ['edge', 'webspeech'];
@@ -50,11 +51,17 @@
     onStateChange: null,
     onProgress: null,
     onNeedAdvance: null,
+    onSectionEnd: null,    // FIX-TTS05: fired when section playback exhausted
+    onSectionStart: null,  // FIX-TTS05: fired when new section begins
+    onDocumentEnd: null,   // FIX-TTS05: fired when entire document is done
     hostFn: null,
     viewEngineFn: null,
     format: '',
     ttsHlStyle: 'highlight',
     ttsHlColor: 'grey',
+    ttsHlGranularity: 'sentence', // FIX-TTS05: 'sentence' (default) or 'word'
+    ttsWordHlStyle: 'highlight',  // FIX-TTS05: independent word highlight style
+    ttsWordHlColor: 'blue',       // FIX-TTS05: independent word highlight color
 
     _pauseStartedAt: 0,
     _pauseNeedsRespeak: false,
@@ -71,11 +78,15 @@
     marks: [],           // current block's [{name, offset}] from parseSSML
     blockRange: null,    // current block's DOM Range (for sentence highlight)
     _lastBlockEl: null,  // last block-level element highlighted (for sentence tracking)
-    _preloadTimer: null, // setTimeout id for delayed preload
-    _preloadedSSML: null,// pre-fetched SSML for next block (after iterator advance)
+    _preloadTimer: null, // setTimeout id for delayed queue fill
+    _preloadedSSML: null,// legacy compat — kept for backward compat during transition
     _preloadActive: false,// true after iterator advance — setMark unreliable for current block
     _savedRanges: null,  // FIX-TTS04: snapshot of current block's mark→Range map before preload advance
+    _queue: [],          // FIX-TTS05: multi-chunk lookahead [{ssml, plainText, marks, savedRanges}]
+    _queueFilling: false,// FIX-TTS05: true while fill is in progress
   };
+
+  var LOOKAHEAD_DEPTH = 4; // FIX-TTS05: blocks to pre-synthesize ahead (matches Readest)
 
   // FIX-TTS04: CSS Custom Highlight API state for word-level highlighting
   var _cssHl = { word: null, doc: null, styleEl: null };
@@ -219,6 +230,57 @@
     return { plainText: plain, marks: marks };
   }
 
+  // FIX-TTS05: split long blocks into sentence-sized chunks for faster start latency.
+  // Inspired by Thorium's splitSentences flag and Readest's per-sentence synthesis.
+  // Short blocks (<=200 chars) are returned as-is. Sub-chunks share the parent block's
+  // savedRanges so sentence-level Overlayer highlight still covers the whole paragraph.
+  function _splitBlock(ssml, plainText, marks) {
+    var single = [{ ssml: ssml, plainText: plainText, marks: marks }];
+    if (!plainText || plainText.length <= 200) return single;
+
+    // Find sentence boundaries: period/exclamation/question followed by whitespace
+    var boundaries = [];
+    var re = /([.!?])\s+/g;
+    var match;
+    while ((match = re.exec(plainText)) !== null) {
+      // Position right after the whitespace = start of next sentence
+      var splitPos = match.index + match[0].length;
+      // Ensure minimum chunk size of 30 chars from previous boundary
+      var prevPos = boundaries.length > 0 ? boundaries[boundaries.length - 1] : 0;
+      if (splitPos - prevPos >= 30 && plainText.length - splitPos >= 30) {
+        boundaries.push(splitPos);
+      }
+    }
+
+    if (boundaries.length === 0) return single;
+
+    // Build sub-chunks
+    var chunks = [];
+    var starts = [0].concat(boundaries);
+    for (var i = 0; i < starts.length; i++) {
+      var chunkStart = starts[i];
+      var chunkEnd = (i + 1 < starts.length) ? starts[i + 1] : plainText.length;
+      var chunkText = plainText.substring(chunkStart, chunkEnd);
+
+      // Filter and adjust marks for this chunk
+      var chunkMarks = [];
+      for (var m = 0; m < marks.length; m++) {
+        if (marks[m].offset >= chunkStart && marks[m].offset < chunkEnd) {
+          chunkMarks.push({ name: marks[m].name, offset: marks[m].offset - chunkStart });
+        }
+      }
+
+      chunks.push({
+        ssml: null, // sub-chunks use plainText directly, not SSML
+        plainText: chunkText,
+        marks: chunkMarks,
+        isSubChunk: true,
+      });
+    }
+
+    return chunks.length > 0 ? chunks : single;
+  }
+
   // Find the nearest mark whose offset <= charIndex
   function findNearestMark(marks, charIndex) {
     if (!marks || !marks.length) return null;
@@ -304,7 +366,8 @@
       win.CSS.highlights.set('tts-word', _cssHl.word);
 
       // Inject ::highlight(tts-word) stylesheet into the iframe
-      var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+      // FIX-TTS05: use independent word highlight color
+      var colors = TTS_HL_COLORS[state.ttsWordHlColor] || TTS_HL_COLORS.blue;
       var style = iframeDoc.createElement('style');
       style.setAttribute('data-tts-hl', '1');
       style.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
@@ -334,7 +397,8 @@
 
   function _updateCssHighlightColor() {
     if (!_cssHl.styleEl || !_cssHl.doc) return;
-    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+    // FIX-TTS05: use independent word highlight color
+    var colors = TTS_HL_COLORS[state.ttsWordHlColor] || TTS_HL_COLORS.blue;
     try {
       _cssHl.styleEl.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
     } catch {}
@@ -508,51 +572,86 @@
 
     fireProgress();
     state.engine.speak(parsed.plainText);
-    _preloadNextBlock();
+    _scheduleQueueFill(); // FIX-TTS05: fill lookahead queue instead of single preload
   }
 
-  function _clearPreload() {
+  // FIX-TTS05: multi-chunk lookahead queue (replaces single-preload system)
+  function _clearQueue() {
     if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
+    _fol._queue = [];
+    _fol._queueFilling = false;
     _fol._preloadedSSML = null;
     _fol._preloadActive = false;
-    _fol._savedRanges = null; // FIX-TTS04
+    _fol._savedRanges = null;
   }
 
-  function _preloadNextBlock() {
+  function _fillQueue() {
+    if (_fol._queueFilling) return;
     if (!state.engine || typeof state.engine.preload !== 'function') return;
     if (!_fol.tts || state.format === 'txt') return;
-    // FIX-TTS02: Guard against double-advancing the iterator
-    if (_fol._preloadActive) return;
+    if (state.status !== PLAYING) return;
 
-    _clearPreload();
+    _fol._queueFilling = true;
 
-    // FIX-TTS04: Start preload at ~40% through (was 50%) to give even more time for
-    // synthesis to complete before block ends — reduces inter-paragraph silence.
-    // Snapshot current block's mark→Range map before advancing the iterator so
-    // handleBoundary() can still highlight words for the tail end of the block.
+    try {
+      while (_fol._queue.length < LOOKAHEAD_DEPTH) {
+        // FIX-TTS04/05: snapshot ranges BEFORE advancing iterator
+        var savedRanges = null;
+        if (typeof _fol.tts.snapshotRanges === 'function') {
+          savedRanges = _fol.tts.snapshotRanges();
+        }
+
+        var nextSSML = _fol.tts.next();
+        if (!nextSSML) break; // end of section
+
+        var parsed = parseSSML(nextSSML);
+
+        // FIX-TTS05: split long blocks into sentence-sized chunks
+        var subChunks = _splitBlock(nextSSML, parsed.plainText, parsed.marks);
+
+        for (var ci = 0; ci < subChunks.length; ci++) {
+          _fol._queue.push({
+            ssml: subChunks[ci].ssml || nextSSML,
+            plainText: subChunks[ci].plainText,
+            marks: subChunks[ci].marks,
+            savedRanges: savedRanges,
+            isSubChunk: subChunks.length > 1,
+          });
+          // Fire engine preload for each chunk (parallel synthesis like Readest)
+          if (subChunks[ci].plainText) {
+            try { state.engine.preload(subChunks[ci].plainText); } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    _fol._queueFilling = false;
+
+    // FIX-TTS05: update legacy compat pointers for handleBoundary
+    if (_fol._queue.length > 0) {
+      _fol._preloadActive = true;
+      _fol._savedRanges = _fol._queue[0].savedRanges;
+    }
+  }
+
+  function _scheduleQueueFill() {
+    if (_fol._preloadTimer) return;
+    if (!state.engine || !_fol.tts || state.format === 'txt') return;
+    if (_fol._queue.length >= LOOKAHEAD_DEPTH) return;
+
     var textLen = (state.currentText || '').length;
-    if (textLen < 10) return; // too short to bother
+    if (textLen < 10) {
+      _fillQueue();
+      return;
+    }
+    // FIX-TTS04: start filling at ~40% through current block
     var cps = Math.max(5, 15 * (state.rate || 1.0));
     var delayMs = Math.max(50, (textLen / cps) * 400);
 
     _fol._preloadTimer = setTimeout(function () {
       _fol._preloadTimer = null;
-      if (state.status !== PLAYING || !_fol.tts) return;
-
-      // FIX-TTS04: snapshot current block's ranges before iterator advance
-      if (typeof _fol.tts.snapshotRanges === 'function') {
-        _fol._savedRanges = _fol.tts.snapshotRanges();
-      }
-
-      var nextSSML = _fol.tts.next();
-      if (!nextSSML) { _fol._savedRanges = null; return; }
-      _fol._preloadedSSML = nextSSML;
-      _fol._preloadActive = true;
-
-      var parsed = parseSSML(nextSSML);
-      if (parsed.plainText) {
-        try { state.engine.preload(parsed.plainText); } catch {}
-      }
+      if (state.status !== PLAYING) return;
+      _fillQueue();
     }, delayMs);
   }
 
@@ -567,46 +666,99 @@
 
     if (!_fol.tts) { stop(); return; }
 
-    // Cancel pending preload timer but keep already-preloaded result
+    // FIX-TTS05: cancel pending fill timer but keep already-queued results
     if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
 
-    var ssml;
-    if (_fol._preloadedSSML) {
-      ssml = _fol._preloadedSSML;
-      _fol._preloadedSSML = null;
-      _fol._preloadActive = false;
+    // FIX-TTS05: consume from multi-chunk lookahead queue
+    if (_fol._queue.length > 0) {
+      var entry = _fol._queue.shift();
+      // Update legacy compat pointers for boundary handling
+      _fol._preloadActive = (_fol._queue.length > 0);
+      _fol._savedRanges = entry.savedRanges;
+      // Speak the dequeued chunk (marks are already parsed)
+      _fol.marks = entry.marks;
+      state.currentText = entry.plainText;
+      state.wordStart = -1;
+      state.wordEnd = -1;
+      _fol._lastBlockEl = null;
+      state.blockIdx++;
+      fireProgress();
+      state.engine.speak(entry.plainText);
+      _scheduleQueueFill(); // refill queue to maintain depth
     } else {
-      ssml = _fol.tts.next();
-    }
-
-    if (ssml) {
-      speakCurrentBlock(ssml);
-    } else {
-      handleAllBlocksDone();
+      // Queue empty — try direct advance as fallback
+      var ssml = _fol.tts.next();
+      if (ssml) {
+        _fol._preloadActive = false;
+        _fol._savedRanges = null;
+        speakCurrentBlock(ssml);
+      } else {
+        handleAllBlocksDone();
+      }
     }
   }
 
   function handleAllBlocksDone() {
+    // FIX-TTS05: explicit section/document transition contract (inspired by Thorium's
+    // R2_EVENT_TTS_DOC_END pattern — fire lifecycle events so UI can react deterministically)
+    var info = { blockIdx: state.blockIdx, engineId: state.engineId };
+
+    // Fire section-end callback
+    if (typeof state.onSectionEnd === 'function') {
+      try { state.onSectionEnd(info); } catch {}
+    }
+
     if (typeof state.onNeedAdvance === 'function') {
+      // Enter transition state — prevents pause() during nav, matches Thorium's r2_cancel guard
+      state.status = SECTION_TRANSITION;
+      fire();
+      _clearQueue();
+
       state.onNeedAdvance().then(function (advanced) {
-        if (!advanced || state.status !== PLAYING) { stop(); return; }
+        if (!advanced || (state.status !== SECTION_TRANSITION && state.status !== PLAYING)) {
+          // FIX-TTS05: 400ms delay before doc-end (like Thorium) to allow highlight cleanup
+          setTimeout(function () {
+            if (typeof state.onDocumentEnd === 'function') {
+              try { state.onDocumentEnd(info); } catch {}
+            }
+            stop();
+          }, 400);
+          return;
+        }
         // After section advance, _reinitFoliateTTS is called by onNeedAdvance
         // then we start from the new section's first block
         if (!_fol.tts) { stop(); return; }
         var ssml = _fol.tts.start();
         if (ssml) {
           state.blockIdx = -1; // reset, speakCurrentBlock will increment
+          if (typeof state.onSectionStart === 'function') {
+            try { state.onSectionStart(info); } catch {}
+          }
+          state.status = PLAYING;
+          fire();
           speakCurrentBlock(ssml);
         } else {
+          // Section had no content — treat as doc-end
+          if (typeof state.onDocumentEnd === 'function') {
+            try { state.onDocumentEnd(info); } catch {}
+          }
           stop();
         }
-      }).catch(function () { stop(); });
+      }).catch(function () {
+        if (typeof state.onDocumentEnd === 'function') {
+          try { state.onDocumentEnd(info); } catch {}
+        }
+        stop();
+      });
     } else {
+      if (typeof state.onDocumentEnd === 'function') {
+        try { state.onDocumentEnd(info); } catch {}
+      }
       stop();
     }
   }
 
-  function handleBoundary(charIndex, charLength, name) {
+  function handleBoundary(charIndex, charLength, name, driftFallback) {
     if (name !== 'word' || state.status !== PLAYING) return;
     state.wordStart = charIndex;
     state.wordEnd = charIndex + Math.max(charLength, 1);
@@ -615,10 +767,15 @@
       var m = rest.match(/^\S+/);
       if (m) state.wordEnd = charIndex + m[0].length;
     }
+
+    // FIX-TTS05: skip word-level highlighting when granularity is sentence-only
+    // or when engine reports chronic boundary drift for this block
+    var skipWordHl = (state.ttsHlGranularity !== 'word') || !!driftFallback;
+
     // FIX-TTS04: Map charIndex to nearest foliate mark for highlighting.
     // If preload has advanced the iterator, use saved ranges instead of setMark
     // (which would look up in the NEW block's ranges and fail silently).
-    if (_fol.tts && _fol.marks.length) {
+    if (!skipWordHl && _fol.tts && _fol.marks.length) {
       var markName = findNearestMark(_fol.marks, charIndex);
       if (markName) {
         if (_fol._preloadActive && _fol._savedRanges) {
@@ -934,10 +1091,12 @@
   }
 
   function pause() {
-    if (!state.engine || state.status !== PLAYING) return;
+    // FIX-TTS05: can't pause during section transition (matches Thorium's r2_cancel guard)
+    if (!state.engine || (state.status !== PLAYING && state.status !== SECTION_TRANSITION)) return;
+    if (state.status === SECTION_TRANSITION) return;
     if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
     _lastToggleAt = Date.now();
-    _clearPreload();
+    _clearQueue();
     state._pauseStartedAt = Date.now();
     state._pauseNeedsRespeak = false;
     state.engine.pause();
@@ -999,7 +1158,7 @@
     if (state.engine) {
       try { state.engine.cancel(); } catch {}
     }
-    _clearPreload();
+    _clearQueue();
     clearTtsOverlays();
     // TXT cleanup
     if (_txt.activeEl) {
@@ -1032,7 +1191,7 @@
     }
 
     if (!_fol.tts) return;
-    _clearPreload();
+    _clearQueue();
     if (state.engine) { try { state.engine.cancel(); } catch {} }
     clearTtsOverlays();
 
@@ -1065,7 +1224,7 @@
     }
 
     if (!_fol.tts) return;
-    _clearPreload();
+    _clearQueue();
     // Estimate how many blocks to skip (~150 chars per block, ~15 chars/s at 1.0x)
     var cps = 15 * (state.rate || 1.0);
     var deltaChars = Math.abs(deltaMs / 1000) * cps;
@@ -1178,7 +1337,7 @@
   // FIX-TTS03: Re-speak current block — keep old audio until new is ready (gapless)
   function _respeakCurrentBlock() {
     if (state.status !== PLAYING || !state.engine) return;
-    _clearPreload();
+    _clearQueue();
     if (!state.currentText) return;
     // FIX-TTS03: signal UI to show "switching" state
     state.wordStart = -1;
@@ -1192,7 +1351,7 @@
       try { state.engine.cancel(); } catch {}
       state.engine.speak(state.currentText);
     }
-    _preloadNextBlock();
+    _scheduleQueueFill();
   }
 
   var TTS_RATE_MIN = 0.5;
@@ -1238,6 +1397,29 @@
     if (!TTS_HL_COLORS[colorName]) return;
     state.ttsHlColor = colorName;
     _redrawActiveOverlays();
+  }
+
+  // FIX-TTS05: highlight granularity — sentence (default) or word
+  function setHighlightGranularity(g) {
+    var valid = ['sentence', 'word'];
+    if (valid.indexOf(g) < 0) return;
+    state.ttsHlGranularity = g;
+    if (g !== 'word' && _cssHl.word) {
+      try { _cssHl.word.clear(); } catch {}
+    }
+  }
+
+  // FIX-TTS05: independent word highlight style/color
+  function setWordHighlightStyle(style) {
+    var valid = ['highlight', 'underline', 'squiggly', 'strikethrough'];
+    if (valid.indexOf(style) < 0) return;
+    state.ttsWordHlStyle = style;
+  }
+
+  function setWordHighlightColor(colorName) {
+    if (!TTS_HL_COLORS[colorName]) return;
+    state.ttsWordHlColor = colorName;
+    _updateCssHighlightColor();
   }
 
   function _redrawActiveOverlays() {
@@ -1314,6 +1496,8 @@
     _fol._preloadedSSML = null;
     _fol._preloadActive = false;
     _fol._savedRanges = null;
+    _fol._queue = [];           // FIX-TTS05: clear lookahead queue
+    _fol._queueFilling = false;
     _clearCssHighlights(); // FIX-TTS04
     _txt.blocks = [];
     _txt.segments = [];
@@ -1321,6 +1505,9 @@
     state.hostFn = null;
     state.viewEngineFn = null;
     state.onNeedAdvance = null;
+    state.onSectionEnd = null;    // FIX-TTS05
+    state.onSectionStart = null;  // FIX-TTS05
+    state.onDocumentEnd = null;   // FIX-TTS05
     state.initDone = false;
     state.initPromise = null;
   }
@@ -1529,8 +1716,19 @@
     getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
     getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },
+    // FIX-TTS05: granularity + independent word highlight controls
+    setHighlightGranularity: setHighlightGranularity,
+    getHighlightGranularity: function () { return state.ttsHlGranularity; },
+    setWordHighlightStyle: setWordHighlightStyle,
+    setWordHighlightColor: setWordHighlightColor,
+    getWordHighlightStyle: function () { return state.ttsWordHlStyle; },
+    getWordHighlightColor: function () { return state.ttsWordHlColor; },
     // TTS_REWRITE: expose _reinitFoliateTTS for section transitions
     _reinitFoliateTTS: _reinitFoliateTTS,
+    // FIX-TTS05: section/document lifecycle events
+    set onSectionEnd(fn) { state.onSectionEnd = typeof fn === 'function' ? fn : null; },
+    set onSectionStart(fn) { state.onSectionStart = typeof fn === 'function' ? fn : null; },
+    set onDocumentEnd(fn) { state.onDocumentEnd = typeof fn === 'function' ? fn : null; },
     set onStateChange(fn) { state.onStateChange = typeof fn === 'function' ? fn : null; },
     set onProgress(fn) { state.onProgress = typeof fn === 'function' ? fn : null; },
   };
