@@ -1181,11 +1181,14 @@ body.inBooksReader .br-reader {
   padding: 3px 4px;
 }
 .booksReaderTtsPresetSel { max-width: 108px; }
+/* FIX-TTS10: force light bg / dark text for native dropdown overlay — dark options
+   are unreliable in Chromium's OS-native select popup on Windows */
 .booksReaderTtsVoice option,
+.booksReaderTtsVoice optgroup,
 .booksReaderTtsPresetSel option,
 .booksReaderTtsHlStyle option {
-  background: #1a1c22;
-  color: #e6e6e6;
+  background: #f0f0f0;
+  color: #1a1a1a;
 }
 /* GAP5: highlight style selector */
 .booksReaderTtsHlStyle {
@@ -1751,18 +1754,23 @@ body.inBooksReader .br-reader {
 [data-reader-theme="contrast3"] .booksReaderTtsPresetSel,
 [data-reader-theme="contrast3"] .booksReaderTtsHlStyle { background: rgba(0,0,0,0.07); border-color: rgba(0,0,0,0.18); color: var(--br-reader-text); } /* FIX-TTS03: boosted from 0.04/0.12 */
 
+/* FIX-TTS10: all themes use same light dropdown overlay for native OS consistency */
 [data-reader-theme="light"] .booksReaderTtsVoice option,
+[data-reader-theme="light"] .booksReaderTtsVoice optgroup,
 [data-reader-theme="light"] .booksReaderTtsPresetSel option,
 [data-reader-theme="light"] .booksReaderTtsHlStyle option,
 [data-reader-theme="sepia"] .booksReaderTtsVoice option,
+[data-reader-theme="sepia"] .booksReaderTtsVoice optgroup,
 [data-reader-theme="sepia"] .booksReaderTtsPresetSel option,
 [data-reader-theme="sepia"] .booksReaderTtsHlStyle option,
 [data-reader-theme="paper"] .booksReaderTtsVoice option,
+[data-reader-theme="paper"] .booksReaderTtsVoice optgroup,
 [data-reader-theme="paper"] .booksReaderTtsPresetSel option,
 [data-reader-theme="paper"] .booksReaderTtsHlStyle option,
 [data-reader-theme="contrast3"] .booksReaderTtsVoice option,
+[data-reader-theme="contrast3"] .booksReaderTtsVoice optgroup,
 [data-reader-theme="contrast3"] .booksReaderTtsPresetSel option,
-[data-reader-theme="contrast3"] .booksReaderTtsHlStyle option { background: var(--br-reader-bg); color: var(--br-reader-text); }
+[data-reader-theme="contrast3"] .booksReaderTtsHlStyle option { background: #f0f0f0; color: #1a1a1a; }
 
 [data-reader-theme="light"] .booksReaderDictHead,
 [data-reader-theme="sepia"] .booksReaderDictHead,

@@ -954,6 +954,9 @@ export class Paginator extends HTMLElement {
     // FIX-TTS03: center the anchor vertically in scrolled mode (for TTS tracking)
     // FIX-TTS08: use 'anchor' reason instead of 'selection' to avoid triggering
     // native DOM selection (blue highlight glitch) on every word boundary.
+    // FIX-TTS10: fixed centering formula — was using viewSize (total doc height) instead
+    // of size (viewport height). Now correctly computes: absolute position in document
+    // minus half the viewport to center the range.
     async scrollToAnchorCentered(anchor) {
         const rects = uncollapse(anchor)?.getClientRects?.()
         if (!rects) return
@@ -963,7 +966,9 @@ export class Paginator extends HTMLElement {
         if (this.scrolled) {
             const mapped = this.#getRectMapper()(rect)
             const rectSize = mapped.right - mapped.left
-            const offset = mapped.left - this.#margin - (this.viewSize - rectSize) / 2
+            // mapped.left is viewport-relative, add current scroll to get absolute pos
+            const absPos = mapped.left - this.#margin + this.start
+            const offset = absPos - (this.size - rectSize) / 2
             return this.#scrollTo(Math.max(0, offset), 'anchor')
         }
         return this.#scrollToRect(rect, 'anchor')
