@@ -28,14 +28,14 @@
   }
 
   async function stepNextSmart() {
-    // FIX_AUDIT: EPUB/TXT arrow buttons should move chapter-wise while PDF remains page-wise.
-    if (RS.isEpubOrTxtOpen()) return nextChapter();
+    // FIX-NAV01: In scrolled mode arrows jump chapters (no discrete pages); in paged mode they step pages.
+    if (isScrolledTextFlow()) return nextChapter();
     return stepNext();
   }
 
   async function stepPrevSmart() {
-    // FIX_AUDIT: EPUB/TXT arrow buttons should move chapter-wise while PDF remains page-wise.
-    if (RS.isEpubOrTxtOpen()) return prevChapter();
+    // FIX-NAV01: In scrolled mode arrows jump chapters (no discrete pages); in paged mode they step pages.
+    if (isScrolledTextFlow()) return prevChapter();
     return stepPrev();
   }
 
