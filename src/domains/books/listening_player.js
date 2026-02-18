@@ -1,13 +1,15 @@
-// LISTEN_P3: TTS Listening player — overlay on #booksReaderView, word-level highlight card
+// LISTEN_P3/P4: TTS Listening player — overlay on #booksReaderView, word-level highlight + progress persistence
 (function () {
   'use strict';
 
   if (window.__booksListenPlayerBound) return;
   window.__booksListenPlayerBound = true;
 
-  var _book = null;       // currently queued / playing book
-  var _open = false;      // player is active (reader open + overlay visible)
-  var _ttsStarted = false; // TTS.play() has been called this session
+  var _book = null;            // currently queued / playing book
+  var _open = false;           // player is active (reader open + overlay visible)
+  var _ttsStarted = false;     // TTS.play() has been called this session
+  var _lastSavedBlockIdx = -1; // LISTEN_P4: track block changes for progress saves
+  var _saveTimer = null;       // LISTEN_P4: debounce timer for progress saves
 
   function qs(id) {
     try { return document.getElementById(id); } catch { return null; }
@@ -70,6 +72,13 @@
 
     // Speed button active state
     syncSpeedActive(info.rate);
+
+    // LISTEN_P4: debounced progress save on block change
+    var blockIdx = (info.blockIdx >= 0) ? info.blockIdx : -1;
+    if (blockIdx >= 0 && blockIdx !== _lastSavedBlockIdx) {
+      _lastSavedBlockIdx = blockIdx;
+      saveProgress(info, false);
+    }
   }
 
   function syncSpeedActive(rate) {
@@ -78,6 +87,38 @@
     for (var i = 0; i < btns.length; i++) {
       var r = parseFloat(btns[i].dataset.rate);
       btns[i].classList.toggle('lp-speed-active', Math.abs(r - rate) < 0.01);
+    }
+  }
+
+  // ── LISTEN_P4: TTS progress persistence ──────────────────────────────────────
+
+  function saveProgress(info, immediate) {
+    if (!_book || !_book.id) return;
+    var entry = {
+      blockIdx:   info ? info.blockIdx   : (_lastSavedBlockIdx >= 0 ? _lastSavedBlockIdx : 0),
+      blockCount: info ? info.blockCount : 0,
+      title:  _book.title  || '',
+      format: _book.format || '',
+    };
+    if (immediate) {
+      if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+      try {
+        var api = window.Tanko && window.Tanko.api;
+        if (api && typeof api.saveBooksTtsProgress === 'function') {
+          api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
+        }
+      } catch {}
+    } else {
+      if (_saveTimer) clearTimeout(_saveTimer);
+      _saveTimer = setTimeout(function () {
+        _saveTimer = null;
+        try {
+          var api = window.Tanko && window.Tanko.api;
+          if (api && typeof api.saveBooksTtsProgress === 'function') {
+            api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
+          }
+        } catch {}
+      }, 2000);
     }
   }
 
@@ -91,12 +132,6 @@
     var voices = [];
     try { voices = tts.getVoices(); } catch {}
     if (!voices.length) return;
-
-    var currentVoiceId = (typeof tts.getState === 'function') ? '' : '';
-    try {
-      var snap = tts.getSnippet ? tts.getSnippet() : null;
-      // voice id not in snippet — use internal state indirectly
-    } catch {}
 
     sel.innerHTML = '';
     for (var i = 0; i < voices.length; i++) {
@@ -158,6 +193,7 @@
     _book = book;
     _open = true;
     _ttsStarted = false;
+    _lastSavedBlockIdx = -1;
 
     // Update header title
     var titleEl = qs('lpBookTitle');
@@ -189,6 +225,14 @@
     if (!_open) return;
     _open = false;
     _ttsStarted = false;
+
+    // LISTEN_P4: flush progress immediately before stopping
+    try {
+      var tts2 = window.booksTTS;
+      var snap = tts2 && tts2.getSnippet ? tts2.getSnippet() : null;
+      saveProgress(snap, true);
+    } catch {}
+    _lastSavedBlockIdx = -1;
 
     // Stop TTS and clear callbacks
     var tts = window.booksTTS;
@@ -262,6 +306,13 @@
     window.addEventListener('books-reader-closed', function () {
       // Reader closed externally (e.g., Esc in reader) — sync player state
       if (!_open) return;
+      // LISTEN_P4: flush progress on external close
+      try {
+        var tts3 = window.booksTTS;
+        var snap3 = tts3 && tts3.getSnippet ? tts3.getSnippet() : null;
+        saveProgress(snap3, true);
+      } catch {}
+      _lastSavedBlockIdx = -1;
       showOverlay(false);
       _open = false;
       _ttsStarted = false;

@@ -49,6 +49,7 @@ __bLog('registerIpc: core imports OK');
 const storage = require('../lib/storage');
 const progress = require('../domains/progress');
 const booksProgress = require('../domains/booksProgress');
+const booksTtsProgress = require('../domains/booksTtsProgress'); // LISTEN_P4
 const videoProgress = require('../domains/videoProgress');
 const booksSettings = require('../domains/booksSettings');
 const booksBookmarks = require('../domains/booksBookmarks');
@@ -1150,6 +1151,7 @@ try {
     require('./register/books'),
     require('./register/books_tts_edge'),
     require('./register/books_progress'),
+    require('./register/books_tts_progress'), // LISTEN_P4
     require('./register/books_settings'),
     require('./register/books_ui_state'),
     require('./register/video'),
@@ -1174,7 +1176,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','health_check'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','health_check'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -1194,6 +1196,7 @@ for (let i = 0; i < registerModules.length; i++) {
     windowDomain,
     progress,
     booksProgress,
+    booksTtsProgress, // LISTEN_P4
     videoProgress,
     booksSettings,
     booksBookmarks,

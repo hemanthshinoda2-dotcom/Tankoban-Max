@@ -250,6 +250,22 @@ const CHANNEL = {
   BOOKS_UI_CLEAR: 'booksUi:clear',
 
   // ========================================
+  // Books TTS Progress (LISTEN_P4)
+  // ========================================
+
+  /** Get all TTS listening progress. Returns: { byBook: { [bookId]: entry } } */
+  BOOKS_TTS_PROGRESS_GET_ALL: 'booksTtsProgress:getAll',
+
+  /** Get TTS progress for one book. Returns: entry or null */
+  BOOKS_TTS_PROGRESS_GET: 'booksTtsProgress:get',
+
+  /** Save TTS progress for a book. Returns: { ok: boolean } */
+  BOOKS_TTS_PROGRESS_SAVE: 'booksTtsProgress:save',
+
+  /** Clear TTS progress for a book. Returns: { ok: boolean } */
+  BOOKS_TTS_PROGRESS_CLEAR: 'booksTtsProgress:clear',
+
+  // ========================================
   // Video
   // ========================================
   

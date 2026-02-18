@@ -307,6 +307,16 @@ const api = {
   },
 
   // ========================================
+  // booksTtsProgress.* (LISTEN_P4)
+  // ========================================
+  booksTtsProgress: {
+    getAll: () => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_PROGRESS_GET_ALL),
+    get: (bookId) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_PROGRESS_GET, bookId),
+    save: (bookId, entry) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_PROGRESS_SAVE, bookId, entry),
+    clear: (bookId) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_PROGRESS_CLEAR, bookId),
+  },
+
+  // ========================================
   // videoProgress.*
   // ========================================
   videoProgress: {
@@ -928,6 +938,12 @@ const legacy = {
   saveBooksProgress: (...args) => api.booksProgress.save(...args),
   clearBooksProgress: (...args) => api.booksProgress.clear(...args),
   clearAllBooksProgress: (...args) => api.booksProgress.clearAll(...args),
+
+  // booksTtsProgress (LISTEN_P4)
+  getAllBooksTtsProgress: (...args) => api.booksTtsProgress.getAll(...args),
+  getBooksTtsProgress: (...args) => api.booksTtsProgress.get(...args),
+  saveBooksTtsProgress: (...args) => api.booksTtsProgress.save(...args),
+  clearBooksTtsProgress: (...args) => api.booksTtsProgress.clear(...args),
 
   // videoProgress
   getAllVideoProgress: (...args) => api.videoProgress.getAll(...args),

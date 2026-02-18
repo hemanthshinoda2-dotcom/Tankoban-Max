@@ -60,6 +60,27 @@
 .listen-book-card:hover .listen-card-badge {
   background: rgba(74,144,217,1);
 }
+/* LISTEN_P4: Continue Listening progress bar on card thumbnail */
+.listen-continue-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(0,0,0,0.4);
+  pointer-events: none;
+  z-index: 3;
+}
+.listen-continue-bar-fill {
+  height: 100%;
+  background: rgba(74,144,217,0.85);
+  border-radius: 0 0 0 0;
+}
+.listen-continue-pct {
+  margin-left: 6px;
+  color: rgba(255,255,255,0.45);
+  font-size: 0.75em;
+}
 
 /* ── LISTEN_P3: TTS Listening player overlay ── */
 .lp-shell {

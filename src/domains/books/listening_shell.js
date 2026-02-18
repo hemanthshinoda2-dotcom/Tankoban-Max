@@ -167,14 +167,132 @@
     appendChunk(0);
   }
 
+  // ── LISTEN_P4: Continue Listening shelf ──────────────────────────────────────
+
+  function makeContinueCard(book, entry) {
+    var booksApp = window.booksApp;
+    var card = document.createElement('div');
+    card.className = 'seriesCard listen-book-card listen-continue-card';
+    card.setAttribute('role', 'button');
+    card.tabIndex = 0;
+    card.title = (book && book.title) || entry.title || 'Untitled';
+
+    // Cover thumbnail
+    var coverWrap = document.createElement('div');
+    coverWrap.className = 'seriesCoverWrap';
+    var thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumbWrap';
+    var img = document.createElement('img');
+    img.className = 'thumb';
+    img.alt = '';
+    img.src = placeholderThumb((book && book.title) || entry.title || '?');
+    if (book && booksApp && typeof booksApp.attachThumb === 'function') {
+      try { booksApp.attachThumb(img, book); } catch {}
+    }
+    thumbWrap.appendChild(img);
+
+    // Play badge
+    var badge = document.createElement('div');
+    badge.className = 'listen-card-badge';
+    badge.setAttribute('aria-hidden', 'true');
+    badge.innerHTML = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg" width="12" height="12"><path d="M14.3 7.73L3.06.85A2.25 2.25 0 0 0 .69 2.17V15.94a2.25 2.25 0 0 0 3.43 1.92l11.26-6.87a2.25 2.25 0 0 0-.08-3.26z" fill="currentColor"/></svg>';
+    thumbWrap.appendChild(badge);
+
+    // Progress bar overlay at bottom of thumb
+    var blockIdx   = Number(entry.blockIdx || 0);
+    var blockCount = Number(entry.blockCount || 0);
+    if (blockCount > 0) {
+      var pct = Math.min(100, Math.round((blockIdx / blockCount) * 100));
+      var bar = document.createElement('div');
+      bar.className = 'listen-continue-bar';
+      bar.setAttribute('aria-hidden', 'true');
+      var fill = document.createElement('div');
+      fill.className = 'listen-continue-bar-fill';
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      thumbWrap.appendChild(bar);
+    }
+
+    coverWrap.appendChild(thumbWrap);
+
+    var name = document.createElement('div');
+    name.className = 'seriesName';
+    name.textContent = (book && book.title) || entry.title || 'Untitled';
+
+    var info = document.createElement('div');
+    info.className = 'seriesInfo';
+    var meta = document.createElement('div');
+    meta.className = 'seriesMeta';
+    var s1 = document.createElement('span');
+    s1.textContent = String((book && book.format) || entry.format || '').toUpperCase() || 'BOOK';
+    meta.appendChild(s1);
+    if (blockCount > 0) {
+      var pctEl = document.createElement('span');
+      pctEl.className = 'listen-continue-pct';
+      pctEl.textContent = Math.round((blockIdx / blockCount) * 100) + '%';
+      meta.appendChild(pctEl);
+    }
+    info.appendChild(meta);
+
+    card.appendChild(coverWrap);
+    card.appendChild(name);
+    card.appendChild(info);
+
+    function launchListen() {
+      var target = book || { id: entry.bookId, title: entry.title, format: entry.format };
+      openListenBook(target);
+    }
+    card.onclick = launchListen;
+    card.onkeydown = function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launchListen(); }
+    };
+    return card;
+  }
+
   function renderListenContinue() {
-    // LISTEN_P4: will populate with books_tts_progress data
+    // LISTEN_P4: populate from books_tts_progress data
     var row = qs('booksListenContinueRow');
     var empty = qs('booksListenContinueEmpty');
     if (!row || !empty) return;
-    row.innerHTML = '';
-    row.classList.add('hidden');
-    empty.classList.remove('hidden');
+
+    var api = window.Tanko && window.Tanko.api;
+    if (!api || typeof api.getAllBooksTtsProgress !== 'function') return;
+
+    api.getAllBooksTtsProgress().then(function (result) {
+      var byBook = (result && typeof result.byBook === 'object') ? result.byBook : {};
+      var entries = [];
+      for (var bookId in byBook) {
+        if (!Object.prototype.hasOwnProperty.call(byBook, bookId)) continue;
+        var e = byBook[bookId];
+        if (!e || typeof e !== 'object') continue;
+        // Only include books where progress was actually made
+        if (!(e.blockIdx >= 0)) continue;
+        entries.push({ bookId: bookId, blockIdx: e.blockIdx, blockCount: e.blockCount || 0,
+          title: e.title || '', format: e.format || '', updatedAt: e.updatedAt || 0 });
+      }
+      // Sort by most recently updated
+      entries.sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+      entries = entries.slice(0, 10); // cap at 10
+
+      row.innerHTML = '';
+      if (!entries.length) {
+        row.classList.add('hidden');
+        empty.classList.remove('hidden');
+        return;
+      }
+
+      var booksApp = window.booksApp;
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i];
+        var book = (booksApp && typeof booksApp.getBookById === 'function')
+          ? booksApp.getBookById(entry.bookId) : null;
+        frag.appendChild(makeContinueCard(book, entry));
+      }
+      row.appendChild(frag);
+      empty.classList.add('hidden');
+      row.classList.remove('hidden');
+    }).catch(function () {});
   }
 
   function renderListenView() {
