@@ -768,6 +768,23 @@ COMMON ANCHORS
                     <span>Listening</span>
                   </button>
                   <div id="lpBookTitle" class="lp-header-title" aria-live="polite"></div>
+                  <!-- LISTEN_P5: chapters button -->
+                  <button id="lpTocBtn" class="lp-toc-btn" title="Chapters (C)" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M3 9h14V7H3v2zm0 4h14v-2H3v2zm0 4h14v-2H3v2zm16 0h2v-2h-2v2zm0-10v2h2V7h-2zm0 6h2v-2h-2v2z" fill="currentColor"/></svg>
+                    <span>Chapters</span>
+                  </button>
+                </div>
+
+                <!-- LISTEN_P5: Chapter list panel -->
+                <div id="lpTocPanel" class="lp-toc-panel hidden" role="dialog" aria-label="Chapters" aria-modal="false">
+                  <div class="lp-toc-header">
+                    <span class="lp-toc-title">Chapters</span>
+                    <button id="lpTocClose" class="lp-toc-close" title="Close chapters">
+                      <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+                    </button>
+                  </div>
+                  <div id="lpTocList" class="lp-toc-list" role="list"></div>
+                  <div id="lpTocEmpty" class="lp-toc-empty hidden">No chapters available.</div>
                 </div>
 
                 <!-- Reading card: current block text with word highlight -->

@@ -1,4 +1,4 @@
-// LISTEN_P3/P4: TTS Listening player — overlay on #booksReaderView, word-level highlight + progress persistence
+// LISTEN_P3/P4/P5: TTS Listening player — overlay, word highlight, progress, chapter navigation
 (function () {
   'use strict';
 
@@ -10,6 +10,9 @@
   var _ttsStarted = false;     // TTS.play() has been called this session
   var _lastSavedBlockIdx = -1; // LISTEN_P4: track block changes for progress saves
   var _saveTimer = null;       // LISTEN_P4: debounce timer for progress saves
+  var _tocPanelOpen = false;   // LISTEN_P5: chapter panel visible
+  var _navigating = false;     // LISTEN_P5: mid-chapter-jump, restart TTS on relocated
+  var _activeTocHref = '';     // LISTEN_P5: href of currently active TOC item
 
   function qs(id) {
     try { return document.getElementById(id); } catch { return null; }
@@ -143,6 +146,90 @@
     }
   }
 
+  // ── LISTEN_P5: Chapter list panel ────────────────────────────────────────────
+
+  function normalizeTocHref(href) {
+    var h = String(href || '').replace(/^\.\//, '');
+    var hi = h.indexOf('#');
+    if (hi >= 0) h = h.substring(0, hi);
+    try { h = decodeURIComponent(h); } catch {}
+    return h.toLowerCase().trim();
+  }
+
+  function showTocPanel(show) {
+    _tocPanelOpen = show;
+    var panel = qs('lpTocPanel');
+    if (panel) panel.classList.toggle('hidden', !show);
+    var btn = qs('lpTocBtn');
+    if (btn) btn.setAttribute('aria-expanded', String(show));
+  }
+
+  function renderTocPanel() {
+    var list = qs('lpTocList');
+    var empty = qs('lpTocEmpty');
+    if (!list) return;
+    list.innerHTML = '';
+
+    var RS = window.booksReaderState;
+    var items = (RS && RS.state && Array.isArray(RS.state.tocItems)) ? RS.state.tocItems : [];
+    if (!items.length) {
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    if (empty) empty.classList.add('hidden');
+
+    var activeNorm = normalizeTocHref(_activeTocHref);
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var label = String(item.label || item.title || 'Chapter ' + (i + 1));
+      var depth = Number(item.depth || item.level || 0);
+      var href  = String(item.href || '');
+
+      var btn = document.createElement('button');
+      btn.className = 'lp-toc-item';
+      btn.type = 'button';
+      btn.title = label;
+      btn.dataset.href = href;
+      btn.dataset.idx  = String(i);
+      if (depth > 0) btn.style.paddingLeft = (14 + depth * 14) + 'px';
+      if (activeNorm && normalizeTocHref(href) === activeNorm) btn.classList.add('active');
+
+      var labelSpan = document.createElement('span');
+      labelSpan.textContent = label;
+      btn.appendChild(labelSpan);
+
+      btn.addEventListener('click', (function (h, idx) {
+        return function () { navigateToChapter(h, idx); };
+      })(href, i));
+      frag.appendChild(btn);
+    }
+    list.appendChild(frag);
+  }
+
+  function updateTocActive(href) {
+    if (!href) return;
+    _activeTocHref = href;
+    var norm = normalizeTocHref(href);
+    var list = qs('lpTocList');
+    if (!list) return;
+    var items = list.querySelectorAll('.lp-toc-item');
+    for (var i = 0; i < items.length; i++) {
+      var isActive = normalizeTocHref(items[i].dataset.href || '') === norm;
+      items[i].classList.toggle('active', isActive);
+    }
+  }
+
+  function navigateToChapter(href, idx) {
+    if (!href) return;
+    var tts = window.booksTTS;
+    if (tts) try { tts.stop(); } catch {}
+    _navigating = true;
+    showTocPanel(false);
+    var bus = window.booksReaderBus;
+    if (bus) try { bus.emit('toc:navigate', href, idx); } catch {}
+  }
+
   // ── TTS wiring ────────────────────────────────────────────────────────────────
 
   function wireTts() {
@@ -171,6 +258,7 @@
     _ttsStarted = true;
     wireTts();
     populateVoiceSelect();
+    renderTocPanel(); // LISTEN_P5: populate chapter list
 
     var tts = window.booksTTS;
     if (!tts) return;
@@ -194,6 +282,9 @@
     _open = true;
     _ttsStarted = false;
     _lastSavedBlockIdx = -1;
+    _tocPanelOpen = false;
+    _navigating = false;
+    _activeTocHref = '';
 
     // Update header title
     var titleEl = qs('lpBookTitle');
@@ -233,6 +324,9 @@
       saveProgress(snap, true);
     } catch {}
     _lastSavedBlockIdx = -1;
+    _tocPanelOpen = false;
+    _navigating = false;
+    showTocPanel(false);
 
     // Stop TTS and clear callbacks
     var tts = window.booksTTS;
@@ -285,9 +379,16 @@
         e.stopPropagation();
         try { tts.stepSegment(1); } catch {}
         break;
+      case 'c':
+      case 'C':
+        e.preventDefault();
+        e.stopPropagation();
+        showTocPanel(!_tocPanelOpen);
+        break;
       case 'Escape':
         e.preventDefault();
         e.stopPropagation();
+        if (_tocPanelOpen) { showTocPanel(false); break; }
         closePlayer();
         break;
     }
@@ -370,6 +471,41 @@
       var tts = window.booksTTS;
       if (tts && typeof tts.setVoice === 'function') try { tts.setVoice(voiceId); } catch {}
     });
+
+    // LISTEN_P5: TOC button
+    var tocBtn = qs('lpTocBtn');
+    if (tocBtn) tocBtn.addEventListener('click', function () {
+      showTocPanel(!_tocPanelOpen);
+    });
+
+    var tocClose = qs('lpTocClose');
+    if (tocClose) tocClose.addEventListener('click', function () { showTocPanel(false); });
+
+    // LISTEN_P5: Bus subscriptions — wire to reader's TOC and relocation events
+    var bus = window.booksReaderBus;
+    if (bus) {
+      // Re-render TOC list when reader loads/changes the TOC
+      bus.on('toc:updated', function () {
+        if (!_open) return;
+        renderTocPanel();
+      });
+
+      // Update active chapter highlight on navigation; restart TTS after chapter jump
+      bus.on('reader:relocated', function (detail) {
+        if (!_open) return;
+        var href = detail && detail.tocItem && detail.tocItem.href ? detail.tocItem.href : '';
+        if (href) updateTocActive(href);
+        if (_navigating) {
+          _navigating = false;
+          // Brief delay to let the engine settle before starting TTS
+          setTimeout(function () {
+            if (!_open) return;
+            var tts = window.booksTTS;
+            if (tts) try { tts.play(); } catch {}
+          }, 150);
+        }
+      });
+    }
 
     // Keyboard shortcuts when player overlay is visible
     document.addEventListener('keydown', onPlayerKeyDown, { capture: true });

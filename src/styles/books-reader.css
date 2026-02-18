@@ -82,6 +82,100 @@
   font-size: 0.75em;
 }
 
+/* ── LISTEN_P5: Chapter TOC panel ── */
+.lp-toc-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.78rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 120ms, color 120ms;
+}
+.lp-toc-btn:hover,
+.lp-toc-btn[aria-expanded="true"] {
+  background: rgba(255,255,255,0.08);
+  color: #e4e8ef;
+}
+.lp-toc-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(300px, 90%);
+  background: #111620;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  box-shadow: -4px 0 24px rgba(0,0,0,0.5);
+}
+.lp-toc-panel.hidden { display: none; }
+.lp-toc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.lp-toc-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.lp-toc-close {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  padding: 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+}
+.lp-toc-close:hover { color: #e4e8ef; background: rgba(255,255,255,0.07); }
+.lp-toc-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+.lp-toc-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.65);
+  font-size: 0.84rem;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.35;
+  transition: background 100ms, color 100ms;
+}
+.lp-toc-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #e4e8ef;
+}
+.lp-toc-item.active {
+  color: #90c2f0;
+  background: rgba(74,144,217,0.12);
+  font-weight: 500;
+}
+.lp-toc-empty {
+  padding: 16px 14px;
+  color: rgba(255,255,255,0.35);
+  font-size: 0.82rem;
+}
+.lp-toc-empty.hidden { display: none; }
+
 /* ── LISTEN_P3: TTS Listening player overlay ── */
 .lp-shell {
   position: fixed;
