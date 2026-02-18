@@ -61,6 +61,192 @@
   background: rgba(74,144,217,1);
 }
 
+/* ── LISTEN_P3: TTS Listening player overlay ── */
+.lp-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #0d1117;
+  display: flex;
+  flex-direction: column;
+  color: #e4e8ef;
+  font-family: var(--br-font-ui, 'Segoe UI', system-ui, sans-serif);
+  overflow: hidden;
+}
+.lp-shell.hidden { display: none; }
+
+/* Header */
+.lp-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  flex-shrink: 0;
+}
+.lp-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 120ms, color 120ms;
+}
+.lp-back-btn:hover {
+  background: rgba(255,255,255,0.07);
+  color: #e4e8ef;
+}
+.lp-header-title {
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* Reading card */
+.lp-card-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px 16px;
+  overflow: hidden;
+}
+.lp-card {
+  width: min(480px, 100%);
+  aspect-ratio: 4 / 3;
+  background: #161b22;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 32px 18px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.lp-card-text {
+  flex: 1;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  color: #c8d3e0;
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.lp-card-text mark.lp-word-active {
+  background: rgba(74,144,217,0.35);
+  color: #e8f0ff;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+.lp-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.3);
+  flex-shrink: 0;
+}
+.lp-block-sep { opacity: 0.5; }
+
+/* Controls */
+.lp-controls {
+  flex-shrink: 0;
+  padding: 12px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255,255,255,0.02);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Transport */
+.lp-transport {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.lp-ctrl-btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms, color 120ms;
+  padding: 0;
+}
+.lp-ctrl-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+.lp-play-btn {
+  width: 56px;
+  height: 56px;
+  background: rgba(74,144,217,0.18);
+  color: #5ba0e0;
+}
+.lp-play-btn:hover { background: rgba(74,144,217,0.32); color: #90c2f0; }
+
+/* Speed */
+.lp-speed-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lp-speed-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.5);
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: background 100ms, color 100ms, border-color 100ms;
+}
+.lp-speed-btn:hover { background: rgba(255,255,255,0.07); color: #e4e8ef; }
+.lp-speed-btn.lp-speed-active {
+  background: rgba(74,144,217,0.2);
+  color: #90c2f0;
+  border-color: rgba(74,144,217,0.4);
+}
+
+/* Voice */
+.lp-voice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+}
+.lp-voice-label {
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+}
+.lp-voice-select {
+  background: #1a2030;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.75);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  max-width: 260px;
+}
+.lp-voice-select:focus { outline: 2px solid rgba(74,144,217,0.5); }
+
 /* ── Layout shell ─────────────────────────────────────────── */
 .br-reader {
   --br-reader-bg: #101216;

@@ -46,8 +46,7 @@
     if (els.chapterTransition && !els.chapterTransition.classList.contains('hidden')) return true;
     if (els.annotPopup && !els.annotPopup.classList.contains('hidden')) return true;
     if (els.dictPopup && !els.dictPopup.classList.contains('hidden')) return true;
-    if (els.ttsDiag && !els.ttsDiag.classList.contains('hidden')) return true;
-    if (els.ttsMega && !els.ttsMega.classList.contains('hidden')) return true;
+    // LISTEN_P3: ttsDiag/ttsMega removed in P0 — no longer checked here
     return false;
   }
 

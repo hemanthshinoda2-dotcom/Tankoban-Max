@@ -194,8 +194,13 @@
     if (!book) return;
     pendingListenBook = book;
     applyMode(MODE_LISTEN);
-    // LISTEN_P3: launch TTS player here
-    try { console.log('[listen] openListenBook:', book.title || book.id); } catch {}
+    // LISTEN_P3: delegate to TTS player
+    var player = window.booksListenPlayer;
+    if (player && typeof player.open === 'function') {
+      player.open(book);
+    } else {
+      try { console.warn('[listen] booksListenPlayer not ready yet'); } catch {}
+    }
   }
 
   function openListenShow(showId) {

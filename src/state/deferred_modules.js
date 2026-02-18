@@ -167,6 +167,8 @@
         await loadScriptOnce('./domains/books/library.js');
         // LISTEN_P1: mode toggle shell
         await loadScriptOnce('./domains/books/listening_shell.js');
+        // LISTEN_P3: TTS player overlay
+        await loadScriptOnce('./domains/books/listening_player.js');
 
         window.__tankoBooksModulesLoaded = true;
 
