@@ -62,6 +62,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 - **Local patches:**
   - `paginator.js`: Added `scrollToAnchorCentered()` method for TTS vertical centering in scrolled mode (FIX-TTS03)
   - `paginator.js`: Added double-hit boundary guard for chapter auto-advance in scrolled mode (FIX-TTS03)
+  - `paginator.js`: Changed `scrollToAnchorCentered()` scroll reason from `'selection'` to `'anchor'` to prevent native DOM selection (blue highlight glitch) during TTS (FIX-TTS08)
   - `tts.js`: Added `snapshotRanges()` method to TTS class for preload-safe word tracking (FIX-TTS04)
 
 ---

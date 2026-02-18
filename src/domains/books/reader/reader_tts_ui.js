@@ -137,6 +137,10 @@
     if (state.settings.ttsWordHlColor && typeof tts.setWordHighlightColor === 'function') {
       tts.setWordHighlightColor(state.settings.ttsWordHlColor);
     }
+    // FIX-TTS08: restore enlarge scale
+    if (state.settings.ttsEnlargeScale && typeof tts.setEnlargeScale === 'function') {
+      tts.setEnlargeScale(state.settings.ttsEnlargeScale);
+    }
     populateHlControls();
 
     tts.onStateChange = function (status, info) {
@@ -681,6 +685,20 @@
         wbtns[wk].classList.toggle('active', wbtns[wk].dataset.color === curWColor);
       }
     }
+
+    // FIX-TTS08: enlarge scale slider — show only when style is 'enlarge'
+    var curHlStyle = typeof tts.getHighlightStyle === 'function' ? tts.getHighlightStyle() : 'highlight';
+    if (els.ttsEnlargeRow) {
+      els.ttsEnlargeRow.style.display = (curHlStyle === 'enlarge') ? '' : 'none';
+    }
+    if (els.ttsEnlargeScale) {
+      var scale = typeof tts.getEnlargeScale === 'function' ? tts.getEnlargeScale() : 1.35;
+      els.ttsEnlargeScale.value = scale;
+    }
+    if (els.ttsEnlargeVal) {
+      var scaleVal = typeof tts.getEnlargeScale === 'function' ? tts.getEnlargeScale() : 1.35;
+      els.ttsEnlargeVal.textContent = scaleVal.toFixed(2) + 'x';
+    }
   }
 
   function onHlStyleChange(style) {
@@ -689,6 +707,11 @@
     tts.setHighlightStyle(style);
     RS.state.settings.ttsHlStyle = style;
     RS.persistSettings().catch(function () {});
+    // FIX-TTS08: toggle enlarge row visibility
+    var els = RS.ensureEls();
+    if (els.ttsEnlargeRow) {
+      els.ttsEnlargeRow.style.display = (style === 'enlarge') ? '' : 'none';
+    }
   }
 
   function onHlColorChange(colorName) {
@@ -774,6 +797,20 @@
         RS.state.settings.ttsWordHlColor = btn.dataset.color;
         RS.persistSettings().catch(function () {});
         populateHlControls();
+      });
+    }
+
+    // FIX-TTS08: enlarge scale slider
+    if (els.ttsEnlargeScale) {
+      els.ttsEnlargeScale.addEventListener('input', function () {
+        var val = parseFloat(els.ttsEnlargeScale.value) || 1.35;
+        var tts = window.booksTTS;
+        if (tts && typeof tts.setEnlargeScale === 'function') {
+          tts.setEnlargeScale(val);
+        }
+        RS.state.settings.ttsEnlargeScale = val;
+        if (els.ttsEnlargeVal) els.ttsEnlargeVal.textContent = val.toFixed(2) + 'x';
+        RS.persistSettings().catch(function () {});
       });
     }
 

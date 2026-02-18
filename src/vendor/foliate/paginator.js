@@ -952,6 +952,8 @@ export class Paginator extends HTMLElement {
         return this.#scrollToAnchor(anchor, select ? 'selection' : 'navigation')
     }
     // FIX-TTS03: center the anchor vertically in scrolled mode (for TTS tracking)
+    // FIX-TTS08: use 'anchor' reason instead of 'selection' to avoid triggering
+    // native DOM selection (blue highlight glitch) on every word boundary.
     async scrollToAnchorCentered(anchor) {
         const rects = uncollapse(anchor)?.getClientRects?.()
         if (!rects) return
@@ -962,9 +964,9 @@ export class Paginator extends HTMLElement {
             const mapped = this.#getRectMapper()(rect)
             const rectSize = mapped.right - mapped.left
             const offset = mapped.left - this.#margin - (this.viewSize - rectSize) / 2
-            return this.#scrollTo(Math.max(0, offset), 'selection')
+            return this.#scrollTo(Math.max(0, offset), 'anchor')
         }
-        return this.#scrollToRect(rect, 'selection')
+        return this.#scrollToRect(rect, 'anchor')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor

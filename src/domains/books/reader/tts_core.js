@@ -47,6 +47,7 @@
     format: '',
     ttsHlStyle: 'highlight',
     ttsHlColor: 'grey',
+    ttsEnlargeScale: 1.35, // FIX-TTS08: configurable enlarge factor (1.1–2.0)
 
     _pauseStartedAt: 0,
     // FIX-TTS05: Thorium-style cancel flag — set BEFORE engine.cancel(), checked in all callbacks
@@ -241,6 +242,19 @@
     return null;
   }
 
+  // FIX-TTS08: Clear native browser selection in both the main document and the
+  // EPUB iframe to remove the blue selection glitch caused by paginator's
+  // setSelectionTo() firing on 'selection' reason scrolls.
+  function _clearNativeSelection() {
+    try { window.getSelection().removeAllRanges(); } catch {}
+    if (_cssHl.doc) {
+      try {
+        var win = _cssHl.doc.defaultView;
+        if (win) win.getSelection().removeAllRanges();
+      } catch {}
+    }
+  }
+
   // ── CSS Custom Highlight API (sentence + word) ─────────────────
 
   function _hexToRgba(hex, alpha) {
@@ -271,6 +285,12 @@
     return sentenceCss + '\n' + wordCss;
   }
 
+  // FIX-TTS08: Build the .tts-enlarge class CSS using the configurable scale.
+  function _buildEnlargeCss() {
+    var scale = state.ttsEnlargeScale || 1.35;
+    return '.tts-enlarge { font-size: ' + scale + 'em; display: inline; transition: font-size 0.12s ease-out; }';
+  }
+
   // FIX-TTS05: Initialize BOTH sentence and word CSS highlights in the EPUB iframe
   function _ensureCssHighlights(iframeDoc) {
     if (!iframeDoc) return false;
@@ -293,8 +313,7 @@
       // FIX-TTS08: Inject style-aware ::highlight rules + enlarge class
       var style = iframeDoc.createElement('style');
       style.setAttribute('data-tts-hl', '1');
-      style.textContent = _buildHighlightCss() + '\n' +
-        '.tts-enlarge { font-size: 1.35em; display: inline; transition: font-size 0.12s ease-out; }';
+      style.textContent = _buildHighlightCss() + '\n' + _buildEnlargeCss();
       iframeDoc.head.appendChild(style);
       _cssHl.styleEl = style;
 
@@ -327,8 +346,7 @@
   function _updateCssHighlightColors() {
     if (!_cssHl.styleEl || !_cssHl.doc) return;
     try {
-      _cssHl.styleEl.textContent = _buildHighlightCss() + '\n' +
-        '.tts-enlarge { font-size: 1.35em; display: inline; transition: font-size 0.12s ease-out; }';
+      _cssHl.styleEl.textContent = _buildHighlightCss() + '\n' + _buildEnlargeCss();
     } catch {}
   }
 
@@ -430,13 +448,15 @@
   // FIX-TTS07: Scroll the paginator so the given range is visible and centered.
   // Called on every word boundary and at the start of each new block to keep
   // the narrated text locked in the middle of the viewport.
+  // FIX-TTS08: uses scrollToAnchorCentered (reason='anchor') to avoid blue selection glitch.
   function _scrollToRange(range) {
     if (!range || !_fol.renderer) return;
     try {
       if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
         _fol.renderer.scrollToAnchorCentered(range);
       } else if (typeof _fol.renderer.scrollToAnchor === 'function') {
-        _fol.renderer.scrollToAnchor(range, true);
+        // Pass false — 'true' would set reason='selection' triggering native DOM selection
+        _fol.renderer.scrollToAnchor(range, false);
       }
     } catch {}
   }
@@ -498,6 +518,10 @@
 
     _fol.tts = view.tts || null;
     _fol.renderer = renderer;
+
+    // FIX-TTS08: Clear any native selection left by initTTS to prevent blue glitch
+    _clearNativeSelection();
+
     return !!_fol.tts;
   }
 
@@ -1194,6 +1218,13 @@
     _updateCssHighlightColors();
   }
 
+  // FIX-TTS08: Set the enlarge scale factor (1.1–2.5)
+  function setEnlargeScale(scale) {
+    var s = Math.max(1.1, Math.min(2.5, Number(scale) || 1.35));
+    state.ttsEnlargeScale = s;
+    _updateCssHighlightColors(); // Rebuilds the .tts-enlarge CSS class
+  }
+
   function setVoice(voiceId) {
     state.voiceId = String(voiceId || '');
     if (state.engine) state.engine.setVoice(state.voiceId);
@@ -1455,6 +1486,8 @@
     getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
     getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },
+    setEnlargeScale: setEnlargeScale,
+    getEnlargeScale: function () { return state.ttsEnlargeScale; },
     _reinitFoliateTTS: _reinitFoliateTTS,
     // FIX-TTS05: expose queue regeneration for section transitions
     _regenerateQueue: _generateQueue,
