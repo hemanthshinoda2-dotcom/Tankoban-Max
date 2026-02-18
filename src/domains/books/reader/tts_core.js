@@ -74,7 +74,11 @@
     _preloadTimer: null, // setTimeout id for delayed preload
     _preloadedSSML: null,// pre-fetched SSML for next block (after iterator advance)
     _preloadActive: false,// true after iterator advance — setMark unreliable for current block
+    _savedRanges: null,  // FIX-TTS04: snapshot of current block's mark→Range map before preload advance
   };
+
+  // FIX-TTS04: CSS Custom Highlight API state for word-level highlighting
+  var _cssHl = { word: null, doc: null, styleEl: null };
 
   // TTS_REWRITE: TXT legacy state (only used for format === 'txt')
   var _txt = {
@@ -226,6 +230,10 @@
         break;
       }
     }
+    // FIX-TTS04: if charIndex is before first mark, use first mark
+    if (best === null && marks.length > 0) {
+      best = marks[0].name;
+    }
     return best;
   }
 
@@ -257,74 +265,137 @@
     return null;
   }
 
-  function getDrawFn(type) {
+  // FIX-TTS04: sentence-only draw functions — word highlighting moved to CSS Highlight API
+  function getSentenceDrawFn() {
     var style = state.ttsHlStyle || 'highlight';
     var Overlayer = _getOverlayerClass();
     if (!Overlayer) return null;
     if (style === 'underline') return Overlayer.underline;
     if (style === 'squiggly') return Overlayer.squiggly;
     if (style === 'strikethrough') return Overlayer.strikethrough;
-    // FIX-TTS03: both sentence and word use filled highlight (no harsh outline border)
     return Overlayer.highlight;
   }
 
-  function getDrawOpts(colors, type) {
+  function getSentenceDrawOpts(colors) {
     var style = state.ttsHlStyle || 'highlight';
-    if (style === 'highlight') {
-      // FIX-TTS03: both use filled highlight; word is brighter shade via palette
-      if (type === 'word') return { color: colors.word };
-      return { color: colors.sentence };
-    }
-    if (style === 'underline') {
-      return { color: colors.line, width: type === 'word' ? 3 : 2 };
-    }
-    if (style === 'squiggly') {
-      return { color: colors.line, width: type === 'word' ? 3 : 2 };
-    }
-    if (style === 'strikethrough') {
-      return { color: colors.line, width: type === 'word' ? 3 : 2 };
-    }
+    if (style === 'highlight') return { color: colors.sentence };
+    if (style === 'underline') return { color: colors.line, width: 2 };
+    if (style === 'squiggly') return { color: colors.line, width: 2 };
+    if (style === 'strikethrough') return { color: colors.line, width: 2 };
     return { color: colors.sentence };
   }
 
+  // FIX-TTS04: CSS Custom Highlight API for word-level highlighting
+  // Uses native browser Highlight objects — zero DOM mutation, GPU-composited.
+  function _ensureCssHighlights(iframeDoc) {
+    if (!iframeDoc) return false;
+    try {
+      var win = iframeDoc.defaultView || window;
+      if (!win.CSS || !win.CSS.highlights) return false;
+
+      // Already initialized for this document?
+      if (_cssHl.doc === iframeDoc && _cssHl.word) return true;
+
+      // Clean up previous highlights
+      _clearCssHighlights();
+
+      _cssHl.doc = iframeDoc;
+      _cssHl.word = new win.Highlight();
+      win.CSS.highlights.set('tts-word', _cssHl.word);
+
+      // Inject ::highlight(tts-word) stylesheet into the iframe
+      var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+      var style = iframeDoc.createElement('style');
+      style.setAttribute('data-tts-hl', '1');
+      style.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
+      iframeDoc.head.appendChild(style);
+      _cssHl.styleEl = style;
+
+      return true;
+    } catch {}
+    return false;
+  }
+
+  function _clearCssHighlights() {
+    if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
+    if (_cssHl.styleEl) { try { _cssHl.styleEl.remove(); } catch {} }
+    if (_cssHl.doc) {
+      try {
+        var win = _cssHl.doc.defaultView;
+        if (win && win.CSS && win.CSS.highlights) {
+          win.CSS.highlights.delete('tts-word');
+        }
+      } catch {}
+    }
+    _cssHl.word = null;
+    _cssHl.doc = null;
+    _cssHl.styleEl = null;
+  }
+
+  function _updateCssHighlightColor() {
+    if (!_cssHl.styleEl || !_cssHl.doc) return;
+    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+    try {
+      _cssHl.styleEl.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
+    } catch {}
+  }
+
+  function _hexToRgba(hex, alpha) {
+    var h = String(hex || '#999').replace('#', '');
+    var r = parseInt(h.substring(0, 2), 16) || 0;
+    var g = parseInt(h.substring(2, 4), 16) || 0;
+    var b = parseInt(h.substring(4, 6), 16) || 0;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
   function clearTtsOverlays() {
-    if (!_fol.overlayer) return;
-    try { _fol.overlayer.remove('tts-word'); } catch {}
-    try { _fol.overlayer.remove('tts-sentence'); } catch {}
+    if (_fol.overlayer) {
+      try { _fol.overlayer.remove('tts-word'); } catch {}
+      try { _fol.overlayer.remove('tts-sentence'); } catch {}
+    }
+    // FIX-TTS04: clear CSS Highlight API word highlight
+    if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     _fol._lastBlockEl = null;
   }
 
   // Highlight callback passed to view.initTTS() — called by tts.setMark(name)
   function highlightRange(range) {
-    if (!_fol.overlayer || !range) return;
+    if (!range) return;
     var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
 
-    // Sentence-level highlight: detect parent block element, highlight it
-    // only when the block changes (avoids redundant redraws)
-    try {
-      var blockEl = _findBlockParent(range.startContainer);
-      if (blockEl && blockEl !== _fol._lastBlockEl) {
-        _fol._lastBlockEl = blockEl;
-        try { _fol.overlayer.remove('tts-sentence'); } catch {}
-        var sentenceDrawFn = getDrawFn('sentence');
-        if (sentenceDrawFn) {
-          var doc = blockEl.ownerDocument || document;
-          var blockRange = doc.createRange();
-          blockRange.selectNodeContents(blockEl);
-          _fol.blockRange = blockRange;
-          _fol.overlayer.add('tts-sentence', blockRange, sentenceDrawFn, getDrawOpts(colors, 'sentence'));
-        }
-      }
-    } catch {}
+    // FIX-TTS04: detect stale _lastBlockEl (disconnected from DOM after section nav)
+    if (_fol._lastBlockEl && !_fol._lastBlockEl.isConnected) {
+      _fol._lastBlockEl = null;
+    }
 
-    // Word-level highlight: outline around the current word
-    try { _fol.overlayer.remove('tts-word'); } catch {}
-    var wordDrawFn = getDrawFn('word');
-    if (wordDrawFn) {
+    // Sentence-level highlight via overlayer: detect parent block element,
+    // highlight it only when the block changes (avoids redundant redraws)
+    if (_fol.overlayer) {
       try {
-        _fol.overlayer.add('tts-word', range, wordDrawFn, getDrawOpts(colors, 'word'));
+        var blockEl = _findBlockParent(range.startContainer);
+        if (blockEl && blockEl !== _fol._lastBlockEl) {
+          _fol._lastBlockEl = blockEl;
+          try { _fol.overlayer.remove('tts-sentence'); } catch {}
+          var sentenceDrawFn = getSentenceDrawFn();
+          if (sentenceDrawFn) {
+            var doc = blockEl.ownerDocument || document;
+            var blockRange = doc.createRange();
+            blockRange.selectNodeContents(blockEl);
+            _fol.blockRange = blockRange;
+            _fol.overlayer.add('tts-sentence', blockRange, sentenceDrawFn, getSentenceDrawOpts(colors));
+          }
+        }
       } catch {}
     }
+
+    // FIX-TTS04: Word-level highlight via CSS Custom Highlight API
+    try {
+      var wordDoc = range.startContainer.ownerDocument || document;
+      if (_ensureCssHighlights(wordDoc) && _cssHl.word) {
+        _cssHl.word.clear();
+        _cssHl.word.add(range);
+      }
+    } catch {}
 
     // FIX-TTS03: Paginator-aware scroll — centered in scrolled mode
     if (_fol.renderer) {
@@ -340,17 +411,19 @@
 
   // Highlight the entire block range (sentence-level) — used by _redrawActiveOverlays
   function highlightBlockRange(blockRange) {
-    if (!_fol.overlayer) return;
-    try { _fol.overlayer.remove('tts-sentence'); } catch {}
-    try { _fol.overlayer.remove('tts-word'); } catch {}
+    if (_fol.overlayer) {
+      try { _fol.overlayer.remove('tts-sentence'); } catch {}
+    }
+    // FIX-TTS04: clear word highlight too
+    if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     _fol._lastBlockEl = null;
-    if (!blockRange) return;
+    if (!blockRange || !_fol.overlayer) return;
     _fol.blockRange = blockRange;
-    var drawFn = getDrawFn('sentence');
+    var drawFn = getSentenceDrawFn();
     if (!drawFn) return;
     var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
     try {
-      _fol.overlayer.add('tts-sentence', blockRange, drawFn, getDrawOpts(colors, 'sentence'));
+      _fol.overlayer.add('tts-sentence', blockRange, drawFn, getSentenceDrawOpts(colors));
     } catch {}
     // FIX-TTS03: scroll centered in scrolled mode
     if (_fol.renderer) {
@@ -417,6 +490,9 @@
     }
     if (!state.engine) { stop(); return; }
 
+    // FIX-TTS04: reset sentence tracking for new block — forces redraw
+    _fol._lastBlockEl = null;
+
     var parsed = parseSSML(ssml);
     _fol.marks = parsed.marks;
     state.currentText = parsed.plainText;
@@ -439,6 +515,7 @@
     if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
     _fol._preloadedSSML = null;
     _fol._preloadActive = false;
+    _fol._savedRanges = null; // FIX-TTS04
   }
 
   function _preloadNextBlock() {
@@ -449,21 +526,26 @@
 
     _clearPreload();
 
-    // FIX-TTS03: Start preload at ~50% through (was 75%) to give more time for
+    // FIX-TTS04: Start preload at ~40% through (was 50%) to give even more time for
     // synthesis to complete before block ends — reduces inter-paragraph silence.
-    // After advancing the iterator, setMark() for the current block becomes
-    // unreliable (word highlight stops) but sentence highlight persists — acceptable.
+    // Snapshot current block's mark→Range map before advancing the iterator so
+    // handleBoundary() can still highlight words for the tail end of the block.
     var textLen = (state.currentText || '').length;
     if (textLen < 10) return; // too short to bother
     var cps = Math.max(5, 15 * (state.rate || 1.0));
-    var delayMs = Math.max(50, (textLen / cps) * 500);
+    var delayMs = Math.max(50, (textLen / cps) * 400);
 
     _fol._preloadTimer = setTimeout(function () {
       _fol._preloadTimer = null;
       if (state.status !== PLAYING || !_fol.tts) return;
 
+      // FIX-TTS04: snapshot current block's ranges before iterator advance
+      if (typeof _fol.tts.snapshotRanges === 'function') {
+        _fol._savedRanges = _fol.tts.snapshotRanges();
+      }
+
       var nextSSML = _fol.tts.next();
-      if (!nextSSML) return;
+      if (!nextSSML) { _fol._savedRanges = null; return; }
       _fol._preloadedSSML = nextSSML;
       _fol._preloadActive = true;
 
@@ -533,13 +615,20 @@
       var m = rest.match(/^\S+/);
       if (m) state.wordEnd = charIndex + m[0].length;
     }
-    // Map charIndex to nearest foliate mark, call setMark for Overlayer highlight.
-    // Skip if preload has advanced the iterator — ranges would be wrong.
-    // Sentence highlight persists; word outline stops for the tail end of the block.
-    if (_fol.tts && _fol.marks.length && !_fol._preloadActive) {
+    // FIX-TTS04: Map charIndex to nearest foliate mark for highlighting.
+    // If preload has advanced the iterator, use saved ranges instead of setMark
+    // (which would look up in the NEW block's ranges and fail silently).
+    if (_fol.tts && _fol.marks.length) {
       var markName = findNearestMark(_fol.marks, charIndex);
       if (markName) {
-        try { _fol.tts.setMark(markName); } catch {}
+        if (_fol._preloadActive && _fol._savedRanges) {
+          var savedRange = _fol._savedRanges.get(markName);
+          if (savedRange) {
+            try { highlightRange(savedRange.cloneRange()); } catch {}
+          }
+        } else {
+          try { _fol.tts.setMark(markName); } catch {}
+        }
       }
     }
     fireProgress();
@@ -762,6 +851,16 @@
         }
       }
       maybeMarkInitFallback(preferredId);
+
+      // FIX-TTS04: pre-warm Edge TTS WebSocket for faster first playback
+      if (state.engineUsable.edge) {
+        try {
+          var ttsApi = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
+          if (ttsApi && typeof ttsApi.warmup === 'function') {
+            ttsApi.warmup({ voice: state.voiceId || 'en-US-AriaNeural' }).catch(function () {});
+          }
+        } catch {}
+      }
 
       if (!state.engine) {
         state.lastError = {
@@ -1143,6 +1242,8 @@
 
   function _redrawActiveOverlays() {
     // If overlayer has active highlights, remove and re-add with new style
+    // FIX-TTS04: also update CSS highlight color
+    _updateCssHighlightColor();
     if (!_fol.overlayer) return;
     if (_fol.blockRange) {
       highlightBlockRange(_fol.blockRange);
@@ -1212,6 +1313,8 @@
     _fol._preloadTimer = null;
     _fol._preloadedSSML = null;
     _fol._preloadActive = false;
+    _fol._savedRanges = null;
+    _clearCssHighlights(); // FIX-TTS04
     _txt.blocks = [];
     _txt.segments = [];
     _txt.segIdx = -1;

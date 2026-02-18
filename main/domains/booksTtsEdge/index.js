@@ -293,8 +293,27 @@ async function probe(ctx, _evt, payload) {
   return out;
 }
 
+// FIX-TTS04: Pre-warm Edge TTS WebSocket connection to reduce first-playback latency.
+async function warmup(_ctx, _evt, payload) {
+  const tts = getTtsInstance();
+  if (!tts) return { ok: false, reason: 'edge_tts_module_missing' };
+  try {
+    const lib = requireEdgeTts();
+    if (!lib) return { ok: false, reason: 'edge_tts_lib_missing' };
+    const outputFormat = lib.OUTPUT_FORMAT && lib.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
+      || 'audio-24khz-48kbitrate-mono-mp3';
+    const voice = String(payload && payload.voice || 'en-US-AriaNeural');
+    await tts.setMetadata(voice, outputFormat, { wordBoundaryEnabled: true });
+    return { ok: true };
+  } catch (err) {
+    resetTtsInstance();
+    return { ok: false, reason: String(err && err.message ? err.message : err) };
+  }
+}
+
 module.exports = {
   probe,
   getVoices,
   synth,
+  warmup,
 };

@@ -275,4 +275,6 @@ export class TTS {
             this.highlight(range.cloneRange())
         }
     }
+    // FIX-TTS04: snapshot current block's mark→Range map before preload advances iterator
+    snapshotRanges() { return new Map(this.#ranges) }
 }

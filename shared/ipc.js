@@ -166,6 +166,9 @@ const CHANNEL = {
   /** Synthesize speech via Edge transport in main process. Returns: { ok, audioBase64?, boundaries?, errorCode?, reason? } */
   BOOKS_TTS_EDGE_SYNTH: 'booksTtsEdge:synth',
 
+  /** FIX-TTS04: Warm up Edge TTS WebSocket connection (no audio returned). Returns: { ok } */
+  BOOKS_TTS_EDGE_WARMUP: 'booksTtsEdge:warmup',
+
   // ========================================
   // Books Progress
   // ========================================

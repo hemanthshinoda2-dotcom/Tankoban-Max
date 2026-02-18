@@ -146,6 +146,7 @@ const api = {
     probe: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_PROBE, payload),
     getVoices: (opts) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_GET_VOICES, opts),
     synth: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_SYNTH, payload),
+    warmup: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_WARMUP, payload), // FIX-TTS04
   },
 
   // ========================================
