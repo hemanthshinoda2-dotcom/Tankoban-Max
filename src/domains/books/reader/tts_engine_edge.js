@@ -44,13 +44,20 @@
       },
     };
 
-    // GAP3: Preload cache — synthesize next sentences while current plays
+    // FIX-TTS05: LRU preload cache — persistent across rate/voice changes.
+    // Inspired by Readest's dual LRU (200 entries). Entries are NOT consumed on hit,
+    // allowing replay/rewind to reuse cached audio. Eviction revokes blob URLs.
     var _preCache = {};
     var _preCacheCount = 0;
-    var MAX_PRECACHE = 6;
+    var MAX_PRECACHE = 50;
+    var _cacheStats = { hits: 0, misses: 0, evictions: 0 };
 
     function _preCacheKey(text) {
       return state.voiceName + '|' + state.rate + '|' + state.pitch + '|' + text;
+    }
+
+    function getCacheStats() {
+      return { hits: _cacheStats.hits, misses: _cacheStats.misses, evictions: _cacheStats.evictions, size: _preCacheCount, max: MAX_PRECACHE };
     }
 
     function clearPreloadCache() {
@@ -65,11 +72,38 @@
       _preCacheCount = 0;
     }
 
+    // FIX-TTS05: LRU eviction — find and remove least-recently-accessed entry
+    function _evictLRU() {
+      var oldestKey = null;
+      var oldestTime = Infinity;
+      var keys = Object.keys(_preCache);
+      for (var i = 0; i < keys.length; i++) {
+        var entry = _preCache[keys[i]];
+        if (entry && entry.lastAccess < oldestTime) {
+          oldestTime = entry.lastAccess;
+          oldestKey = keys[i];
+        }
+      }
+      if (oldestKey) {
+        var evicted = _preCache[oldestKey];
+        if (evicted && evicted.blobUrl) {
+          try { URL.revokeObjectURL(evicted.blobUrl); } catch {}
+        }
+        delete _preCache[oldestKey];
+        _preCacheCount--;
+        _cacheStats.evictions++;
+      }
+    }
+
     async function preload(text) {
       var t = String(text || '').trim();
       if (!t) return;
       var key = _preCacheKey(t);
-      if (_preCache[key]) return;
+      if (_preCache[key]) {
+        // FIX-TTS05: update last access on preload hit (keeps hot entries alive)
+        _preCache[key].lastAccess = Date.now();
+        return;
+      }
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
         if (!api || typeof api.synth !== 'function') return;
@@ -82,19 +116,11 @@
         if (!res || !res.ok || !res.audioBase64) return;
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) return;
-        // Evict oldest if full
-        if (_preCacheCount >= MAX_PRECACHE) {
-          var cacheKeys = Object.keys(_preCache);
-          if (cacheKeys.length) {
-            var evicted = _preCache[cacheKeys[0]];
-            if (evicted && evicted.blobUrl) {
-              try { URL.revokeObjectURL(evicted.blobUrl); } catch {}
-            }
-            delete _preCache[cacheKeys[0]];
-            _preCacheCount--;
-          }
+        // FIX-TTS05: LRU eviction if full
+        while (_preCacheCount >= MAX_PRECACHE) {
+          _evictLRU();
         }
-        _preCache[key] = { blob: blob, blobUrl: null, boundaries: res.boundaries || [] };
+        _preCache[key] = { blob: blob, blobUrl: null, boundaries: res.boundaries || [], lastAccess: Date.now() };
         _preCacheCount++;
       } catch {}
     }
@@ -212,34 +238,72 @@
       state.voiceName = String(voiceURI || 'en-US-AriaNeural');
     }
 
-    // FIX-TTS02: Boundary timers now also check AbortController signal
+    // FIX-TTS05: Positional windowed boundary alignment — fixes drift on repeated words.
+    // Tracks expectedPos (cumulative) and searches within ±WINDOW chars. Falls back to
+    // expectedPos when no match found. Validates monotonic ordering and signals chronic drift.
     function fireBoundaries(reqId, boundaries, spokenText) {
       var list = Array.isArray(boundaries) ? boundaries : [];
       var txt = String(spokenText || '');
-      var searchFrom = 0;
+      if (!txt || !list.length) return;
+
+      var WINDOW = 30;
+      var positions = [];
+      var expectedPos = 0;
+      var driftCount = 0;
+      var maxConsecDrift = 0;
+      var curDriftRun = 0;
+
+      // FIX-TTS05: Build aligned positions using windowed search around expectedPos
       for (var i = 0; i < list.length; i++) {
         var word = list[i] && list[i].text || '';
-        var charIndex = 0;
-        var charLength = 0;
+        var charIndex = expectedPos;
+        var charLength = word.length;
+
         if (word && txt) {
-          var idx = txt.indexOf(word, searchFrom);
-          if (idx >= 0) {
-            charIndex = idx;
-            charLength = word.length;
-            searchFrom = idx + word.length;
+          var searchStart = Math.max(0, expectedPos - WINDOW);
+          var searchEnd = Math.min(txt.length, expectedPos + WINDOW + word.length);
+          var windowStr = txt.substring(searchStart, searchEnd);
+          var localIdx = windowStr.indexOf(word);
+
+          if (localIdx >= 0) {
+            charIndex = searchStart + localIdx;
+            curDriftRun = 0;
+          } else {
+            charIndex = Math.min(expectedPos, Math.max(0, txt.length - 1));
+            curDriftRun++;
+            if (curDriftRun > maxConsecDrift) maxConsecDrift = curDriftRun;
           }
         }
-        (function (b, ci, cl) {
-          var delay = Math.max(0, Number(b && b.offsetMs || 0));
+
+        expectedPos = charIndex + Math.max(charLength, 1);
+        positions.push({ boundary: list[i], charIndex: charIndex, charLength: charLength });
+      }
+
+      // FIX-TTS05: Validate monotonic ordering — fix backward jumps via interpolation
+      for (var j = 1; j < positions.length; j++) {
+        if (positions[j].charIndex < positions[j - 1].charIndex) {
+          positions[j].charIndex = positions[j - 1].charIndex + positions[j - 1].charLength;
+          if (positions[j].charIndex >= txt.length) {
+            positions[j].charIndex = Math.max(0, txt.length - 1);
+          }
+        }
+      }
+
+      var driftFallback = maxConsecDrift > 3;
+
+      // FIX-TTS05: Schedule boundary callbacks with drift flag
+      for (var m = 0; m < positions.length; m++) {
+        (function (pos, bd, df) {
+          var delay = Math.max(0, Number(bd && bd.offsetMs || 0));
           setTimeout(function () {
             if (reqId !== state.requestId) return;
             if (!state.playing || state.paused) return;
             if (state.abortCtrl && state.abortCtrl.signal.aborted) return;
             if (typeof state.onBoundary === 'function') {
-              try { state.onBoundary(ci, cl, 'word'); } catch {}
+              try { state.onBoundary(pos.charIndex, pos.charLength, 'word', df); } catch {}
             }
           }, delay);
-        })(list[i], charIndex, charLength);
+        })(positions[m], positions[m].boundary, driftFallback);
       }
     }
 
@@ -320,19 +384,17 @@
       var myReq = state.requestId;
       var signal = state.abortCtrl.signal;
 
-      // GAP3: check preload cache first
+      // FIX-TTS05: LRU cache hit — keep entry for replay/rewind, update lastAccess
       var cacheKey = _preCacheKey(t);
       var cached = _preCache[cacheKey];
       if (cached) {
-        delete _preCache[cacheKey];
-        _preCacheCount--;
+        cached.lastAccess = Date.now();
+        _cacheStats.hits++;
         diag('edge_preload_hit', '');
         _playBlob(myReq, cached.blob, cached.boundaries, t);
-        if (cached.blobUrl) {
-          try { URL.revokeObjectURL(cached.blobUrl); } catch {}
-        }
         return;
       }
+      _cacheStats.misses++;
 
       diag('edge_ws_open_start', '');
       try {
@@ -394,19 +456,17 @@
       state.abortCtrl = new AbortController();
       var signal = state.abortCtrl.signal;
 
-      // Check preload cache first
+      // FIX-TTS05: LRU cache hit — keep for replay, update lastAccess
       var cacheKey = _preCacheKey(t);
       var cached = _preCache[cacheKey];
       if (cached) {
-        delete _preCache[cacheKey];
-        _preCacheCount--;
+        cached.lastAccess = Date.now();
+        _cacheStats.hits++;
         diag('edge_preload_hit', '');
         _playBlob(newReqId, cached.blob, cached.boundaries, t);
-        if (cached.blobUrl) {
-          try { URL.revokeObjectURL(cached.blobUrl); } catch {}
-        }
         return;
       }
+      _cacheStats.misses++;
 
       // Synthesize in background while old audio keeps playing
       try {
@@ -510,6 +570,7 @@
       loadVoices: loadVoices,
       getHealth: getHealth,
       getLastDiag: getLastDiag,
+      getCacheStats: getCacheStats, // FIX-TTS05
       engineId: 'edge',
       set onBoundary(fn) { state.onBoundary = (typeof fn === 'function') ? fn : null; },
       set onEnd(fn) { state.onEnd = (typeof fn === 'function') ? fn : null; },

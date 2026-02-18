@@ -125,11 +125,24 @@
     if (state.settings.ttsHlColor && typeof tts.setHighlightColor === 'function') {
       tts.setHighlightColor(state.settings.ttsHlColor);
     }
+    // FIX-TTS05: restore granularity + word highlight settings
+    if (state.settings.ttsHlGranularity && typeof tts.setHighlightGranularity === 'function') {
+      tts.setHighlightGranularity(state.settings.ttsHlGranularity);
+    }
+    if (state.settings.ttsWordHlStyle && typeof tts.setWordHighlightStyle === 'function') {
+      tts.setWordHighlightStyle(state.settings.ttsWordHlStyle);
+    }
+    if (state.settings.ttsWordHlColor && typeof tts.setWordHighlightColor === 'function') {
+      tts.setWordHighlightColor(state.settings.ttsWordHlColor);
+    }
     populateHlControls();
 
     tts.onStateChange = function (status, info) {
       syncTtsUI(status, info);
     };
+    // FIX-TTS05: lifecycle events for section/document transitions
+    tts.onDocumentEnd = function () { RS.showToast('End of book'); };
+
     tts.onProgress = function (info) {
       updateTtsSnippet(info);
       syncTtsUI(tts.getState(), info);
@@ -147,7 +160,8 @@
   function syncTtsUI(status, infoMaybe) {
     var els = RS.ensureEls();
     var state = RS.state;
-    var isActive = status === 'playing' || status === 'paused';
+    // FIX-TTS05: treat section_transition as playing for UI purposes
+    var isActive = status === 'playing' || status === 'paused' || status === 'section_transition';
     var tts = window.booksTTS;
     var info = infoMaybe || (tts && typeof tts.getSnippet === 'function' ? tts.getSnippet() : null);
     var fallbackInfo = (tts && typeof tts.getFallbackInfo === 'function') ? tts.getFallbackInfo() : null;
@@ -171,15 +185,17 @@
     if (els.ttsBar) els.ttsBar.classList.toggle('hidden', !isActive);
     // Close mega panel when TTS stops
     if (!isActive && els.ttsMega) els.ttsMega.classList.add('hidden');
+    // FIX-TTS05: section_transition shows as playing (pause icon)
+    var showPause = (status === 'playing' || status === 'section_transition');
     if (els.playBtn) {
       els.playBtn.classList.toggle('ttsActive', isActive);
-      els.playBtn.innerHTML = status === 'playing' ? SVG_PAUSE : SVG_PLAY;
-      els.playBtn.title = status === 'playing' ? 'Pause (T)' : 'Read aloud (T)';
+      els.playBtn.innerHTML = showPause ? SVG_PAUSE : SVG_PLAY;
+      els.playBtn.title = showPause ? 'Pause (T)' : 'Read aloud (T)';
     }
 
     if (els.ttsPlayPause) {
-      els.ttsPlayPause.innerHTML = status === 'playing' ? SVG_PAUSE : SVG_PLAY;
-      els.ttsPlayPause.title = status === 'playing' ? 'Pause' : 'Play';
+      els.ttsPlayPause.innerHTML = showPause ? SVG_PAUSE : SVG_PLAY;
+      els.ttsPlayPause.title = showPause ? 'Pause' : 'Play';
     }
 
     if (els.ttsSpeed) {
@@ -222,7 +238,7 @@
 
     // TTS launch button (toolbar)
     if (els.ttsLaunch) {
-      if (status === 'playing') {
+      if (status === 'playing' || status === 'section_transition') {
         els.ttsLaunch.innerHTML = SVG_PAUSE;
         els.ttsLaunch.title = 'Pause TTS (T)';
         els.ttsLaunch.classList.add('ttsActive');
@@ -313,6 +329,7 @@
       return;
     }
     var st = tts.getState();
+    if (st === 'section_transition') return; // FIX-TTS05: no toggle during transition
     if (st === 'idle') tts.play();
     else if (st === 'playing') tts.pause();
     else if (st === 'paused') tts.resume();
@@ -535,7 +552,8 @@
     }
     var state = RS.state;
     var tts = window.booksTTS;
-    var isActive = tts && (tts.getState() === 'playing' || tts.getState() === 'paused');
+    var st = tts ? tts.getState() : 'idle';
+    var isActive = (st === 'playing' || st === 'paused' || st === 'section_transition');
     btn.classList.toggle('hidden', !isActive || !state.ttsLastLocation);
   }
 
@@ -633,6 +651,53 @@
         btns[k].classList.toggle('active', btns[k].dataset.color === curColor);
       }
     }
+
+    // FIX-TTS05: word tracking checkbox
+    if (els.ttsWordTracking) {
+      var gran = typeof tts.getHighlightGranularity === 'function' ? tts.getHighlightGranularity() : 'sentence';
+      els.ttsWordTracking.checked = (gran === 'word');
+    }
+
+    // FIX-TTS05: word highlight style selector
+    var wordHlRow = document.getElementById('booksReaderWordHlRow');
+    var wordGran = typeof tts.getHighlightGranularity === 'function' ? tts.getHighlightGranularity() : 'sentence';
+    if (wordHlRow) wordHlRow.style.display = (wordGran === 'word') ? '' : 'none';
+
+    if (els.ttsWordHlStyle) {
+      var wStyles = typeof tts.getHighlightStyles === 'function' ? tts.getHighlightStyles() : [];
+      if (els.ttsWordHlStyle.options.length === 0) {
+        var wLabels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough' };
+        for (var wi = 0; wi < wStyles.length; wi++) {
+          var wo = document.createElement('option');
+          wo.value = wStyles[wi];
+          wo.textContent = wLabels[wStyles[wi]] || wStyles[wi];
+          els.ttsWordHlStyle.appendChild(wo);
+        }
+      }
+      var curWStyle = typeof tts.getWordHighlightStyle === 'function' ? tts.getWordHighlightStyle() : 'highlight';
+      els.ttsWordHlStyle.value = curWStyle;
+    }
+
+    // FIX-TTS05: word highlight color swatches
+    if (els.ttsWordHlColors) {
+      var wColors = typeof tts.getHighlightColors === 'function' ? tts.getHighlightColors() : [];
+      var curWColor = typeof tts.getWordHighlightColor === 'function' ? tts.getWordHighlightColor() : 'blue';
+      if (!els.ttsWordHlColors.children.length) {
+        var wSwatches = { grey: '#9a9aa8', blue: '#5a96ff', yellow: '#e6c800', green: '#50b464', pink: '#ff6e96', orange: '#ffa032' };
+        for (var wj = 0; wj < wColors.length; wj++) {
+          var wbtn = document.createElement('button');
+          wbtn.className = 'ttsColorSwatch';
+          wbtn.dataset.color = wColors[wj];
+          wbtn.style.background = wSwatches[wColors[wj]] || '#888';
+          wbtn.title = wColors[wj].charAt(0).toUpperCase() + wColors[wj].slice(1);
+          els.ttsWordHlColors.appendChild(wbtn);
+        }
+      }
+      var wbtns = els.ttsWordHlColors.querySelectorAll('.ttsColorSwatch');
+      for (var wk = 0; wk < wbtns.length; wk++) {
+        wbtns[wk].classList.toggle('active', wbtns[wk].dataset.color === curWColor);
+      }
+    }
   }
 
   function onHlStyleChange(style) {
@@ -692,6 +757,40 @@
       els.ttsHlColors.addEventListener('click', function (ev) {
         var btn = ev.target.closest('.ttsColorSwatch');
         if (btn && btn.dataset.color) onHlColorChange(btn.dataset.color);
+      });
+    }
+
+    // FIX-TTS05: word tracking checkbox
+    els.ttsWordTracking && els.ttsWordTracking.addEventListener('change', function () {
+      var tts = window.booksTTS;
+      if (!tts || typeof tts.setHighlightGranularity !== 'function') return;
+      var val = els.ttsWordTracking.checked ? 'word' : 'sentence';
+      tts.setHighlightGranularity(val);
+      RS.state.settings.ttsHlGranularity = val;
+      RS.persistSettings().catch(function () {});
+      populateHlControls();
+    });
+
+    // FIX-TTS05: word highlight style
+    els.ttsWordHlStyle && els.ttsWordHlStyle.addEventListener('change', function () {
+      var tts = window.booksTTS;
+      if (!tts || typeof tts.setWordHighlightStyle !== 'function') return;
+      tts.setWordHighlightStyle(els.ttsWordHlStyle.value);
+      RS.state.settings.ttsWordHlStyle = els.ttsWordHlStyle.value;
+      RS.persistSettings().catch(function () {});
+    });
+
+    // FIX-TTS05: word highlight color
+    if (els.ttsWordHlColors) {
+      els.ttsWordHlColors.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.ttsColorSwatch');
+        if (!btn || !btn.dataset.color) return;
+        var tts = window.booksTTS;
+        if (!tts || typeof tts.setWordHighlightColor !== 'function') return;
+        tts.setWordHighlightColor(btn.dataset.color);
+        RS.state.settings.ttsWordHlColor = btn.dataset.color;
+        RS.persistSettings().catch(function () {});
+        populateHlControls();
       });
     }
 
@@ -756,7 +855,7 @@
         try { navigator.mediaSession.setActionHandler(keys[i], actions[keys[i]]); } catch (e) {}
       }
     }
-    navigator.mediaSession.playbackState = status === 'playing' ? 'playing'
+    navigator.mediaSession.playbackState = (status === 'playing' || status === 'section_transition') ? 'playing'
       : status === 'paused' ? 'paused' : 'none';
     var book = RS.state.book;
     var title = (book && book.title) || 'TTS';
