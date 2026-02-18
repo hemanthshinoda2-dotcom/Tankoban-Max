@@ -211,6 +211,7 @@
       ttsFromSel: qs('booksReaderTtsFromSel'),
       returnTts: qs('booksReaderReturnTts'),
       flowToggle: qs('brSettingsFlowToggle'),
+      flowBtn: qs('booksReaderFlowBtn'), // FIX-TTS03: toolbar flow mode toggle
       shortcutsList: qs('brSettingsShortcuts'),
       // Annotation popup
       annotPopup: qs('booksAnnotPopup'),
