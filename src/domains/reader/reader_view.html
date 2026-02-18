@@ -2,7 +2,7 @@
         <div class="playerBar ytHudTop">
           <div class="ytHudRow">
             <div class="ytTopLeft">
-              <button id="backBtn" class="iconBtn ytIcon" title="Back to library" aria-label="Back to library">←</button>
+              <button id="backBtn" class="iconBtn ytIcon mi" title="Back to library" aria-label="Back to library">arrow_back</button>
 
               <div class="playerMeta">
                 <div id="nowTitle" class="nowTitle">—</div>
@@ -206,10 +206,10 @@
 
               <!-- Build 35: quick actions on the scrub bar (minimal symbols) -->
               <div class="scrubActions" aria-label="Quick actions">
-                <button id="scrubModeBtn" class="scrubActionBtn" title="Modes" aria-label="Modes">◫</button>
-                <button id="scrubNavBtn" class="scrubActionBtn" title="Navigate volumes" aria-label="Navigate volumes">≡</button>
-                <button id="scrubFitBtn" class="scrubActionBtn" title="Image fit" aria-label="Image fit">⤢</button>
-                <button id="scrubWidthBtn" class="scrubActionBtn" title="Portrait width" aria-label="Portrait width">↔</button>
+                <button id="scrubModeBtn" class="scrubActionBtn mi" title="Modes" aria-label="Modes">auto_awesome_motion</button>
+                <button id="scrubNavBtn" class="scrubActionBtn mi" title="Navigate volumes" aria-label="Navigate volumes">menu_book</button>
+                <button id="scrubFitBtn" class="scrubActionBtn mi" title="Image fit" aria-label="Image fit">fit_screen</button>
+                <button id="scrubWidthBtn" class="scrubActionBtn mi" title="Portrait width" aria-label="Portrait width">swap_horiz</button>
               </div>
 
               <!-- // FIND_THIS:TWO_PAGE_SCROLL_ROW_GAP_UI (Tankoban Build 5) -->
@@ -224,15 +224,15 @@
           <!-- Build 7 (UI-only): hide the always-on quick row to match Build 23 minimalist HUD -->
           <div id="quickSettingsRow" class="ytQuickRow hidden" role="toolbar" aria-label="Quick settings">
             <button id="quickSpeedBtn" class="iconBtn ytIcon ytQuickIcon ytQuickSpeed" title="Scroll speed">⏱ —</button>
-            <button id="quickModeBtn" class="iconBtn ytIcon ytQuickIcon ytQuickMode" title="Toggle Auto Scroll / Manual Scroll (M)">✋</button>
+            <button id="quickModeBtn" class="iconBtn ytIcon ytQuickIcon ytQuickMode mi" title="Toggle Auto Scroll / Manual Scroll (M)">touch_app</button>
             <!-- Build 14: one-mode reader (infinite strip only). -->
-            <button id="quickWidthBtn" class="iconBtn ytIcon ytQuickIcon" title="Portrait width">↔</button>
+            <button id="quickWidthBtn" class="iconBtn ytIcon ytQuickIcon mi" title="Portrait width">swap_horiz</button>
             <!-- Build 14: spreads are inline; no spread fit/fill toggle. -->
             <div class="ytQuickSep" aria-hidden="true"></div>
-            <button id="volNavBtn" class="iconBtn ytIcon ytQuickIcon" title="Volumes">≡</button>
-            <button id="quickKeysBtn" class="iconBtn ytIcon ytQuickIcon" title="Keys">⌨</button>
-            <button id="quickClearResumeBtn" class="iconBtn ytIcon ytQuickIcon" title="Start volume from beginning">↺</button>
-            <button id="quickResetSeriesBtn" class="iconBtn ytIcon ytQuickIcon" title="Start series from beginning">⟲</button>
+            <button id="volNavBtn" class="iconBtn ytIcon ytQuickIcon mi" title="Volumes">menu_book</button>
+            <button id="quickKeysBtn" class="iconBtn ytIcon ytQuickIcon mi" title="Keys">keyboard</button>
+            <button id="quickClearResumeBtn" class="iconBtn ytIcon ytQuickIcon mi" title="Start volume from beginning">restart_alt</button>
+            <button id="quickResetSeriesBtn" class="iconBtn ytIcon ytQuickIcon mi" title="Start series from beginning">replay</button>
           </div>
 
           <!-- Build 19: scroll speed slider overlay -->
@@ -253,19 +253,19 @@
 
           <div class="ytControlsRow">
             <div class="ytLeftControls">
-              <button id="prevBtn" class="iconBtn ytIcon" title="Previous page" aria-label="Previous page">⟨</button>
-              <button id="playBtn" class="iconBtn ytIcon ytPlay" title="Play or pause" aria-label="Play or pause">▶</button>
-              <button id="nextBtn" class="iconBtn ytIcon" title="Next page" aria-label="Next page">⟩</button>
+              <button id="prevBtn" class="iconBtn ytIcon mi" title="Previous page" aria-label="Previous page">navigate_before</button>
+              <button id="playBtn" class="iconBtn ytIcon ytPlay mi" title="Play or pause" aria-label="Play or pause">play_arrow</button>
+              <button id="nextBtn" class="iconBtn ytIcon mi" title="Next page" aria-label="Next page">navigate_next</button>
               <span id="pageText" class="ytPageText mono">—</span>
             </div>
 
             <div class="ytRightControls">
-              <button id="prevVolBtn" class="iconBtn ytIcon hidden" title="Previous volume" aria-label="Previous volume">←</button>
-              <button id="nextVolBtn" class="iconBtn ytIcon hidden" title="Next volume" aria-label="Next volume">→</button>
-              <button id="playerMinBtn" class="iconBtn ytIcon" title="Minimize" aria-label="Minimize">_</button>
+              <button id="prevVolBtn" class="iconBtn ytIcon mi hidden" title="Previous volume" aria-label="Previous volume">skip_previous</button>
+              <button id="nextVolBtn" class="iconBtn ytIcon mi hidden" title="Next volume" aria-label="Next volume">skip_next</button>
+              <button id="playerMinBtn" class="iconBtn ytIcon mi" title="Minimize" aria-label="Minimize">minimize</button>
               <!-- Build 11A: reader fullscreen toggle button -->
-              <button id="playerFsBtn" class="iconBtn ytIcon" title="Exit fullscreen" aria-label="Exit fullscreen">⛶</button>
-              <button id="playerCloseBtn" class="iconBtn ytIcon" title="Close" aria-label="Close">×</button>
+              <button id="playerFsBtn" class="iconBtn ytIcon mi" title="Exit fullscreen" aria-label="Exit fullscreen">fullscreen</button>
+              <button id="playerCloseBtn" class="iconBtn ytIcon mi" title="Close" aria-label="Close">close</button>
             </div>
           </div>
 
@@ -314,7 +314,7 @@
                 <span class="megaLeft">Scroll speed</span>
                 <span class="megaRight">
                   <span id="megaSpeedValue" class="megaValue">Speed 5</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -323,7 +323,7 @@
                 <span class="megaLeft">Mode</span>
                 <span class="megaRight">
                   <span id="megaModeValue" class="megaValue">Manual</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -332,7 +332,7 @@
                 <span class="megaLeft">Auto Flip</span>
                 <span class="megaRight">
                   <span id="megaAutoFlipValue" class="megaValue">30s</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -341,7 +341,7 @@
                 <span class="megaLeft">Image Fit</span>
                 <span class="megaRight">
                   <span id="megaImageFitValue" class="megaValue">Fit Height</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -351,7 +351,7 @@
                 <span class="megaLeft">Portrait width</span>
                 <span class="megaRight">
                   <span id="megaWidthValue" class="megaValue">None</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -361,7 +361,7 @@
                 <span class="megaLeft">Tools</span>
                 <span class="megaRight">
                   <span class="megaValue">Keys</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -369,7 +369,7 @@
                 <span class="megaLeft">Progress</span>
                 <span class="megaRight">
                   <span id="megaProgressValue" class="megaValue">None</span>
-                  <span class="megaChevron">Open</span>
+                  <span class="megaChevron mi">chevron_right</span>
                 </span>
               </button>
 
@@ -379,7 +379,7 @@
             <!-- Submenu -->
             <div id="megaSubPanel" class="megaPanel megaSubPanel hidden">
               <div class="megaSubTop">
-                <button id="megaBackBtn" class="iconBtn ytIcon megaBackBtn" type="button" title="Back">Back</button>
+                <button id="megaBackBtn" class="iconBtn ytIcon megaBackBtn mi" type="button" title="Back">arrow_back</button>
                 <div id="megaSubTitle" class="megaSubTitle">None</div>
               </div>
               <div id="megaSubList" class="megaSubList"></div>

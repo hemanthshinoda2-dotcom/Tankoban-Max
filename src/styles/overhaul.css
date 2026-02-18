@@ -973,6 +973,27 @@ code, pre, .mono{
 }
 
 /* Webkit slider styling */
+
+/* ICONS1: Material Symbols Rounded — comic reader icon font */
+@font-face {
+  font-family: 'Material Symbols Rounded';
+  src: url('../fonts/material_symbols_rounded.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: block;
+}
+
+/* Apply to any element that should render a Material Symbol ligature. */
+.mi {
+  font-family: 'Material Symbols Rounded';
+  font-style: normal;
+  font-weight: 300;
+  font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  -webkit-font-smoothing: antialiased;
+}
 .popoverSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;

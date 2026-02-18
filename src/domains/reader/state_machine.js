@@ -34,18 +34,18 @@
     const mode = getControlMode();
 
     if (mode === 'auto') {
-      el.playBtn.textContent = appState.playing ? '⏸' : '▶';
+      el.playBtn.textContent = appState.playing ? 'pause' : 'play_arrow';
       return;
     }
 
     if (mode === 'autoFlip') {
       // Show pause only if the timer is actually running and not paused.
       const running = !!autoFlipTimeoutId;
-      el.playBtn.textContent = (running && !appState.autoFlipPaused) ? '⏸' : '▶';
+      el.playBtn.textContent = (running && !appState.autoFlipPaused) ? 'pause' : 'play_arrow';
       return;
     }
 
-    el.playBtn.textContent = '▶';
+    el.playBtn.textContent = 'play_arrow';
   }
 
 
