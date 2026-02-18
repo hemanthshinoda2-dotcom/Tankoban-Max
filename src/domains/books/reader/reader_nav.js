@@ -105,15 +105,16 @@
       state.progressFraction = fraction;
 
       // Corner overlays: chapter name in left, percentage in right
-      var chapterLabel = '';
+      // FIX-TTS12: only update chapter label when a new one is available — never clear
+      // it to empty. This prevents blinking when relocate events lack tocItem data.
       if (detailMaybe && detailMaybe.tocItem && detailMaybe.tocItem.label) {
-        chapterLabel = String(detailMaybe.tocItem.label);
+        label = String(detailMaybe.tocItem.label);
+        state._lastChapterLabel = label;
+        renderPageText(label);
       }
-      label = chapterLabel || '';
 
       renderProgressFraction(fraction);
       renderProgressPct(fraction);
-      renderPageText(label);
 
       // Track per-chapter read state (drives TOC sidebar progress indicators)
       if (detailMaybe && detailMaybe.section && typeof detailMaybe.section.current === 'number') {

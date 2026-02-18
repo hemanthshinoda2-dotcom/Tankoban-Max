@@ -445,20 +445,10 @@
     _clearEnlargeSpan(); // FIX-TTS08: also remove enlarge span
   }
 
-  // FIX-TTS07: Scroll the paginator so the given range is visible and centered.
-  // Called on every word boundary and at the start of each new block to keep
-  // the narrated text locked in the middle of the viewport.
-  // FIX-TTS08: uses scrollToAnchorCentered (reason='anchor') to avoid blue selection glitch.
-  function _scrollToRange(range) {
-    if (!range || !_fol.renderer) return;
-    try {
-      if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
-        _fol.renderer.scrollToAnchorCentered(range);
-      } else if (typeof _fol.renderer.scrollToAnchor === 'function') {
-        // Pass false — 'true' would set reason='selection' triggering native DOM selection
-        _fol.renderer.scrollToAnchor(range, false);
-      }
-    } catch {}
+  // FIX-TTS12: Auto-scroll removed — was causing screen shaking and chapter label
+  // blinking. The user scrolls manually; TTS only highlights the current word/sentence.
+  function _scrollToRange(/* range */) {
+    // no-op — auto-scroll disabled
   }
 
   // ── Queue Generation (Thorium-style) ───────────────────────────
