@@ -51,6 +51,20 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ---
 
+## foliate-js
+
+- **Project:** foliate-js
+- **Source:** https://github.com/johnfactotum/foliate-js
+- **License:** MIT
+- **License file:** `src/vendor/foliate/LICENSE`
+- **What was used:**
+  - EPUB rendering engine (`paginator.js`, `overlayer.js`, `tts.js`, etc.) distributed in `src/vendor/foliate/`
+- **Local patches:**
+  - `paginator.js`: Added `scrollToAnchorCentered()` method for TTS vertical centering in scrolled mode (FIX-TTS03)
+  - `paginator.js`: Added double-hit boundary guard for chapter auto-advance in scrolled mode (FIX-TTS03)
+
+---
+
 ## Bundled Fonts (via ReadiumCSS)
 
 ### AccessibleDfA

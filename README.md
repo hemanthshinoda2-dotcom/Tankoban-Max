@@ -4,7 +4,7 @@
 - Electron app runtime: main process, preload bridge, renderer, workers, native bridge, shared contracts, tools, and bundled resources.
 
 ## Does not own
-- Anything not listed above. If you’re unsure, jump to `docs/MUSEUM_TOUR.md`.
+- Anything not listed above. If you're unsure, start with `CLAUDE.md`.
 
 ## Entry points
 - Main: `app/main.js` → `app/main/index.js`
@@ -24,9 +24,9 @@
 - Worker entry wrappers (`app/library_scan_worker.js`, `app/video_scan_worker.js`) must remain stable paths.
 
 ## Next links
-- `docs/README.md`
-- `docs/CODEMAP_INDEX.md`
-- `docs/maps/`
+- `CLAUDE.md` (project guide for AI contributors)
+- `START_HERE.md` (developer orientation)
+- `docs/08_TESTING_AND_SMOKE.md`
 
 ## Third-party code
 - `src/vendor/foliate/*` contains vendored code from Foliate (`projects/foliate-js-main`) under the MIT license.

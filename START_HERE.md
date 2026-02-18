@@ -54,9 +54,8 @@ Do not bypass structure:
 - Renderer should not call `window.electronAPI` directly.
 
 See:
-- `docs/01_ARCHITECTURE_OVERVIEW.md`
-- `docs/03_INTER_PROCESS_COMMUNICATION.md`
-- `DANGER_ZONES.md`
+- `CLAUDE.md` (project guide for AI contributors)
+- `docs/08_TESTING_AND_SMOKE.md`
 
 ## Smoke check
 

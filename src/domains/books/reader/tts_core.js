@@ -87,13 +87,14 @@
   // GAP5: TTS highlight color presets
   // Use solid colors — Overlayer.highlight applies its own 0.3 opacity via CSS variable.
   // Using rgba here would double-fade (alpha * 0.3 = nearly invisible).
+  // FIX-TTS03: softened palette — word is a brighter shade over sentence for karaoke effect
   var TTS_HL_COLORS = {
-    grey:   { sentence: '#8c8c9b', word: '#6e6e80',  line: '#9a9aa8' },
-    blue:   { sentence: '#64a0ff', word: '#4080ff',  line: '#5a96ff' },
-    yellow: { sentence: '#ffe664', word: '#ffdc32',  line: '#e6c800' },
-    green:  { sentence: '#64c878', word: '#40b060',  line: '#50b464' },
-    pink:   { sentence: '#ff82aa', word: '#ff5a8c',  line: '#ff6e96' },
-    orange: { sentence: '#ffb450', word: '#ffa028',  line: '#ffa032' },
+    grey:   { sentence: '#8c8c9b', word: '#9a9aa8',  line: '#9a9aa8' },
+    blue:   { sentence: '#64a0ff', word: '#7ab0ff',  line: '#5a96ff' },
+    yellow: { sentence: '#ffe664', word: '#fff090',  line: '#e6c800' },
+    green:  { sentence: '#64c878', word: '#7ad890',  line: '#50b464' },
+    pink:   { sentence: '#ff82aa', word: '#ff9abe',  line: '#ff6e96' },
+    orange: { sentence: '#ffb450', word: '#ffc878',  line: '#ffa032' },
   };
 
   // Pause debounce
@@ -263,17 +264,15 @@
     if (style === 'underline') return Overlayer.underline;
     if (style === 'squiggly') return Overlayer.squiggly;
     if (style === 'strikethrough') return Overlayer.strikethrough;
-    // For 'highlight' style: sentence gets filled background, word gets visible outline border
-    if (type === 'word') return Overlayer.outline;
+    // FIX-TTS03: both sentence and word use filled highlight (no harsh outline border)
     return Overlayer.highlight;
   }
 
   function getDrawOpts(colors, type) {
     var style = state.ttsHlStyle || 'highlight';
     if (style === 'highlight') {
-      // Sentence: filled background (Overlayer.highlight with 0.3 opacity)
-      // Word: outline border (Overlayer.outline, no opacity reduction)
-      if (type === 'word') return { color: colors.word, width: 2, radius: 3 };
+      // FIX-TTS03: both use filled highlight; word is brighter shade via palette
+      if (type === 'word') return { color: colors.word };
       return { color: colors.sentence };
     }
     if (style === 'underline') {
@@ -327,9 +326,15 @@
       } catch {}
     }
 
-    // Paginator-aware scroll
+    // FIX-TTS03: Paginator-aware scroll — centered in scrolled mode
     if (_fol.renderer) {
-      try { _fol.renderer.scrollToAnchor(range, true); } catch {}
+      try {
+        if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
+          _fol.renderer.scrollToAnchorCentered(range);
+        } else {
+          _fol.renderer.scrollToAnchor(range, true);
+        }
+      } catch {}
     }
   }
 
@@ -347,9 +352,15 @@
     try {
       _fol.overlayer.add('tts-sentence', blockRange, drawFn, getDrawOpts(colors, 'sentence'));
     } catch {}
-    // Scroll to block start
+    // FIX-TTS03: scroll centered in scrolled mode
     if (_fol.renderer) {
-      try { _fol.renderer.scrollToAnchor(blockRange, true); } catch {}
+      try {
+        if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
+          _fol.renderer.scrollToAnchorCentered(blockRange);
+        } else {
+          _fol.renderer.scrollToAnchor(blockRange, true);
+        }
+      } catch {}
     }
   }
 
@@ -433,17 +444,19 @@
   function _preloadNextBlock() {
     if (!state.engine || typeof state.engine.preload !== 'function') return;
     if (!_fol.tts || state.format === 'txt') return;
+    // FIX-TTS02: Guard against double-advancing the iterator
+    if (_fol._preloadActive) return;
 
     _clearPreload();
 
-    // Estimate block duration; start preload at ~75% through so next block's
-    // audio is cached by the time current block ends. After advancing the
-    // iterator, setMark() for the current block becomes unreliable (word
-    // highlight stops) but sentence highlight persists — acceptable trade-off.
+    // FIX-TTS03: Start preload at ~50% through (was 75%) to give more time for
+    // synthesis to complete before block ends — reduces inter-paragraph silence.
+    // After advancing the iterator, setMark() for the current block becomes
+    // unreliable (word highlight stops) but sentence highlight persists — acceptable.
     var textLen = (state.currentText || '').length;
     if (textLen < 10) return; // too short to bother
     var cps = Math.max(5, 15 * (state.rate || 1.0));
-    var delayMs = Math.max(50, (textLen / cps) * 750);
+    var delayMs = Math.max(50, (textLen / cps) * 500);
 
     _fol._preloadTimer = setTimeout(function () {
       _fol._preloadTimer = null;
@@ -829,18 +842,17 @@
     state._pauseStartedAt = Date.now();
     state._pauseNeedsRespeak = false;
     state.engine.pause();
-    // Verify engine actually paused. Check isPaused() first (definitive),
-    // then fall back to isSpeaking() for engines that don't implement isPaused.
-    // WebSpeech: synth.speaking stays true during pause — that's normal, not a failure.
-    // Only force-cancel if the engine has no pause capability at all.
-    var pauseWorked = false;
-    if (typeof state.engine.isPaused === 'function') {
-      pauseWorked = state.engine.isPaused();
-    }
-    if (!pauseWorked && typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
-      // Engine is still actively speaking (not paused) — force cancel
-      try { state.engine.cancel(); } catch {}
-      state._pauseNeedsRespeak = true;
+    // FIX-TTS02: Edge now uses HTMLAudioElement where pause() is synchronous and reliable.
+    // Only check for respeak need on webspeech (Chromium pause bug, engine may not support pause).
+    if (state.engineId === 'webspeech') {
+      var pauseWorked = false;
+      if (typeof state.engine.isPaused === 'function') {
+        pauseWorked = state.engine.isPaused();
+      }
+      if (!pauseWorked && typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
+        try { state.engine.cancel(); } catch {}
+        state._pauseNeedsRespeak = true;
+      }
     }
     state.status = PAUSED;
     releaseWakeLock();
@@ -1064,16 +1076,24 @@
 
   // ── Rate / Pitch / Voice / Preset / Highlight ────────────────
 
-  // Re-speak the current block immediately (for instant voice/rate/pitch changes)
+  // FIX-TTS03: Re-speak current block — keep old audio until new is ready (gapless)
   function _respeakCurrentBlock() {
     if (state.status !== PLAYING || !state.engine) return;
     _clearPreload();
-    try { state.engine.cancel(); } catch {}
-    // Re-speak current text from the start of the block with new settings
-    if (state.currentText) {
+    if (!state.currentText) return;
+    // FIX-TTS03: signal UI to show "switching" state
+    state.wordStart = -1;
+    state.wordEnd = -1;
+    fireProgress();
+    // If engine supports speakGapless, use it to keep old audio playing until new audio arrives.
+    // Otherwise fall back to cancel+speak (audible gap).
+    if (typeof state.engine.speakGapless === 'function') {
+      state.engine.speakGapless(state.currentText);
+    } else {
+      try { state.engine.cancel(); } catch {}
       state.engine.speak(state.currentText);
-      _preloadNextBlock();
     }
+    _preloadNextBlock();
   }
 
   var TTS_RATE_MIN = 0.5;

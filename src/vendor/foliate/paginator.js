@@ -570,13 +570,27 @@ export class Paginator extends HTMLElement {
                 else {
                     this.#afterScroll('scroll')
                     // FIX_SCROLL: auto-advance when scrolled to section boundary
+                    // FIX-TTS03: require two consecutive boundary hits (≥250ms apart via
+                    // debounce) before navigating — prevents accidental chapter changes
+                    // when user scrolls to the top/bottom of a chapter.
                     if (!this.pauseAtBoundary && !this.#locked) {
-                        if (this.viewSize - this.end <= 2) {
-                            const nextIdx = this.#adjacentIndex(1)
-                            if (nextIdx != null) this.next()
-                        } else if (this.start <= 2) {
-                            const prevIdx = this.#adjacentIndex(-1)
-                            if (prevIdx != null) this.prev()
+                        const atEnd = this.viewSize - this.end <= 2
+                        const atStart = this.start <= 2
+                        if (atEnd || atStart) {
+                            if (!this._boundaryHitAt) {
+                                this._boundaryHitAt = Date.now()
+                            } else if (Date.now() - this._boundaryHitAt >= 200) {
+                                this._boundaryHitAt = 0
+                                if (atEnd) {
+                                    const nextIdx = this.#adjacentIndex(1)
+                                    if (nextIdx != null) this.next()
+                                } else {
+                                    const prevIdx = this.#adjacentIndex(-1)
+                                    if (prevIdx != null) this.prev()
+                                }
+                            }
+                        } else {
+                            this._boundaryHitAt = 0
                         }
                     }
                 }
@@ -936,6 +950,21 @@ export class Paginator extends HTMLElement {
     }
     async scrollToAnchor(anchor, select) {
         return this.#scrollToAnchor(anchor, select ? 'selection' : 'navigation')
+    }
+    // FIX-TTS03: center the anchor vertically in scrolled mode (for TTS tracking)
+    async scrollToAnchorCentered(anchor) {
+        const rects = uncollapse(anchor)?.getClientRects?.()
+        if (!rects) return
+        const rect = Array.from(rects)
+            .find(r => r.width > 0 && r.height > 0) || rects[0]
+        if (!rect) return
+        if (this.scrolled) {
+            const mapped = this.#getRectMapper()(rect)
+            const rectSize = mapped.right - mapped.left
+            const offset = mapped.left - this.#margin - (this.viewSize - rectSize) / 2
+            return this.#scrollTo(Math.max(0, offset), 'selection')
+        }
+        return this.#scrollToRect(rect, 'selection')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor

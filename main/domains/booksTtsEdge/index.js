@@ -1,5 +1,5 @@
 /*
-Tankoban Max - Books Edge TTS bridge domain (FIX-TTS01)
+Tankoban Max - Books Edge TTS bridge domain (FIX-TTS01, FIX-TTS02)
 Main-process transport for Edge neural synthesis via msedge-tts.
 Same IPC contract as before: probe, getVoices, synth.
 */
@@ -161,44 +161,49 @@ async function synthEdge(payload) {
     const audioChunks = [];
     const boundaries = [];
 
-    // Consume audio and metadata streams in parallel via Promise.
-    await new Promise((resolve, reject) => {
-      let audioEnded = false;
-      let metaEnded = false;
+    // FIX-TTS02: Consume audio and metadata streams with a 20-second timeout.
+    // If the Edge service hangs, we reject instead of blocking forever.
+    const SYNTH_TIMEOUT_MS = 20000;
+    await Promise.race([
+      new Promise((resolve, reject) => {
+        let audioEnded = false;
+        let metaEnded = false;
 
-      function checkDone() {
-        if (audioEnded && metaEnded) resolve();
-      }
+        function checkDone() {
+          if (audioEnded && metaEnded) resolve();
+        }
 
-      result.audioStream.on('data', (chunk) => {
-        audioChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      result.audioStream.on('end', () => { audioEnded = true; checkDone(); });
-      result.audioStream.on('error', (err) => { audioEnded = true; reject(err); });
-
-      if (result.metadataStream && typeof result.metadataStream.on === 'function') {
-        result.metadataStream.on('data', (meta) => {
-          try {
-            const raw = Buffer.isBuffer(meta) ? meta.toString('utf8') : String(meta);
-            const obj = JSON.parse(raw);
-            const items = obj && obj.Metadata ? obj.Metadata : [obj];
-            for (const item of items) {
-              if (!item || !item.Data) continue;
-              // Offset/Duration in 100-nanosecond units → milliseconds.
-              const offsetMs = item.Data.Offset ? Math.round(Number(item.Data.Offset) / 10000) : 0;
-              const durationMs = item.Data.Duration ? Math.round(Number(item.Data.Duration) / 10000) : 0;
-              const word = item.Data.text && item.Data.text.Text ? String(item.Data.text.Text) : '';
-              boundaries.push({ offsetMs, durationMs, text: word });
-            }
-          } catch {}
+        result.audioStream.on('data', (chunk) => {
+          audioChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
         });
-        result.metadataStream.on('end', () => { metaEnded = true; checkDone(); });
-        result.metadataStream.on('close', () => { metaEnded = true; checkDone(); });
-        result.metadataStream.on('error', () => { metaEnded = true; checkDone(); });
-      } else {
-        metaEnded = true;
-      }
-    });
+        result.audioStream.on('end', () => { audioEnded = true; checkDone(); });
+        result.audioStream.on('error', (err) => { audioEnded = true; reject(err); });
+
+        if (result.metadataStream && typeof result.metadataStream.on === 'function') {
+          result.metadataStream.on('data', (meta) => {
+            try {
+              const raw = Buffer.isBuffer(meta) ? meta.toString('utf8') : String(meta);
+              const obj = JSON.parse(raw);
+              const items = obj && obj.Metadata ? obj.Metadata : [obj];
+              for (const item of items) {
+                if (!item || !item.Data) continue;
+                // Offset/Duration in 100-nanosecond units → milliseconds.
+                const offsetMs = item.Data.Offset ? Math.round(Number(item.Data.Offset) / 10000) : 0;
+                const durationMs = item.Data.Duration ? Math.round(Number(item.Data.Duration) / 10000) : 0;
+                const word = item.Data.text && item.Data.text.Text ? String(item.Data.text.Text) : '';
+                boundaries.push({ offsetMs, durationMs, text: word });
+              }
+            } catch {}
+          });
+          result.metadataStream.on('end', () => { metaEnded = true; checkDone(); });
+          result.metadataStream.on('close', () => { metaEnded = true; checkDone(); });
+          result.metadataStream.on('error', () => { metaEnded = true; checkDone(); });
+        } else {
+          metaEnded = true;
+        }
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('edge_synth_timeout')), SYNTH_TIMEOUT_MS)),
+    ]);
 
     if (!audioChunks.length) {
       return { ok: false, errorCode: 'edge_audio_chunk_recv_none', reason: 'No audio data received', boundaries, audioBase64: '' };

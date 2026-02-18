@@ -1645,6 +1645,16 @@ body.inBooksReader .br-reader {
   border-color: rgba(0,0,0,0.15);
   box-shadow: 0 4px 18px rgba(0,0,0,0.18);
 }
+/* FIX-TTS03: TTS bar on light themes — distinct from page background via frosted glass */
+[data-reader-theme="light"] .booksReaderTtsBar,
+[data-reader-theme="sepia"] .booksReaderTtsBar,
+[data-reader-theme="paper"] .booksReaderTtsBar,
+[data-reader-theme="contrast3"] .booksReaderTtsBar {
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(16px) saturate(1.4);
+}
 [data-reader-theme="light"] .booksReaderTtsBar .iconBtn,
 [data-reader-theme="light"] .booksReaderTtsMega .iconBtn,
 [data-reader-theme="light"] .booksReaderDictPopup .iconBtn,
@@ -1738,7 +1748,7 @@ body.inBooksReader .br-reader {
 [data-reader-theme="paper"] .booksReaderTtsHlStyle,
 [data-reader-theme="contrast3"] .booksReaderTtsVoice,
 [data-reader-theme="contrast3"] .booksReaderTtsPresetSel,
-[data-reader-theme="contrast3"] .booksReaderTtsHlStyle { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.12); color: var(--br-reader-text); }
+[data-reader-theme="contrast3"] .booksReaderTtsHlStyle { background: rgba(0,0,0,0.07); border-color: rgba(0,0,0,0.18); color: var(--br-reader-text); } /* FIX-TTS03: boosted from 0.04/0.12 */
 
 [data-reader-theme="light"] .booksReaderTtsVoice option,
 [data-reader-theme="light"] .booksReaderTtsPresetSel option,

@@ -1,16 +1,17 @@
-// Books reader TTS engine: Edge neural bridge over main process IPC (FIX-R08)
+// Books reader TTS engine: Edge neural bridge over main process IPC (FIX-TTS02)
+// Rewritten to use HTMLAudioElement for reliable pause/resume (replaces AudioContext).
 (function () {
   'use strict';
 
   window.booksTTSEngines = window.booksTTSEngines || {};
 
-  function base64ToArrayBuffer(b64) {
+  function base64ToBlob(b64, mime) {
     try {
-      const bin = atob(String(b64 || ''));
-      const len = bin.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
-      return bytes.buffer;
+      var bin = atob(String(b64 || ''));
+      var len = bin.length;
+      var bytes = new Uint8Array(len);
+      for (var i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: mime || 'audio/mpeg' });
     } catch {
       return null;
     }
@@ -18,8 +19,9 @@
 
   function create() {
     var state = {
-      audioCtx: null,
-      source: null,
+      audio: null,
+      abortCtrl: null,
+      blobUrl: null,
       rate: 1.0,
       pitch: 1.0,
       voiceName: 'en-US-AriaNeural',
@@ -52,6 +54,13 @@
     }
 
     function clearPreloadCache() {
+      var keys = Object.keys(_preCache);
+      for (var i = 0; i < keys.length; i++) {
+        var entry = _preCache[keys[i]];
+        if (entry && entry.blobUrl) {
+          try { URL.revokeObjectURL(entry.blobUrl); } catch {}
+        }
+      }
       _preCache = {};
       _preCacheCount = 0;
     }
@@ -71,18 +80,21 @@
           pitch: state.pitch,
         });
         if (!res || !res.ok || !res.audioBase64) return;
-        var ctx = ensureAudioCtx();
-        if (!ctx) return;
-        var ab = base64ToArrayBuffer(res.audioBase64);
-        if (!ab) return;
-        var audioBuffer = await ctx.decodeAudioData(ab.slice(0));
-        if (!audioBuffer) return;
+        var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
+        if (!blob) return;
         // Evict oldest if full
         if (_preCacheCount >= MAX_PRECACHE) {
-          var keys = Object.keys(_preCache);
-          if (keys.length) { delete _preCache[keys[0]]; _preCacheCount--; }
+          var cacheKeys = Object.keys(_preCache);
+          if (cacheKeys.length) {
+            var evicted = _preCache[cacheKeys[0]];
+            if (evicted && evicted.blobUrl) {
+              try { URL.revokeObjectURL(evicted.blobUrl); } catch {}
+            }
+            delete _preCache[cacheKeys[0]];
+            _preCacheCount--;
+          }
         }
-        _preCache[key] = { audioBuffer: audioBuffer, boundaries: res.boundaries || [] };
+        _preCache[key] = { blob: blob, blobUrl: null, boundaries: res.boundaries || [] };
         _preCacheCount++;
       } catch {}
     }
@@ -94,17 +106,24 @@
       }
     }
 
-    function ensureAudioCtx() {
-      if (!state.audioCtx) {
-        try { state.audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-        catch {
-          state.audioCtx = null;
+    function ensureAudio() {
+      if (!state.audio) {
+        try {
+          state.audio = new Audio();
+          state.audio.preload = 'auto';
+        } catch {
+          state.audio = null;
         }
       }
-      if (state.audioCtx && state.audioCtx.state === 'suspended') {
-        try { state.audioCtx.resume(); } catch {}
+      return state.audio;
+    }
+
+    // FIX-TTS02: Revoke old blob URL to prevent memory leaks
+    function _revokeBlobUrl() {
+      if (state.blobUrl) {
+        try { URL.revokeObjectURL(state.blobUrl); } catch {}
+        state.blobUrl = null;
       }
-      return state.audioCtx;
     }
 
     async function loadVoices(opts) {
@@ -193,6 +212,7 @@
       state.voiceName = String(voiceURI || 'en-US-AriaNeural');
     }
 
+    // FIX-TTS02: Boundary timers now also check AbortController signal
     function fireBoundaries(reqId, boundaries, spokenText) {
       var list = Array.isArray(boundaries) ? boundaries : [];
       var txt = String(spokenText || '');
@@ -214,6 +234,7 @@
           setTimeout(function () {
             if (reqId !== state.requestId) return;
             if (!state.playing || state.paused) return;
+            if (state.abortCtrl && state.abortCtrl.signal.aborted) return;
             if (typeof state.onBoundary === 'function') {
               try { state.onBoundary(ci, cl, 'word'); } catch {}
             }
@@ -222,40 +243,69 @@
       }
     }
 
-    // GAP3: play a decoded AudioBuffer (shared by cached and fresh paths)
-    function _playBuffer(myReq, audioBuffer, boundaries, text) {
-      var ctx = ensureAudioCtx();
-      if (!ctx) {
+    // FIX-TTS02: Play a Blob via HTMLAudioElement (replaces _playBuffer)
+    function _playBlob(myReq, blob, boundaries, text) {
+      var audio = ensureAudio();
+      if (!audio) {
         state.playing = false;
-        diag('edge_decode_fail', 'no_audio_context');
-        if (typeof state.onError === 'function') state.onError({ error: 'edge_decode_fail', stage: 'edge_decode', reason: 'no_audio_context' });
+        diag('edge_play_fail', 'no_audio_element');
+        if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: 'no_audio_element' });
         return;
       }
 
-      fireBoundaries(myReq, boundaries, text);
+      _revokeBlobUrl();
+      state.blobUrl = URL.createObjectURL(blob);
+      audio.src = state.blobUrl;
 
-      var src = ctx.createBufferSource();
-      src.buffer = audioBuffer;
-      src.connect(ctx.destination);
-      state.source = src;
-
-      src.onended = function () {
+      audio.onended = function () {
         if (myReq !== state.requestId) return;
-        state.source = null;
         state.playing = false;
         state.paused = false;
         diag('edge_play_ok', '');
         if (typeof state.onEnd === 'function') state.onEnd();
       };
 
+      audio.onerror = function () {
+        if (myReq !== state.requestId) return;
+        state.playing = false;
+        var reason = audio.error ? String(audio.error.message || audio.error.code || 'unknown') : 'unknown';
+        diag('edge_play_fail', reason);
+        if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: reason });
+      };
+
+      fireBoundaries(myReq, boundaries, text);
+
       try {
-        src.start(0);
+        var playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(function (err) {
+            if (myReq !== state.requestId) return;
+            state.playing = false;
+            diag('edge_play_fail', String(err && err.message ? err.message : err));
+            if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
+          });
+        }
       } catch (err) {
-        state.source = null;
         state.playing = false;
         diag('edge_play_fail', String(err && err.message ? err.message : err));
         if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
       }
+    }
+
+    // FIX-TTS02: IPC synth with timeout to prevent hanging
+    function _synthWithTimeout(api, payload, timeoutMs) {
+      return new Promise(function (resolve, reject) {
+        var timer = setTimeout(function () {
+          reject(new Error('edge_synth_timeout'));
+        }, timeoutMs || 15000);
+        api.synth(payload).then(function (res) {
+          clearTimeout(timer);
+          resolve(res);
+        }).catch(function (err) {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
     }
 
     async function speak(text) {
@@ -266,7 +316,9 @@
       state.playing = true;
       state.paused = false;
       state.requestId = Math.random().toString(36).slice(2);
+      state.abortCtrl = new AbortController();
       var myReq = state.requestId;
+      var signal = state.abortCtrl.signal;
 
       // GAP3: check preload cache first
       var cacheKey = _preCacheKey(t);
@@ -275,7 +327,10 @@
         delete _preCache[cacheKey];
         _preCacheCount--;
         diag('edge_preload_hit', '');
-        _playBuffer(myReq, cached.audioBuffer, cached.boundaries, t);
+        _playBlob(myReq, cached.blob, cached.boundaries, t);
+        if (cached.blobUrl) {
+          try { URL.revokeObjectURL(cached.blobUrl); } catch {}
+        }
         return;
       }
 
@@ -289,13 +344,14 @@
           return;
         }
 
-        var res = await api.synth({
+        // FIX-TTS02: Use timeout wrapper to prevent hanging on slow Edge service
+        var res = await _synthWithTimeout(api, {
           text: t,
           voice: state.voiceName,
           rate: state.rate,
           pitch: state.pitch,
-        });
-        if (myReq !== state.requestId) return;
+        }, 15000);
+        if (signal.aborted || myReq !== state.requestId) return;
 
         if (!res || !res.ok || !res.audioBase64) {
           state.playing = false;
@@ -306,69 +362,106 @@
         }
 
         diag('edge_audio_chunk_recv_ok', '');
-        var ctx = ensureAudioCtx();
-        if (!ctx) {
-          state.playing = false;
-          diag('edge_decode_fail', 'no_audio_context');
-          if (typeof state.onError === 'function') state.onError({ error: 'edge_decode_fail', stage: 'edge_decode', reason: 'no_audio_context' });
-          return;
-        }
-
-        var ab = base64ToArrayBuffer(res.audioBase64);
-        if (!ab) {
+        var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
+        if (!blob) {
           state.playing = false;
           diag('edge_decode_fail', 'invalid_audio_payload');
           if (typeof state.onError === 'function') state.onError({ error: 'edge_decode_fail', stage: 'edge_decode', reason: 'invalid_audio_payload' });
           return;
         }
-
-        var audioBuffer = null;
-        try {
-          audioBuffer = await ctx.decodeAudioData(ab.slice(0));
-        } catch (err) {
-          state.playing = false;
-          diag('edge_decode_fail', String(err && err.message ? err.message : err));
-          if (typeof state.onError === 'function') state.onError({ error: 'edge_decode_fail', stage: 'edge_decode', reason: String(err && err.message ? err.message : err) });
-          return;
-        }
-        if (myReq !== state.requestId) return;
+        if (signal.aborted || myReq !== state.requestId) return;
         diag('edge_decode_ok', '');
 
-        _playBuffer(myReq, audioBuffer, res.boundaries || [], t);
+        _playBlob(myReq, blob, res.boundaries || [], t);
       } catch (err3) {
-        if (myReq !== state.requestId) return;
+        if (signal.aborted || myReq !== state.requestId) return;
         state.playing = false;
         diag('edge_ws_open_fail', String(err3 && err3.message ? err3.message : err3));
         if (typeof state.onError === 'function') state.onError({ error: 'edge_ws_open_fail', stage: 'edge_ws_open', reason: String(err3 && err3.message ? err3.message : err3) });
       }
     }
 
-    function pause() {
-      if (!state.audioCtx || !state.playing || state.paused) return;
-      // TTS_REWRITE: verify AudioContext state before suspending
-      if (state.audioCtx.state === 'running') {
-        try { state.audioCtx.suspend(); } catch {}
+    // FIX-TTS03: Gapless re-speak — keep current audio playing until new audio is ready
+    async function speakGapless(text) {
+      var t = String(text || '').trim();
+      if (!t) return;
+      // Abort any previous in-flight requests but do NOT stop current audio
+      if (state.abortCtrl) {
+        try { state.abortCtrl.abort(); } catch {}
       }
+      var newReqId = Math.random().toString(36).slice(2);
+      state.requestId = newReqId;
+      state.abortCtrl = new AbortController();
+      var signal = state.abortCtrl.signal;
+
+      // Check preload cache first
+      var cacheKey = _preCacheKey(t);
+      var cached = _preCache[cacheKey];
+      if (cached) {
+        delete _preCache[cacheKey];
+        _preCacheCount--;
+        diag('edge_preload_hit', '');
+        _playBlob(newReqId, cached.blob, cached.boundaries, t);
+        if (cached.blobUrl) {
+          try { URL.revokeObjectURL(cached.blobUrl); } catch {}
+        }
+        return;
+      }
+
+      // Synthesize in background while old audio keeps playing
+      try {
+        var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
+        if (!api || typeof api.synth !== 'function') return;
+        var res = await _synthWithTimeout(api, {
+          text: t,
+          voice: state.voiceName,
+          rate: state.rate,
+          pitch: state.pitch,
+        }, 15000);
+        if (signal.aborted || newReqId !== state.requestId) return;
+        if (!res || !res.ok || !res.audioBase64) return;
+        var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
+        if (!blob) return;
+        if (signal.aborted || newReqId !== state.requestId) return;
+        // Now hot-swap: replace old audio with new
+        _playBlob(newReqId, blob, res.boundaries || [], t);
+      } catch {}
+    }
+
+    // FIX-TTS02: Pause is now synchronous via HTMLAudioElement.pause()
+    function pause() {
+      if (!state.audio || !state.playing || state.paused) return;
+      state.audio.pause();
       state.paused = true;
     }
 
+    // FIX-TTS02: Resume via HTMLAudioElement.play()
     function resume() {
-      if (!state.audioCtx || !state.paused) return;
-      // TTS_REWRITE: verify AudioContext state before resuming
-      if (state.audioCtx.state === 'suspended') {
-        try { state.audioCtx.resume(); } catch {}
-      }
+      if (!state.audio || !state.paused) return;
+      try {
+        var playPromise = state.audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(function () {});
+        }
+      } catch {}
       state.paused = false;
     }
 
     function cancel() {
+      // FIX-TTS02: Abort any in-flight IPC requests
+      if (state.abortCtrl) {
+        try { state.abortCtrl.abort(); } catch {}
+        state.abortCtrl = null;
+      }
       state.requestId = '';
       state.playing = false;
       state.paused = false;
-      if (state.source) {
-        try { state.source.stop(); } catch {}
+      if (state.audio) {
+        try { state.audio.pause(); } catch {}
+        try { state.audio.removeAttribute('src'); } catch {}
+        try { state.audio.load(); } catch {}
       }
-      state.source = null;
+      _revokeBlobUrl();
     }
 
     function isSpeaking() {
@@ -404,6 +497,7 @@
       setVoice: setVoice,
       setPitch: setPitch,
       speak: speak,
+      speakGapless: speakGapless, // FIX-TTS03: keeps old audio until new is ready
       pause: pause,
       resume: resume,
       cancel: cancel,
