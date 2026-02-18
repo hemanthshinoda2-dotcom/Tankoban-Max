@@ -10,6 +10,110 @@
   var SVG_PAUSE = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/><rect x="10" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/></svg>';
   var SVG_SPEAKER = '<svg viewBox="0 0 18 16" xmlns="http://www.w3.org/2000/svg"><path d="M9.38 0.29C9.19 0.1 8.93 0 8.67 0c-0.13 0-0.26 0.03-0.38 0.08L3.05 2.67H1C0.45 2.67 0 3.11 0 3.67v8.67c0 0.55 0.45 1 1 1h2.05l5.24 2.58c0.12 0.05 0.25 0.08 0.38 0.08 0.26 0 0.52-0.1 0.71-0.29 0.19-0.19 0.29-0.44 0.29-0.71V1c0-0.27-0.1-0.52-0.29-0.71zM7.67 13.46L3.67 11.49V4.51l4-1.97v10.92zM13.54 3.46c-0.39-0.39-1.02-0.39-1.41 0-0.39 0.39-0.39 1.02 0 1.41C13 5.75 13.5 7.12 13.5 8.5s-0.5 2.75-1.37 3.63c-0.39 0.39-0.39 1.02 0 1.41 0.2 0.2 0.45 0.29 0.71 0.29s0.51-0.1 0.71-0.29C14.82 12.27 15.5 10.44 15.5 8.5S14.82 4.73 13.54 3.46z" fill="currentColor"/></svg>';
 
+  // FIX-TTS09: Friendly display names for Edge TTS voices.
+  // Key = short voice name extracted from ShortName (e.g. "AriaNeural" from "en-US-AriaNeural").
+  // Value = { label, gender } where label is a short human-friendly description.
+  var VOICE_DISPLAY = {
+    // en-US
+    'AnaNeural':           { label: 'Ana',           g: 'F', desc: 'Child' },
+    'AndrewNeural':        { label: 'Andrew',        g: 'M', desc: 'Warm, storyteller' },
+    'AndrewMultilingualNeural': { label: 'Andrew ML', g: 'M', desc: 'Warm, multilingual' },
+    'AriaNeural':          { label: 'Aria',          g: 'F', desc: 'Expressive, versatile' },
+    'AvaNeural':           { label: 'Ava',           g: 'F', desc: 'Bright, engaging' },
+    'AvaMultilingualNeural': { label: 'Ava ML',      g: 'F', desc: 'Bright, multilingual' },
+    'BrianNeural':         { label: 'Brian',         g: 'M', desc: 'Youthful, cheerful' },
+    'BrianMultilingualNeural': { label: 'Brian ML',  g: 'M', desc: 'Youthful, multilingual' },
+    'ChristopherNeural':   { label: 'Christopher',   g: 'M', desc: 'Authoritative' },
+    'EmmaNeural':          { label: 'Emma',          g: 'F', desc: 'Friendly, educational' },
+    'EmmaMultilingualNeural': { label: 'Emma ML',    g: 'F', desc: 'Friendly, multilingual' },
+    'EricNeural':          { label: 'Eric',          g: 'M', desc: 'Neutral' },
+    'GuyNeural':           { label: 'Guy',           g: 'M', desc: 'Professional, mature' },
+    'JennyNeural':         { label: 'Jenny',         g: 'F', desc: 'Warm, assistant' },
+    'JennyMultilingualNeural': { label: 'Jenny ML',  g: 'F', desc: 'Warm, multilingual' },
+    'MichelleNeural':      { label: 'Michelle',      g: 'F', desc: 'Clear, professional' },
+    'RogerNeural':         { label: 'Roger',         g: 'M', desc: 'Mature, narrator' },
+    'SteffanNeural':       { label: 'Steffan',       g: 'M', desc: 'Smooth' },
+    'DavisNeural':         { label: 'Davis',         g: 'M', desc: 'Conversational' },
+    'JaneNeural':          { label: 'Jane',          g: 'F', desc: 'Clear, expressive' },
+    'JasonNeural':         { label: 'Jason',         g: 'M', desc: 'Steady, articulate' },
+    'NancyNeural':         { label: 'Nancy',         g: 'F', desc: 'Warm, approachable' },
+    'TonyNeural':          { label: 'Tony',          g: 'M', desc: 'Strong, confident' },
+    'SaraNeural':          { label: 'Sara',          g: 'F', desc: 'Soft, gentle' },
+    'AmberNeural':         { label: 'Amber',         g: 'F', desc: 'Smooth' },
+    'AshleyNeural':        { label: 'Ashley',        g: 'F', desc: 'Friendly' },
+    'BrandonNeural':       { label: 'Brandon',       g: 'M', desc: 'Confident' },
+    'CoraNeural':          { label: 'Cora',          g: 'F', desc: 'Calm' },
+    'ElizabethNeural':     { label: 'Elizabeth',     g: 'F', desc: 'Polished' },
+    'JacobNeural':         { label: 'Jacob',         g: 'M', desc: 'Casual' },
+    'MonicaNeural':        { label: 'Monica',        g: 'F', desc: 'Warm' },
+    // en-GB
+    'SoniaNeural':         { label: 'Sonia',         g: 'F', desc: 'Polished' },
+    'RyanNeural':          { label: 'Ryan',          g: 'M', desc: 'Warm' },
+    'LibbyNeural':         { label: 'Libby',         g: 'F', desc: 'Natural' },
+    'AbbiNeural':          { label: 'Abbi',          g: 'F', desc: 'Soft' },
+    'AlfieNeural':         { label: 'Alfie',         g: 'M', desc: 'Youthful' },
+    'BellaNeural':         { label: 'Bella',         g: 'F', desc: 'Bright' },
+    'ElliotNeural':        { label: 'Elliot',        g: 'M', desc: 'Calm' },
+    'EthanNeural':         { label: 'Ethan',         g: 'M', desc: 'Clear' },
+    'HollieNeural':        { label: 'Hollie',        g: 'F', desc: 'Cheerful' },
+    'MaisieNeural':        { label: 'Maisie',        g: 'F', desc: 'Child' },
+    'NoahNeural':          { label: 'Noah',          g: 'M', desc: 'Neutral' },
+    'OliverNeural':        { label: 'Oliver',        g: 'M', desc: 'Professional' },
+    'OliviaNeural':        { label: 'Olivia',        g: 'F', desc: 'Elegant' },
+    'ThomasNeural':        { label: 'Thomas',        g: 'M', desc: 'Mature' },
+    // en-AU
+    'NatashaNeural':       { label: 'Natasha',       g: 'F', desc: 'Clear' },
+    'WilliamNeural':       { label: 'William',       g: 'M', desc: 'Warm' },
+    // en-IN
+    'NeerjaNeural':        { label: 'Neerja',        g: 'F', desc: 'Clear' },
+    'PrabhatNeural':       { label: 'Prabhat',       g: 'M', desc: 'Professional' },
+  };
+
+  // FIX-TTS09: Locale labels for voice grouping
+  var LOCALE_LABELS = {
+    'en-US': 'US',
+    'en-GB': 'British',
+    'en-AU': 'Australian',
+    'en-IN': 'Indian',
+    'en-IE': 'Irish',
+    'en-CA': 'Canadian',
+    'en-NZ': 'New Zealand',
+    'en-ZA': 'South African',
+    'en-SG': 'Singaporean',
+    'en-PH': 'Filipino',
+    'en-HK': 'Hong Kong',
+    'en-KE': 'Kenyan',
+    'en-NG': 'Nigerian',
+    'en-TZ': 'Tanzanian',
+  };
+
+  // FIX-TTS09: Build friendly display name from voice URI + metadata
+  function _voiceDisplayName(v) {
+    var uri = String(v.voiceURI || v.name || '');
+    // Extract locale and short voice name from ShortName like "en-US-AriaNeural"
+    var parts = uri.split('-');
+    var locale = '';
+    var shortName = '';
+    if (parts.length >= 3) {
+      locale = parts[0] + '-' + parts[1];           // "en-US"
+      shortName = parts.slice(2).join('');            // "AriaNeural"
+    } else {
+      shortName = uri.replace(/Neural$/i, '') + 'Neural';
+    }
+    var entry = VOICE_DISPLAY[shortName];
+    var localeTag = LOCALE_LABELS[locale] || locale || '';
+    var gender = (entry && entry.g) || (v.gender === 'Female' ? 'F' : v.gender === 'Male' ? 'M' : '');
+    var genderStr = gender === 'F' ? '\u2640' : gender === 'M' ? '\u2642' : '';
+    var desc = (entry && entry.desc) || '';
+    var baseName = (entry && entry.label) || shortName.replace(/Neural$/i, '').replace(/Multilingual$/i, ' ML');
+    // Format: "Aria ♀ · Expressive, versatile · US"
+    var result = baseName;
+    if (genderStr) result += ' ' + genderStr;
+    if (desc) result += ' \u00b7 ' + desc;
+    if (localeTag && localeTag !== 'US') result += ' \u00b7 ' + localeTag;
+    return result;
+  }
+
   function ttsAllowed() {
     return RS.isEpubOrTxtOpen();
   }
@@ -274,17 +378,39 @@
       return;
     }
 
-    var enGroup = document.createElement('optgroup');
-    enGroup.label = 'English (' + enVoices.length + ')';
+    // FIX-TTS09: Group voices by locale for better organization
+    var localeGroups = {};
     for (var i = 0; i < enVoices.length; i++) {
       var v = enVoices[i];
-      var o = document.createElement('option');
-      o.value = v.voiceURI || v.name || '';
-      var dn = (v.name || v.voiceURI || '').replace(/Microsoft Server Speech Text to Speech Voice \(/, '').replace(/\)$/, '');
-      o.textContent = dn + (v.engine === 'edge' ? ' \u2605' : '');
-      enGroup.appendChild(o);
+      var uri = String(v.voiceURI || v.name || '');
+      var parts = uri.split('-');
+      var locale = (parts.length >= 2) ? (parts[0] + '-' + parts[1]) : 'en-US';
+      if (!localeGroups[locale]) localeGroups[locale] = [];
+      localeGroups[locale].push(v);
     }
-    els.ttsVoice.appendChild(enGroup);
+    // Locale display order: US first, then GB, AU, IN, then rest alphabetically
+    var localeOrder = ['en-US', 'en-GB', 'en-AU', 'en-IN'];
+    var allLocales = Object.keys(localeGroups);
+    for (var li = 0; li < allLocales.length; li++) {
+      if (localeOrder.indexOf(allLocales[li]) < 0) localeOrder.push(allLocales[li]);
+    }
+
+    for (var gi = 0; gi < localeOrder.length; gi++) {
+      var loc = localeOrder[gi];
+      var group = localeGroups[loc];
+      if (!group || !group.length) continue;
+      var groupLabel = LOCALE_LABELS[loc] || loc;
+      var optGroup = document.createElement('optgroup');
+      optGroup.label = groupLabel + ' (' + group.length + ')';
+      for (var vi = 0; vi < group.length; vi++) {
+        var voice = group[vi];
+        var o = document.createElement('option');
+        o.value = voice.voiceURI || voice.name || '';
+        o.textContent = _voiceDisplayName(voice);
+        optGroup.appendChild(o);
+      }
+      els.ttsVoice.appendChild(optGroup);
+    }
 
     var saved = state.settings.ttsVoice;
     if (saved) els.ttsVoice.value = saved;
@@ -391,8 +517,8 @@
     RS.persistSettings().catch(function () {});
     populateTtsVoices();
     syncTtsUI(tts.getState());
-    var displayName = (next.name || next.voiceURI || '').replace(/Microsoft Server Speech Text to Speech Voice \(/, '').replace(/\)$/, '');
-    RS.showToast(displayName + ' (' + (next.engine === 'edge' ? 'Edge Neural' : 'System') + ')');
+    var displayName = _voiceDisplayName(next);
+    RS.showToast(displayName);
   }
 
   // ── Preview voice ────────────────────────────────────────────
