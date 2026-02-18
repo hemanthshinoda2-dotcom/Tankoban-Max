@@ -63,8 +63,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
   - `paginator.js`: Added `scrollToAnchorCentered()` method for TTS vertical centering in scrolled mode (FIX-TTS03)
   - `paginator.js`: Added double-hit boundary guard for chapter auto-advance in scrolled mode (FIX-TTS03)
   - `paginator.js`: Changed `scrollToAnchorCentered()` scroll reason from `'selection'` to `'anchor'` to prevent native DOM selection (blue highlight glitch) during TTS (FIX-TTS08)
-  - `paginator.js`: Fixed `scrollToAnchorCentered()` centering formula — was using `viewSize` (total doc height) instead of `size` (viewport height) for centering calculation (FIX-TTS10)
-  - `paginator.js`: Added `'tts'` scroll reason to suppress `relocate` event dispatch during TTS word tracking, and added comfort-zone skip to avoid unnecessary scrolls (FIX-TTS10b)
+  - `paginator.js`: Rewrote `scrollToAnchorCentered()` for TTS — direct scrollTop manipulation bypassing #scrollTo/#afterScroll/relocate entirely, with comfort-zone skip (FIX-TTS11, replaces FIX-TTS10/TTS10b)
   - `tts.js`: Added `snapshotRanges()` method to TTS class for preload-safe word tracking (FIX-TTS04)
 
 ---

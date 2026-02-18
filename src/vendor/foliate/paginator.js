@@ -951,35 +951,50 @@ export class Paginator extends HTMLElement {
     async scrollToAnchor(anchor, select) {
         return this.#scrollToAnchor(anchor, select ? 'selection' : 'navigation')
     }
-    // FIX-TTS03: center the anchor vertically in scrolled mode (for TTS tracking)
-    // FIX-TTS08: use 'anchor' reason instead of 'selection' to avoid triggering
-    // native DOM selection (blue highlight glitch) on every word boundary.
-    // FIX-TTS10: fixed centering formula — was using viewSize (total doc height) instead
-    // of size (viewport height). Now correctly computes: absolute position in document
-    // minus half the viewport to center the range.
-    // FIX-TTS10b: use 'tts' reason to suppress relocate event dispatch (prevents chapter
-    // label blinking). Skip scroll entirely if range is already within visible middle zone.
-    async scrollToAnchorCentered(anchor) {
+    // FIX-TTS11: TTS scroll tracking — keep narrated word visible and centered.
+    // Completely rewritten to use simple, direct scrollTop manipulation on the
+    // container. No rect mapper, no #scrollTo, no #afterScroll, no relocate events.
+    // In scrolled mode: rect.top is relative to iframe viewport (= container viewport).
+    // Positive = below visible top, negative = above. Container.scrollTop + rect.top
+    // gives absolute position in document. We center that in the viewport.
+    // In paginated mode: just navigate to the page containing the range.
+    scrollToAnchorCentered(anchor) {
         const rects = uncollapse(anchor)?.getClientRects?.()
         if (!rects) return
         const rect = Array.from(rects)
             .find(r => r.width > 0 && r.height > 0) || rects[0]
         if (!rect) return
-        if (this.scrolled) {
-            const mapped = this.#getRectMapper()(rect)
-            const rectSize = mapped.right - mapped.left
-            // FIX-TTS10b: skip scroll if range is within the middle 60% of the viewport
-            const viewStart = this.start + this.#margin
-            const viewEnd = this.end - this.#margin
-            const viewSpan = viewEnd - viewStart
-            const comfortTop = viewStart + viewSpan * 0.2
-            const comfortBot = viewStart + viewSpan * 0.8
-            if (mapped.left >= comfortTop && mapped.right <= comfortBot) return
-            // mapped.left is viewport-relative, add current scroll to get absolute pos
-            const absPos = mapped.left - this.#margin + this.start
-            const offset = absPos - (this.size - rectSize) / 2
-            return this.#scrollTo(Math.max(0, offset), 'tts')
+        if (this.scrolled && !this.#vertical) {
+            // rect.top = distance from top of visible container area to the range
+            // Comfort zone: if word is in the middle 60% of viewport, don't scroll
+            const viewH = this.size
+            const comfort = viewH * 0.2
+            if (rect.top >= comfort && rect.bottom <= viewH - comfort) return
+            // Center the word: set scrollTop so word is at vertical center
+            const wordMid = rect.top + rect.height / 2
+            const viewMid = viewH / 2
+            const delta = wordMid - viewMid
+            const newScroll = this.#container.scrollTop + delta
+            this.#container.scrollTop = Math.max(0, newScroll)
+            // Set justAnchored so the debounced scroll listener doesn't trigger
+            // #afterScroll → relocate for this programmatic scroll
+            this.#justAnchored = true
+            return
         }
+        if (this.scrolled && this.#vertical) {
+            // Vertical writing: same logic but on horizontal axis
+            const viewW = this.size
+            const comfort = viewW * 0.2
+            if (rect.left >= comfort && rect.right <= viewW - comfort) return
+            const wordMid = rect.left + rect.width / 2
+            const viewMid = viewW / 2
+            const delta = wordMid - viewMid
+            const newScroll = Math.abs(this.#container.scrollLeft) + delta
+            this.#container.scrollLeft = this.#rtl ? -Math.max(0, newScroll) : Math.max(0, newScroll)
+            this.#justAnchored = true
+            return
+        }
+        // Paginated mode: navigate to the page containing the range
         return this.#scrollToRect(rect, 'tts')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
