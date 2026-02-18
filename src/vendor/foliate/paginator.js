@@ -995,6 +995,14 @@ export class Paginator extends HTMLElement {
             return
         }
         // Paginated mode: navigate to the page containing the range
+        // FIX-TTS-RESCROLL: rect coords are document-space within the iframe (the iframe
+        // is expandedSize wide, so getBoundingClientRect is absolute, not viewport-relative).
+        // Content on page N has rect.left = (N-1)*pageSize. The paginator's this.start =
+        // container.scrollLeft = N*pageSize when viewing page N. So the currently visible
+        // page has rect.left in [start-size, start). Skip navigation if already visible —
+        // avoids firing #afterScroll/relocate on every word boundary when word is on screen.
+        const mappedLeft = this.#getRectMapper()(rect).left
+        if (mappedLeft >= this.start - this.size && mappedLeft < this.start) return
         return this.#scrollToRect(rect, 'tts')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {

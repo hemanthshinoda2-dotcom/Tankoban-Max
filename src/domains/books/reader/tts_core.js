@@ -445,10 +445,16 @@
     _clearEnlargeSpan(); // FIX-TTS08: also remove enlarge span
   }
 
-  // FIX-TTS12: Auto-scroll removed — was causing screen shaking and chapter label
-  // blinking. The user scrolls manually; TTS only highlights the current word/sentence.
-  function _scrollToRange(/* range */) {
-    // no-op — auto-scroll disabled
+  // FIX-TTS-RESCROLL: Re-enabled auto-scroll via scrollToAnchorCentered.
+  // Root cause of FIX-TTS12 shaking: paginated mode always called #scrollToRect →
+  // #afterScroll → relocate on every word boundary, even for words on the current page.
+  // Fix: paginator.js now checks if rect is already in the visible page before navigating.
+  // In scrolled mode, scrollToAnchorCentered already had a comfort-zone check.
+  function _scrollToRange(range) {
+    if (!range) return;
+    var renderer = _fol.renderer;
+    if (!renderer || typeof renderer.scrollToAnchorCentered !== 'function') return;
+    try { renderer.scrollToAnchorCentered(range); } catch {}
   }
 
   // ── Queue Generation (Thorium-style) ───────────────────────────
