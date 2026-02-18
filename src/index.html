@@ -285,7 +285,7 @@ COMMON ANCHORS
             <div id="booksHomeView" class="homeView">
               <div class="panel continuePanel">
                 <div class="continueHead">
-                  <div class="continueTitle">Continue Reading...</div>
+                  <div id="booksContinueTitle" class="continueTitle">Continue Reading...</div>
                   <div class="contTools">
                     <sl-switch id="booksHideFinishedToggle" class="toggle muted tiny" size="small" title="Hide finished items">Hide finished</sl-switch>
                     <div id="booksScanPill" class="scanPill hidden" title="Refreshing books library">
@@ -394,24 +394,6 @@ COMMON ANCHORS
               </div>
             </div>
             </div><!-- end #booksReadingContent -->
-
-            <!-- LISTEN_P2: Listening mode home view -->
-            <div id="booksListenView" class="homeView hidden">
-              <div class="panel continuePanel">
-                <div class="continueHead">
-                  <div class="continueTitle">Continue Listening...</div>
-                </div>
-                <div id="booksListenContinueRow" class="continueRow continueYacRow hidden"></div>
-                <div id="booksListenContinueEmpty" class="muted tiny hidden continueEmpty">Nothing in progress yet.</div>
-              </div>
-              <div class="panel seriesPanel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">Books</div>
-                </div>
-                <div id="booksListenGrid" class="seriesGrid listen-grid"></div>
-                <div id="booksListenGridEmpty" class="muted tiny hidden">No books yet. Add a root library folder in Reading mode.</div>
-              </div>
-            </div>
 
             <!-- BUILD_OVERHAUL: Book reader — standard layout (toolbar + sidebar + reading area + footer) -->
             <div id="booksReaderView" class="br-reader hidden">

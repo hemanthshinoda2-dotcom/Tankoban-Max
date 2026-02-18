@@ -12,6 +12,9 @@
     try { return document.getElementById(id); } catch { return null; }
   };
 
+  // LISTEN_P2: listen mode flag — routes openBook() to TTS player
+  let _listenMode = false;
+
   const el = {
     homeView: qs('booksHomeView'),
     showView: qs('booksShowView') || qs('booksSeriesView'),
@@ -1185,6 +1188,16 @@
   }
 
   function renderContinue() {
+    // LISTEN_P2: delegate continue shelf to listening shell when in listen mode
+    if (_listenMode) {
+      if (el.continuePanel) el.continuePanel.innerHTML = '';
+      try {
+        const shell = window.booksListeningShell;
+        if (shell && typeof shell.renderListenContinue === 'function') shell.renderListenContinue();
+      } catch {}
+      scheduleBooksContinueGeometry();
+      return;
+    }
     if (!el.continuePanel || !el.continueEmpty) return;
     if (el.continueList) el.continueList.classList.add('hidden');
     const row = el.continuePanel;
@@ -2097,6 +2110,14 @@
   async function openBook(input) {
     const b = resolveBook(input);
     if (!b) return false;
+    // LISTEN_P2: in listen mode, route to TTS player instead of opening the reader
+    if (_listenMode) {
+      try {
+        const shell = window.booksListeningShell;
+        if (shell && typeof shell.openListenBook === 'function') shell.openListenBook(b);
+      } catch {}
+      return true;
+    }
     const ctl = getReaderController();
     if (!ctl) {
       toast('Books reader is unavailable');
@@ -2544,6 +2565,9 @@
     attachThumb: (imgEl, book) => attachThumb(imgEl, book),
     setGlobalSearchSelection: (idx) => setGlobalSearchSelection(idx),
     activateGlobalSearchSelection: () => activateGlobalSearchSelection(),
+    // LISTEN_P2: listen mode toggle (called by listening_shell.js)
+    setListenMode: (v) => { _listenMode = !!v; renderContinue(); },
+    isListenMode: () => _listenMode,
     setAllProgress: (p) => {
       state.progressAll = p && typeof p === 'object' ? p : {};
       rebuildShowProgressSummary();
