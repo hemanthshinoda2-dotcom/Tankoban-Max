@@ -597,6 +597,19 @@
       doc.addEventListener('touchstart', emitUserActivity, { passive: true });
       doc.addEventListener('click', (ev) => {
         emitUserActivity(ev);
+        // FIX-TTS06: Click-to-speak — single click during TTS playback jumps to clicked word
+        try {
+          var tts = window.booksTTS;
+          if (tts && typeof tts.getState === 'function') {
+            var ttsState = tts.getState();
+            if ((ttsState === 'playing' || ttsState === 'paused') && typeof tts.playFromNode === 'function') {
+              var range = doc.caretRangeFromPoint(ev.clientX, ev.clientY);
+              if (range && range.startContainer) {
+                tts.playFromNode(range.startContainer);
+              }
+            }
+          }
+        } catch (e) { /* click-to-seek failed silently */ }
       });
       doc.addEventListener('selectionchange', rememberFromDoc);
       doc.addEventListener('mouseup', rememberFromDoc, { passive: true });

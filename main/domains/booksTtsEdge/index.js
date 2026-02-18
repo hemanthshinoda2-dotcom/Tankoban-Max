@@ -311,9 +311,16 @@ async function warmup(_ctx, _evt, payload) {
   }
 }
 
+// FIX-TTS06: Expose resetInstance to renderer so retry logic can force a fresh WebSocket.
+async function resetInstanceHandler(_ctx, _evt) {
+  resetTtsInstance();
+  return { ok: true };
+}
+
 module.exports = {
   probe,
   getVoices,
   synth,
   warmup,
+  resetInstance: resetInstanceHandler,
 };

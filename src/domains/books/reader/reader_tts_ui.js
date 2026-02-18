@@ -298,10 +298,16 @@
     }
     var tts = window.booksTTS;
     if (!tts || !ttsRuntimeReady()) {
-      // FIX_TTS_RETRY: auto-retry — destroy stale engine and re-probe before giving up
+      // FIX-TTS06: auto-retry — destroy stale engine, reset main-process WS, and re-probe
       if (tts) tts.destroy();
       RS.showToast('Retrying TTS...');
       try {
+        // FIX-TTS06: Reset the main-process Edge TTS WebSocket before re-probing.
+        // The msedge-tts instance may have a dead WS from a previous error.
+        var ttsApi = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
+        if (ttsApi && typeof ttsApi.resetInstance === 'function') {
+          await ttsApi.resetInstance().catch(function () {});
+        }
         await initTTS();
         tts = window.booksTTS;
         if (tts && ttsRuntimeReady()) {

@@ -169,6 +169,9 @@ const CHANNEL = {
   /** FIX-TTS04: Warm up Edge TTS WebSocket connection (no audio returned). Returns: { ok } */
   BOOKS_TTS_EDGE_WARMUP: 'booksTtsEdge:warmup',
 
+  /** FIX-TTS06: Reset main-process Edge TTS instance (force fresh WebSocket on next synth). Returns: { ok } */
+  BOOKS_TTS_EDGE_RESET_INSTANCE: 'booksTtsEdge:resetInstance',
+
   // ========================================
   // Books Progress
   // ========================================

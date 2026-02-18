@@ -452,8 +452,10 @@
     if (!state.engine) { stop(); return; }
 
     var item = _queue.items[queueIdx];
-    if (!item || !item.text) {
-      // Skip empty blocks
+    // FIX-TTS06: Skip empty blocks AND whitespace-only / trivially short text.
+    // Very short text (e.g. "1", "I") can cause Edge TTS to fail or produce empty audio.
+    var itemText = item ? (item.text || '').trim() : '';
+    if (!item || !itemText || itemText.length < 2) {
       _queue.index = queueIdx + 1;
       if (_queue.index < _queue.length) {
         _speakQueueItem(_queue.index);
@@ -511,6 +513,9 @@
     // FIX-TTS05: cancel flag check — first line of every callback
     if (state._cancelFlag) return;
     if (state.status !== PLAYING) return;
+
+    // FIX-TTS06: successful block playback resets consecutive error counter
+    _consecutiveErrors = 0;
 
     // TXT legacy path
     if (state.format === 'txt') {
@@ -572,11 +577,38 @@
     fireProgress();
   }
 
+  // FIX-TTS06: Track consecutive errors to detect persistent failures
+  var _consecutiveErrors = 0;
+  var MAX_CONSECUTIVE_ERRORS = 3;
+
   function handleError(err) {
     // FIX-TTS05: cancel flag check
     if (state._cancelFlag) return;
     state.lastError = normalizeErr(err, 'tts_error');
-    stop();
+
+    // FIX-TTS06: Instead of stopping entirely on error, try to skip to the next block.
+    // This prevents a single bad block (short title, chapter number) from killing TTS.
+    // Only stop if we hit too many consecutive errors (indicates real engine failure).
+    _consecutiveErrors++;
+    if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      _consecutiveErrors = 0;
+      stop();
+      return;
+    }
+
+    if (state.status !== PLAYING) { stop(); return; }
+
+    // Try advancing to next block
+    if (state.format === 'txt') {
+      _txtHandleBlockEnd();
+      return;
+    }
+    var nextIdx = _queue.index + 1;
+    if (nextIdx < _queue.length) {
+      _speakQueueItem(nextIdx);
+    } else {
+      handleAllBlocksDone();
+    }
   }
 
   // ── Engine Management ──────────────────────────────────────
@@ -980,6 +1012,41 @@
     return false;
   }
 
+  // FIX-TTS06: Click-to-speak — find queue item containing a DOM node and jump to it
+  function playFromNode(node) {
+    if (!node || !state.engine) return false;
+    if (state.format === 'txt') return false;
+    if (!_queue.length) return false;
+
+    // Walk up to find the block parent
+    var blockEl = _findBlockParent(node);
+    if (!blockEl) return false;
+
+    // Find the queue item whose ranges overlap this block
+    for (var i = 0; i < _queue.length; i++) {
+      var item = _queue.items[i];
+      if (!item || !item.ranges || !item.ranges.size) continue;
+      // Check if any mark range is inside the same block element
+      var firstRange = item.ranges.values().next().value;
+      if (!firstRange) continue;
+      var itemBlock = _findBlockParent(firstRange.startContainer);
+      if (itemBlock === blockEl) {
+        // Found matching queue item — jump to it
+        var wasPlaying = (state.status === PLAYING);
+        state._cancelFlag = true;
+        if (state.engine) { try { state.engine.cancel(); } catch {} }
+        clearTtsHighlights();
+        state._cancelFlag = false;
+        state.status = PLAYING;
+        acquireWakeLock();
+        fire();
+        _speakQueueItem(i);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // ── Rate / Pitch / Voice / Preset / Highlight ────────────────
 
   // FIX-TTS05: Re-speak current block with gapless transition
@@ -1288,6 +1355,7 @@
     stepSegment: stepBlock,
     playFromSelection: playFromSelection,
     playFromElement: playFromElement,
+    playFromNode: playFromNode,
     jumpApproxMs: jumpApproxMs,
     getRateLimits: function () { return { min: TTS_RATE_MIN, max: TTS_RATE_MAX }; },
     getState: function () { return state.status; },

@@ -109,10 +109,27 @@
       } catch {}
     }
 
+    // FIX-TTS06: Track synth failures — reset main-process WS after repeated errors
+    var _synthErrorCount = 0;
+
     function diag(code, detail) {
       state.lastDiag = { code: String(code || ''), detail: String(detail || '') };
       if (typeof state.onDiag === 'function') {
         try { state.onDiag({ code: state.lastDiag.code, detail: state.lastDiag.detail }); } catch {}
+      }
+      // FIX-TTS06: If we're seeing synth/ws failures, proactively reset the main-process instance
+      // so the next speak attempt gets a fresh WebSocket instead of hitting the same dead one.
+      if (code && (String(code).indexOf('fail') >= 0 || String(code).indexOf('timeout') >= 0)) {
+        _synthErrorCount++;
+        if (_synthErrorCount >= 2) {
+          _synthErrorCount = 0;
+          try {
+            var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
+            if (api && typeof api.resetInstance === 'function') {
+              api.resetInstance().catch(function () {});
+            }
+          } catch {}
+        }
       }
     }
 
@@ -267,6 +284,7 @@
         if (myReq !== state.requestId) return;
         state.playing = false;
         state.paused = false;
+        _synthErrorCount = 0; // FIX-TTS06: reset error counter on successful playback
         diag('edge_play_ok', '');
         if (typeof state.onEnd === 'function') state.onEnd();
       };

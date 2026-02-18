@@ -147,6 +147,7 @@ const api = {
     getVoices: (opts) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_GET_VOICES, opts),
     synth: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_SYNTH, payload),
     warmup: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_WARMUP, payload), // FIX-TTS04
+    resetInstance: () => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_RESET_INSTANCE), // FIX-TTS06
   },
 
   // ========================================
