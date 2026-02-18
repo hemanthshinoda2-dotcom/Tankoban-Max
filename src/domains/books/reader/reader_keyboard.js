@@ -7,16 +7,14 @@
 
   var shortcutCaptureAction = '';
 
+  // LISTEN_P0: ttsToggle, voiceNext, voicePrev removed — owned by Listening mode
   var SHORTCUT_ACTIONS = [
-    { id: 'ttsToggle', label: 'Toggle TTS' },
     { id: 'tocToggle', label: 'Toggle TOC' },
     { id: 'bookmarkToggle', label: 'Toggle bookmark' },
     { id: 'dictLookup', label: 'Dictionary lookup' },
     { id: 'fullscreen', label: 'Toggle fullscreen' },
     { id: 'sidebarToggle', label: 'Toggle sidebar' },
     { id: 'themeToggle', label: 'Cycle theme' },
-    { id: 'voiceNext', label: 'Next TTS voice' },
-    { id: 'voicePrev', label: 'Previous TTS voice' },
   ];
 
   var FIXED_SHORTCUTS = [
@@ -26,8 +24,6 @@
     { label: 'Next/prev chapter', key: 'Ctrl+Right / Ctrl+Left' },
     { label: 'Nav history back/fwd', key: 'Alt+Left / Alt+Right' }, // BUILD_HISTORY
     { label: 'Book bounds', key: 'Home / End' },
-    { label: 'TTS back/fwd 10s', key: '[ / ]' },
-    { label: 'Read from selection', key: 'R' },
     { label: 'Escape chain', key: 'Esc (cascading close)' },
   ];
 
@@ -200,16 +196,6 @@
         if (Annot && Annot.isAnnotPopupOpen && Annot.isAnnotPopupOpen()) { bus.emit('annot:hide-popup'); return; }
         // Dictionary popup
         if (els.dictPopup && !els.dictPopup.classList.contains('hidden')) { bus.emit('dict:hide'); return; }
-        // TTS mega panel
-        if (els.ttsMega && !els.ttsMega.classList.contains('hidden')) {
-          els.ttsMega.classList.add('hidden');
-          return;
-        }
-        // TTS diagnostics
-        if (els.ttsDiag && !els.ttsDiag.classList.contains('hidden')) {
-          els.ttsDiag.classList.add('hidden');
-          return;
-        }
         // Floating overlays
         var OV = window.booksReaderOverlays;
         if (OV && OV.isOpen()) { OV.closeAll(); return; }
@@ -231,19 +217,6 @@
         e.preventDefault();
         bus.emit('sidebar:close');
         return;
-      }
-
-      // FIX-TTS05: Spacebar intercept — during TTS, spacebar toggles pause/resume instead of page turn
-      if (e.key === ' ') {
-        var tts = window.booksTTS;
-        var ttsState = tts ? tts.getState() : 'idle';
-        if (ttsState === 'playing' || ttsState === 'paused') {
-          e.preventDefault();
-          bus.emit('tts:toggle');
-          return;
-        }
-        // When TTS is idle, spacebar does NOT navigate — prevent accidental page turns
-        // (User expectation: spacebar doesn't navigate in a book reader)
       }
 
       // BUILD_HISTORY: Alt+Left/Right for navigation history (before bare arrow handling)
@@ -314,38 +287,7 @@
         bus.emit('bookmark:toggle');
         return;
       }
-      if (RS.matchShortcut(e, 'ttsToggle')) {
-        e.preventDefault();
-        bus.emit('tts:toggle');
-        return;
-      }
-      if (RS.matchShortcut(e, 'voiceNext')) {
-        e.preventDefault();
-        bus.emit('tts:cycle-voice', 1);
-        return;
-      }
-      if (RS.matchShortcut(e, 'voicePrev')) {
-        e.preventDefault();
-        bus.emit('tts:cycle-voice', -1);
-        return;
-      }
-      // BUILD_TTS_JUMP: -10s/+10s keyboard shortcuts ([ and ])
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === '[') {
-        e.preventDefault();
-        bus.emit('tts:jump', -10000);
-        return;
-      }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key === ']') {
-        e.preventDefault();
-        bus.emit('tts:jump', 10000);
-        return;
-      }
-      // BUILD_TTS_SEL: read from selection (R key)
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key === 'r') {
-        e.preventDefault();
-        bus.emit('tts:play-from-selection');
-        return;
-      }
+      // LISTEN_P0: ttsToggle, voiceNext, voicePrev, tts:jump, tts:play-from-selection removed — owned by Listening mode
       if (RS.matchShortcut(e, 'sidebarToggle')) {
         e.preventDefault();
         bus.emit('sidebar:toggle');

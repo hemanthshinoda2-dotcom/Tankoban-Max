@@ -20,21 +20,12 @@
     paraSpacing: 0,           // 0-2.0 rem (ReadiumCSS --USER__paraSpacing)
     paraIndent: '',           // ''|0|1em|1.5em|2em (ReadiumCSS --USER__paraIndent)
     bodyHyphens: '',          // ''|auto|none (ReadiumCSS --USER__bodyHyphens)
-    ttsRate: 1.0,
-    ttsVoice: '',
-    ttsPreset: '',
-    ttsHlGranularity: 'sentence', // FIX-TTS05: 'sentence' or 'word'
-    ttsWordHlStyle: 'highlight',  // FIX-TTS05: independent word highlight style
-    ttsWordHlColor: 'blue',       // FIX-TTS05: independent word highlight color
-    ttsEnlargeScale: 1.35,        // FIX-TTS08: enlarge style scale factor
-  };
+  }; // LISTEN_P0: tts* settings removed — owned by Listening mode
 
   var DEFAULT_SHORTCUTS = {
-    ttsToggle: 't',
+    // LISTEN_P0: ttsToggle/voiceNext/voicePrev removed — owned by Listening mode
     tocToggle: 'o',
     bookmarkToggle: 'b',
-    voiceNext: 'v',
-    voicePrev: 'V',
     dictLookup: 'd',
     fullscreen: 'f',
     sidebarToggle: 'h',
@@ -73,11 +64,9 @@
     dictCache: {},
     dictCacheOrder: [],
     lastBookInput: null,
-    ttsFallbackNotified: false,
     progressFraction: 0,
     progressDragFraction: 0,
     shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
-    ttsLastLocation: null,
     // BUILD_ANNOT
     annotations: [],
     annotEditId: null,
@@ -111,7 +100,6 @@
       status: qs('booksReaderStatus'),
       // Toolbar
       backBtn: qs('booksReaderBackBtn'),
-      ttsLaunch: qs('booksReaderTtsLaunch'),
       searchBtn: qs('booksReaderSearchBtn'),
       bookmarksBtn: qs('booksReaderBookmarksBtn'),
       annotBtn: qs('booksReaderAnnotBtn'),
@@ -179,47 +167,13 @@
       chapterTransNext: qs('booksChapterTransNext'),
       chapterTransContinue: qs('booksChapterTransContinue'),
       chapterTransCountdown: qs('booksChapterTransCountdown'),
-      // TTS mega panel
-      ttsMega: qs('booksReaderTtsMega'),
-      ttsMegaBtn: qs('booksReaderTtsSettingsBtn'),
-      ttsMegaClose: qs('booksReaderTtsMegaClose'),
       // Dictionary
       dictPopup: qs('booksReaderDictPopup'),
       dictWord: qs('booksReaderDictWord'),
       dictBody: qs('booksReaderDictBody'),
       dictClose: qs('booksReaderDictClose'),
       dictBack: qs('booksReaderDictBack'),
-      // TTS bar (inside host)
-      ttsBar: qs('booksReaderTtsBar'),
-      ttsPlayPause: qs('booksReaderTtsPlayPause'),
-      ttsStop: qs('booksReaderTtsStop'),
-      ttsSlower: qs('booksReaderTtsSlower'),
-      ttsFaster: qs('booksReaderTtsFaster'),
-      ttsSpeed: qs('booksReaderTtsSpeed'),
-      ttsEngine: qs('booksReaderTtsEngine'),
-      ttsVoice: qs('booksReaderTtsVoice'),
-      ttsPreview: qs('booksReaderTtsPreview'),
-      ttsPresetSel: qs('booksReaderTtsPresetSel'),
-      ttsRewind: qs('booksReaderTtsRewind'),
-      ttsForward: qs('booksReaderTtsForward'),
-      ttsDiagBtn: qs('booksReaderTtsDiagBtn'),
-      ttsHlStyle: qs('booksReaderTtsHlStyle'),
-      ttsHlColors: qs('booksReaderTtsHlColors'),
-      ttsWordTracking: qs('booksReaderTtsWordTracking'),   // FIX-TTS05
-      ttsWordHlStyle: qs('booksReaderTtsWordHlStyle'),     // FIX-TTS05
-      ttsWordHlColors: qs('booksReaderTtsWordHlColors'),   // FIX-TTS05
-      ttsEnlargeRow: qs('booksReaderEnlargeRow'),           // FIX-TTS08
-      ttsEnlargeScale: qs('booksReaderTtsEnlargeScale'),    // FIX-TTS08
-      ttsEnlargeVal: qs('booksReaderTtsEnlargeVal'),        // FIX-TTS08
-      ttsDiag: qs('booksReaderTtsDiag'),
-      ttsDiagBody: qs('booksReaderTtsDiagBody'),
-      ttsDiagClose: qs('booksReaderTtsDiagClose'),
-      // BUILD_TTS_JUMP: -10s/+10s buttons
-      ttsBack10: qs('booksReaderTtsBack10'),
-      ttsFwd10: qs('booksReaderTtsFwd10'),
-      // BUILD_TTS_SEL: read from selection
-      ttsFromSel: qs('booksReaderTtsFromSel'),
-      returnTts: qs('booksReaderReturnTts'),
+      // LISTEN_P0: TTS bar elements removed — owned by Listening mode
       flowToggle: qs('brSettingsFlowToggle'),
       flowBtn: qs('booksReaderFlowBtn'), // FIX-TTS03: toolbar flow mode toggle
       shortcutsList: qs('brSettingsShortcuts'),
