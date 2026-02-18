@@ -276,9 +276,7 @@
     if (!els.progress) return;
     var old = els.progress.querySelector('.scrubChapters');
     if (old) old.remove();
-    // Scrub bar is chapter-local for EPUB/TXT — no chapter markers needed.
-    // Only render markers for PDF (which still uses whole-book scrub).
-    if (!RS.isPdfOpen()) return;
+    // FIX-NAV01: render section markers for all formats (EPUB uses whole-book scrub)
     var state = RS.state;
     if (!state.engine || typeof state.engine.getSectionFractions !== 'function') return;
     var fracs;

@@ -207,7 +207,9 @@
   }
 
   // ── showAnnotPopup ──────────────────────────────────────────
-  function showAnnotPopup(existingAnn) {
+  // FIX-ANN01: anchorRange is an optional DOM Range from inside the EPUB iframe,
+  // used for iframe-aware popup positioning instead of window.getSelection().
+  function showAnnotPopup(existingAnn, anchorRange) {
     var els = RS.ensureEls();
     var state = RS.state;
     if (!annotationsSupported()) return;
@@ -234,21 +236,59 @@
       els.annotDelete.classList.toggle('hidden', !state.annotEditId);
     }
 
-    // Position popup near selection or center of host
+    // FIX-ANN01: Position popup using iframe-aware coordinates.
+    // Priority: (1) anchorRange from engine show-annotation event (has iframe Range),
+    // (2) Dict.getSelectionRect() which iterates iframe docs, (3) center of host.
+    var POPUP_HEIGHT = 240;
     var positioned = false;
     if (els.host) {
-      try {
-        var sel = window.getSelection();
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
-          var rect = sel.getRangeAt(0).getBoundingClientRect();
-          if (rect && rect.width > 0) {
-            els.annotPopup.style.top = Math.max(8, rect.bottom + 8) + 'px';
-            els.annotPopup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 340)) + 'px';
+      // (1) Engine-supplied Range from inside the EPUB iframe
+      if (!positioned && anchorRange && typeof anchorRange.getBoundingClientRect === 'function') {
+        try {
+          var aRect = anchorRange.getBoundingClientRect();
+          if (aRect && aRect.width > 0) {
+            var docView = anchorRange.startContainer &&
+              anchorRange.startContainer.ownerDocument &&
+              anchorRange.startContainer.ownerDocument.defaultView;
+            var frame = docView && docView.frameElement;
+            var absBottom, absTop, absLeft;
+            if (frame && typeof frame.getBoundingClientRect === 'function') {
+              var fr = frame.getBoundingClientRect();
+              absBottom = fr.top + aRect.bottom;
+              absTop = fr.top + aRect.top;
+              absLeft = fr.left + aRect.left;
+            } else {
+              absBottom = aRect.bottom;
+              absTop = aRect.top;
+              absLeft = aRect.left;
+            }
+            var top = absBottom + 8;
+            if (top + POPUP_HEIGHT > window.innerHeight - 8) top = Math.max(8, absTop - POPUP_HEIGHT - 8);
+            els.annotPopup.style.top = Math.max(8, top) + 'px';
+            els.annotPopup.style.left = Math.max(8, Math.min(absLeft, window.innerWidth - 340)) + 'px';
             positioned = true;
           }
-        }
-      } catch (e) { /* swallow */ }
+        } catch (e) { /* swallow */ }
+      }
 
+      // (2) Dict module's iframe-aware selection rect (handles renderer.getContents())
+      if (!positioned) {
+        try {
+          var Dict = window.booksReaderDict;
+          if (Dict && typeof Dict.getSelectionRect === 'function') {
+            var selRect = Dict.getSelectionRect();
+            if (selRect && selRect.width > 0) {
+              var top2 = selRect.bottom + 8;
+              if (top2 + POPUP_HEIGHT > window.innerHeight - 8) top2 = Math.max(8, selRect.top - POPUP_HEIGHT - 8);
+              els.annotPopup.style.top = Math.max(8, top2) + 'px';
+              els.annotPopup.style.left = Math.max(8, Math.min(selRect.left, window.innerWidth - 340)) + 'px';
+              positioned = true;
+            }
+          }
+        } catch (e) { /* swallow */ }
+      }
+
+      // (3) Fallback: center on reading host
       if (!positioned) {
         var hostRect = els.host.getBoundingClientRect();
         els.annotPopup.style.top = Math.max(8, hostRect.top + hostRect.height / 2 - 100) + 'px';
@@ -385,7 +425,8 @@
           for (var i = 0; i < state.annotations.length; i++) {
             if (state.annotations[i].cfi === cfi) { found = state.annotations[i]; break; }
           }
-          if (found) showAnnotPopup(found);
+          // FIX-ANN01: pass range from engine event for iframe-aware popup positioning
+          if (found) showAnnotPopup(found, data && data.range);
         });
       }
 

@@ -468,6 +468,7 @@
     triggerDictLookup: triggerDictLookup,
     triggerDictLookupFromText: triggerDictLookup,
     getSelectedWord: getSelectedWord,
+    getSelectionRect: getSelectionRect, // FIX-ANN01: shared iframe-aware selection rect
     onOpen: function () {},
     onClose: function () { resetHistory(); hideDictPopup(); },
   };
