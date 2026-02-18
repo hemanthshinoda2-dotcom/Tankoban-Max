@@ -3,6 +3,7 @@ dist/
 build/
 player_qt/
 resources/
+.claude/
 /Books
 /Books/
 *.log

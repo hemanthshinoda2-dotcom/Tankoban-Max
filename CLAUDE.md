@@ -90,20 +90,31 @@ From this directory (`projects/Tankoban Max/`):
 - Don't use interactive git flags (`-i`)
 - Don't skip pre-commit hooks (`--no-verify`)
 
-## Git workflow
+## Git workflow — NO BRANCH RULE
 
+- **Never create branches.** All work happens on `master` directly.
+- Before applying any fix or feature, **save a pre-fix backup** of the affected scripts to `.claude/backups/` using the backup script (`.claude/backup_script.ps1`). Label backups like `before-fix-TTS06` or `pre-fix-P7` — the label should match the fix tag.
+- Fixes are applied directly to the main files in the working tree, never to a copy or branch.
 - Commit all changes before ending a session — don't leave uncommitted work
 - Use descriptive commit messages with the fix/feature tag (e.g. `FIX-TTS03: ...`)
 - Group related changes into a single commit per fix/feature round
-- Push to remote after committing so work is backed up
+- Push to remote after committing so work is backed up. If push fails, remind the user.
 - Vendor file patches (e.g. `paginator.js`) must be documented in `THIRD_PARTY_NOTICES.md`
+
+### Pre-fix backup procedure
+
+```powershell
+# From project root — run before any fix
+powershell -ExecutionPolicy Bypass -File ".claude/backup_script.ps1" -Label "before-fix-TAGNAME"
+```
+
+This copies all scripts (no node_modules, dist, build, .git, player_qt, resources) to `.claude/backups/<label>/`. The `.claude/` folder is gitignored, so backups stay local.
 
 ## Existing docs
 
-- `START_HERE.md` — Quick developer orientation
+- `CLAUDE.md` — This file (project guide for Claude)
 - `MAX_SCOPE.md` — Scope contract (Max is additive to Pro)
+- `THIRD_PARTY_NOTICES.md` — Third-party licenses
 - `docs/08_TESTING_AND_SMOKE.md` — Testing guide
 - `docs/books_reader_comic_parity_contract.md` — Feature parity contract
-- `docs/plans/` — Historical implementation plans
-- `docs/archive/` — Completed task docs and audits (historical reference only)
-- `THIRD_PARTY_NOTICES.md` — Third-party licenses
+- `docs/archive/` — Historical docs, completed plans, audits (reference only)
