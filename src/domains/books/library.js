@@ -117,6 +117,7 @@
   const thumbInFlight = new Map();
   const thumbBookRef = new WeakMap();
   const fallbackMem = new Map();
+  const accentMem = new Map(); // BUILD_ACCENT: bookId -> dominant hex color
   let foliateViewModulePromise = null;
   function withLimit(limit) {
     let active = 0;
@@ -150,7 +151,12 @@
       }
       getOrCreateBookThumb(book).then((url) => {
         if (!url) return;
-        if (img && img.dataset && String(img.dataset.bookid || '') === bid) img.src = url;
+        if (img && img.dataset && String(img.dataset.bookid || '') === bid) {
+          img.src = url;
+          // BUILD_ACCENT: apply accent once thumb is loaded (may be set by then)
+          const accent = accentMem.get(bid);
+          if (accent) applyAccentToParent(img, accent);
+        }
         try { thumbObserver.unobserve(img); } catch {}
       }).catch(() => {});
     }
@@ -325,6 +331,47 @@
     }
   }
 
+  // BUILD_ACCENT: extract most-saturated non-trivial pixel from a cover blob (tiny canvas sample)
+  async function extractAccentFromBlob(blob) {
+    if (!blob || !blob.size) return null;
+    let bmp = null;
+    try {
+      bmp = await createImageBitmap(blob, { resizeWidth: 20, resizeHeight: 28 });
+      const c = document.createElement('canvas');
+      c.width = 20; c.height = 28;
+      const ctx = c.getContext('2d');
+      if (!ctx) return null;
+      ctx.drawImage(bmp, 0, 0);
+      const data = ctx.getImageData(0, 0, 20, 28).data;
+      let bestSat = -1, bestR = 0, bestG = 0, bestB = 0;
+      // Sample center 10×14 region to avoid black bars at edges
+      for (let y = 7; y < 21; y++) {
+        for (let x = 5; x < 15; x++) {
+          const i = (y * 20 + x) * 4;
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const max = Math.max(r, g, b), min = Math.min(r, g, b);
+          const lum = (r + g + b) / 3;
+          if (lum < 25 || lum > 230) continue; // skip near-black / near-white
+          const sat = max > 0 ? (max - min) / max : 0;
+          if (sat > bestSat) { bestSat = sat; bestR = r; bestG = g; bestB = b; }
+        }
+      }
+      if (bestSat < 0.18) return null; // not saturated enough
+      return `#${bestR.toString(16).padStart(2, '0')}${bestG.toString(16).padStart(2, '0')}${bestB.toString(16).padStart(2, '0')}`;
+    } catch {
+      return null;
+    } finally {
+      try { bmp && bmp.close && bmp.close(); } catch {}
+    }
+  }
+
+  function applyAccentToParent(img, accentHex) {
+    try {
+      const wrap = img && img.parentElement;
+      if (wrap && accentHex) wrap.style.setProperty('--book-accent', accentHex);
+    } catch {}
+  }
+
   async function generateBookThumbDataUrl(book) {
     if (!book || !book.path) return null;
     if (shouldSkipHeavyThumbWork()) return null;
@@ -332,6 +379,12 @@
     if (fmt === 'txt') return null;
     const coverBlob = await coverBlobViaFoliate(book);
     if (!coverBlob) return null;
+    // BUILD_ACCENT: extract dominant color concurrently (non-blocking)
+    if (book.id && !accentMem.has(String(book.id))) {
+      extractAccentFromBlob(coverBlob).then((hex) => {
+        if (hex && book.id) accentMem.set(String(book.id), hex);
+      }).catch(() => {});
+    }
     return drawCoverBlobToThumbDataUrl(coverBlob);
   }
 
@@ -390,6 +443,9 @@
     const cached = thumbMem.get(id);
     if (cached) {
       img.src = cached;
+      // BUILD_ACCENT: apply cached accent immediately
+      const accent = accentMem.get(id);
+      if (accent) applyAccentToParent(img, accent);
       return;
     }
     img.src = fallbackForBook(book);
@@ -1309,6 +1365,19 @@
     el.showsEmpty.classList.toggle('hidden', !!shows.length);
     if (!shows.length) return;
 
+    // BUILD_LETTER_DIVIDERS: track current letter across chunks to insert A/B/C dividers
+    let lastDividerLetter = '';
+    const makeLetterDivider = (letter) => {
+      const div = document.createElement('div');
+      div.className = 'booksLetterDivider';
+      div.textContent = letter;
+      return div;
+    };
+    const getShowLetter = (show) => {
+      const ch = String(show.name || '').trim().slice(0, 1).toUpperCase();
+      return (/[A-Z]/.test(ch)) ? ch : '#';
+    };
+
     const CHUNK = 60;
     renderHome._token = (renderHome._token || 0) + 1;
     const token = renderHome._token;
@@ -1317,7 +1386,14 @@
       if (token !== renderHome._token) return;
       const frag = document.createDocumentFragment();
       const end = Math.min(startIdx + CHUNK, shows.length);
-      for (let i = startIdx; i < end; i += 1) frag.appendChild(makeShowCard(shows[i]));
+      for (let i = startIdx; i < end; i += 1) {
+        const letter = getShowLetter(shows[i]);
+        if (letter !== lastDividerLetter) {
+          lastDividerLetter = letter;
+          frag.appendChild(makeLetterDivider(letter));
+        }
+        frag.appendChild(makeShowCard(shows[i]));
+      }
       el.showsGrid.appendChild(frag);
       if (end >= shows.length) return;
       if (typeof requestIdleCallback !== 'undefined') requestIdleCallback(() => appendChunk(end), { timeout: 120 });
@@ -1326,7 +1402,14 @@
 
     if (shows.length <= CHUNK) {
       const frag = document.createDocumentFragment();
-      for (const s of shows) frag.appendChild(makeShowCard(s));
+      for (const s of shows) {
+        const letter = getShowLetter(s);
+        if (letter !== lastDividerLetter) {
+          lastDividerLetter = letter;
+          frag.appendChild(makeLetterDivider(letter));
+        }
+        frag.appendChild(makeShowCard(s));
+      }
       el.showsGrid.appendChild(frag);
     } else {
       appendChunk(0);
@@ -2442,6 +2525,65 @@
     // R8: wire tips overlay close button
     const booksLibTipsClose = qs('booksLibTipsClose');
     booksLibTipsClose && booksLibTipsClose.addEventListener('click', () => toggleBooksLibTipsOverlay(false));
+
+    // BUILD_DRAG_DROP: drag EPUB/PDF/TXT files onto the books library to add them
+    (function bindDragDrop() {
+      const dropZone = el.homeView || document.getElementById('booksMode') || document.body;
+      if (!dropZone) return;
+      const SUPPORTED_EXTS = ['.epub', '.pdf', '.txt'];
+      let dragCounter = 0;
+
+      const hasBookFiles = (dt) => {
+        try {
+          const types = dt && dt.types ? Array.from(dt.types) : [];
+          return types.includes('Files') || types.some((t) => t === 'application/x-moz-file');
+        } catch { return false; }
+      };
+
+      dropZone.addEventListener('dragenter', (e) => {
+        if (!document.body.classList.contains('inBooksMode') || state.readerOpen) return;
+        if (!hasBookFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        dragCounter += 1;
+        dropZone.classList.add('booksDragover');
+      });
+
+      dropZone.addEventListener('dragover', (e) => {
+        if (!document.body.classList.contains('inBooksMode') || state.readerOpen) return;
+        if (!hasBookFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      dropZone.addEventListener('dragleave', () => {
+        dragCounter = Math.max(0, dragCounter - 1);
+        if (dragCounter === 0) dropZone.classList.remove('booksDragover');
+      });
+
+      dropZone.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dragCounter = 0;
+        dropZone.classList.remove('booksDragover');
+        if (!document.body.classList.contains('inBooksMode') || state.readerOpen) return;
+        const files = e.dataTransfer && e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+        if (!files.length) return;
+        const paths = files
+          .map((f) => String(f.path || ''))
+          .filter((p) => p && SUPPORTED_EXTS.some((ext) => p.toLowerCase().endsWith(ext)));
+        if (!paths.length) { toast('Drop EPUB, PDF, or TXT files to add them'); return; }
+        try {
+          const res = await api.books.addFilePaths(paths);
+          if (res && res.state) {
+            applySnapshot(res.state);
+            await loadProgress();
+            renderAll();
+            toast(`${paths.length} book${paths.length === 1 ? '' : 's'} added to library`);
+          } else {
+            toast('Files already in library');
+          }
+        } catch { toast('Failed to add dropped files'); }
+      });
+    })();
 
     api.books.onUpdated((snap) => {
       applySnapshot(snap || {});

@@ -144,6 +144,9 @@ const CHANNEL = {
   /** Add explicit standalone book files via dialog. Returns: { ok: boolean, state?: object } */
   BOOKS_ADD_FILES: 'books:addFiles',
 
+  /** Add explicit standalone book files by path (no dialog — for drag-and-drop). Returns: { ok: boolean, state?: object } */
+  BOOKS_ADD_FILE_PATHS: 'books:addFilePaths', // BUILD_DRAG_DROP
+
   /** Remove explicit standalone book file. Returns: { ok: boolean, state?: object } */
   BOOKS_REMOVE_FILE: 'books:removeFile',
 

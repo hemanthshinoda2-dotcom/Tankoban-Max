@@ -13,6 +13,7 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.BOOKS_REMOVE_SERIES_FOLDER, (e, ...args) => domains.booksDomain.removeSeriesFolder(ctx, e, ...args));
 
   ipcMain.handle(CHANNEL.BOOKS_ADD_FILES, (e, ...args) => domains.booksDomain.addFiles(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.BOOKS_ADD_FILE_PATHS, (e, ...args) => domains.booksDomain.addFilePaths(ctx, e, ...args)); // BUILD_DRAG_DROP
   ipcMain.handle(CHANNEL.BOOKS_REMOVE_FILE, (e, ...args) => domains.booksDomain.removeFile(ctx, e, ...args));
 
   ipcMain.handle(CHANNEL.BOOKS_OPEN_FILE_DIALOG, (e, ...args) => domains.booksDomain.openFileDialog(ctx, e, ...args));

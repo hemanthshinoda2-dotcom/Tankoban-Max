@@ -503,6 +503,19 @@ async function addFiles(ctx, evt) {
   return { ok: true, state: snap };
 }
 
+// BUILD_DRAG_DROP: add files by explicit paths (no dialog) — used by renderer drag-and-drop
+async function addFilePaths(ctx, _evt, paths) {
+  if (!Array.isArray(paths) || !paths.length) return { ok: false };
+  const picks = paths.map((p) => String(p || '')).filter((p) => p && isSupportedBookPath(p));
+  if (!picks.length) return { ok: false };
+  const state = readBooksConfig(ctx);
+  state.bookSingleFiles = uniq([...(state.bookSingleFiles || []), ...picks]);
+  await writeBooksConfig(ctx, state);
+  const snap = makeBooksStateSnapshot(ctx, state);
+  startBooksScan(ctx, state, { force: true });
+  return { ok: true, state: snap };
+}
+
 async function removeFile(ctx, _evt, filePath) {
   const target = String(filePath || '');
   if (!target) return { ok: false };
@@ -626,6 +639,7 @@ module.exports = {
   addSeriesFolder,
   removeSeriesFolder,
   addFiles,
+  addFilePaths,
   removeFile,
   openFileDialog,
   bookFromPath,
