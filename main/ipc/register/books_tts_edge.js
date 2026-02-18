@@ -6,4 +6,6 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.BOOKS_TTS_EDGE_SYNTH, (e, ...args) => domains.booksTtsEdgeDomain.synth(ctx, e, ...args));
   ipcMain.handle(CHANNEL.BOOKS_TTS_EDGE_WARMUP, (e, ...args) => domains.booksTtsEdgeDomain.warmup(ctx, e, ...args)); // FIX-TTS04
   ipcMain.handle(CHANNEL.BOOKS_TTS_EDGE_RESET_INSTANCE, (e, ...args) => domains.booksTtsEdgeDomain.resetInstance(ctx, e, ...args)); // FIX-TTS06
+  ipcMain.handle(CHANNEL.BOOKS_TTS_EDGE_CACHE_CLEAR, (e, ...args) => domains.booksTtsEdgeDomain.clearAudioCache(ctx, e, ...args)); // LISTEN_P6
+  ipcMain.handle(CHANNEL.BOOKS_TTS_EDGE_CACHE_INFO,  (e, ...args) => domains.booksTtsEdgeDomain.getAudioCacheInfo(ctx, e, ...args)); // LISTEN_P6
 };

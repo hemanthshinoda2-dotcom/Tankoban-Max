@@ -172,6 +172,12 @@ const CHANNEL = {
   /** FIX-TTS06: Reset main-process Edge TTS instance (force fresh WebSocket on next synth). Returns: { ok } */
   BOOKS_TTS_EDGE_RESET_INSTANCE: 'booksTtsEdge:resetInstance',
 
+  /** LISTEN_P6: Clear on-disk TTS audio cache. Returns: { ok, deletedCount? } */
+  BOOKS_TTS_EDGE_CACHE_CLEAR: 'booksTtsEdge:cacheClear',
+
+  /** LISTEN_P6: Get on-disk TTS audio cache stats. Returns: { ok, count, sizeBytes } */
+  BOOKS_TTS_EDGE_CACHE_INFO: 'booksTtsEdge:cacheInfo',
+
   // ========================================
   // Books Progress
   // ========================================

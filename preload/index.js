@@ -148,6 +148,8 @@ const api = {
     synth: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_SYNTH, payload),
     warmup: (payload) => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_WARMUP, payload), // FIX-TTS04
     resetInstance: () => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_RESET_INSTANCE), // FIX-TTS06
+    cacheClear: () => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_CACHE_CLEAR), // LISTEN_P6
+    cacheInfo:  () => ipcRenderer.invoke(CHANNEL.BOOKS_TTS_EDGE_CACHE_INFO),  // LISTEN_P6
   },
 
   // ========================================
@@ -881,6 +883,8 @@ const legacy = {
   booksTtsEdgeProbe: (...args) => api.booksTtsEdge.probe(...args),
   booksTtsEdgeGetVoices: (...args) => api.booksTtsEdge.getVoices(...args),
   booksTtsEdgeSynth: (...args) => api.booksTtsEdge.synth(...args),
+  clearTtsAudioCache: (...args) => api.booksTtsEdge.cacheClear(...args),  // LISTEN_P6
+  getTtsAudioCacheInfo: (...args) => api.booksTtsEdge.cacheInfo(...args), // LISTEN_P6
 
   // video
   getVideoState: (...args) => api.video.getState(...args),

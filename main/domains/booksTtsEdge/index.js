@@ -4,6 +4,57 @@ Main-process transport for Edge neural synthesis via msedge-tts.
 Same IPC contract as before: probe, getVoices, synth.
 */
 
+// LISTEN_P6: disk audio cache (tts_audio_cache/ in userData)
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+let _audioCacheDir = null;
+
+function getAudioCacheDir(ctx) {
+  if (_audioCacheDir) return _audioCacheDir;
+  try {
+    if (ctx && ctx.storage && typeof ctx.storage.dataPath === 'function') {
+      _audioCacheDir = ctx.storage.dataPath('tts_audio_cache');
+    }
+  } catch {}
+  return _audioCacheDir;
+}
+
+function audioCacheKey(text, voice, rate, pitch) {
+  return crypto.createHash('sha256')
+    .update(text + '|' + voice + '|' + String(rate) + '|' + String(pitch))
+    .digest('hex')
+    .slice(0, 40);
+}
+
+function audioCacheGet(cacheDir, key) {
+  try {
+    const mp3Path = path.join(cacheDir, key + '.mp3');
+    const metaPath = path.join(cacheDir, key + '.meta.json');
+    const audioBuf = fs.readFileSync(mp3Path);
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    return {
+      audioBase64: audioBuf.toString('base64'),
+      boundaries: Array.isArray(meta.boundaries) ? meta.boundaries : [],
+      mime: meta.mime || 'audio/mpeg',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function audioCacheSet(cacheDir, key, audioBase64, boundaries, mime) {
+  try {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const audioBuf = Buffer.from(audioBase64, 'base64');
+    const mp3Path = path.join(cacheDir, key + '.mp3');
+    const metaPath = path.join(cacheDir, key + '.meta.json');
+    fs.writeFileSync(mp3Path, audioBuf);
+    fs.writeFileSync(metaPath, JSON.stringify({ boundaries: boundaries || [], mime: mime || 'audio/mpeg' }));
+  } catch {}
+}
+
 let edgeTtsLib = null;
 let ttsInstance = null;
 
@@ -230,9 +281,49 @@ async function synthEdge(payload) {
   }
 }
 
-async function synth(_ctx, _evt, payload) {
+async function synth(ctx, _evt, payload) {
   try {
-    return await synthEdge(payload);
+    // LISTEN_P6: check disk cache before calling Edge TTS
+    const cacheDir = getAudioCacheDir(ctx);
+    if (cacheDir) {
+      const text  = String(payload && payload.text || '').trim();
+      const voice = String(payload && payload.voice || 'en-US-AriaNeural');
+      const rate  = payload && payload.rate  != null ? Number(payload.rate)  : 1.0;
+      const pitch = payload && payload.pitch != null ? Number(payload.pitch) : 1.0;
+      if (text) {
+        const key    = audioCacheKey(text, voice, rate, pitch);
+        const cached = audioCacheGet(cacheDir, key);
+        if (cached) {
+          return {
+            ok: true,
+            elapsedMs: 0,
+            boundaries: cached.boundaries,
+            audioBase64: cached.audioBase64,
+            encoding: 'base64',
+            mime: cached.mime,
+            fromCache: true,
+          };
+        }
+      }
+    }
+
+    const result = await synthEdge(payload);
+
+    // LISTEN_P6: write successful result to disk cache (async-safe; errors swallowed)
+    if (cacheDir && result && result.ok && result.audioBase64) {
+      try {
+        const text  = String(payload && payload.text || '').trim();
+        const voice = String(payload && payload.voice || 'en-US-AriaNeural');
+        const rate  = payload && payload.rate  != null ? Number(payload.rate)  : 1.0;
+        const pitch = payload && payload.pitch != null ? Number(payload.pitch) : 1.0;
+        if (text) {
+          const key = audioCacheKey(text, voice, rate, pitch);
+          audioCacheSet(cacheDir, key, result.audioBase64, result.boundaries, result.mime || 'audio/mpeg');
+        }
+      } catch {}
+    }
+
+    return result;
   } catch (err) {
     return {
       ok: false,
@@ -317,10 +408,47 @@ async function resetInstanceHandler(_ctx, _evt) {
   return { ok: true };
 }
 
+// LISTEN_P6: Clear all files in the on-disk audio cache directory.
+async function clearAudioCache(ctx) {
+  const cacheDir = getAudioCacheDir(ctx);
+  if (!cacheDir) return { ok: false, reason: 'cache_dir_unavailable' };
+  try {
+    if (!fs.existsSync(cacheDir)) return { ok: true, deletedCount: 0 };
+    const files = fs.readdirSync(cacheDir);
+    let deleted = 0;
+    for (const f of files) {
+      try { fs.unlinkSync(path.join(cacheDir, f)); deleted++; } catch {}
+    }
+    return { ok: true, deletedCount: deleted };
+  } catch (err) {
+    return { ok: false, reason: String(err && err.message ? err.message : err) };
+  }
+}
+
+// LISTEN_P6: Return count + total size of on-disk audio cache.
+async function getAudioCacheInfo(ctx) {
+  const cacheDir = getAudioCacheDir(ctx);
+  if (!cacheDir) return { ok: false, reason: 'cache_dir_unavailable', count: 0, sizeBytes: 0 };
+  try {
+    if (!fs.existsSync(cacheDir)) return { ok: true, count: 0, sizeBytes: 0 };
+    const files = fs.readdirSync(cacheDir);
+    const mp3Count = files.filter((f) => f.endsWith('.mp3')).length;
+    let sizeBytes = 0;
+    for (const f of files) {
+      try { sizeBytes += fs.statSync(path.join(cacheDir, f)).size; } catch {}
+    }
+    return { ok: true, count: mp3Count, sizeBytes };
+  } catch (err) {
+    return { ok: false, reason: String(err && err.message ? err.message : err), count: 0, sizeBytes: 0 };
+  }
+}
+
 module.exports = {
   probe,
   getVoices,
   synth,
   warmup,
   resetInstance: resetInstanceHandler,
+  clearAudioCache,   // LISTEN_P6
+  getAudioCacheInfo, // LISTEN_P6
 };
