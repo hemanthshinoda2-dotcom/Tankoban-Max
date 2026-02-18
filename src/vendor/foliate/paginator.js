@@ -957,6 +957,8 @@ export class Paginator extends HTMLElement {
     // FIX-TTS10: fixed centering formula — was using viewSize (total doc height) instead
     // of size (viewport height). Now correctly computes: absolute position in document
     // minus half the viewport to center the range.
+    // FIX-TTS10b: use 'tts' reason to suppress relocate event dispatch (prevents chapter
+    // label blinking). Skip scroll entirely if range is already within visible middle zone.
     async scrollToAnchorCentered(anchor) {
         const rects = uncollapse(anchor)?.getClientRects?.()
         if (!rects) return
@@ -966,12 +968,19 @@ export class Paginator extends HTMLElement {
         if (this.scrolled) {
             const mapped = this.#getRectMapper()(rect)
             const rectSize = mapped.right - mapped.left
+            // FIX-TTS10b: skip scroll if range is within the middle 60% of the viewport
+            const viewStart = this.start + this.#margin
+            const viewEnd = this.end - this.#margin
+            const viewSpan = viewEnd - viewStart
+            const comfortTop = viewStart + viewSpan * 0.2
+            const comfortBot = viewStart + viewSpan * 0.8
+            if (mapped.left >= comfortTop && mapped.right <= comfortBot) return
             // mapped.left is viewport-relative, add current scroll to get absolute pos
             const absPos = mapped.left - this.#margin + this.start
             const offset = absPos - (this.size - rectSize) / 2
-            return this.#scrollTo(Math.max(0, offset), 'anchor')
+            return this.#scrollTo(Math.max(0, offset), 'tts')
         }
-        return this.#scrollToRect(rect, 'anchor')
+        return this.#scrollToRect(rect, 'tts')
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
@@ -1008,9 +1017,13 @@ export class Paginator extends HTMLElement {
         const range = this.#getVisibleRange()
         this.#lastVisibleRange = range
         // don't set new anchor if relocation was to scroll to anchor
-        if (reason !== 'selection' && reason !== 'navigation' && reason !== 'anchor')
+        if (reason !== 'selection' && reason !== 'navigation' && reason !== 'anchor' && reason !== 'tts')
             this.#anchor = range
         else this.#justAnchored = true
+
+        // FIX-TTS10b: suppress relocate event for TTS-driven scrolls to prevent
+        // chapter label blinking and unnecessary progress saves during narration
+        if (reason === 'tts') return
 
         const index = this.#index
         const detail = { reason, range, index }
