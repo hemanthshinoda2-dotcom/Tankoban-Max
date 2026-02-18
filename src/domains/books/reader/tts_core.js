@@ -353,22 +353,28 @@
         highlightSentence(blockRange);
       } catch {}
     }
-    // Paginator-aware scroll — centered in scrolled mode
-    if (_fol.renderer) {
-      try {
-        if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
-          _fol.renderer.scrollToAnchorCentered(range);
-        } else {
-          _fol.renderer.scrollToAnchor(range, true);
-        }
-      } catch {}
-    }
+    // FIX-TTS07: scroll via shared helper
+    _scrollToRange(range);
   }
 
   function clearTtsHighlights() {
     // FIX-TTS05: only clear CSS highlights — no overlayer for TTS
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
+  }
+
+  // FIX-TTS07: Scroll the paginator so the given range is visible and centered.
+  // Called on every word boundary and at the start of each new block to keep
+  // the narrated text locked in the middle of the viewport.
+  function _scrollToRange(range) {
+    if (!range || !_fol.renderer) return;
+    try {
+      if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
+        _fol.renderer.scrollToAnchorCentered(range);
+      } else if (typeof _fol.renderer.scrollToAnchor === 'function') {
+        _fol.renderer.scrollToAnchor(range, true);
+      }
+    } catch {}
   }
 
   // ── Queue Generation (Thorium-style) ───────────────────────────
@@ -485,6 +491,9 @@
             highlightSentence(blockRange);
           } catch {}
         }
+        // FIX-TTS07: Scroll to the start of the new block immediately so the
+        // reader viewport tracks the narrated text before the first word boundary fires.
+        _scrollToRange(firstRange.cloneRange());
       }
     }
 
@@ -564,13 +573,19 @@
     }
 
     // FIX-TTS05: Map charIndex to nearest mark → highlight via CSS Highlight API
+    // FIX-TTS07: Also scroll to keep highlighted word visible and centered
     var item = _queue.items[_queue.index];
     if (item && item.marks && item.marks.length && item.ranges) {
       var markName = findNearestMark(item.marks, charIndex);
       if (markName) {
         var range = item.ranges.get(markName);
         if (range) {
-          try { highlightWord(range.cloneRange()); } catch {}
+          try {
+            var cloned = range.cloneRange();
+            highlightWord(cloned);
+            // FIX-TTS07: scroll to tracked word — keep narrated text visible/centered
+            _scrollToRange(cloned);
+          } catch {}
         }
       }
     }
