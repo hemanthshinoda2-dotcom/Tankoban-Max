@@ -300,14 +300,15 @@
     syncPlayPauseIcon('idle');
 
     // Open the book in the reader (books-reader-opened event will fire when ready)
+    // LISTEN_P7: use openBookInReader to bypass _listenMode routing and avoid infinite loop
     var booksApp = window.booksApp;
-    if (!booksApp || typeof booksApp.openBook !== 'function') {
-      try { console.warn('[listen-player] booksApp.openBook not available'); } catch {}
+    if (!booksApp || typeof booksApp.openBookInReader !== 'function') {
+      try { console.warn('[listen-player] booksApp.openBookInReader not available'); } catch {}
       return;
     }
 
-    booksApp.openBook(book).catch(function (e) {
-      try { console.error('[listen-player] openBook failed:', e); } catch {}
+    booksApp.openBookInReader(book).catch(function (e) {
+      try { console.error('[listen-player] openBookInReader failed:', e); } catch {}
       _open = false;
     });
   }

@@ -2156,6 +2156,48 @@
     }
   }
 
+  // LISTEN_P7: open reader directly, bypassing _listenMode routing (used by listening_player.js)
+  async function openBookInReader(input) {
+    const b = resolveBook(input);
+    if (!b) return false;
+    const ctl = getReaderController();
+    if (!ctl) {
+      toast('Books reader is unavailable');
+      return false;
+    }
+
+    const show = findPreferredShowForBook(b);
+    if (show) {
+      state.ui.selectedRootId = show.rootId || state.ui.selectedRootId;
+      state.ui.booksSubView = 'show';
+      state.ui.selectedShowId = String(show.id || '');
+      state.ui.selectedBookId = String(b.id || '');
+      state.ui.showFolderRel = normalizeRel(deriveBookFolderRelInShow(b, show));
+    } else if (b.rootId) {
+      state.ui.selectedRootId = String(b.rootId);
+      state.ui.booksSubView = 'home';
+      state.ui.selectedShowId = null;
+      state.ui.selectedBookId = null;
+      state.ui.showFolderRel = '';
+    }
+
+    ensureSelectionTreeExpanded();
+    scheduleSaveUi();
+    state.viewBeforeReader = (state.ui.booksSubView === 'show') ? 'show' : 'home';
+
+    try {
+      await ctl.open(b);
+      state.readerOpen = true;
+      renderViews();
+      return true;
+    } catch {
+      state.readerOpen = false;
+      state.ui.booksSubView = (state.viewBeforeReader === 'show' && state.ui.selectedShowId) ? 'show' : 'home';
+      renderAll();
+      return false;
+    }
+  }
+
   async function back() {
     const ctl = getReaderController();
     if (ctl && ctl.isOpen && ctl.isOpen()) {
@@ -2556,6 +2598,8 @@
     back: () => back(),
     resetToHome,
     openBook: (input) => openBook(input),
+    // LISTEN_P7: bypass _listenMode routing — used by listening_player.js
+    openBookInReader: (input) => openBookInReader(input),
     renderGlobalSearchResults: () => renderGlobalSearchResults(),
     hideGlobalSearchResults: () => hideGlobalSearchResults(),
     // LISTEN_P2: data accessors for listening_shell.js
