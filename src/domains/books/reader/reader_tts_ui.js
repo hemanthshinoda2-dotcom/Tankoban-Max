@@ -43,7 +43,6 @@
     }
     var els = RS.ensureEls();
     var state = RS.state;
-    state.ttsFallbackNotified = false;
 
     await tts.init({
       getHost: function () { return els.host; },
@@ -75,10 +74,13 @@
             clearTimeout(timeout);
             try { foliateView.removeEventListener('relocate', handler); } catch {}
             RS.saveProgress();
-            // Re-init foliate TTS for the new section's document
+            // FIX-TTS05: Re-init foliate TTS + regenerate queue for new section
             var tts = window.booksTTS;
             if (tts && typeof tts._reinitFoliateTTS === 'function') {
               tts._reinitFoliateTTS().then(function () {
+                if (tts && typeof tts._regenerateQueue === 'function') {
+                  tts._regenerateQueue();
+                }
                 resolve(true);
               }).catch(function () { resolve(false); });
             } else {
@@ -164,7 +166,6 @@
     var isActive = status === 'playing' || status === 'paused' || status === 'section_transition';
     var tts = window.booksTTS;
     var info = infoMaybe || (tts && typeof tts.getSnippet === 'function' ? tts.getSnippet() : null);
-    var fallbackInfo = (tts && typeof tts.getFallbackInfo === 'function') ? tts.getFallbackInfo() : null;
     var usableMap = (tts && typeof tts.getEngineUsableMap === 'function') ? tts.getEngineUsableMap() : {};
 
     if (!ttsAllowed()) {
@@ -203,29 +204,13 @@
       els.ttsSpeed.textContent = rate.toFixed(1) + '\u00d7';
     }
 
-    // Engine name and fallback state
+    // FIX-TTS05: Engine name — Edge only, no fallback state
     if (els.ttsEngine) {
       var eid = tts ? tts.getEngineId() : '';
-      var impliedFallback = !!(eid === 'webspeech' && usableMap && usableMap.edge === false);
-      var fallback = !!((fallbackInfo && fallbackInfo.used && eid === 'webspeech') || impliedFallback);
-      var label = eid === 'edge'
-        ? 'Edge Neural'
-        : eid === 'webspeech'
-          ? (fallback ? 'System Voice (Fallback)' : 'System Voice')
-          : '';
+      var label = eid === 'edge' ? 'Edge Neural' : '';
       els.ttsEngine.textContent = label;
       els.ttsEngine.title = eid ? ('TTS engine: ' + eid) : '';
-      els.ttsEngine.classList.toggle('ttsFallback', fallback);
-      if (fallback) {
-        var why = (fallbackInfo && fallbackInfo.reason && (fallbackInfo.reason.error || fallbackInfo.reason.reason))
-          || (info && info.lastDiag && (info.lastDiag.code || info.lastDiag.detail))
-          || 'edge_unavailable';
-        els.ttsEngine.title = 'Neural TTS unavailable; using system voice (' + String(why) + ')';
-        if (!state.ttsFallbackNotified) {
-          state.ttsFallbackNotified = true;
-          RS.setStatus('Neural TTS unavailable, using system voice');
-        }
-      }
+      els.ttsEngine.classList.remove('ttsFallback');
     }
 
     // Diagnostics refresh
@@ -490,7 +475,6 @@
     if (!tts) { els.ttsDiagBody.textContent = 'TTS not initialized'; return; }
 
     var info = tts.getSnippet();
-    var fallbackInfo = (typeof tts.getFallbackInfo === 'function') ? tts.getFallbackInfo() : null;
     var usableMap = (typeof tts.getEngineUsableMap === 'function') ? tts.getEngineUsableMap() : {};
     var lines = [
       'Engine: ' + (info.engineId || 'none'),
@@ -502,15 +486,8 @@
       'Pitch: ' + (info.pitch || 1.0).toFixed(2),
       'Preset: ' + (info.preset || 'custom'),
       'Voice: ' + (state.settings.ttsVoice || '(default)'),
-      'Segment: ' + (info.segIdx >= 0 ? (info.segIdx + 1) + '/' + info.segCount : '-'),
-      'Block: ' + (info.blockIdx >= 0 ? (info.blockIdx + 1) + '/' + info.blockCount : '-'),
+      'Block: ' + (info.blockIdx >= 0 ? (info.blockIdx + 1) + '/' + (info.blockCount || '?') : '-'),
     ];
-    if (fallbackInfo && fallbackInfo.used) {
-      lines.push('Fallback: ' + String(fallbackInfo.from || '?') + ' -> ' + String(fallbackInfo.to || '?'));
-      lines.push('Fallback reason: ' + JSON.stringify(fallbackInfo.reason || {}));
-    } else {
-      lines.push('Fallback: none');
-    }
     if (info.lastDiag) {
       lines.push('Last diag: ' + String(info.lastDiag.code || '') + ' ' + String(info.lastDiag.detail || '').trim());
     }

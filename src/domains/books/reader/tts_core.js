@@ -1,16 +1,14 @@
-// Books reader TTS core: state machine, foliate-js TTS integration, engine fallback
-// TTS_REWRITE: uses foliate-js TTS class for text extraction, Overlayer for highlighting,
-// renderer.scrollToAnchor for paginator-aware view tracking.
+// FIX-TTS05: TTS Pipeline Overhaul — Thorium queue model + CSS Highlight API + cancel flag
+// Replaces ad-hoc iterator approach with deterministic pre-generated queue,
+// CSS Custom Highlight API for BOTH sentence and word (no overlayer for TTS),
+// and explicit cancel semantics (Thorium r2_cancel pattern).
+// Edge-only: webspeech fallback removed entirely.
 (function () {
   'use strict';
 
   var IDLE = 'idle';
   var PLAYING = 'playing';
   var PAUSED = 'paused';
-  var SECTION_TRANSITION = 'section_transition'; // FIX-TTS05: between sections
-
-  // FIX-R08: deterministic priority order.
-  var ENGINE_PRIORITY = ['edge', 'webspeech'];
 
   // TTS-F05
   var TTS_PRESETS = {
@@ -39,57 +37,46 @@
 
     lastError: null,
     lastDiag: null,
-    fallbackInfo: {
-      used: false,
-      from: '',
-      to: '',
-      reason: null,
-      at: 0,
-    },
     selectionReason: '',
 
     onStateChange: null,
     onProgress: null,
     onNeedAdvance: null,
-    onSectionEnd: null,    // FIX-TTS05: fired when section playback exhausted
-    onSectionStart: null,  // FIX-TTS05: fired when new section begins
-    onDocumentEnd: null,   // FIX-TTS05: fired when entire document is done
     hostFn: null,
     viewEngineFn: null,
     format: '',
     ttsHlStyle: 'highlight',
     ttsHlColor: 'grey',
-    ttsHlGranularity: 'sentence', // FIX-TTS05: 'sentence' (default) or 'word'
-    ttsWordHlStyle: 'highlight',  // FIX-TTS05: independent word highlight style
-    ttsWordHlColor: 'blue',       // FIX-TTS05: independent word highlight color
 
     _pauseStartedAt: 0,
-    _pauseNeedsRespeak: false,
+    // FIX-TTS05: Thorium-style cancel flag — set BEFORE engine.cancel(), checked in all callbacks
+    _cancelFlag: false,
 
     initDone: false,
     initPromise: null,
   };
 
-  // TTS_REWRITE: foliate-js bridge state
-  var _fol = {
-    tts: null,          // foliate TTS class instance (per section)
-    overlayer: null,     // current section's Overlayer ref
-    renderer: null,      // foliate renderer ref
-    marks: [],           // current block's [{name, offset}] from parseSSML
-    blockRange: null,    // current block's DOM Range (for sentence highlight)
-    _lastBlockEl: null,  // last block-level element highlighted (for sentence tracking)
-    _preloadTimer: null, // setTimeout id for delayed queue fill
-    _preloadedSSML: null,// legacy compat — kept for backward compat during transition
-    _preloadActive: false,// true after iterator advance — setMark unreliable for current block
-    _savedRanges: null,  // FIX-TTS04: snapshot of current block's mark→Range map before preload advance
-    _queue: [],          // FIX-TTS05: multi-chunk lookahead [{ssml, plainText, marks, savedRanges}]
-    _queueFilling: false,// FIX-TTS05: true while fill is in progress
+  // FIX-TTS05: Thorium-style pre-generated text queue
+  var _queue = {
+    items: [],       // Array of { text, ssml, range, blockRange, parentEl, lang, marks }
+    index: -1,       // Current playback position
+    length: 0,       // items.length
   };
 
-  var LOOKAHEAD_DEPTH = 4; // FIX-TTS05: blocks to pre-synthesize ahead (matches Readest)
+  // FIX-TTS05: foliate-js bridge state (simplified — no preload timer, no saved ranges)
+  var _fol = {
+    tts: null,          // foliate TTS class instance (per section)
+    renderer: null,      // foliate renderer ref
+  };
 
-  // FIX-TTS04: CSS Custom Highlight API state for word-level highlighting
-  var _cssHl = { word: null, doc: null, styleEl: null };
+  // FIX-TTS05: CSS Custom Highlight API for BOTH word and sentence highlighting
+  // No SVG overlayer for TTS — eliminates blue selection flash entirely.
+  var _cssHl = {
+    word: null,       // Highlight object for current word
+    sentence: null,   // Highlight object for current sentence/block
+    doc: null,        // iframe document ref
+    styleEl: null,    // injected <style> in iframe
+  };
 
   // TTS_REWRITE: TXT legacy state (only used for format === 'txt')
   var _txt = {
@@ -99,10 +86,7 @@
     activeEl: null,
   };
 
-  // GAP5: TTS highlight color presets
-  // Use solid colors — Overlayer.highlight applies its own 0.3 opacity via CSS variable.
-  // Using rgba here would double-fade (alpha * 0.3 = nearly invisible).
-  // FIX-TTS03: softened palette — word is a brighter shade over sentence for karaoke effect
+  // FIX-TTS05: highlight color presets — used for CSS Highlight API only
   var TTS_HL_COLORS = {
     grey:   { sentence: '#8c8c9b', word: '#9a9aa8',  line: '#9a9aa8' },
     blue:   { sentence: '#64a0ff', word: '#7ab0ff',  line: '#5a96ff' },
@@ -168,9 +152,9 @@
       wordStart: state.wordStart,
       wordEnd: state.wordEnd,
       blockIdx: state.blockIdx,
-      blockCount: 0,
+      blockCount: _queue.length,
       segIdx: state.format === 'txt' ? _txt.segIdx : state.blockIdx,
-      segCount: state.format === 'txt' ? _txt.segments.length : 0,
+      segCount: state.format === 'txt' ? _txt.segments.length : _queue.length,
       rate: state.rate,
       pitch: state.pitch,
       preset: state.preset,
@@ -178,13 +162,10 @@
       selectionReason: state.selectionReason,
       lastError: state.lastError,
       lastDiag: state.lastDiag,
-      fallbackInfo: state.fallbackInfo,
     };
   }
 
   // ── SSML Parser ──────────────────────────────────────────────
-  // Strips XML tags from foliate-js SSML output, records <mark name="N"/> positions
-  // as character offsets into the resulting plain text.
 
   function parseSSML(ssmlString) {
     var plain = '';
@@ -196,18 +177,15 @@
     var len = s.length;
     while (i < len) {
       if (s[i] === '<') {
-        // Check for <mark name="..." or <mark name='...'
         var tagEnd = s.indexOf('>', i);
         if (tagEnd < 0) break;
         var tagContent = s.substring(i + 1, tagEnd);
-        // Detect <mark .../>  or <mark ...>
         var markMatch = tagContent.match(/^mark\s+name\s*=\s*["']([^"']*)["']/i);
         if (markMatch) {
           marks.push({ name: markMatch[1], offset: plain.length });
         }
         i = tagEnd + 1;
       } else if (s[i] === '&') {
-        // Basic XML entity decode
         var semi = s.indexOf(';', i);
         if (semi > i && semi - i < 10) {
           var ent = s.substring(i + 1, semi);
@@ -230,58 +208,6 @@
     return { plainText: plain, marks: marks };
   }
 
-  // FIX-TTS05: split long blocks into sentence-sized chunks for faster start latency.
-  // Inspired by Thorium's splitSentences flag and Readest's per-sentence synthesis.
-  // Short blocks (<=200 chars) are returned as-is. Sub-chunks share the parent block's
-  // savedRanges so sentence-level Overlayer highlight still covers the whole paragraph.
-  function _splitBlock(ssml, plainText, marks) {
-    var single = [{ ssml: ssml, plainText: plainText, marks: marks }];
-    if (!plainText || plainText.length <= 200) return single;
-
-    // Find sentence boundaries: period/exclamation/question followed by whitespace
-    var boundaries = [];
-    var re = /([.!?])\s+/g;
-    var match;
-    while ((match = re.exec(plainText)) !== null) {
-      // Position right after the whitespace = start of next sentence
-      var splitPos = match.index + match[0].length;
-      // Ensure minimum chunk size of 30 chars from previous boundary
-      var prevPos = boundaries.length > 0 ? boundaries[boundaries.length - 1] : 0;
-      if (splitPos - prevPos >= 30 && plainText.length - splitPos >= 30) {
-        boundaries.push(splitPos);
-      }
-    }
-
-    if (boundaries.length === 0) return single;
-
-    // Build sub-chunks
-    var chunks = [];
-    var starts = [0].concat(boundaries);
-    for (var i = 0; i < starts.length; i++) {
-      var chunkStart = starts[i];
-      var chunkEnd = (i + 1 < starts.length) ? starts[i + 1] : plainText.length;
-      var chunkText = plainText.substring(chunkStart, chunkEnd);
-
-      // Filter and adjust marks for this chunk
-      var chunkMarks = [];
-      for (var m = 0; m < marks.length; m++) {
-        if (marks[m].offset >= chunkStart && marks[m].offset < chunkEnd) {
-          chunkMarks.push({ name: marks[m].name, offset: marks[m].offset - chunkStart });
-        }
-      }
-
-      chunks.push({
-        ssml: null, // sub-chunks use plainText directly, not SSML
-        plainText: chunkText,
-        marks: chunkMarks,
-        isSubChunk: true,
-      });
-    }
-
-    return chunks.length > 0 ? chunks : single;
-  }
-
-  // Find the nearest mark whose offset <= charIndex
   function findNearestMark(marks, charIndex) {
     if (!marks || !marks.length) return null;
     var best = null;
@@ -292,14 +218,13 @@
         break;
       }
     }
-    // FIX-TTS04: if charIndex is before first mark, use first mark
     if (best === null && marks.length > 0) {
       best = marks[0].name;
     }
     return best;
   }
 
-  // ── Block parent detection (for sentence-level highlight) ────
+  // ── Block parent detection ───────────────────────────────────
 
   var _blockTags = new Set([
     'article', 'aside', 'blockquote', 'div', 'dl', 'dt', 'dd',
@@ -316,39 +241,17 @@
     return null;
   }
 
-  // ── Overlayer Highlighting ───────────────────────────────────
+  // ── CSS Custom Highlight API (sentence + word) ─────────────────
 
-  function _getOverlayerClass() {
-    try {
-      if (_fol.overlayer && _fol.overlayer.constructor) {
-        return _fol.overlayer.constructor;
-      }
-    } catch {}
-    return null;
+  function _hexToRgba(hex, alpha) {
+    var h = String(hex || '#999').replace('#', '');
+    var r = parseInt(h.substring(0, 2), 16) || 0;
+    var g = parseInt(h.substring(2, 4), 16) || 0;
+    var b = parseInt(h.substring(4, 6), 16) || 0;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
   }
 
-  // FIX-TTS04: sentence-only draw functions — word highlighting moved to CSS Highlight API
-  function getSentenceDrawFn() {
-    var style = state.ttsHlStyle || 'highlight';
-    var Overlayer = _getOverlayerClass();
-    if (!Overlayer) return null;
-    if (style === 'underline') return Overlayer.underline;
-    if (style === 'squiggly') return Overlayer.squiggly;
-    if (style === 'strikethrough') return Overlayer.strikethrough;
-    return Overlayer.highlight;
-  }
-
-  function getSentenceDrawOpts(colors) {
-    var style = state.ttsHlStyle || 'highlight';
-    if (style === 'highlight') return { color: colors.sentence };
-    if (style === 'underline') return { color: colors.line, width: 2 };
-    if (style === 'squiggly') return { color: colors.line, width: 2 };
-    if (style === 'strikethrough') return { color: colors.line, width: 2 };
-    return { color: colors.sentence };
-  }
-
-  // FIX-TTS04: CSS Custom Highlight API for word-level highlighting
-  // Uses native browser Highlight objects — zero DOM mutation, GPU-composited.
+  // FIX-TTS05: Initialize BOTH sentence and word CSS highlights in the EPUB iframe
   function _ensureCssHighlights(iframeDoc) {
     if (!iframeDoc) return false;
     try {
@@ -356,21 +259,24 @@
       if (!win.CSS || !win.CSS.highlights) return false;
 
       // Already initialized for this document?
-      if (_cssHl.doc === iframeDoc && _cssHl.word) return true;
+      if (_cssHl.doc === iframeDoc && _cssHl.word && _cssHl.sentence) return true;
 
       // Clean up previous highlights
       _clearCssHighlights();
 
       _cssHl.doc = iframeDoc;
       _cssHl.word = new win.Highlight();
+      _cssHl.sentence = new win.Highlight();
       win.CSS.highlights.set('tts-word', _cssHl.word);
+      win.CSS.highlights.set('tts-sentence', _cssHl.sentence);
 
-      // Inject ::highlight(tts-word) stylesheet into the iframe
-      // FIX-TTS05: use independent word highlight color
-      var colors = TTS_HL_COLORS[state.ttsWordHlColor] || TTS_HL_COLORS.blue;
+      // Inject ::highlight styles into the iframe
+      var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
       var style = iframeDoc.createElement('style');
       style.setAttribute('data-tts-hl', '1');
-      style.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
+      style.textContent =
+        '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }\n' +
+        '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
       iframeDoc.head.appendChild(style);
       _cssHl.styleEl = style;
 
@@ -381,87 +287,73 @@
 
   function _clearCssHighlights() {
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
+    if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
     if (_cssHl.styleEl) { try { _cssHl.styleEl.remove(); } catch {} }
     if (_cssHl.doc) {
       try {
         var win = _cssHl.doc.defaultView;
         if (win && win.CSS && win.CSS.highlights) {
           win.CSS.highlights.delete('tts-word');
+          win.CSS.highlights.delete('tts-sentence');
         }
       } catch {}
     }
     _cssHl.word = null;
+    _cssHl.sentence = null;
     _cssHl.doc = null;
     _cssHl.styleEl = null;
   }
 
-  function _updateCssHighlightColor() {
+  function _updateCssHighlightColors() {
     if (!_cssHl.styleEl || !_cssHl.doc) return;
-    // FIX-TTS05: use independent word highlight color
-    var colors = TTS_HL_COLORS[state.ttsWordHlColor] || TTS_HL_COLORS.blue;
+    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
     try {
-      _cssHl.styleEl.textContent = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.35) + '; }';
+      _cssHl.styleEl.textContent =
+        '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }\n' +
+        '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
     } catch {}
   }
 
-  function _hexToRgba(hex, alpha) {
-    var h = String(hex || '#999').replace('#', '');
-    var r = parseInt(h.substring(0, 2), 16) || 0;
-    var g = parseInt(h.substring(2, 4), 16) || 0;
-    var b = parseInt(h.substring(4, 6), 16) || 0;
-    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
-  }
-
-  function clearTtsOverlays() {
-    if (_fol.overlayer) {
-      try { _fol.overlayer.remove('tts-word'); } catch {}
-      try { _fol.overlayer.remove('tts-sentence'); } catch {}
-    }
-    // FIX-TTS04: clear CSS Highlight API word highlight
-    if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
-    _fol._lastBlockEl = null;
-  }
-
-  // Highlight callback passed to view.initTTS() — called by tts.setMark(name)
-  function highlightRange(range) {
+  // FIX-TTS05: Highlight the sentence (block range) via CSS Highlight API
+  function highlightSentence(range) {
     if (!range) return;
-    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
-
-    // FIX-TTS04: detect stale _lastBlockEl (disconnected from DOM after section nav)
-    if (_fol._lastBlockEl && !_fol._lastBlockEl.isConnected) {
-      _fol._lastBlockEl = null;
-    }
-
-    // Sentence-level highlight via overlayer: detect parent block element,
-    // highlight it only when the block changes (avoids redundant redraws)
-    if (_fol.overlayer) {
-      try {
-        var blockEl = _findBlockParent(range.startContainer);
-        if (blockEl && blockEl !== _fol._lastBlockEl) {
-          _fol._lastBlockEl = blockEl;
-          try { _fol.overlayer.remove('tts-sentence'); } catch {}
-          var sentenceDrawFn = getSentenceDrawFn();
-          if (sentenceDrawFn) {
-            var doc = blockEl.ownerDocument || document;
-            var blockRange = doc.createRange();
-            blockRange.selectNodeContents(blockEl);
-            _fol.blockRange = blockRange;
-            _fol.overlayer.add('tts-sentence', blockRange, sentenceDrawFn, getSentenceDrawOpts(colors));
-          }
-        }
-      } catch {}
-    }
-
-    // FIX-TTS04: Word-level highlight via CSS Custom Highlight API
     try {
-      var wordDoc = range.startContainer.ownerDocument || document;
-      if (_ensureCssHighlights(wordDoc) && _cssHl.word) {
+      var doc = range.startContainer.ownerDocument || document;
+      if (_ensureCssHighlights(doc) && _cssHl.sentence) {
+        _cssHl.sentence.clear();
+        _cssHl.sentence.add(range);
+      }
+    } catch {}
+  }
+
+  // FIX-TTS05: Highlight the current word via CSS Highlight API
+  function highlightWord(range) {
+    if (!range) return;
+    try {
+      var doc = range.startContainer.ownerDocument || document;
+      if (_ensureCssHighlights(doc) && _cssHl.word) {
         _cssHl.word.clear();
         _cssHl.word.add(range);
       }
     } catch {}
+  }
 
-    // FIX-TTS03: Paginator-aware scroll — centered in scrolled mode
+  // FIX-TTS05: Highlight callback passed to view.initTTS() — handles both sentence and word
+  function highlightRange(range) {
+    if (!range) return;
+    // Word highlight
+    highlightWord(range);
+    // Sentence highlight: detect parent block, highlight when block changes
+    var blockEl = _findBlockParent(range.startContainer);
+    if (blockEl) {
+      try {
+        var doc = blockEl.ownerDocument || document;
+        var blockRange = doc.createRange();
+        blockRange.selectNodeContents(blockEl);
+        highlightSentence(blockRange);
+      } catch {}
+    }
+    // Paginator-aware scroll — centered in scrolled mode
     if (_fol.renderer) {
       try {
         if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
@@ -473,37 +365,49 @@
     }
   }
 
-  // Highlight the entire block range (sentence-level) — used by _redrawActiveOverlays
-  function highlightBlockRange(blockRange) {
-    if (_fol.overlayer) {
-      try { _fol.overlayer.remove('tts-sentence'); } catch {}
-    }
-    // FIX-TTS04: clear word highlight too
+  function clearTtsHighlights() {
+    // FIX-TTS05: only clear CSS highlights — no overlayer for TTS
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
-    _fol._lastBlockEl = null;
-    if (!blockRange || !_fol.overlayer) return;
-    _fol.blockRange = blockRange;
-    var drawFn = getSentenceDrawFn();
-    if (!drawFn) return;
-    var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
-    try {
-      _fol.overlayer.add('tts-sentence', blockRange, drawFn, getSentenceDrawOpts(colors));
-    } catch {}
-    // FIX-TTS03: scroll centered in scrolled mode
-    if (_fol.renderer) {
-      try {
-        if (typeof _fol.renderer.scrollToAnchorCentered === 'function') {
-          _fol.renderer.scrollToAnchorCentered(blockRange);
-        } else {
-          _fol.renderer.scrollToAnchor(blockRange, true);
-        }
-      } catch {}
+    if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
+  }
+
+  // ── Queue Generation (Thorium-style) ───────────────────────────
+
+  // FIX-TTS05: Build the entire TTS queue for the current section upfront.
+  // Each item = one foliate block with its SSML, plain text, marks, and ranges.
+  // This replaces the lazy ListIterator approach with a deterministic, indexable array.
+  function _generateQueue() {
+    _queue.items = [];
+    _queue.index = -1;
+    _queue.length = 0;
+
+    if (!_fol.tts) return;
+
+    // Walk through all blocks using foliate's existing next() mechanism.
+    // First, start from the beginning.
+    var ssml = _fol.tts.start();
+    var idx = 0;
+    while (ssml) {
+      var parsed = parseSSML(ssml);
+      // Snapshot the mark→Range map for this block
+      var ranges = null;
+      if (typeof _fol.tts.snapshotRanges === 'function') {
+        ranges = _fol.tts.snapshotRanges();
+      }
+      _queue.items.push({
+        ssml: ssml,
+        text: parsed.plainText,
+        marks: parsed.marks,
+        ranges: ranges, // Map of mark name → Range for word highlighting
+      });
+      idx++;
+      ssml = _fol.tts.next();
     }
+    _queue.length = _queue.items.length;
   }
 
   // ── foliate-js TTS init ──────────────────────────────────────
 
-  // TTS_REWRITE: get the foliate view engine instance via callback from reader_tts_ui
   function _getViewEngine() {
     return (typeof state.viewEngineFn === 'function') ? state.viewEngineFn() : null;
   }
@@ -524,13 +428,6 @@
 
     _fol.tts = view.tts || null;
     _fol.renderer = renderer;
-    // Get overlayer from current section
-    try {
-      var contents = renderer.getContents();
-      _fol.overlayer = (contents && contents[0]) ? contents[0].overlayer : null;
-    } catch {
-      _fol.overlayer = null;
-    }
     return !!_fol.tts;
   }
 
@@ -540,122 +437,79 @@
     var view = typeof eng.getFoliateView === 'function' ? eng.getFoliateView() : null;
     if (!view) return false;
 
-    // Force re-creation by clearing cached instance
     view.tts = null;
     return _initFoliateTTS();
   }
 
-  // ── Block Playback (EPUB via foliate-js) ─────────────────────
+  // ── Block Playback (EPUB via queue) ─────────────────────────────
 
-  function speakCurrentBlock(ssml) {
-    if (!ssml) {
+  // FIX-TTS05: Play the queue item at _queue.index
+  function _speakQueueItem(queueIdx) {
+    if (queueIdx < 0 || queueIdx >= _queue.length) {
       handleAllBlocksDone();
       return;
     }
     if (!state.engine) { stop(); return; }
 
-    // FIX-TTS04: reset sentence tracking for new block — forces redraw
-    _fol._lastBlockEl = null;
-
-    var parsed = parseSSML(ssml);
-    _fol.marks = parsed.marks;
-    state.currentText = parsed.plainText;
-    state.wordStart = -1;
-    state.wordEnd = -1;
-    state.blockIdx++;
-
-    // The foliate TTS class already called highlightRange for the block
-    // when we called start()/next()/prev() if paused=true was passed.
-    // For playing, we highlight the block range ourselves.
-    // tts.start()/next() return the SSML but the block range is held internally.
-    // We rely on setMark() for word-level and scrollToAnchor for view tracking.
-
-    fireProgress();
-    state.engine.speak(parsed.plainText);
-    _scheduleQueueFill(); // FIX-TTS05: fill lookahead queue instead of single preload
-  }
-
-  // FIX-TTS05: multi-chunk lookahead queue (replaces single-preload system)
-  function _clearQueue() {
-    if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
-    _fol._queue = [];
-    _fol._queueFilling = false;
-    _fol._preloadedSSML = null;
-    _fol._preloadActive = false;
-    _fol._savedRanges = null;
-  }
-
-  function _fillQueue() {
-    if (_fol._queueFilling) return;
-    if (!state.engine || typeof state.engine.preload !== 'function') return;
-    if (!_fol.tts || state.format === 'txt') return;
-    if (state.status !== PLAYING) return;
-
-    _fol._queueFilling = true;
-
-    try {
-      while (_fol._queue.length < LOOKAHEAD_DEPTH) {
-        // FIX-TTS04/05: snapshot ranges BEFORE advancing iterator
-        var savedRanges = null;
-        if (typeof _fol.tts.snapshotRanges === 'function') {
-          savedRanges = _fol.tts.snapshotRanges();
-        }
-
-        var nextSSML = _fol.tts.next();
-        if (!nextSSML) break; // end of section
-
-        var parsed = parseSSML(nextSSML);
-
-        // FIX-TTS05: split long blocks into sentence-sized chunks
-        var subChunks = _splitBlock(nextSSML, parsed.plainText, parsed.marks);
-
-        for (var ci = 0; ci < subChunks.length; ci++) {
-          _fol._queue.push({
-            ssml: subChunks[ci].ssml || nextSSML,
-            plainText: subChunks[ci].plainText,
-            marks: subChunks[ci].marks,
-            savedRanges: savedRanges,
-            isSubChunk: subChunks.length > 1,
-          });
-          // Fire engine preload for each chunk (parallel synthesis like Readest)
-          if (subChunks[ci].plainText) {
-            try { state.engine.preload(subChunks[ci].plainText); } catch {}
-          }
-        }
+    var item = _queue.items[queueIdx];
+    if (!item || !item.text) {
+      // Skip empty blocks
+      _queue.index = queueIdx + 1;
+      if (_queue.index < _queue.length) {
+        _speakQueueItem(_queue.index);
+      } else {
+        handleAllBlocksDone();
       }
-    } catch {}
-
-    _fol._queueFilling = false;
-
-    // FIX-TTS05: update legacy compat pointers for handleBoundary
-    if (_fol._queue.length > 0) {
-      _fol._preloadActive = true;
-      _fol._savedRanges = _fol._queue[0].savedRanges;
-    }
-  }
-
-  function _scheduleQueueFill() {
-    if (_fol._preloadTimer) return;
-    if (!state.engine || !_fol.tts || state.format === 'txt') return;
-    if (_fol._queue.length >= LOOKAHEAD_DEPTH) return;
-
-    var textLen = (state.currentText || '').length;
-    if (textLen < 10) {
-      _fillQueue();
       return;
     }
-    // FIX-TTS04: start filling at ~40% through current block
-    var cps = Math.max(5, 15 * (state.rate || 1.0));
-    var delayMs = Math.max(50, (textLen / cps) * 400);
 
-    _fol._preloadTimer = setTimeout(function () {
-      _fol._preloadTimer = null;
-      if (state.status !== PLAYING) return;
-      _fillQueue();
-    }, delayMs);
+    _queue.index = queueIdx;
+    state.currentText = item.text;
+    state.wordStart = -1;
+    state.wordEnd = -1;
+    state.blockIdx = queueIdx;
+
+    // Highlight sentence for this block
+    if (item.ranges && item.ranges.size > 0) {
+      // Use the first mark's range to find the block parent for sentence highlight
+      var firstRange = item.ranges.values().next().value;
+      if (firstRange) {
+        var blockEl = _findBlockParent(firstRange.startContainer);
+        if (blockEl) {
+          try {
+            var doc = blockEl.ownerDocument || document;
+            var blockRange = doc.createRange();
+            blockRange.selectNodeContents(blockEl);
+            highlightSentence(blockRange);
+          } catch {}
+        }
+      }
+    }
+
+    fireProgress();
+
+    // FIX-TTS05: Pre-synthesize ahead (multi-chunk lookahead)
+    _preloadAhead(queueIdx + 1, 3);
+
+    state.engine.speak(item.text);
+  }
+
+  // FIX-TTS05: Multi-chunk lookahead — synthesize next N blocks in background
+  function _preloadAhead(startIdx, count) {
+    if (!state.engine || typeof state.engine.preload !== 'function') return;
+    for (var i = 0; i < count; i++) {
+      var idx = startIdx + i;
+      if (idx >= _queue.length) break;
+      var item = _queue.items[idx];
+      if (item && item.text) {
+        try { state.engine.preload(item.text); } catch {}
+      }
+    }
   }
 
   function handleBlockEnd() {
+    // FIX-TTS05: cancel flag check — first line of every callback
+    if (state._cancelFlag) return;
     if (state.status !== PLAYING) return;
 
     // TXT legacy path
@@ -664,102 +518,38 @@
       return;
     }
 
-    if (!_fol.tts) { stop(); return; }
-
-    // FIX-TTS05: cancel pending fill timer but keep already-queued results
-    if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
-
-    // FIX-TTS05: consume from multi-chunk lookahead queue
-    if (_fol._queue.length > 0) {
-      var entry = _fol._queue.shift();
-      // Update legacy compat pointers for boundary handling
-      _fol._preloadActive = (_fol._queue.length > 0);
-      _fol._savedRanges = entry.savedRanges;
-      // Speak the dequeued chunk (marks are already parsed)
-      _fol.marks = entry.marks;
-      state.currentText = entry.plainText;
-      state.wordStart = -1;
-      state.wordEnd = -1;
-      _fol._lastBlockEl = null;
-      state.blockIdx++;
-      fireProgress();
-      state.engine.speak(entry.plainText);
-      _scheduleQueueFill(); // refill queue to maintain depth
+    // Advance to next queue item
+    var nextIdx = _queue.index + 1;
+    if (nextIdx < _queue.length) {
+      _speakQueueItem(nextIdx);
     } else {
-      // Queue empty — try direct advance as fallback
-      var ssml = _fol.tts.next();
-      if (ssml) {
-        _fol._preloadActive = false;
-        _fol._savedRanges = null;
-        speakCurrentBlock(ssml);
-      } else {
-        handleAllBlocksDone();
-      }
+      handleAllBlocksDone();
     }
   }
 
   function handleAllBlocksDone() {
-    // FIX-TTS05: explicit section/document transition contract (inspired by Thorium's
-    // R2_EVENT_TTS_DOC_END pattern — fire lifecycle events so UI can react deterministically)
-    var info = { blockIdx: state.blockIdx, engineId: state.engineId };
-
-    // Fire section-end callback
-    if (typeof state.onSectionEnd === 'function') {
-      try { state.onSectionEnd(info); } catch {}
-    }
-
     if (typeof state.onNeedAdvance === 'function') {
-      // Enter transition state — prevents pause() during nav, matches Thorium's r2_cancel guard
-      state.status = SECTION_TRANSITION;
-      fire();
-      _clearQueue();
-
       state.onNeedAdvance().then(function (advanced) {
-        if (!advanced || (state.status !== SECTION_TRANSITION && state.status !== PLAYING)) {
-          // FIX-TTS05: 400ms delay before doc-end (like Thorium) to allow highlight cleanup
-          setTimeout(function () {
-            if (typeof state.onDocumentEnd === 'function') {
-              try { state.onDocumentEnd(info); } catch {}
-            }
-            stop();
-          }, 400);
-          return;
-        }
-        // After section advance, _reinitFoliateTTS is called by onNeedAdvance
-        // then we start from the new section's first block
+        if (!advanced || state.status !== PLAYING) { stop(); return; }
         if (!_fol.tts) { stop(); return; }
-        var ssml = _fol.tts.start();
-        if (ssml) {
-          state.blockIdx = -1; // reset, speakCurrentBlock will increment
-          if (typeof state.onSectionStart === 'function') {
-            try { state.onSectionStart(info); } catch {}
-          }
-          state.status = PLAYING;
-          fire();
-          speakCurrentBlock(ssml);
+        // FIX-TTS05: regenerate queue for new section
+        _generateQueue();
+        if (_queue.length > 0) {
+          _speakQueueItem(0);
         } else {
-          // Section had no content — treat as doc-end
-          if (typeof state.onDocumentEnd === 'function') {
-            try { state.onDocumentEnd(info); } catch {}
-          }
           stop();
         }
-      }).catch(function () {
-        if (typeof state.onDocumentEnd === 'function') {
-          try { state.onDocumentEnd(info); } catch {}
-        }
-        stop();
-      });
+      }).catch(function () { stop(); });
     } else {
-      if (typeof state.onDocumentEnd === 'function') {
-        try { state.onDocumentEnd(info); } catch {}
-      }
       stop();
     }
   }
 
-  function handleBoundary(charIndex, charLength, name, driftFallback) {
+  function handleBoundary(charIndex, charLength, name) {
+    // FIX-TTS05: cancel flag check — first line
+    if (state._cancelFlag) return;
     if (name !== 'word' || state.status !== PLAYING) return;
+
     state.wordStart = charIndex;
     state.wordEnd = charIndex + Math.max(charLength, 1);
     if (charLength === 0 && state.currentText) {
@@ -768,23 +558,14 @@
       if (m) state.wordEnd = charIndex + m[0].length;
     }
 
-    // FIX-TTS05: skip word-level highlighting when granularity is sentence-only
-    // or when engine reports chronic boundary drift for this block
-    var skipWordHl = (state.ttsHlGranularity !== 'word') || !!driftFallback;
-
-    // FIX-TTS04: Map charIndex to nearest foliate mark for highlighting.
-    // If preload has advanced the iterator, use saved ranges instead of setMark
-    // (which would look up in the NEW block's ranges and fail silently).
-    if (!skipWordHl && _fol.tts && _fol.marks.length) {
-      var markName = findNearestMark(_fol.marks, charIndex);
+    // FIX-TTS05: Map charIndex to nearest mark → highlight via CSS Highlight API
+    var item = _queue.items[_queue.index];
+    if (item && item.marks && item.marks.length && item.ranges) {
+      var markName = findNearestMark(item.marks, charIndex);
       if (markName) {
-        if (_fol._preloadActive && _fol._savedRanges) {
-          var savedRange = _fol._savedRanges.get(markName);
-          if (savedRange) {
-            try { highlightRange(savedRange.cloneRange()); } catch {}
-          }
-        } else {
-          try { _fol.tts.setMark(markName); } catch {}
+        var range = item.ranges.get(markName);
+        if (range) {
+          try { highlightWord(range.cloneRange()); } catch {}
         }
       }
     }
@@ -792,15 +573,17 @@
   }
 
   function handleError(err) {
+    // FIX-TTS05: cancel flag check
+    if (state._cancelFlag) return;
     state.lastError = normalizeErr(err, 'tts_error');
     stop();
   }
 
-  // ── Engine Management (preserved from original) ──────────────
+  // ── Engine Management ──────────────────────────────────────
 
   function bindEngine(engine) {
     engine.onEnd = handleBlockEnd;
-    engine.onError = handleErrorWithFallback;
+    engine.onError = handleError;
     engine.onBoundary = handleBoundary;
 
     if ('onDiag' in engine) {
@@ -838,79 +621,6 @@
     state.engineId = eid;
     bindEngine(inst);
     return true;
-  }
-
-  function promoteFallback(normalizedErr) {
-    if (state.fallbackInfo.used) return false;
-    var fromId = String(state.engineId || '');
-    if (!fromId || fromId === 'webspeech') return false;
-    if (!state.allEngines.webspeech || !isEngineUsable('webspeech')) return false;
-    if (!switchEngine('webspeech')) return false;
-
-    state.fallbackInfo = {
-      used: true,
-      from: fromId,
-      to: 'webspeech',
-      reason: normalizedErr,
-      at: Date.now(),
-    };
-    state.selectionReason = 'runtime_fallback';
-    state.lastError = {
-      error: 'edge_fallback_to_webspeech',
-      from: fromId,
-      to: 'webspeech',
-      cause: normalizedErr,
-    };
-
-    // Re-speak current block after fallback
-    if (state.status === PLAYING && state.currentText) {
-      state.engine.speak(state.currentText);
-    }
-    fire();
-    fireProgress();
-    return true;
-  }
-
-  function maybeMarkInitFallback(preferredId) {
-    if (state.fallbackInfo.used) return;
-    if (state.engineId !== 'webspeech') return;
-    var edgePresent = !!state.allEngines.edge;
-    var edgeUsable = !!state.engineUsable.edge;
-    var webUsable = !!state.engineUsable.webspeech;
-    if (!webUsable) return;
-    if (!edgePresent || edgeUsable) return;
-
-    var reason = {
-      error: 'edge_unavailable_init',
-      preferred: String(preferredId || ''),
-    };
-    if (state.lastDiag) {
-      if (state.lastDiag.code) reason.diagCode = String(state.lastDiag.code);
-      if (state.lastDiag.detail) reason.diagDetail = String(state.lastDiag.detail);
-    }
-
-    state.fallbackInfo = {
-      used: true,
-      from: 'edge',
-      to: 'webspeech',
-      reason: reason,
-      at: Date.now(),
-    };
-    state.selectionReason = 'init_fallback';
-    state.lastError = {
-      error: 'edge_fallback_to_webspeech',
-      from: 'edge',
-      to: 'webspeech',
-      cause: reason,
-    };
-  }
-
-  function handleErrorWithFallback(err) {
-    var normalized = normalizeErr(err, 'engine_error');
-    state.lastError = normalized;
-    if (!promoteFallback(normalized)) {
-      handleError(normalized);
-    }
   }
 
   async function probeEngine(eid, eng) {
@@ -956,11 +666,11 @@
       state.viewEngineFn = o.getViewEngine || null;
       state.format = String(o.format || '').toLowerCase();
       state.onNeedAdvance = o.onNeedAdvance || null;
-      state.fallbackInfo = { used: false, from: '', to: '', reason: null, at: 0 };
       state.lastError = null;
       state.lastDiag = null;
       state.selectionReason = '';
       state.initDone = false;
+      state._cancelFlag = false;
 
       var factories = window.booksTTSEngines || {};
       state.allEngines = {};
@@ -968,48 +678,30 @@
       state.engine = null;
       state.engineId = '';
 
-      for (var i = 0; i < ENGINE_PRIORITY.length; i++) {
-        var id = ENGINE_PRIORITY[i];
-        if (!factories[id]) continue;
+      // FIX-TTS05: Edge-only — no webspeech fallback
+      if (factories.edge) {
         try {
-          var inst = factories[id].create();
-          if (!inst) continue;
-          state.allEngines[id] = inst;
-          state.engineUsable[id] = false;
+          var inst = factories.edge.create();
+          if (inst) {
+            state.allEngines.edge = inst;
+            state.engineUsable.edge = false;
+          }
         } catch {}
       }
 
-      for (var j = 0; j < ENGINE_PRIORITY.length; j++) {
-        var eid = ENGINE_PRIORITY[j];
-        var eng = state.allEngines[eid];
-        if (!eng) continue;
-
-        state.engineUsable[eid] = !!(await probeEngine(eid, eng));
-
-        if (state.engineUsable[eid] && typeof eng.loadVoices === 'function') {
-          try { await eng.loadVoices({ maxAgeMs: 0 }); } catch {}
+      if (state.allEngines.edge) {
+        state.engineUsable.edge = !!(await probeEngine('edge', state.allEngines.edge));
+        if (state.engineUsable.edge && typeof state.allEngines.edge.loadVoices === 'function') {
+          try { await state.allEngines.edge.loadVoices({ maxAgeMs: 0 }); } catch {}
         }
       }
 
-      var preferredId = '';
-      if (o.preferEngine) preferredId = String(o.preferEngine || '');
-
-      var selected = false;
-      if (preferredId && state.allEngines[preferredId] && isEngineUsable(preferredId)) {
-        selected = switchEngine(preferredId);
+      // Select edge if usable
+      if (state.allEngines.edge && isEngineUsable('edge')) {
+        switchEngine('edge');
       }
-      if (!selected) {
-        for (var p = 0; p < ENGINE_PRIORITY.length; p++) {
-          var pid = ENGINE_PRIORITY[p];
-          if (state.allEngines[pid] && isEngineUsable(pid)) {
-            selected = switchEngine(pid);
-            if (selected) break;
-          }
-        }
-      }
-      maybeMarkInitFallback(preferredId);
 
-      // FIX-TTS04: pre-warm Edge TTS WebSocket for faster first playback
+      // FIX-TTS05: pre-warm Edge TTS WebSocket for faster first playback
       if (state.engineUsable.edge) {
         try {
           var ttsApi = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
@@ -1055,22 +747,24 @@
       return;
     }
 
+    // FIX-TTS05: Clear cancel flag
+    state._cancelFlag = false;
+
     // EPUB/PDF: initialize foliate-js TTS
     var ok = await _initFoliateTTS();
     if (!ok) {
-      // Retry up to 3 times (content may still be loading)
       var retries = 0;
       var tryInit = async function () {
         retries++;
         ok = await _initFoliateTTS();
         if (ok && _fol.tts) {
-          var ssml = _fol.tts.start();
-          if (ssml) {
-            state.blockIdx = -1;
+          // FIX-TTS05: generate queue and start from first item
+          _generateQueue();
+          if (_queue.length > 0) {
             state.status = PLAYING;
             acquireWakeLock();
             fire();
-            speakCurrentBlock(ssml);
+            _speakQueueItem(0);
           }
         } else if (retries < 3) {
           setTimeout(tryInit, 300 * retries);
@@ -1080,39 +774,28 @@
       return;
     }
 
-    var ssml = _fol.tts.start();
-    if (!ssml) return;
+    // FIX-TTS05: generate queue and start from first item
+    _generateQueue();
+    if (!_queue.length) return;
 
-    state.blockIdx = -1;
     state.status = PLAYING;
     acquireWakeLock();
     fire();
-    speakCurrentBlock(ssml);
+    _speakQueueItem(0);
   }
 
   function pause() {
-    // FIX-TTS05: can't pause during section transition (matches Thorium's r2_cancel guard)
-    if (!state.engine || (state.status !== PLAYING && state.status !== SECTION_TRANSITION)) return;
-    if (state.status === SECTION_TRANSITION) return;
+    if (!state.engine || state.status !== PLAYING) return;
     if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
     _lastToggleAt = Date.now();
-    _clearQueue();
+
+    // FIX-TTS05: Set cancel flag BEFORE engine.cancel() — Thorium r2_cancel pattern
+    // This prevents handleBoundary/handleBlockEnd from firing during the cancel transition
+    state._cancelFlag = true;
     state._pauseStartedAt = Date.now();
-    state._pauseNeedsRespeak = false;
     state.engine.pause();
-    // FIX-TTS02: Edge now uses HTMLAudioElement where pause() is synchronous and reliable.
-    // Only check for respeak need on webspeech (Chromium pause bug, engine may not support pause).
-    if (state.engineId === 'webspeech') {
-      var pauseWorked = false;
-      if (typeof state.engine.isPaused === 'function') {
-        pauseWorked = state.engine.isPaused();
-      }
-      if (!pauseWorked && typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
-        try { state.engine.cancel(); } catch {}
-        state._pauseNeedsRespeak = true;
-      }
-    }
     state.status = PAUSED;
+    // NOTE: highlights are NOT cleared on pause — they persist (Step 7)
     releaseWakeLock();
     fire();
   }
@@ -1122,32 +805,9 @@
     if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
     _lastToggleAt = Date.now();
 
-    // TTS_REWRITE: if pause had to force-cancel (engine didn't obey pause),
-    // or WebSpeech was paused >10s (Chromium bug), re-speak from current position.
-    var needsRespeak = !!state._pauseNeedsRespeak;
-    if (!needsRespeak && state.engineId === 'webspeech') {
-      var pauseDuration = Date.now() - (state._pauseStartedAt || 0);
-      needsRespeak = pauseDuration > 10000;
-    }
-
-    if (needsRespeak) {
-      try { state.engine.cancel(); } catch {}
-      state.status = PLAYING;
-      state._pauseStartedAt = 0;
-      state._pauseNeedsRespeak = false;
-      acquireWakeLock();
-      if (state.format !== 'txt' && _fol.tts) {
-        var ssml = _fol.tts.resume();
-        if (ssml) { speakCurrentBlock(ssml); }
-      } else if (state.currentText) {
-        state.engine.speak(state.currentText);
-      }
-      fire();
-      return;
-    }
-
+    // FIX-TTS05: Clear cancel flag on resume
+    state._cancelFlag = false;
     state._pauseStartedAt = 0;
-    state._pauseNeedsRespeak = false;
     state.engine.resume();
     state.status = PLAYING;
     acquireWakeLock();
@@ -1155,25 +815,26 @@
   }
 
   function stop() {
+    // FIX-TTS05: Set cancel flag before cancel
+    state._cancelFlag = true;
     if (state.engine) {
       try { state.engine.cancel(); } catch {}
     }
-    _clearQueue();
-    clearTtsOverlays();
+    // FIX-TTS05: Clear ALL highlights on stop (and only on stop)
+    clearTtsHighlights();
     // TXT cleanup
     if (_txt.activeEl) {
       try { _txt.activeEl.classList.remove('booksReaderTtsActive'); } catch {}
       _txt.activeEl = null;
     }
+    _queue.index = -1;
     state.blockIdx = -1;
     state.currentText = '';
     state.wordStart = -1;
     state.wordEnd = -1;
     state.status = IDLE;
     state._pauseStartedAt = 0;
-    state._pauseNeedsRespeak = false;
-    _fol.marks = [];
-    _fol.blockRange = null;
+    state._cancelFlag = false;
     _txt.segIdx = -1;
     releaseWakeLock();
     fire();
@@ -1190,26 +851,35 @@
       return;
     }
 
-    if (!_fol.tts) return;
-    _clearQueue();
+    if (!_queue.length) return;
+
+    // FIX-TTS05: cancel flag before engine cancel
+    state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
-    clearTtsOverlays();
 
-    var isPaused = (state.status === PAUSED);
-    var ssml = (delta > 0) ? _fol.tts.next(isPaused) : _fol.tts.prev(isPaused);
-    if (!ssml) return;
+    var targetIdx = _queue.index + delta;
+    targetIdx = Math.max(0, Math.min(_queue.length - 1, targetIdx));
 
-    if (isPaused) {
-      var parsed = parseSSML(ssml);
-      _fol.marks = parsed.marks;
-      state.currentText = parsed.plainText;
-      state.wordStart = -1;
-      state.wordEnd = -1;
-      state.blockIdx++;
-      fireProgress();
-      fire();
+    state._cancelFlag = false;
+
+    if (state.status === PAUSED) {
+      var item = _queue.items[targetIdx];
+      if (item) {
+        _queue.index = targetIdx;
+        state.currentText = item.text;
+        state.blockIdx = targetIdx;
+        state.wordStart = -1;
+        state.wordEnd = -1;
+        // Highlight sentence for new position
+        if (item.ranges && item.ranges.size > 0) {
+          var firstRange = item.ranges.values().next().value;
+          if (firstRange) highlightRange(firstRange.cloneRange());
+        }
+        fireProgress();
+        fire();
+      }
     } else {
-      speakCurrentBlock(ssml);
+      _speakQueueItem(targetIdx);
       fire();
     }
   }
@@ -1223,36 +893,33 @@
       return;
     }
 
-    if (!_fol.tts) return;
-    _clearQueue();
-    // Estimate how many blocks to skip (~150 chars per block, ~15 chars/s at 1.0x)
+    if (!_queue.length) return;
     var cps = 15 * (state.rate || 1.0);
     var deltaChars = Math.abs(deltaMs / 1000) * cps;
     var blocksToSkip = Math.max(1, Math.round(deltaChars / 150));
     var dir = deltaMs > 0 ? 1 : -1;
 
+    state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
-    clearTtsOverlays();
 
-    var isPaused = (state.status === PAUSED);
-    var ssml = null;
-    for (var i = 0; i < blocksToSkip; i++) {
-      var next = (dir > 0) ? _fol.tts.next(isPaused) : _fol.tts.prev(isPaused);
-      if (!next) break;
-      ssml = next;
-    }
-    if (!ssml) return;
+    var targetIdx = _queue.index + (blocksToSkip * dir);
+    targetIdx = Math.max(0, Math.min(_queue.length - 1, targetIdx));
 
-    if (isPaused) {
-      var parsed = parseSSML(ssml);
-      _fol.marks = parsed.marks;
-      state.currentText = parsed.plainText;
-      state.wordStart = -1;
-      state.wordEnd = -1;
-      fireProgress();
-      fire();
+    state._cancelFlag = false;
+
+    if (state.status === PAUSED) {
+      var item = _queue.items[targetIdx];
+      if (item) {
+        _queue.index = targetIdx;
+        state.currentText = item.text;
+        state.blockIdx = targetIdx;
+        state.wordStart = -1;
+        state.wordEnd = -1;
+        fireProgress();
+        fire();
+      }
     } else {
-      speakCurrentBlock(ssml);
+      _speakQueueItem(targetIdx);
       fire();
     }
   }
@@ -1265,23 +932,23 @@
       return _txtPlayFromSelection(selectedText);
     }
 
-    if (!_fol.tts) return false;
-    // Try to get selection Range from iframe
-    var range = _getIframeSelectionRange();
-    if (range) {
-      var ssml = _fol.tts.from(range);
-      if (ssml) {
+    if (!_queue.length) return false;
+    // Find queue item containing the selected text
+    var needle = String(selectedText || '').trim().toLowerCase();
+    if (!needle) return false;
+    for (var i = 0; i < _queue.length; i++) {
+      if ((_queue.items[i].text || '').toLowerCase().indexOf(needle) >= 0) {
+        state._cancelFlag = true;
         if (state.engine) { try { state.engine.cancel(); } catch {} }
-        clearTtsOverlays();
-        state.blockIdx = -1;
+        clearTtsHighlights();
+        state._cancelFlag = false;
         state.status = PLAYING;
         acquireWakeLock();
         fire();
-        speakCurrentBlock(ssml);
+        _speakQueueItem(i);
         return true;
       }
     }
-    // Fallback: just start from beginning
     return false;
   }
 
@@ -1293,65 +960,44 @@
       return _txtPlayFromElement(el);
     }
 
-    if (!_fol.tts) return false;
-    // Create a collapsed Range at the element
-    try {
-      var doc = el.ownerDocument || document;
-      var range = doc.createRange();
-      range.selectNodeContents(el);
-      range.collapse(true); // collapse to start
-      var ssml = _fol.tts.from(range);
-      if (ssml) {
+    if (!_queue.length) return false;
+    // Find queue item whose ranges contain this element
+    var text = (el.textContent || '').trim().toLowerCase();
+    if (!text) return false;
+    for (var i = 0; i < _queue.length; i++) {
+      if ((_queue.items[i].text || '').toLowerCase().indexOf(text.substring(0, 40)) >= 0) {
+        state._cancelFlag = true;
         if (state.engine) { try { state.engine.cancel(); } catch {} }
-        clearTtsOverlays();
-        state.blockIdx = -1;
+        clearTtsHighlights();
+        state._cancelFlag = false;
         state.status = PLAYING;
         acquireWakeLock();
         fire();
-        speakCurrentBlock(ssml);
+        _speakQueueItem(i);
         return true;
       }
-    } catch {}
+    }
     return false;
-  }
-
-  function _getIframeSelectionRange() {
-    try {
-      var eng = _getViewEngine();
-      if (!eng || !eng.getFoliateRenderer) return null;
-      var renderer = eng.getFoliateRenderer();
-      if (!renderer) return null;
-      var contents = renderer.getContents();
-      if (!contents || !contents[0] || !contents[0].doc) return null;
-      var doc = contents[0].doc;
-      var sel = doc.getSelection ? doc.getSelection() : null;
-      if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
-        return sel.getRangeAt(0);
-      }
-    } catch {}
-    return null;
   }
 
   // ── Rate / Pitch / Voice / Preset / Highlight ────────────────
 
-  // FIX-TTS03: Re-speak current block — keep old audio until new is ready (gapless)
+  // FIX-TTS05: Re-speak current block with gapless transition
   function _respeakCurrentBlock() {
     if (state.status !== PLAYING || !state.engine) return;
-    _clearQueue();
-    if (!state.currentText) return;
-    // FIX-TTS03: signal UI to show "switching" state
+    if (_queue.index < 0 || _queue.index >= _queue.length) return;
+    var item = _queue.items[_queue.index];
+    if (!item || !item.text) return;
     state.wordStart = -1;
     state.wordEnd = -1;
     fireProgress();
-    // If engine supports speakGapless, use it to keep old audio playing until new audio arrives.
-    // Otherwise fall back to cancel+speak (audible gap).
     if (typeof state.engine.speakGapless === 'function') {
-      state.engine.speakGapless(state.currentText);
+      state.engine.speakGapless(item.text);
     } else {
       try { state.engine.cancel(); } catch {}
-      state.engine.speak(state.currentText);
+      state.engine.speak(item.text);
     }
-    _scheduleQueueFill();
+    _preloadAhead(_queue.index + 1, 3);
   }
 
   var TTS_RATE_MIN = 0.5;
@@ -1375,7 +1021,6 @@
     var p = TTS_PRESETS[presetId];
     if (!p) return;
     state.preset = presetId;
-    // Set both without re-speaking twice — setRate/setPitch would each re-speak
     state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(p.rate) || 1.0));
     if (state.engine) state.engine.setRate(state.rate);
     state.pitch = Math.max(0.5, Math.min(2.0, Number(p.pitch) || 1.0));
@@ -1389,84 +1034,34 @@
     var valid = ['highlight', 'underline', 'squiggly', 'strikethrough'];
     if (valid.indexOf(style) < 0) return;
     state.ttsHlStyle = style;
-    // Redraw active overlays with new style
-    _redrawActiveOverlays();
+    // FIX-TTS05: style affects overlayer only (which we no longer use for TTS)
+    // CSS highlights always use background — just update colors
+    _updateCssHighlightColors();
   }
 
   function setHighlightColor(colorName) {
     if (!TTS_HL_COLORS[colorName]) return;
     state.ttsHlColor = colorName;
-    _redrawActiveOverlays();
-  }
-
-  // FIX-TTS05: highlight granularity — sentence (default) or word
-  function setHighlightGranularity(g) {
-    var valid = ['sentence', 'word'];
-    if (valid.indexOf(g) < 0) return;
-    state.ttsHlGranularity = g;
-    if (g !== 'word' && _cssHl.word) {
-      try { _cssHl.word.clear(); } catch {}
-    }
-  }
-
-  // FIX-TTS05: independent word highlight style/color
-  function setWordHighlightStyle(style) {
-    var valid = ['highlight', 'underline', 'squiggly', 'strikethrough'];
-    if (valid.indexOf(style) < 0) return;
-    state.ttsWordHlStyle = style;
-  }
-
-  function setWordHighlightColor(colorName) {
-    if (!TTS_HL_COLORS[colorName]) return;
-    state.ttsWordHlColor = colorName;
-    _updateCssHighlightColor();
-  }
-
-  function _redrawActiveOverlays() {
-    // If overlayer has active highlights, remove and re-add with new style
-    // FIX-TTS04: also update CSS highlight color
-    _updateCssHighlightColor();
-    if (!_fol.overlayer) return;
-    if (_fol.blockRange) {
-      highlightBlockRange(_fol.blockRange);
-    }
+    _updateCssHighlightColors();
   }
 
   function setVoice(voiceId) {
     state.voiceId = String(voiceId || '');
-    var ids = Object.keys(state.allEngines);
-    for (var i = 0; i < ids.length; i++) {
-      var eid = ids[i];
-      var eng = state.allEngines[eid];
-      if (!eng) continue;
-      if (!isEngineUsable(eid)) continue;
-      var voices = [];
-      try { voices = eng.getVoices ? eng.getVoices() : []; } catch { voices = []; }
-      for (var v = 0; v < voices.length; v++) {
-        if (String(voices[v].voiceURI || '') === state.voiceId) {
-          if (eid !== state.engineId) switchEngine(eid);
-          if (state.engine) state.engine.setVoice(state.voiceId);
-          _respeakCurrentBlock();
-          fire();
-          return;
-        }
-      }
-    }
     if (state.engine) state.engine.setVoice(state.voiceId);
     _respeakCurrentBlock();
+    fire();
   }
 
   function getVoices() {
     var all = [];
-    for (var i = 0; i < ENGINE_PRIORITY.length; i++) {
-      var eid = ENGINE_PRIORITY[i];
-      var eng = state.allEngines[eid];
-      if (!eng || !isEngineUsable(eid)) continue;
+    // FIX-TTS05: Edge-only — just get edge voices
+    var eng = state.allEngines.edge;
+    if (eng && isEngineUsable('edge')) {
       var voices = [];
       try { voices = eng.getVoices ? eng.getVoices() : []; } catch { voices = []; }
       for (var v = 0; v < voices.length; v++) {
         var voice = voices[v];
-        if (!voice.engine) voice.engine = eid;
+        if (!voice.engine) voice.engine = 'edge';
         all.push(voice);
       }
     }
@@ -1487,33 +1082,22 @@
     state.allEngines = {};
     state.engineUsable = {};
     _fol.tts = null;
-    _fol.overlayer = null;
     _fol.renderer = null;
-    _fol.marks = [];
-    _fol.blockRange = null;
-    _fol._lastBlockEl = null;
-    _fol._preloadTimer = null;
-    _fol._preloadedSSML = null;
-    _fol._preloadActive = false;
-    _fol._savedRanges = null;
-    _fol._queue = [];           // FIX-TTS05: clear lookahead queue
-    _fol._queueFilling = false;
-    _clearCssHighlights(); // FIX-TTS04
+    _queue.items = [];
+    _queue.index = -1;
+    _queue.length = 0;
+    _clearCssHighlights();
     _txt.blocks = [];
     _txt.segments = [];
     _txt.segIdx = -1;
     state.hostFn = null;
     state.viewEngineFn = null;
     state.onNeedAdvance = null;
-    state.onSectionEnd = null;    // FIX-TTS05
-    state.onSectionStart = null;  // FIX-TTS05
-    state.onDocumentEnd = null;   // FIX-TTS05
     state.initDone = false;
     state.initPromise = null;
   }
 
   // ── TXT Legacy Path ──────────────────────────────────────────
-  // For plain text files, there's no foliate view. Use simple block extraction.
 
   var BLOCK_TAGS = ['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'figcaption', 'pre', 'td', 'th', 'dt', 'dd'];
 
@@ -1566,7 +1150,6 @@
     state.blockIdx = seg.blockIdx;
     state.wordStart = -1;
     state.wordEnd = -1;
-    // Simple DOM highlight for TXT
     if (_txt.activeEl) {
       try { _txt.activeEl.classList.remove('booksReaderTtsActive'); } catch {}
     }
@@ -1580,6 +1163,7 @@
   }
 
   function _txtHandleBlockEnd() {
+    if (state._cancelFlag) return;
     if (state.status !== PLAYING) return;
     _txt.segIdx++;
     if (_txt.segIdx < _txt.segments.length) {
@@ -1595,7 +1179,9 @@
     var target = _txt.segIdx + delta;
     target = Math.max(0, Math.min(_txt.segments.length - 1, target));
     if (target === _txt.segIdx) return;
+    state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    state._cancelFlag = false;
     _txt.segIdx = target;
     if (state.status === PAUSED) {
       var seg = _txt.segments[_txt.segIdx];
@@ -1624,7 +1210,9 @@
     idx = Math.max(0, Math.min(_txt.segments.length - 1, idx));
     if (idx === _txt.segIdx) idx = Math.max(0, Math.min(_txt.segments.length - 1, _txt.segIdx + dir));
     if (idx === _txt.segIdx) return;
+    state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    state._cancelFlag = false;
     _txt.segIdx = idx;
     if (state.status === PAUSED) {
       var seg = _txt.segments[_txt.segIdx];
@@ -1665,7 +1253,9 @@
     for (var depth = 0; depth < 8 && target; depth++) {
       for (var i = 0; i < _txt.segments.length; i++) {
         if (_txt.segments[i].element === target) {
+          state._cancelFlag = true;
           if (state.engine) { try { state.engine.cancel(); } catch {} }
+          state._cancelFlag = false;
           _txt.segIdx = i;
           state.status = PLAYING;
           acquireWakeLock();
@@ -1695,7 +1285,7 @@
     setPreset: setPreset,
     getPresets: function () { return TTS_PRESETS; },
     getPitch: function () { return state.pitch; },
-    stepSegment: stepBlock,   // keep old name for UI compatibility
+    stepSegment: stepBlock,
     playFromSelection: playFromSelection,
     playFromElement: playFromElement,
     jumpApproxMs: jumpApproxMs,
@@ -1707,7 +1297,6 @@
     getEngineId: function () { return state.engineId; },
     getAvailableEngines: function () { return Object.keys(state.allEngines).filter(isEngineUsable); },
     getEngineUsableMap: function () { return { ...state.engineUsable }; },
-    getFallbackInfo: function () { return { ...state.fallbackInfo }; },
     getLastDiag: function () { return state.lastDiag ? { ...state.lastDiag } : null; },
     switchEngine: switchEngine,
     setHighlightStyle: setHighlightStyle,
@@ -1716,19 +1305,9 @@
     getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
     getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },
-    // FIX-TTS05: granularity + independent word highlight controls
-    setHighlightGranularity: setHighlightGranularity,
-    getHighlightGranularity: function () { return state.ttsHlGranularity; },
-    setWordHighlightStyle: setWordHighlightStyle,
-    setWordHighlightColor: setWordHighlightColor,
-    getWordHighlightStyle: function () { return state.ttsWordHlStyle; },
-    getWordHighlightColor: function () { return state.ttsWordHlColor; },
-    // TTS_REWRITE: expose _reinitFoliateTTS for section transitions
     _reinitFoliateTTS: _reinitFoliateTTS,
-    // FIX-TTS05: section/document lifecycle events
-    set onSectionEnd(fn) { state.onSectionEnd = typeof fn === 'function' ? fn : null; },
-    set onSectionStart(fn) { state.onSectionStart = typeof fn === 'function' ? fn : null; },
-    set onDocumentEnd(fn) { state.onDocumentEnd = typeof fn === 'function' ? fn : null; },
+    // FIX-TTS05: expose queue regeneration for section transitions
+    _regenerateQueue: _generateQueue,
     set onStateChange(fn) { state.onStateChange = typeof fn === 'function' ? fn : null; },
     set onProgress(fn) { state.onProgress = typeof fn === 'function' ? fn : null; },
   };

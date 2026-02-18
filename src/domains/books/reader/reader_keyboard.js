@@ -232,13 +232,26 @@
         return;
       }
 
+      // FIX-TTS05: Spacebar intercept — during TTS, spacebar toggles pause/resume instead of page turn
+      if (e.key === ' ') {
+        var tts = window.booksTTS;
+        var ttsState = tts ? tts.getState() : 'idle';
+        if (ttsState === 'playing' || ttsState === 'paused') {
+          e.preventDefault();
+          bus.emit('tts:toggle');
+          return;
+        }
+        // When TTS is idle, spacebar does NOT navigate — prevent accidental page turns
+        // (User expectation: spacebar doesn't navigate in a book reader)
+      }
+
       // Page navigation
       if (e.key === ' ' && e.shiftKey) {
         e.preventDefault();
         bus.emit('nav:prev');
         return;
       }
-      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault();
         bus.emit('nav:next');
         return;

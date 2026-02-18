@@ -330,7 +330,7 @@ function main() {
     'src/domains/books/reader/engine_foliate.js',
     'src/domains/books/reader/engine_txt.js',
     'src/domains/books/reader/tts_core.js',
-    'src/domains/books/reader/tts_engine_webspeech.js',
+    // FIX-TTS05: webspeech removed — Edge or nothing
     'src/domains/books/reader/tts_engine_edge.js',
   ];
   for (const f of booksReaderFiles) {
@@ -347,7 +347,7 @@ function main() {
     'booksReaderTtsDiag', 'booksReaderTtsDiagBtn',
     'booksReaderErrorBanner', 'booksTocSearch', 'booksTocList',
     // R1/R5/R7/R9: new refinement elements
-    'booksReaderTtsLaunch', 'booksTtsMiniBar', 'booksReaderReturnTts',
+    'booksReaderTtsLaunch', 'booksReaderReturnTts',
     'booksUtilSearchInput', 'booksUtilBookmarkList',
     // Books library parity (R8/R10)
     'booksLibTipsOverlay', 'booksFolderContinue',
@@ -366,14 +366,8 @@ function main() {
   if (!ttsEdge.includes('booksTTSEngines.edge')) {
     fail('TTS edge engine does not register as booksTTSEngines.edge');
   }
-  const ttsWS = readText(path.join(ROOT, 'src', 'domains', 'books', 'reader', 'tts_engine_webspeech.js'));
-  if (!ttsWS.includes('booksTTSEngines.webspeech')) {
-    fail('TTS webspeech engine does not register as booksTTSEngines.webspeech');
-  }
+  // FIX-TTS05: webspeech removed — Edge or nothing. No ENGINE_PRIORITY needed.
   const ttsCore = readText(path.join(ROOT, 'src', 'domains', 'books', 'reader', 'tts_core.js'));
-  if (!ttsCore.includes('ENGINE_PRIORITY')) {
-    fail('TTS core missing ENGINE_PRIORITY registry');
-  }
   if (!ttsCore.includes('TTS_PRESETS')) {
     fail('TTS core missing TTS_PRESETS');
   }
@@ -382,16 +376,14 @@ function main() {
   }
   ok('X-F01: TTS engine registration patterns verified');
 
-  // Check deferred_modules loads TTS files in correct order
+  // FIX-TTS05: Check deferred_modules loads TTS files in correct order (Edge-only)
   const deferred = readText(path.join(ROOT, 'src', 'state', 'deferred_modules.js'));
-  const wsIdx = deferred.indexOf('tts_engine_webspeech.js');
   const edgeIdx = deferred.indexOf('tts_engine_edge.js');
   const coreIdx = deferred.indexOf('tts_core.js');
-  if (wsIdx < 0) fail('deferred_modules.js missing tts_engine_webspeech.js');
   if (edgeIdx < 0) fail('deferred_modules.js missing tts_engine_edge.js');
   if (coreIdx < 0) fail('deferred_modules.js missing tts_core.js');
-  if (wsIdx >= 0 && edgeIdx >= 0 && coreIdx >= 0) {
-    if (coreIdx < wsIdx || coreIdx < edgeIdx) {
+  if (edgeIdx >= 0 && coreIdx >= 0) {
+    if (coreIdx < edgeIdx) {
       fail('deferred_modules.js: tts_core.js must load AFTER engine files');
     } else {
       ok('X-F01: TTS load order in deferred_modules.js is correct');

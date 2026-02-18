@@ -133,13 +133,13 @@
 
         // BUILD_PERF: parallel loading groups — modules within each group
         // have no cross-deps, so they download+execute concurrently.
-        // Group 1: engines + TTS engines + event bus (all independent)
+        // Group 1: engines + TTS engine + event bus (all independent)
+        // FIX-TTS05: webspeech removed — Edge or nothing
         await loadScriptGroup([
           './domains/books/reader/engine_epub.js',
           './domains/books/reader/engine_pdf.js',
           './domains/books/reader/engine_foliate.js',
           './domains/books/reader/engine_txt.js',
-          './domains/books/reader/tts_engine_webspeech.js',
           './domains/books/reader/tts_engine_edge.js',
           './domains/books/reader/reader_bus.js',
         ]);

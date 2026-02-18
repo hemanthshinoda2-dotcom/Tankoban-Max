@@ -1,5 +1,6 @@
-// Books reader TTS engine: Edge neural bridge over main process IPC (FIX-TTS02)
-// Rewritten to use HTMLAudioElement for reliable pause/resume (replaces AudioContext).
+// FIX-TTS05: Edge TTS engine with LRU audio cache and multi-chunk preload
+// Replaces single-item preCache with proper LRU (20 items).
+// Cache key: voice|rate|pitch|text — replay/seek is instant on cache hit.
 (function () {
   'use strict';
 
@@ -44,66 +45,54 @@
       },
     };
 
-    // FIX-TTS05: LRU preload cache — persistent across rate/voice changes.
-    // Inspired by Readest's dual LRU (200 entries). Entries are NOT consumed on hit,
-    // allowing replay/rewind to reuse cached audio. Eviction revokes blob URLs.
-    var _preCache = {};
-    var _preCacheCount = 0;
-    var MAX_PRECACHE = 50;
-    var _cacheStats = { hits: 0, misses: 0, evictions: 0 };
+    // FIX-TTS05: LRU audio cache — keyed by "voice|rate|pitch|text"
+    // Uses Map for insertion-order iteration (oldest first for eviction).
+    var _lruCache = new Map();
+    var LRU_MAX = 20;
 
-    function _preCacheKey(text) {
+    function _lruKey(text) {
       return state.voiceName + '|' + state.rate + '|' + state.pitch + '|' + text;
     }
 
-    function getCacheStats() {
-      return { hits: _cacheStats.hits, misses: _cacheStats.misses, evictions: _cacheStats.evictions, size: _preCacheCount, max: MAX_PRECACHE };
+    function _lruGet(key) {
+      if (!_lruCache.has(key)) return null;
+      var entry = _lruCache.get(key);
+      // Move to end (most recently used)
+      _lruCache.delete(key);
+      _lruCache.set(key, entry);
+      return entry;
     }
 
-    function clearPreloadCache() {
-      var keys = Object.keys(_preCache);
-      for (var i = 0; i < keys.length; i++) {
-        var entry = _preCache[keys[i]];
-        if (entry && entry.blobUrl) {
-          try { URL.revokeObjectURL(entry.blobUrl); } catch {}
-        }
-      }
-      _preCache = {};
-      _preCacheCount = 0;
-    }
-
-    // FIX-TTS05: LRU eviction — find and remove least-recently-accessed entry
-    function _evictLRU() {
-      var oldestKey = null;
-      var oldestTime = Infinity;
-      var keys = Object.keys(_preCache);
-      for (var i = 0; i < keys.length; i++) {
-        var entry = _preCache[keys[i]];
-        if (entry && entry.lastAccess < oldestTime) {
-          oldestTime = entry.lastAccess;
-          oldestKey = keys[i];
-        }
-      }
-      if (oldestKey) {
-        var evicted = _preCache[oldestKey];
+    function _lruSet(key, entry) {
+      if (_lruCache.has(key)) {
+        _lruCache.delete(key);
+      } else if (_lruCache.size >= LRU_MAX) {
+        // Evict oldest (first entry in Map)
+        var oldest = _lruCache.keys().next().value;
+        var evicted = _lruCache.get(oldest);
         if (evicted && evicted.blobUrl) {
           try { URL.revokeObjectURL(evicted.blobUrl); } catch {}
         }
-        delete _preCache[oldestKey];
-        _preCacheCount--;
-        _cacheStats.evictions++;
+        _lruCache.delete(oldest);
       }
+      _lruCache.set(key, entry);
     }
 
+    function clearPreloadCache() {
+      _lruCache.forEach(function (entry) {
+        if (entry && entry.blobUrl) {
+          try { URL.revokeObjectURL(entry.blobUrl); } catch {}
+        }
+      });
+      _lruCache.clear();
+    }
+
+    // FIX-TTS05: Background preload — synthesize and cache without playing
     async function preload(text) {
       var t = String(text || '').trim();
       if (!t) return;
-      var key = _preCacheKey(t);
-      if (_preCache[key]) {
-        // FIX-TTS05: update last access on preload hit (keeps hot entries alive)
-        _preCache[key].lastAccess = Date.now();
-        return;
-      }
+      var key = _lruKey(t);
+      if (_lruCache.has(key)) return; // Already cached
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
         if (!api || typeof api.synth !== 'function') return;
@@ -116,12 +105,7 @@
         if (!res || !res.ok || !res.audioBase64) return;
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) return;
-        // FIX-TTS05: LRU eviction if full
-        while (_preCacheCount >= MAX_PRECACHE) {
-          _evictLRU();
-        }
-        _preCache[key] = { blob: blob, blobUrl: null, boundaries: res.boundaries || [], lastAccess: Date.now() };
-        _preCacheCount++;
+        _lruSet(key, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
       } catch {}
     }
 
@@ -144,7 +128,6 @@
       return state.audio;
     }
 
-    // FIX-TTS02: Revoke old blob URL to prevent memory leaks
     function _revokeBlobUrl() {
       if (state.blobUrl) {
         try { URL.revokeObjectURL(state.blobUrl); } catch {}
@@ -188,7 +171,6 @@
           diag('edge_probe_fail', state.health.reason);
           return state.health.available;
         }
-        // FIX-R08: strict probe requires successful synthesis payload, not voices-only success.
         var probeReq = Object.assign({ requireSynthesis: true, timeoutMs: 10000 }, payload || {});
         var res = await api.probe(probeReq);
         var ok = !!(res && res.ok && res.available);
@@ -238,76 +220,36 @@
       state.voiceName = String(voiceURI || 'en-US-AriaNeural');
     }
 
-    // FIX-TTS05: Positional windowed boundary alignment — fixes drift on repeated words.
-    // Tracks expectedPos (cumulative) and searches within ±WINDOW chars. Falls back to
-    // expectedPos when no match found. Validates monotonic ordering and signals chronic drift.
     function fireBoundaries(reqId, boundaries, spokenText) {
       var list = Array.isArray(boundaries) ? boundaries : [];
       var txt = String(spokenText || '');
-      if (!txt || !list.length) return;
-
-      var WINDOW = 30;
-      var positions = [];
-      var expectedPos = 0;
-      var driftCount = 0;
-      var maxConsecDrift = 0;
-      var curDriftRun = 0;
-
-      // FIX-TTS05: Build aligned positions using windowed search around expectedPos
+      var searchFrom = 0;
       for (var i = 0; i < list.length; i++) {
         var word = list[i] && list[i].text || '';
-        var charIndex = expectedPos;
-        var charLength = word.length;
-
+        var charIndex = 0;
+        var charLength = 0;
         if (word && txt) {
-          var searchStart = Math.max(0, expectedPos - WINDOW);
-          var searchEnd = Math.min(txt.length, expectedPos + WINDOW + word.length);
-          var windowStr = txt.substring(searchStart, searchEnd);
-          var localIdx = windowStr.indexOf(word);
-
-          if (localIdx >= 0) {
-            charIndex = searchStart + localIdx;
-            curDriftRun = 0;
-          } else {
-            charIndex = Math.min(expectedPos, Math.max(0, txt.length - 1));
-            curDriftRun++;
-            if (curDriftRun > maxConsecDrift) maxConsecDrift = curDriftRun;
+          var idx = txt.indexOf(word, searchFrom);
+          if (idx >= 0) {
+            charIndex = idx;
+            charLength = word.length;
+            searchFrom = idx + word.length;
           }
         }
-
-        expectedPos = charIndex + Math.max(charLength, 1);
-        positions.push({ boundary: list[i], charIndex: charIndex, charLength: charLength });
-      }
-
-      // FIX-TTS05: Validate monotonic ordering — fix backward jumps via interpolation
-      for (var j = 1; j < positions.length; j++) {
-        if (positions[j].charIndex < positions[j - 1].charIndex) {
-          positions[j].charIndex = positions[j - 1].charIndex + positions[j - 1].charLength;
-          if (positions[j].charIndex >= txt.length) {
-            positions[j].charIndex = Math.max(0, txt.length - 1);
-          }
-        }
-      }
-
-      var driftFallback = maxConsecDrift > 3;
-
-      // FIX-TTS05: Schedule boundary callbacks with drift flag
-      for (var m = 0; m < positions.length; m++) {
-        (function (pos, bd, df) {
-          var delay = Math.max(0, Number(bd && bd.offsetMs || 0));
+        (function (b, ci, cl) {
+          var delay = Math.max(0, Number(b && b.offsetMs || 0));
           setTimeout(function () {
             if (reqId !== state.requestId) return;
             if (!state.playing || state.paused) return;
             if (state.abortCtrl && state.abortCtrl.signal.aborted) return;
             if (typeof state.onBoundary === 'function') {
-              try { state.onBoundary(pos.charIndex, pos.charLength, 'word', df); } catch {}
+              try { state.onBoundary(ci, cl, 'word'); } catch {}
             }
           }, delay);
-        })(positions[m], positions[m].boundary, driftFallback);
+        })(list[i], charIndex, charLength);
       }
     }
 
-    // FIX-TTS02: Play a Blob via HTMLAudioElement (replaces _playBuffer)
     function _playBlob(myReq, blob, boundaries, text) {
       var audio = ensureAudio();
       if (!audio) {
@@ -356,7 +298,6 @@
       }
     }
 
-    // FIX-TTS02: IPC synth with timeout to prevent hanging
     function _synthWithTimeout(api, payload, timeoutMs) {
       return new Promise(function (resolve, reject) {
         var timer = setTimeout(function () {
@@ -384,17 +325,14 @@
       var myReq = state.requestId;
       var signal = state.abortCtrl.signal;
 
-      // FIX-TTS05: LRU cache hit — keep entry for replay/rewind, update lastAccess
-      var cacheKey = _preCacheKey(t);
-      var cached = _preCache[cacheKey];
+      // FIX-TTS05: Check LRU cache first — instant playback on hit
+      var cacheKey = _lruKey(t);
+      var cached = _lruGet(cacheKey);
       if (cached) {
-        cached.lastAccess = Date.now();
-        _cacheStats.hits++;
         diag('edge_preload_hit', '');
         _playBlob(myReq, cached.blob, cached.boundaries, t);
         return;
       }
-      _cacheStats.misses++;
 
       diag('edge_ws_open_start', '');
       try {
@@ -406,7 +344,6 @@
           return;
         }
 
-        // FIX-TTS02: Use timeout wrapper to prevent hanging on slow Edge service
         var res = await _synthWithTimeout(api, {
           text: t,
           voice: state.voiceName,
@@ -434,6 +371,9 @@
         if (signal.aborted || myReq !== state.requestId) return;
         diag('edge_decode_ok', '');
 
+        // FIX-TTS05: Store in LRU cache for replay/seek
+        _lruSet(cacheKey, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
+
         _playBlob(myReq, blob, res.boundaries || [], t);
       } catch (err3) {
         if (signal.aborted || myReq !== state.requestId) return;
@@ -443,11 +383,10 @@
       }
     }
 
-    // FIX-TTS03: Gapless re-speak — keep current audio playing until new audio is ready
+    // FIX-TTS05: Gapless re-speak — keep current audio playing until new audio is ready
     async function speakGapless(text) {
       var t = String(text || '').trim();
       if (!t) return;
-      // Abort any previous in-flight requests but do NOT stop current audio
       if (state.abortCtrl) {
         try { state.abortCtrl.abort(); } catch {}
       }
@@ -456,19 +395,15 @@
       state.abortCtrl = new AbortController();
       var signal = state.abortCtrl.signal;
 
-      // FIX-TTS05: LRU cache hit — keep for replay, update lastAccess
-      var cacheKey = _preCacheKey(t);
-      var cached = _preCache[cacheKey];
+      // Check LRU cache
+      var cacheKey = _lruKey(t);
+      var cached = _lruGet(cacheKey);
       if (cached) {
-        cached.lastAccess = Date.now();
-        _cacheStats.hits++;
         diag('edge_preload_hit', '');
         _playBlob(newReqId, cached.blob, cached.boundaries, t);
         return;
       }
-      _cacheStats.misses++;
 
-      // Synthesize in background while old audio keeps playing
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
         if (!api || typeof api.synth !== 'function') return;
@@ -483,19 +418,18 @@
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) return;
         if (signal.aborted || newReqId !== state.requestId) return;
-        // Now hot-swap: replace old audio with new
+        // Store in LRU
+        _lruSet(_lruKey(t), { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
         _playBlob(newReqId, blob, res.boundaries || [], t);
       } catch {}
     }
 
-    // FIX-TTS02: Pause is now synchronous via HTMLAudioElement.pause()
     function pause() {
       if (!state.audio || !state.playing || state.paused) return;
       state.audio.pause();
       state.paused = true;
     }
 
-    // FIX-TTS02: Resume via HTMLAudioElement.play()
     function resume() {
       if (!state.audio || !state.paused) return;
       try {
@@ -508,7 +442,6 @@
     }
 
     function cancel() {
-      // FIX-TTS02: Abort any in-flight IPC requests
       if (state.abortCtrl) {
         try { state.abortCtrl.abort(); } catch {}
         state.abortCtrl = null;
@@ -557,7 +490,7 @@
       setVoice: setVoice,
       setPitch: setPitch,
       speak: speak,
-      speakGapless: speakGapless, // FIX-TTS03: keeps old audio until new is ready
+      speakGapless: speakGapless,
       pause: pause,
       resume: resume,
       cancel: cancel,
@@ -570,7 +503,6 @@
       loadVoices: loadVoices,
       getHealth: getHealth,
       getLastDiag: getLastDiag,
-      getCacheStats: getCacheStats, // FIX-TTS05
       engineId: 'edge',
       set onBoundary(fn) { state.onBoundary = (typeof fn === 'function') ? fn : null; },
       set onEnd(fn) { state.onEnd = (typeof fn === 'function') ? fn : null; },
