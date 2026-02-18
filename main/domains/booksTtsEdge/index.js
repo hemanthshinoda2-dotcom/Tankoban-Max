@@ -35,6 +35,20 @@ function getTtsInstance() {
       ttsInstance._pushAudioData = function (data, requestId) {
         if (this._streams && this._streams[requestId]) return origAudio.call(this, data, requestId);
       };
+      // FIX_TTS_CRASH2: The _ws.onmessage handler (line 142 in MsEdgeTTS.js) directly
+      // accesses this._streams[requestId].audio.push(null) on TURN_END without guarding.
+      // Wrap setMetadata to patch onmessage with a try-catch after the WebSocket is created.
+      const origSetMetadata = ttsInstance.setMetadata.bind(ttsInstance);
+      ttsInstance.setMetadata = async function (...args) {
+        const r = await origSetMetadata(...args);
+        if (this._ws && this._ws.onmessage) {
+          const origOnMsg = this._ws.onmessage;
+          this._ws.onmessage = function (m) {
+            try { return origOnMsg(m); } catch {}
+          };
+        }
+        return r;
+      };
     } catch (err) {
       ttsInstance = null;
     }

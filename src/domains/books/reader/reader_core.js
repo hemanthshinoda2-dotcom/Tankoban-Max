@@ -148,6 +148,10 @@
     var localY = Number(clientY) - rect.top;
     var inTopZone = localY < REVEAL_ZONE;
     var inBottomZone = localY > (rect.height - REVEAL_ZONE);
+    // Don't trigger HUD from bottom zone when TTS bar is visible
+    if (inBottomZone && els.ttsBar && !els.ttsBar.classList.contains('hidden')) {
+      return false;
+    }
     return !!(inTopZone || inBottomZone);
   }
 

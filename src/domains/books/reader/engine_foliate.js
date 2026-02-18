@@ -597,15 +597,6 @@
       doc.addEventListener('touchstart', emitUserActivity, { passive: true });
       doc.addEventListener('click', (ev) => {
         emitUserActivity(ev);
-        // FIX_TTS_CLICK: click on paragraph during TTS → start reading from that paragraph
-        try {
-          const tts = window.booksTTS;
-          if (tts && typeof tts.playFromElement === 'function' &&
-              (tts.getState() === 'playing' || tts.getState() === 'paused') &&
-              ev && ev.target) {
-            tts.playFromElement(ev.target);
-          }
-        } catch (e) {}
       });
       doc.addEventListener('selectionchange', rememberFromDoc);
       doc.addEventListener('mouseup', rememberFromDoc, { passive: true });

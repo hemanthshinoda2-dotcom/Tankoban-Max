@@ -70,6 +70,10 @@
     renderer: null,      // foliate renderer ref
     marks: [],           // current block's [{name, offset}] from parseSSML
     blockRange: null,    // current block's DOM Range (for sentence highlight)
+    _lastBlockEl: null,  // last block-level element highlighted (for sentence tracking)
+    _preloadTimer: null, // setTimeout id for delayed preload
+    _preloadedSSML: null,// pre-fetched SSML for next block (after iterator advance)
+    _preloadActive: false,// true after iterator advance — setMark unreliable for current block
   };
 
   // TTS_REWRITE: TXT legacy state (only used for format === 'txt')
@@ -81,13 +85,15 @@
   };
 
   // GAP5: TTS highlight color presets
+  // Use solid colors — Overlayer.highlight applies its own 0.3 opacity via CSS variable.
+  // Using rgba here would double-fade (alpha * 0.3 = nearly invisible).
   var TTS_HL_COLORS = {
-    grey:   { sentence: 'rgba(140,140,155,0.35)', word: 'rgba(130,130,145,0.6)',  line: '#9a9aa8' },
-    blue:   { sentence: 'rgba(100,160,255,0.25)', word: 'rgba(90,150,255,0.55)', line: '#5a96ff' },
-    yellow: { sentence: 'rgba(255,230,100,0.3)',  word: 'rgba(255,220,50,0.5)',  line: '#e6c800' },
-    green:  { sentence: 'rgba(100,200,120,0.25)', word: 'rgba(80,180,100,0.5)',  line: '#50b464' },
-    pink:   { sentence: 'rgba(255,130,170,0.25)', word: 'rgba(255,110,150,0.5)', line: '#ff6e96' },
-    orange: { sentence: 'rgba(255,180,80,0.25)',  word: 'rgba(255,160,50,0.5)',  line: '#ffa032' },
+    grey:   { sentence: '#8c8c9b', word: '#6e6e80',  line: '#9a9aa8' },
+    blue:   { sentence: '#64a0ff', word: '#4080ff',  line: '#5a96ff' },
+    yellow: { sentence: '#ffe664', word: '#ffdc32',  line: '#e6c800' },
+    green:  { sentence: '#64c878', word: '#40b060',  line: '#50b464' },
+    pink:   { sentence: '#ff82aa', word: '#ff5a8c',  line: '#ff6e96' },
+    orange: { sentence: '#ffb450', word: '#ffa028',  line: '#ffa032' },
   };
 
   // Pause debounce
@@ -222,35 +228,59 @@
     return best;
   }
 
+  // ── Block parent detection (for sentence-level highlight) ────
+
+  var _blockTags = new Set([
+    'article', 'aside', 'blockquote', 'div', 'dl', 'dt', 'dd',
+    'figure', 'figcaption', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'header', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'tr',
+  ]);
+
+  function _findBlockParent(node) {
+    var el = (node && node.nodeType === 3) ? node.parentElement : node;
+    while (el && el !== el.ownerDocument.body) {
+      if (_blockTags.has((el.tagName || '').toLowerCase())) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
   // ── Overlayer Highlighting ───────────────────────────────────
 
-  function getDrawFn() {
-    var style = state.ttsHlStyle || 'highlight';
-    // Overlayer is imported from foliate vendor; get static methods via prototype
-    // We access it dynamically since it's an ES module class
-    var Overlayer = null;
+  function _getOverlayerClass() {
     try {
       if (_fol.overlayer && _fol.overlayer.constructor) {
-        Overlayer = _fol.overlayer.constructor;
+        return _fol.overlayer.constructor;
       }
     } catch {}
+    return null;
+  }
+
+  function getDrawFn(type) {
+    var style = state.ttsHlStyle || 'highlight';
+    var Overlayer = _getOverlayerClass();
     if (!Overlayer) return null;
     if (style === 'underline') return Overlayer.underline;
     if (style === 'squiggly') return Overlayer.squiggly;
     if (style === 'strikethrough') return Overlayer.strikethrough;
+    // For 'highlight' style: sentence gets filled background, word gets visible outline border
+    if (type === 'word') return Overlayer.outline;
     return Overlayer.highlight;
   }
 
   function getDrawOpts(colors, type) {
     var style = state.ttsHlStyle || 'highlight';
     if (style === 'highlight') {
-      return { color: type === 'word' ? colors.word : colors.sentence };
+      // Sentence: filled background (Overlayer.highlight with 0.3 opacity)
+      // Word: outline border (Overlayer.outline, no opacity reduction)
+      if (type === 'word') return { color: colors.word, width: 2, radius: 3 };
+      return { color: colors.sentence };
     }
     if (style === 'underline') {
       return { color: colors.line, width: type === 'word' ? 3 : 2 };
     }
     if (style === 'squiggly') {
-      return { color: colors.line };
+      return { color: colors.line, width: type === 'word' ? 3 : 2 };
     }
     if (style === 'strikethrough') {
       return { color: colors.line, width: type === 'word' ? 3 : 2 };
@@ -262,32 +292,56 @@
     if (!_fol.overlayer) return;
     try { _fol.overlayer.remove('tts-word'); } catch {}
     try { _fol.overlayer.remove('tts-sentence'); } catch {}
+    _fol._lastBlockEl = null;
   }
 
   // Highlight callback passed to view.initTTS() — called by tts.setMark(name)
   function highlightRange(range) {
     if (!_fol.overlayer || !range) return;
-    try { _fol.overlayer.remove('tts-word'); } catch {}
-    var drawFn = getDrawFn();
-    if (!drawFn) return;
     var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
+
+    // Sentence-level highlight: detect parent block element, highlight it
+    // only when the block changes (avoids redundant redraws)
     try {
-      _fol.overlayer.add('tts-word', range, drawFn, getDrawOpts(colors, 'word'));
+      var blockEl = _findBlockParent(range.startContainer);
+      if (blockEl && blockEl !== _fol._lastBlockEl) {
+        _fol._lastBlockEl = blockEl;
+        try { _fol.overlayer.remove('tts-sentence'); } catch {}
+        var sentenceDrawFn = getDrawFn('sentence');
+        if (sentenceDrawFn) {
+          var doc = blockEl.ownerDocument || document;
+          var blockRange = doc.createRange();
+          blockRange.selectNodeContents(blockEl);
+          _fol.blockRange = blockRange;
+          _fol.overlayer.add('tts-sentence', blockRange, sentenceDrawFn, getDrawOpts(colors, 'sentence'));
+        }
+      }
     } catch {}
+
+    // Word-level highlight: outline around the current word
+    try { _fol.overlayer.remove('tts-word'); } catch {}
+    var wordDrawFn = getDrawFn('word');
+    if (wordDrawFn) {
+      try {
+        _fol.overlayer.add('tts-word', range, wordDrawFn, getDrawOpts(colors, 'word'));
+      } catch {}
+    }
+
     // Paginator-aware scroll
     if (_fol.renderer) {
       try { _fol.renderer.scrollToAnchor(range, true); } catch {}
     }
   }
 
-  // Highlight the entire block range (sentence-level)
+  // Highlight the entire block range (sentence-level) — used by _redrawActiveOverlays
   function highlightBlockRange(blockRange) {
     if (!_fol.overlayer) return;
     try { _fol.overlayer.remove('tts-sentence'); } catch {}
     try { _fol.overlayer.remove('tts-word'); } catch {}
+    _fol._lastBlockEl = null;
     if (!blockRange) return;
     _fol.blockRange = blockRange;
-    var drawFn = getDrawFn();
+    var drawFn = getDrawFn('sentence');
     if (!drawFn) return;
     var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
     try {
@@ -370,12 +424,41 @@
     _preloadNextBlock();
   }
 
+  function _clearPreload() {
+    if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
+    _fol._preloadedSSML = null;
+    _fol._preloadActive = false;
+  }
+
   function _preloadNextBlock() {
     if (!state.engine || typeof state.engine.preload !== 'function') return;
-    if (!_fol.tts) return;
-    // Peek next block's SSML for preloading
-    // Unfortunately foliate TTS doesn't have a peek method, so we skip preload
-    // for the first iteration. The engine cache from previous blocks helps.
+    if (!_fol.tts || state.format === 'txt') return;
+
+    _clearPreload();
+
+    // Estimate block duration; start preload at ~75% through so next block's
+    // audio is cached by the time current block ends. After advancing the
+    // iterator, setMark() for the current block becomes unreliable (word
+    // highlight stops) but sentence highlight persists — acceptable trade-off.
+    var textLen = (state.currentText || '').length;
+    if (textLen < 10) return; // too short to bother
+    var cps = Math.max(5, 15 * (state.rate || 1.0));
+    var delayMs = Math.max(50, (textLen / cps) * 750);
+
+    _fol._preloadTimer = setTimeout(function () {
+      _fol._preloadTimer = null;
+      if (state.status !== PLAYING || !_fol.tts) return;
+
+      var nextSSML = _fol.tts.next();
+      if (!nextSSML) return;
+      _fol._preloadedSSML = nextSSML;
+      _fol._preloadActive = true;
+
+      var parsed = parseSSML(nextSSML);
+      if (parsed.plainText) {
+        try { state.engine.preload(parsed.plainText); } catch {}
+      }
+    }, delayMs);
   }
 
   function handleBlockEnd() {
@@ -388,7 +471,19 @@
     }
 
     if (!_fol.tts) { stop(); return; }
-    var ssml = _fol.tts.next();
+
+    // Cancel pending preload timer but keep already-preloaded result
+    if (_fol._preloadTimer) { clearTimeout(_fol._preloadTimer); _fol._preloadTimer = null; }
+
+    var ssml;
+    if (_fol._preloadedSSML) {
+      ssml = _fol._preloadedSSML;
+      _fol._preloadedSSML = null;
+      _fol._preloadActive = false;
+    } else {
+      ssml = _fol.tts.next();
+    }
+
     if (ssml) {
       speakCurrentBlock(ssml);
     } else {
@@ -425,8 +520,10 @@
       var m = rest.match(/^\S+/);
       if (m) state.wordEnd = charIndex + m[0].length;
     }
-    // Map charIndex to nearest foliate mark, call setMark for Overlayer highlight
-    if (_fol.tts && _fol.marks.length) {
+    // Map charIndex to nearest foliate mark, call setMark for Overlayer highlight.
+    // Skip if preload has advanced the iterator — ranges would be wrong.
+    // Sentence highlight persists; word outline stops for the tail end of the block.
+    if (_fol.tts && _fol.marks.length && !_fol._preloadActive) {
       var markName = findNearestMark(_fol.marks, charIndex);
       if (markName) {
         try { _fol.tts.setMark(markName); } catch {}
@@ -728,11 +825,20 @@
     if (!state.engine || state.status !== PLAYING) return;
     if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
     _lastToggleAt = Date.now();
+    _clearPreload();
     state._pauseStartedAt = Date.now();
+    state._pauseNeedsRespeak = false;
     state.engine.pause();
-    // TTS_REWRITE: verify engine actually paused — if it silently failed,
-    // audio is still audible. Force cancel + mark as needing re-speak on resume.
-    if (typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
+    // Verify engine actually paused. Check isPaused() first (definitive),
+    // then fall back to isSpeaking() for engines that don't implement isPaused.
+    // WebSpeech: synth.speaking stays true during pause — that's normal, not a failure.
+    // Only force-cancel if the engine has no pause capability at all.
+    var pauseWorked = false;
+    if (typeof state.engine.isPaused === 'function') {
+      pauseWorked = state.engine.isPaused();
+    }
+    if (!pauseWorked && typeof state.engine.isSpeaking === 'function' && state.engine.isSpeaking()) {
+      // Engine is still actively speaking (not paused) — force cancel
       try { state.engine.cancel(); } catch {}
       state._pauseNeedsRespeak = true;
     }
@@ -782,6 +888,7 @@
     if (state.engine) {
       try { state.engine.cancel(); } catch {}
     }
+    _clearPreload();
     clearTtsOverlays();
     // TXT cleanup
     if (_txt.activeEl) {
@@ -814,6 +921,7 @@
     }
 
     if (!_fol.tts) return;
+    _clearPreload();
     if (state.engine) { try { state.engine.cancel(); } catch {} }
     clearTtsOverlays();
 
@@ -846,6 +954,7 @@
     }
 
     if (!_fol.tts) return;
+    _clearPreload();
     // Estimate how many blocks to skip (~150 chars per block, ~15 chars/s at 1.0x)
     var cps = 15 * (state.rate || 1.0);
     var deltaChars = Math.abs(deltaMs / 1000) * cps;
@@ -955,12 +1064,25 @@
 
   // ── Rate / Pitch / Voice / Preset / Highlight ────────────────
 
+  // Re-speak the current block immediately (for instant voice/rate/pitch changes)
+  function _respeakCurrentBlock() {
+    if (state.status !== PLAYING || !state.engine) return;
+    _clearPreload();
+    try { state.engine.cancel(); } catch {}
+    // Re-speak current text from the start of the block with new settings
+    if (state.currentText) {
+      state.engine.speak(state.currentText);
+      _preloadNextBlock();
+    }
+  }
+
   var TTS_RATE_MIN = 0.5;
   var TTS_RATE_MAX = 3.0;
 
   function setRate(r) {
     state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(r) || 1.0));
     if (state.engine) state.engine.setRate(state.rate);
+    _respeakCurrentBlock();
   }
 
   function setPitch(p) {
@@ -968,14 +1090,21 @@
     if (state.engine && typeof state.engine.setPitch === 'function') {
       state.engine.setPitch(state.pitch);
     }
+    _respeakCurrentBlock();
   }
 
   function setPreset(presetId) {
     var p = TTS_PRESETS[presetId];
     if (!p) return;
     state.preset = presetId;
-    setRate(p.rate);
-    setPitch(p.pitch);
+    // Set both without re-speaking twice — setRate/setPitch would each re-speak
+    state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(p.rate) || 1.0));
+    if (state.engine) state.engine.setRate(state.rate);
+    state.pitch = Math.max(0.5, Math.min(2.0, Number(p.pitch) || 1.0));
+    if (state.engine && typeof state.engine.setPitch === 'function') {
+      state.engine.setPitch(state.pitch);
+    }
+    _respeakCurrentBlock();
   }
 
   function setHighlightStyle(style) {
@@ -1014,12 +1143,14 @@
         if (String(voices[v].voiceURI || '') === state.voiceId) {
           if (eid !== state.engineId) switchEngine(eid);
           if (state.engine) state.engine.setVoice(state.voiceId);
+          _respeakCurrentBlock();
           fire();
           return;
         }
       }
     }
     if (state.engine) state.engine.setVoice(state.voiceId);
+    _respeakCurrentBlock();
   }
 
   function getVoices() {
@@ -1057,6 +1188,10 @@
     _fol.renderer = null;
     _fol.marks = [];
     _fol.blockRange = null;
+    _fol._lastBlockEl = null;
+    _fol._preloadTimer = null;
+    _fol._preloadedSSML = null;
+    _fol._preloadActive = false;
     _txt.blocks = [];
     _txt.segments = [];
     _txt.segIdx = -1;
