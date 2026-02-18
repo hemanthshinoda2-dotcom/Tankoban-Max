@@ -415,6 +415,7 @@
 
     if (locator) {
       locator.flowMode = String(state.settings.flowMode || 'paginated');
+      locator.chapterReadState = Object.assign({}, state.chapterReadState || {}); // BUILD_CHAP_PERSIST
     }
 
     var payload = {

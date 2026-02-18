@@ -353,7 +353,11 @@
       const userOverrides = fontSize !== 100
         ? 'body { font-size: ' + fontSize + '% !important; }'
         : '';
-      return rcss.before + '\n' + rcss.dflt + '\n' + rcss.after + '\n' + userOverrides;
+      // BUILD_JUSTIFY: prevent last-line stretch when text-align is justify
+      const justifyFix = (s.textAlign === 'justify')
+        ? '\np::after{content:"";display:inline-block;width:100%;visibility:hidden;}'
+        : '';
+      return rcss.before + '\n' + rcss.dflt + '\n' + rcss.after + '\n' + userOverrides + justifyFix;
     }
 
     // RCSS_INTEGRATION: legacy fallback (original buildEpubStyles for when ReadiumCSS fails to load)
@@ -395,7 +399,8 @@
         // Theme / appearance
         const theme = String(s.theme || 'light');
         let appearance = 'readium-default-on';
-        if (theme === 'dark' || theme === 'contrast1' || theme === 'contrast2' || theme === 'contrast4') appearance = 'readium-night-on';
+        // BUILD_THEMES: nord and gruvboxDark are dark themes
+        if (theme === 'dark' || theme === 'contrast1' || theme === 'contrast2' || theme === 'contrast4' || theme === 'nord' || theme === 'gruvboxDark') appearance = 'readium-night-on';
         else if (theme === 'sepia') appearance = 'readium-sepia-on';
         docEl.style.setProperty('--USER__appearance', appearance);
 
@@ -477,11 +482,16 @@
     // RCSS_INTEGRATION: custom bg/fg for extended themes not built into ReadiumCSS
     function applyExtendedThemeColors(docEl, theme) {
       const custom = {
-        paper:     { bg: '#f8f4ec', fg: '#2c2c2c' },
-        contrast1: { bg: '#000000', fg: '#ffff00' },
-        contrast2: { bg: '#0a0a3e', fg: '#ffd700' },
-        contrast3: { bg: '#f5f5dc', fg: '#1a1a00' },
-        contrast4: { bg: '#1a1a2e', fg: '#e0e0e0' },
+        paper:      { bg: '#f8f4ec', fg: '#2c2c2c' },
+        contrast1:  { bg: '#000000', fg: '#ffff00' },
+        contrast2:  { bg: '#0a0a3e', fg: '#ffd700' },
+        contrast3:  { bg: '#f5f5dc', fg: '#1a1a00' },
+        contrast4:  { bg: '#1a1a2e', fg: '#e0e0e0' },
+        // BUILD_THEMES: named literary themes
+        nord:        { bg: '#2e3440', fg: '#d8dee9' },
+        gruvbox:     { bg: '#fbf1c7', fg: '#3c3836' },
+        gruvboxDark: { bg: '#282828', fg: '#ebdbb2' },
+        solarized:   { bg: '#fdf6e3', fg: '#657b83' },
       };
       const ct = custom[theme];
       if (ct) {
@@ -586,6 +596,22 @@
     function bindDocEvents(doc) {
       if (!doc || doc._tankoEvBound) return;
       doc._tankoEvBound = true;
+
+      // BUILD_COVER: inject full-viewport layout for epub:type="cover" sections
+      var epubType = '';
+      if (doc.body) {
+        epubType = doc.body.getAttribute('epub:type') ||
+                   doc.body.getAttributeNS('http://www.idpf.org/2007/ops', 'type') || '';
+      }
+      if (epubType.split(/\s+/).indexOf('cover') >= 0) {
+        var coverStyle = doc.createElement('style');
+        coverStyle.textContent =
+          'html,body{margin:0!important;padding:0!important;height:100%!important;}' +
+          'body{display:flex!important;align-items:center!important;justify-content:center!important;background:#000!important;}' +
+          'body img,body svg{max-width:100%!important;max-height:100vh!important;width:auto!important;height:auto!important;object-fit:contain!important;}';
+        doc.head.appendChild(coverStyle);
+      }
+
       const rememberFromDoc = () => { rememberSelectionText(doc, false); };
       const rememberBeforeContext = (ev) => {
         try { if (ev && ev.button === 2) rememberSelectionText(doc, false); } catch {}

@@ -245,6 +245,7 @@
     state.tocItems = [];
     state.bookmarks = [];
     state.annotations = [];
+    state.chapterReadState = {}; // BUILD_CHAP_PERSIST: reset between books
     if (hudHideTimer) { clearTimeout(hudHideTimer); hudHideTimer = null; }
 
     var els = RS.ensureEls();
@@ -292,6 +293,14 @@
 
     var progress = null;
     try { progress = await Tanko.api.booksProgress.get(book.id); } catch (e) {}
+
+    // BUILD_CHAP_PERSIST: restore chapter read state before renderToc() runs
+    if (progress && progress.locator && progress.locator.chapterReadState &&
+        typeof progress.locator.chapterReadState === 'object') {
+      state.chapterReadState = Object.assign({}, progress.locator.chapterReadState);
+    } else {
+      state.chapterReadState = {};
+    }
 
     if (els.title) {
       var fallbackTitle = String(book.path || '').split(/[\\/]/).pop() || 'Book';

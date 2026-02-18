@@ -13,7 +13,8 @@
     if (els.readerView) els.readerView.setAttribute('data-reader-theme', nextTheme);
     if (els.host) els.host.setAttribute('data-reader-theme', nextTheme);
     // FIX-TTS03: set blend mode for TTS highlight overlayer (lighten for dark themes)
-    var isDark = ['dark', 'contrast1', 'contrast2', 'contrast4'].indexOf(nextTheme) !== -1;
+    // BUILD_THEMES: nord and gruvboxDark are dark themes
+    var isDark = ['dark', 'contrast1', 'contrast2', 'contrast4', 'nord', 'gruvboxDark'].indexOf(nextTheme) !== -1;
     document.documentElement.style.setProperty('--overlayer-highlight-blend-mode', isDark ? 'lighten' : 'normal');
   }
 
@@ -120,11 +121,14 @@
   }
 
   // BUILD_READIUMCSS: text-align chip sync helper
-  var THEME_ORDER = ['light', 'sepia', 'dark', 'paper', 'contrast1', 'contrast2', 'contrast3', 'contrast4'];
+  // BUILD_THEMES: added named literary themes to cycle order
+  var THEME_ORDER = ['light', 'sepia', 'dark', 'paper', 'contrast1', 'contrast2', 'contrast3', 'contrast4',
+    'nord', 'gruvbox', 'gruvboxDark', 'solarized'];
   var THEME_LABELS = {
     light: 'Light', sepia: 'Sepia', dark: 'Dark', paper: 'Paper',
     contrast1: 'High Contrast 1', contrast2: 'High Contrast 2',
-    contrast3: 'High Contrast 3', contrast4: 'High Contrast 4'
+    contrast3: 'High Contrast 3', contrast4: 'High Contrast 4',
+    nord: 'Nord', gruvbox: 'Gruvbox', gruvboxDark: 'Gruvbox Dark', solarized: 'Solarized'
   };
 
   function syncTextAlignChips(align) {

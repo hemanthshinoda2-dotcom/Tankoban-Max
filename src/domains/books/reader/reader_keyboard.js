@@ -24,6 +24,7 @@
     { label: 'Find in book', key: 'Ctrl+F or /' },
     { label: 'Page nav', key: 'Arrows, Space, Shift+Space, PgUp/PgDn' },
     { label: 'Next/prev chapter', key: 'Ctrl+Right / Ctrl+Left' },
+    { label: 'Nav history back/fwd', key: 'Alt+Left / Alt+Right' }, // BUILD_HISTORY
     { label: 'Book bounds', key: 'Home / End' },
     { label: 'TTS back/fwd 10s', key: '[ / ]' },
     { label: 'Read from selection', key: 'R' },
@@ -243,6 +244,18 @@
         }
         // When TTS is idle, spacebar does NOT navigate — prevent accidental page turns
         // (User expectation: spacebar doesn't navigate in a book reader)
+      }
+
+      // BUILD_HISTORY: Alt+Left/Right for navigation history (before bare arrow handling)
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (state.engine && state.engine.historyCanGoBack()) state.engine.historyBack();
+        return;
+      }
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (state.engine && state.engine.historyCanGoForward()) state.engine.historyForward();
+        return;
       }
 
       // Page navigation

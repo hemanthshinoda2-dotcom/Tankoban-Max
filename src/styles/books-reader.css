@@ -104,6 +104,43 @@
   --br-reader-accent: #5a7eb5;
   --br-reader-accent-rgb: 90,126,181;
 }
+/* BUILD_THEMES: named literary themes */
+.br-reader[data-reader-theme="nord"] {
+  --br-reader-bg: #2e3440;
+  --br-reader-text: #d8dee9;
+  --br-reader-muted: #81868e;
+  --br-reader-border: rgba(216,222,233,0.08);
+  --br-reader-surface-rgb: 46,52,64;
+  --br-reader-accent: #88c0d0;
+  --br-reader-accent-rgb: 136,192,208;
+}
+.br-reader[data-reader-theme="gruvbox"] {
+  --br-reader-bg: #fbf1c7;
+  --br-reader-text: #3c3836;
+  --br-reader-muted: #7c6f64;
+  --br-reader-border: rgba(60,56,54,0.14);
+  --br-reader-surface-rgb: 251,241,199;
+  --br-reader-accent: #076678;
+  --br-reader-accent-rgb: 7,102,120;
+}
+.br-reader[data-reader-theme="gruvboxDark"] {
+  --br-reader-bg: #282828;
+  --br-reader-text: #ebdbb2;
+  --br-reader-muted: #a89984;
+  --br-reader-border: rgba(235,219,178,0.08);
+  --br-reader-surface-rgb: 40,40,40;
+  --br-reader-accent: #83a598;
+  --br-reader-accent-rgb: 131,165,152;
+}
+.br-reader[data-reader-theme="solarized"] {
+  --br-reader-bg: #fdf6e3;
+  --br-reader-text: #657b83;
+  --br-reader-muted: #93a1a1;
+  --br-reader-border: rgba(101,123,131,0.14);
+  --br-reader-surface-rgb: 253,246,227;
+  --br-reader-accent: #268bd2;
+  --br-reader-accent-rgb: 38,139,210;
+}
 
 /* ── Toolbar (48px, always visible) ───────────────────────── */
 .br-toolbar {
@@ -677,6 +714,11 @@
 .br-host[data-reader-theme="contrast2"] { background: #0a0a3e; color: #ffd700; }
 .br-host[data-reader-theme="contrast3"] { background: #f5f5dc; color: #1a1a00; }
 .br-host[data-reader-theme="contrast4"] { background: #1a1a2e; color: #e0e0e0; }
+/* BUILD_THEMES: named literary themes host backgrounds */
+.br-host[data-reader-theme="nord"] { background: #2e3440; color: #d8dee9; }
+.br-host[data-reader-theme="gruvbox"] { background: #fbf1c7; color: #3c3836; }
+.br-host[data-reader-theme="gruvboxDark"] { background: #282828; color: #ebdbb2; }
+.br-host[data-reader-theme="solarized"] { background: #fdf6e3; color: #657b83; }
 
 /* FIX_AUDIT: remove native scrollbars in scroll mode while preserving scroll interaction. */
 .br-host,
@@ -1613,8 +1655,41 @@ body.inBooksReader .br-reader {
 [data-reader-theme="contrast4"] .br-overlay-title { color: #e0e0e0; }
 [data-reader-theme="contrast4"] .br-overlay-header { border-bottom-color: rgba(224,224,224,0.08); }
 
+/* BUILD_THEMES: overlay panels for named literary themes */
+[data-reader-theme="nord"] .br-overlay-panel {
+  background: #3b4252;
+  border-color: rgba(216,222,233,0.10);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+}
+[data-reader-theme="nord"] .br-overlay-title { color: #eceff4; }
+[data-reader-theme="nord"] .br-overlay-header { border-bottom-color: rgba(216,222,233,0.08); }
+
+[data-reader-theme="gruvbox"] .br-overlay-panel {
+  background: #f2e5bc;
+  border-color: rgba(60,56,54,0.14);
+  box-shadow: 0 12px 28px rgba(60,56,54,0.16);
+}
+[data-reader-theme="gruvbox"] .br-overlay-title { color: #3c3836; }
+[data-reader-theme="gruvbox"] .br-overlay-header { border-bottom-color: rgba(60,56,54,0.10); }
+
+[data-reader-theme="gruvboxDark"] .br-overlay-panel {
+  background: #3c3836;
+  border-color: rgba(235,219,178,0.10);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.4);
+}
+[data-reader-theme="gruvboxDark"] .br-overlay-title { color: #ebdbb2; }
+[data-reader-theme="gruvboxDark"] .br-overlay-header { border-bottom-color: rgba(235,219,178,0.08); }
+
+[data-reader-theme="solarized"] .br-overlay-panel {
+  background: #eee8d5;
+  border-color: rgba(101,123,131,0.14);
+  box-shadow: 0 12px 28px rgba(101,123,131,0.16);
+}
+[data-reader-theme="solarized"] .br-overlay-title { color: #586e75; }
+[data-reader-theme="solarized"] .br-overlay-header { border-bottom-color: rgba(101,123,131,0.10); }
+
 /* FIX_LIGHT_OVERLAYS: light themes get dark controls, dark themes keep white.
-   Light themes: light, sepia, paper, contrast3 */
+   Light themes: light, sepia, paper, contrast3, gruvbox, solarized */
 [data-reader-theme="light"] .booksReaderTtsBar,
 [data-reader-theme="light"] .booksReaderTtsMega,
 [data-reader-theme="light"] .booksReaderTtsDiag,
@@ -1642,7 +1717,21 @@ body.inBooksReader .br-reader {
 [data-reader-theme="contrast3"] .booksReaderDictPopup,
 [data-reader-theme="contrast3"] .booksAnnotPopup,
 [data-reader-theme="contrast3"] .booksReaderReturnTts,
-[data-reader-theme="contrast3"] .booksGotoCard {
+[data-reader-theme="contrast3"] .booksGotoCard,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar,
+[data-reader-theme="gruvbox"] .booksReaderTtsMega,
+[data-reader-theme="gruvbox"] .booksReaderTtsDiag,
+[data-reader-theme="gruvbox"] .booksReaderDictPopup,
+[data-reader-theme="gruvbox"] .booksAnnotPopup,
+[data-reader-theme="gruvbox"] .booksReaderReturnTts,
+[data-reader-theme="gruvbox"] .booksGotoCard,
+[data-reader-theme="solarized"] .booksReaderTtsBar,
+[data-reader-theme="solarized"] .booksReaderTtsMega,
+[data-reader-theme="solarized"] .booksReaderTtsDiag,
+[data-reader-theme="solarized"] .booksReaderDictPopup,
+[data-reader-theme="solarized"] .booksAnnotPopup,
+[data-reader-theme="solarized"] .booksReaderReturnTts,
+[data-reader-theme="solarized"] .booksGotoCard {
   background: var(--br-reader-bg);
   color: var(--br-reader-text);
   border-color: rgba(0,0,0,0.15);
@@ -1652,7 +1741,9 @@ body.inBooksReader .br-reader {
 [data-reader-theme="light"] .booksReaderTtsBar,
 [data-reader-theme="sepia"] .booksReaderTtsBar,
 [data-reader-theme="paper"] .booksReaderTtsBar,
-[data-reader-theme="contrast3"] .booksReaderTtsBar {
+[data-reader-theme="contrast3"] .booksReaderTtsBar,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar,
+[data-reader-theme="solarized"] .booksReaderTtsBar {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(0, 0, 0, 0.18);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.05);
@@ -1703,7 +1794,11 @@ body.inBooksReader .br-reader {
 [data-reader-theme="paper"] .br-toolbar,
 [data-reader-theme="paper"] .br-footer,
 [data-reader-theme="contrast3"] .br-toolbar,
-[data-reader-theme="contrast3"] .br-footer {
+[data-reader-theme="contrast3"] .br-footer,
+[data-reader-theme="gruvbox"] .br-toolbar,
+[data-reader-theme="gruvbox"] .br-footer,
+[data-reader-theme="solarized"] .br-toolbar,
+[data-reader-theme="solarized"] .br-footer {
   background: var(--br-reader-bg);
   border-color: rgba(0,0,0,0.10);
 }
@@ -1806,6 +1901,15 @@ body.inBooksReader .br-reader {
 [data-reader-theme="contrast3"] .br-sidebar-tab:hover { background: rgba(40,40,0,0.05); }
 [data-reader-theme="contrast4"] .br-sidebar-tabs { background: rgba(224,224,224,0.03); }
 [data-reader-theme="contrast4"] .br-sidebar-tab:hover { background: rgba(224,224,224,0.04); }
+/* BUILD_THEMES: sidebar tabs for named literary themes */
+[data-reader-theme="nord"] .br-sidebar-tabs { background: rgba(216,222,233,0.03); }
+[data-reader-theme="nord"] .br-sidebar-tab:hover { background: rgba(216,222,233,0.05); }
+[data-reader-theme="gruvbox"] .br-sidebar-tabs { background: rgba(60,56,54,0.04); }
+[data-reader-theme="gruvbox"] .br-sidebar-tab:hover { background: rgba(60,56,54,0.06); }
+[data-reader-theme="gruvboxDark"] .br-sidebar-tabs { background: rgba(235,219,178,0.03); }
+[data-reader-theme="gruvboxDark"] .br-sidebar-tab:hover { background: rgba(235,219,178,0.05); }
+[data-reader-theme="solarized"] .br-sidebar-tabs { background: rgba(101,123,131,0.04); }
+[data-reader-theme="solarized"] .br-sidebar-tab:hover { background: rgba(101,123,131,0.06); }
 
 /* Responsive: narrow screens */
 @media (max-width: 500px) {
