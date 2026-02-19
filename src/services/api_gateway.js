@@ -389,6 +389,24 @@
     },
 
     // ========================================
+    // ========================================
+    // webTabs.* (BUILD_WCV)
+    // ========================================
+    webTabs: {
+      create: (...a) => ea.webTabs?.create ? ea.webTabs.create(...a) : Promise.resolve({ ok: false }),
+      close: (...a) => ea.webTabs?.close ? ea.webTabs.close(...a) : Promise.resolve({ ok: false }),
+      activate: (...a) => ea.webTabs?.activate ? ea.webTabs.activate(...a) : Promise.resolve({ ok: false }),
+      navigate: (...a) => ea.webTabs?.navigate ? ea.webTabs.navigate(...a) : Promise.resolve({ ok: false }),
+      setBounds: (...a) => ea.webTabs?.setBounds ? ea.webTabs.setBounds(...a) : Promise.resolve({ ok: false }),
+      hideAll: (...a) => ea.webTabs?.hideAll ? ea.webTabs.hideAll(...a) : Promise.resolve({ ok: false }),
+      query: (...a) => ea.webTabs?.query ? ea.webTabs.query(...a) : Promise.resolve({ ok: false }),
+      splitBounds: (...a) => ea.webTabs?.splitBounds ? ea.webTabs.splitBounds(...a) : Promise.resolve({ ok: false }),
+      onTitleUpdated: (...a) => ea.webTabs?.onTitleUpdated ? ea.webTabs.onTitleUpdated(...a) : undefined,
+      onUrlUpdated: (...a) => ea.webTabs?.onUrlUpdated ? ea.webTabs.onUrlUpdated(...a) : undefined,
+      onLoading: (...a) => ea.webTabs?.onLoading ? ea.webTabs.onLoading(...a) : undefined,
+      onNavState: (...a) => ea.webTabs?.onNavState ? ea.webTabs.onNavState(...a) : undefined,
+    },
+
     // Health check (BUILD 88 FIX 3.2)
     // ========================================
     ping: () => ea.ping ? ea.ping() : Promise.resolve({ ok: true, timestamp: Date.now() }),

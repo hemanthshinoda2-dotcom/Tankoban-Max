@@ -57,6 +57,15 @@
     // BUILD_WEB_HOME: always hide browser overlay on mode switch
     const webBrowserView = qs('webBrowserView');
     if (webBrowserView) webBrowserView.classList.add('hidden');
+    // FIX-WEB-MODE: hide main-process WebContentsViews when leaving web mode
+    if (!isWeb) {
+      try {
+        const _api = window.Tanko && window.Tanko.api;
+        if (_api && _api.webTabs && typeof _api.webTabs.hideAll === 'function') {
+          _api.webTabs.hideAll();
+        }
+      } catch (e) {}
+    }
 
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);

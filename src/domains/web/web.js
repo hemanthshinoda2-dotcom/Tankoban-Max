@@ -4,13 +4,14 @@
   'use strict';
 
   if (window.__tankoWebBrowserBound) return;
-  window.__tankoWebBrowserBound = true;
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
   if (!api || !api.webSources || !api.webTabs) {
     console.warn('[BUILD_WCV] Tanko.api.webSources or webTabs not available');
     return;
   }
+
+  window.__tankoWebBrowserBound = true;
 
   function qs(id) {
     try { return document.getElementById(id); } catch (e) { return null; }
@@ -310,15 +311,15 @@
 
   // ---- BUILD_WCV: Bounds reporting ----
 
+  // FIX-WEB-MODE: View.setBounds uses CSS/logical pixels, not physical
   function getContainerBounds() {
     if (!el.viewContainer) return { x: 0, y: 0, width: 0, height: 0 };
     var rect = el.viewContainer.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
     return {
-      x: Math.round(rect.left * dpr),
-      y: Math.round(rect.top * dpr),
-      width: Math.round(rect.width * dpr),
-      height: Math.round(rect.height * dpr)
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
     };
   }
 
@@ -350,29 +351,29 @@
     if (!splitTab || !splitTab.mainTabId) return;
 
     var rect = el.viewContainer.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
     var totalW = rect.width;
     var dividerW = 4; // matches CSS .webSplitDivider width
     var leftW = Math.round((totalW - dividerW) * state.splitRatio);
     var rightW = Math.round((totalW - dividerW) * (1 - state.splitRatio));
 
+    // FIX-WEB-MODE: setBounds uses CSS/logical pixels
     api.webTabs.splitBounds({
       left: {
         tabId: mainTab.mainTabId,
         bounds: {
-          x: Math.round(rect.left * dpr),
-          y: Math.round(rect.top * dpr),
-          width: Math.round(leftW * dpr),
-          height: Math.round(rect.height * dpr)
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(leftW),
+          height: Math.round(rect.height)
         }
       },
       right: {
         tabId: splitTab.mainTabId,
         bounds: {
-          x: Math.round((rect.left + leftW + dividerW) * dpr),
-          y: Math.round(rect.top * dpr),
-          width: Math.round(rightW * dpr),
-          height: Math.round(rect.height * dpr)
+          x: Math.round(rect.left + leftW + dividerW),
+          y: Math.round(rect.top),
+          width: Math.round(rightW),
+          height: Math.round(rect.height)
         }
       }
     }).catch(function () {});
@@ -1630,5 +1631,37 @@
   } catch (e) {
     console.warn('[BUILD_WCV] bindUI failed', e);
   }
+
+  // FIX-WEB-MODE: register mode handler for lifecycle
+  try {
+    var tanko = window.Tanko || {};
+    if (tanko.modeRouter && typeof tanko.modeRouter.registerModeHandler === 'function') {
+      tanko.modeRouter.registerModeHandler('web', {
+        setMode: function (mode, opts) {
+          // Entering web mode: restore browser if tabs were open
+          if (state.browserOpen && state.tabs.length > 0) {
+            if (el.homeView) el.homeView.classList.add('hidden');
+            if (el.webLibraryView) el.webLibraryView.classList.add('hidden');
+            if (el.browserView) el.browserView.classList.remove('hidden');
+            var tab = getActiveTab();
+            if (tab && tab.mainTabId) {
+              api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
+            }
+            setTimeout(reportBoundsForActiveTab, 50);
+          }
+        },
+        refresh: function () {
+          loadSources();
+          loadDestinations();
+        },
+        back: function () {
+          if (state.browserOpen) {
+            closeBrowser();
+            return true;
+          }
+        }
+      });
+    }
+  } catch (e) {}
 
 })();
