@@ -165,7 +165,12 @@
       continuePanel.appendChild(frag);
       continuePanel.classList.remove('hidden');
       if (continueEmpty) continueEmpty.classList.add('hidden');
-    }).catch(function () {});
+    }).catch(function (e) {
+      // FIX-LISTEN-STAB: log errors instead of silently swallowing them
+      try { console.error('[listen-shell] getAllBooksTtsProgress failed:', e); } catch {}
+      if (continuePanel) continuePanel.classList.add('hidden');
+      if (continueEmpty) continueEmpty.classList.remove('hidden');
+    });
   }
 
   // ── Open listen book (LISTEN_P3: wired to TTS player) ───────────────────────

@@ -227,7 +227,22 @@
     _navigating = true;
     showTocPanel(false);
     var bus = window.booksReaderBus;
-    if (bus) try { bus.emit('toc:navigate', href, idx); } catch {}
+    var emitted = false;
+    if (bus) try { bus.emit('toc:navigate', href, idx); emitted = true; } catch {}
+    // FIX-LISTEN-STAB: timeout fallback — if reader:relocated never fires, reset _navigating
+    // and restart TTS so the player doesn't get stuck in a dead state
+    if (!emitted) {
+      _navigating = false;
+      try { console.warn('[listen-player] toc:navigate not emitted — bus unavailable'); } catch {}
+      return;
+    }
+    setTimeout(function () {
+      if (!_navigating || !_open) return;
+      _navigating = false;
+      try { console.warn('[listen-player] toc:navigate timeout — reader:relocated not received'); } catch {}
+      var tts2 = window.booksTTS;
+      if (tts2) try { tts2.play(); } catch {}
+    }, 5000);
   }
 
   // ── TTS wiring ────────────────────────────────────────────────────────────────
@@ -278,6 +293,17 @@
 
   function open(book) {
     if (!book) return;
+    // FIX-LISTEN-STAB: guard against rapid double-open — close previous session first
+    if (_open) {
+      try {
+        var tts = window.booksTTS;
+        if (tts) tts.stop();
+      } catch {}
+      unwireTts();
+      showOverlay(false);
+      _open = false;
+      _ttsStarted = false;
+    }
     _book = book;
     _open = true;
     _ttsStarted = false;
@@ -367,8 +393,11 @@
       case ' ':
         e.preventDefault();
         e.stopPropagation();
-        if (tts.getState() === 'playing') tts.pause();
-        else tts.resume();
+        // FIX-LISTEN-STAB: handle idle state (resume only works from paused)
+        var st = tts.getState();
+        if (st === 'playing') tts.pause();
+        else if (st === 'paused') tts.resume();
+        else try { tts.play(); } catch {}
         break;
       case 'ArrowLeft':
         e.preventDefault();
@@ -429,13 +458,15 @@
     var backBtn = qs('lpBackBtn');
     if (backBtn) backBtn.addEventListener('click', closePlayer);
 
-    // Play / Pause
+    // Play / Pause — FIX-LISTEN-STAB: handle idle state (resume only works from paused)
     var ppBtn = qs('lpPlayPauseBtn');
     if (ppBtn) ppBtn.addEventListener('click', function () {
       var tts = window.booksTTS;
       if (!tts) return;
-      if (tts.getState() === 'playing') tts.pause();
-      else tts.resume();
+      var st = tts.getState();
+      if (st === 'playing') tts.pause();
+      else if (st === 'paused') tts.resume();
+      else try { tts.play(); } catch {}
     });
 
     // Prev / Next block

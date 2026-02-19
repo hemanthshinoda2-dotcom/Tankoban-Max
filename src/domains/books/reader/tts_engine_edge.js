@@ -259,8 +259,10 @@
       if (_bd.reqId !== state.requestId) return;
       if (!state.playing) return;
       if (state.paused) {
-        // Re-check after a short delay when paused
-        _bd.rafId = setTimeout(_bdPoll, 100);
+        // FIX-LISTEN-STAB: re-check reqId before rescheduling to avoid timer leak on cancel-while-paused
+        if (_bd.reqId === state.requestId) {
+          _bd.rafId = setTimeout(_bdPoll, 100);
+        }
         return;
       }
       var audio = state.audio;
