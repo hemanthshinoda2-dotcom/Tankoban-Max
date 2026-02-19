@@ -918,7 +918,7 @@ function updateCard(info) {
     var titleEl = qs('lpBookTitle');
     if (titleEl) titleEl.textContent = book.title || '';
     var card = qs('lpCardText');
-    if (card) card.innerHTML = '';
+    if (card) card.innerHTML = '<span class="lp-loading-msg">Preparing TTS\u2026</span>'; // OPT2: loading feedback
     var idxEl = qs('lpBlockIdx');
     var cntEl = qs('lpBlockCount');
     if (idxEl) idxEl.textContent = '0';

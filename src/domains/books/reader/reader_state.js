@@ -107,6 +107,7 @@
       fontBtn: qs('booksReaderFontBtn'),
       themeBtn: qs('booksReaderThemeBtn'),
       // FIX_TTSH: settings button triggers mega panel
+      listenBtn: qs('booksReaderListenBtn'),
       fsBtn: qs('booksReaderFsBtn'),
       closeBtn: qs('booksReaderCloseBtn'),
       // Overlay panels

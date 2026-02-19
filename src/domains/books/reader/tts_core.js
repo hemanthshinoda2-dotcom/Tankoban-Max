@@ -927,9 +927,7 @@
 
       if (state.allEngines.edge) {
         state.engineUsable.edge = !!(await probeEngine('edge', state.allEngines.edge));
-        if (state.engineUsable.edge && typeof state.allEngines.edge.loadVoices === 'function') {
-          try { await state.allEngines.edge.loadVoices({ maxAgeMs: 0 }); } catch {}
-        }
+        // OPT2: voices already loaded inside probe() on success — no need to call again
       }
 
       // FIX-LISTEN-STAB3: bail out if destroyed during probe/voice loading

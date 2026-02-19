@@ -433,6 +433,15 @@
   margin-left: 6px;
   white-space: nowrap;
 }
+/* OPT2: loading feedback */
+.lp-loading-msg {
+  opacity: 0.5;
+  animation: lp-pulse 1.5s ease-in-out infinite;
+}
+@keyframes lp-pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
 .lp-seek {
   width: 100%;
   height: 20px;

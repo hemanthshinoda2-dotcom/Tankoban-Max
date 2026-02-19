@@ -181,6 +181,11 @@
     }
 
     async function probe(payload) {
+      // OPT2: skip re-probe if already confirmed available this session
+      if (state.health.known && state.health.available) {
+        diag('edge_probe_cached', 'skipped');
+        return true;
+      }
       diag('edge_probe_start', '');
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
@@ -191,7 +196,7 @@
           diag('edge_probe_fail', state.health.reason);
           return state.health.available;
         }
-        var probeReq = Object.assign({ requireSynthesis: true, timeoutMs: 10000 }, payload || {});
+        var probeReq = Object.assign({ requireSynthesis: true, timeoutMs: 5000 }, payload || {}); // OPT2: reduced from 10s
         var res = await api.probe(probeReq);
         var ok = !!(res && res.ok && res.available);
         state.health.known = true;
