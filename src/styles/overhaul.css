@@ -1148,8 +1148,9 @@ code, pre, .mono{
 
 .winCtrl{
   appearance: none;
+  -webkit-app-region: no-drag;
   width: 46px;
-  height: 100%;
+  height: 30px;
   border: none;
   background: transparent;
   color: rgba(255,255,255,.82);
