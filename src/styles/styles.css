@@ -448,7 +448,7 @@ body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-corner{
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
-.tbLeft,.tbRight{ display:flex; align-items:center; gap:6px; }
+.tbLeft,.tbRight{ display:flex; align-items:center; gap:6px; position:relative; z-index:1; }
 .tbLeft{ grid-column:1; }
 .tbRight{ grid-column:3; }
 .tbCenter{ position:absolute; left:0; right:0; top:0; bottom:0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
@@ -3308,8 +3308,23 @@ body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:aut
   flex-direction:row;
 }
 
+/* FIX-TILES: match Comics continue tile pattern — tile height auto, cover gets explicit size */
 #booksContinuePanel.continueYacRow{
-  align-items: stretch;
+  align-items: flex-start !important;
+}
+#booksContinuePanel .contTile{
+  width: 200px !important;
+  height: auto !important;
+}
+#booksContinuePanel .contCover{
+  height: 308px !important;
+  flex: 0 0 auto !important;
+}
+body[data-tile-density="compact"] #booksContinuePanel .contTile{
+  width: 170px !important;
+}
+body[data-tile-density="compact"] #booksContinuePanel .contCover{
+  height: 262px !important;
 }
 
 #booksContinueList{
