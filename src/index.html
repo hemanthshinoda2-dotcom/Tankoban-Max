@@ -857,6 +857,32 @@ COMMON ANCHORS
             </div>
           </div>
         </div>
+
+        <!-- BUILD_WEB_PARITY: Web tips overlay -->
+        <div id="webLibTipsOverlay" class="keysOverlay hidden" aria-hidden="true">
+          <div class="keysCard">
+            <div class="keysTop">
+              <div class="keysTitle">Web Shortcuts</div>
+              <sl-button id="webLibTipsClose" class="keysClose" pill>Close</sl-button>
+            </div>
+            <div class="keysCols">
+              <div>
+                <div class="keysHead">Navigation</div>
+                <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back (close browser first)</span></div>
+                <div class="keysLine"><span class="key">Escape</span><span class="desc">Close tips or browser</span></div>
+                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">R</span><span class="desc">Reload (page or sources)</span></div>
+                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">T</span><span class="desc">New tab</span></div>
+                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">W</span><span class="desc">Close tab</span></div>
+              </div>
+              <div>
+                <div class="keysHead">Display</div>
+                <div class="keysLine"><span class="key">K</span><span class="desc">Toggle this tips overlay</span></div>
+                <div class="keysLine"><span class="key">F</span> / <span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
+              </div>
+            </div>
+            <div class="keysHint muted tiny">Tip: Right-click sources and continue tiles for more options.</div>
+          </div>
+        </div>
       </section>
 
       <!-- Video library view (Build 97) -->
@@ -1331,6 +1357,7 @@ COMMON ANCHORS
               <div class="navItems">
                 <div id="webSourcesList" class="folderTree" role="list" aria-label="Bookmarked sources"></div>
                 <sl-button id="webAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+                <sl-button id="webTipsBtn" class="navBtn" title="Keyboard shortcuts (K)">Tips</sl-button>
               </div>
             </div>
 
@@ -1382,7 +1409,7 @@ COMMON ANCHORS
         <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
           <div class="settingsCard">
             <div class="settingsTop">
-              <div class="settingsTitle">Add Download Source</div>
+              <div id="webAddTitle" class="settingsTitle">Add Download Source</div>
               <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
             </div>
             <div class="settingsGroup">
@@ -1406,6 +1433,7 @@ COMMON ANCHORS
           <button id="webBrowserBackBtn" class="iconBtn webNavBtn" title="Back to library" aria-label="Back to library">&#8592; Library</button>
           <div id="webBrowserTitle" class="webBrowserTitle"></div>
           <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
+          <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading…</div>
           <div class="webBrowserNav">
             <button id="webNavBack" class="iconBtn webNavBtn" title="Back" aria-label="Navigate back" disabled>&#8592;</button>
             <button id="webNavForward" class="iconBtn webNavBtn" title="Forward" aria-label="Navigate forward" disabled>&#8594;</button>
@@ -1413,9 +1441,13 @@ COMMON ANCHORS
             <button id="webNavHome" class="iconBtn webNavBtn" title="Source home page" aria-label="Source home">&#8962;</button>
           </div>
         </div>
+        <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
         <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
         <div id="webViewContainer" class="webViewContainer"></div>
       </div>
+
+      <!-- BUILD_WEB_PARITY: Web toast -->
+      <div id="webToast" class="videoToast hidden" role="status" aria-live="polite"></div>
 
       <!-- FIND_THIS:CONTEXT_MENU_CONTAINER -->
       <div id="contextMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>

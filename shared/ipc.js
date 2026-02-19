@@ -740,6 +740,8 @@ const EVENT = {
   WEB_SOURCES_UPDATED: 'webSources:updated',
 
   /** Download completed. Payload: { filename, destination?, library?, error? } */
+  // BUILD_WEB_PARITY
+  WEB_DOWNLOAD_STARTED: 'webDownload:started',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
 
   /**

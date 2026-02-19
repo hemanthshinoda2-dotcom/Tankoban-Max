@@ -178,6 +178,15 @@ function setupDownloadHandler(ctx) {
 
       item.setSavePath(route.destination);
 
+      // BUILD_WEB_PARITY
+      try {
+        ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+          filename: filename,
+          destination: route.destination,
+          library: route.library,
+        });
+      } catch {}
+
       item.on('done', function (_e, doneState) {
         if (doneState === 'completed') {
           // Trigger library rescan

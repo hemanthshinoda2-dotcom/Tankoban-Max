@@ -405,6 +405,11 @@ const api = {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));
     },
+    // BUILD_WEB_PARITY
+    onDownloadStarted: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_DOWNLOAD_STARTED, (_evt, data) => cb(data));
+    },
     onDownloadCompleted: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_COMPLETED, (_evt, data) => cb(data));

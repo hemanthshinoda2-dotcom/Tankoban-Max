@@ -262,3 +262,95 @@
   font-size: 11px;
   word-break: break-all;
 }
+
+
+/* =========================================
+   BUILD_WEB_PARITY: web polish + parity bits
+   ========================================= */
+
+.webSourceCard{
+  --web-src-color: #7a7a7a;
+}
+.webSourceCard:hover .webSourceThumb{
+  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
+}
+.webSourceCard:focus-visible .webSourceThumb{
+  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
+  outline: none;
+}
+
+.webSourceItem:hover{
+  background: rgba(255,255,255,.06);
+}
+.webSourceItem.active{
+  background: rgba(255,255,255,.08);
+}
+
+#webSourcesEmpty, #webContinueEmpty{
+  padding: 14px 12px;
+  border-radius: 14px;
+  border: 1px dashed rgba(255,255,255,.18);
+  background: rgba(0,0,0,.10);
+}
+
+.webDlPill{
+  margin-left: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.24);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.webLoadBar{
+  height: 3px;
+  width: 100%;
+  background: rgba(255,255,255,.10);
+  position: relative;
+  overflow: hidden;
+}
+.webLoadBar::before{
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  height: 100%;
+  width: 40%;
+  background: rgba(255,255,255,.55);
+  animation: webLoadBarSweep 900ms linear infinite;
+}
+@keyframes webLoadBarSweep{
+  0%{ left: -40%; }
+  100%{ left: 110%; }
+}
+
+.webTab.loading{
+  opacity: .92;
+}
+.webTab.loading::before{
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,.30);
+  border-top-color: rgba(255,255,255,.85);
+  display: inline-block;
+  animation: webTabSpin 800ms linear infinite;
+}
+@keyframes webTabSpin{
+  0%{ transform: rotate(0deg); }
+  100%{ transform: rotate(360deg); }
+}
+
+/* Make web toast behave like a global toast */
+#webToast.videoToast{
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 220;
+  pointer-events: none;
+}
+
