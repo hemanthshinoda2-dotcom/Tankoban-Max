@@ -397,7 +397,8 @@
 }
 .lp-card-footer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 4px;
   margin-top: 10px;
   font-size: 0.72rem;
