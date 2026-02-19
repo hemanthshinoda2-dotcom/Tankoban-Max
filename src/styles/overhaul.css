@@ -1120,13 +1120,17 @@ code, pre, .mono{
 
 /* =============================================
    MERIDIAN_FRAME: Frameless window + drag region
+   FIX-WIN-CTRL: drag region is now on .topbar itself.
+   The overlay element is kept for HTML compatibility but does nothing.
    ============================================= */
 
-.topbarDragRegion{
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+/* FIX-WIN-CTRL: make the topbar itself the drag handle */
+.topbar{
   -webkit-app-region: drag;
-  z-index: 0;
+}
+/* FIX-WIN-CTRL: overlay kept in HTML but disabled — drag is on .topbar */
+.topbarDragRegion{
+  display: none;
 }
 .topbar button,
 .topbar input,

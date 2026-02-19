@@ -29,17 +29,15 @@
   position: relative;
 }
 
-/* FIX-WEB-MODE: drag region so window can be moved from browser toolbar */
-.webToolbarDragRegion {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+/* FIX-WEB-MODE + FIX-WIN-CTRL: drag on the toolbar itself, overlay disabled */
+.webBrowserToolbar {
   -webkit-app-region: drag;
-  z-index: 0;
+}
+.webToolbarDragRegion {
+  display: none;
 }
 .webBrowserToolbar > *:not(.webToolbarDragRegion) {
   -webkit-app-region: no-drag;
-  position: relative;
-  z-index: 1;
 }
 
 .webBackBtn {

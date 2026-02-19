@@ -369,15 +369,23 @@ function createWindow(opts = {}) {
     try { windows.delete(w); } catch {}
   });
 
-  w.on('ready-to-show', () => { 
-    w.__tankobanDidFinishLoad = true; 
-    
-    flushPendingOpenPaths(w); 
+  // FIX-WIN-CTRL: When leaving fullscreen, restore to maximized (not small 1200x800).
+  // Deferred so the transition finishes before maximize() is called.
+  w.on('leave-full-screen', () => {
+    setImmediate(() => { try { w.maximize(); } catch {} });
+  });
+
+  w.on('ready-to-show', () => {
+    w.__tankobanDidFinishLoad = true;
+
+    flushPendingOpenPaths(w);
   });
 
   w.loadFile(path.join(APP_ROOT, 'src', 'index.html'), openBookId ? { query: { book: openBookId } } : {})
-    .then(() => { 
-      w.show(); 
+    .then(() => {
+      // FIX-WIN-CTRL: show first, then maximize — maximize before show is unreliable on Windows 11
+      w.show();
+      w.maximize();
       // BUILD14: Log ready state
       try { console.log('TANKOBAN_BUILD14_READY'); } catch {}
     })
