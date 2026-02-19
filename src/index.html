@@ -66,10 +66,18 @@ COMMON ANCHORS
           <div id="globalSearchResults" class="searchResults hidden" role="listbox" aria-label="Search results"></div>
         </div>
 
-        <!-- Build 36: Windows provides native title bar controls now (hidden, but kept for legacy bindings). -->
-        <button id="minimizeBtn" class="iconBtn winChromeHidden" title="Minimize" aria-label="Minimize">_</button>
-        <button id="libFsBtn" class="iconBtn winChromeHidden" title="Exit fullscreen" aria-label="Exit fullscreen">Fullscreen</button>
-        <button id="closeBtn" class="iconBtn winChromeHidden" title="Close" aria-label="Close">Close</button>
+        <!-- MERIDIAN_FRAME: Custom window controls -->
+        <div class="winControls">
+          <button id="winMinBtn" class="winCtrl" title="Minimize" aria-label="Minimize">
+            <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
+          </button>
+          <button id="winMaxBtn" class="winCtrl" title="Maximize" aria-label="Maximize">
+            <svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+          </button>
+          <button id="winCloseBtn" class="winCtrl winCtrl--close" title="Close" aria-label="Close">
+            <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+        </div>
       </div>
     </header>
 

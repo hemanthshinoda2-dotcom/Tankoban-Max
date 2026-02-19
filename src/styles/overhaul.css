@@ -1116,3 +1116,90 @@ code, pre, .mono{
 .videoAnchoredPopover.hidden {
   pointer-events: none;
 }
+
+/* =============================================
+   MERIDIAN_FRAME: Frameless window + drag region
+   ============================================= */
+
+.topbar{
+  -webkit-app-region: drag;
+}
+.topbar button,
+.topbar input,
+.topbar select,
+.topbar sl-button,
+.topbar sl-input,
+.topbar sl-select,
+.topbar sl-switch,
+.topbar .modeSwitch,
+.topbar .winControls,
+.topbar .globalSearchWrap{
+  -webkit-app-region: no-drag;
+}
+
+/* MERIDIAN_FRAME: custom window controls */
+.winControls{
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-left: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.winCtrl{
+  appearance: none;
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 0;
+  padding: 0;
+  transition: background .12s ease;
+}
+
+.winCtrl:hover{
+  background: rgba(255,255,255,.10);
+}
+
+.winCtrl:active{
+  background: rgba(255,255,255,.20);
+}
+
+.winCtrl--close:hover{
+  background: #e81123;
+  color: #fff;
+}
+
+.winCtrl--close:active{
+  background: #f1707a;
+  color: #fff;
+}
+
+/* =============================================
+   MERIDIAN_GLASS: Glassmorphic overlays
+   ============================================= */
+
+.glass-overlay{
+  backdrop-filter: blur(40px) saturate(145%);
+  -webkit-backdrop-filter: blur(40px) saturate(145%);
+  background: rgba(0,0,0,.55);
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 20px 50px -20px rgba(0,0,0,.75);
+}
+
+.keysCard,
+.settingsCard,
+.webDlPanel,
+#contextMenu{
+  backdrop-filter: blur(40px) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(145%) !important;
+  background: rgba(0,0,0,.55) !important;
+  border: 1px solid rgba(255,255,255,.12) !important;
+  box-shadow: 0 20px 50px -20px rgba(0,0,0,.75);
+}

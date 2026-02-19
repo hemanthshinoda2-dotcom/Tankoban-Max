@@ -144,7 +144,7 @@
     });
   }
 
-  el.minimizeBtn.addEventListener('click', () => Tanko.api.window.minimize());
+  if (el.minimizeBtn) el.minimizeBtn.addEventListener('click', () => Tanko.api.window.minimize());
   if (el.libFsBtn) {
     el.libFsBtn.addEventListener('click', async () => {
       try { await Tanko.api.window.toggleFullscreen(); } catch {}
@@ -152,7 +152,33 @@
       try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
     });
   }
-  el.closeBtn.addEventListener('click', () => Tanko.api.window.close());
+  if (el.closeBtn) el.closeBtn.addEventListener('click', () => Tanko.api.window.close());
+
+  // MERIDIAN_FRAME: custom window controls
+  var winMinBtn = document.getElementById('winMinBtn');
+  var winMaxBtn = document.getElementById('winMaxBtn');
+  var winCloseBtn = document.getElementById('winCloseBtn');
+  if (winMinBtn) {
+    winMinBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.minimize(); } catch (err) {}
+    });
+  }
+  if (winMaxBtn) {
+    winMaxBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.toggleFullscreen(); } catch (err) {}
+    });
+  }
+  if (winCloseBtn) {
+    winCloseBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.close(); } catch (err) {}
+    });
+  }
 
   el.seriesBackBtn.addEventListener('click', () => {
     appState.selectedSeriesId = null;

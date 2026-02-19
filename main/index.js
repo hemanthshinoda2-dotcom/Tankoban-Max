@@ -304,7 +304,7 @@ function createWindow(opts = {}) {
     title: 'Tankoban',
     backgroundColor: '#000000',
     icon: path.join(APP_ROOT, 'build', 'icon.png'),
-    frame: true,            // Build16: normal window chrome
+    frame: false,           // MERIDIAN_FRAME: frameless window with custom controls
     fullscreen: false,      // will be set programmatically after creation
     // Hide menu bar (especially important for fullscreen reading on Windows/Linux).
     autoHideMenuBar: true,
