@@ -1430,16 +1430,19 @@ COMMON ANCHORS
       <!-- BUILD_WEB_HOME: Web browser view (overlay, hidden by default) -->
       <div id="webBrowserView" class="webBrowserView hidden">
         <div class="webBrowserToolbar">
-          <button id="webBrowserBackBtn" class="iconBtn webNavBtn" title="Back to library" aria-label="Back to library">&#8592; Library</button>
+          <button id="webBrowserBackBtn" class="webBackBtn" title="Back to library" aria-label="Back to library">&#8592; Library</button>
+          <div class="webToolbarSep"></div>
           <div id="webBrowserTitle" class="webBrowserTitle"></div>
-          <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
-          <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading…</div>
           <div class="webBrowserNav">
             <button id="webNavBack" class="iconBtn webNavBtn" title="Back" aria-label="Navigate back" disabled>&#8592;</button>
             <button id="webNavForward" class="iconBtn webNavBtn" title="Forward" aria-label="Navigate forward" disabled>&#8594;</button>
             <button id="webNavReload" class="iconBtn webNavBtn" title="Reload" aria-label="Reload page">&#8635;</button>
             <button id="webNavHome" class="iconBtn webNavBtn" title="Source home page" aria-label="Source home">&#8962;</button>
           </div>
+        </div>
+        <div class="webUrlBar">
+          <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
+          <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading&hellip;</div>
         </div>
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
         <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>

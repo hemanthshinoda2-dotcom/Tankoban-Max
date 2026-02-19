@@ -23,7 +23,7 @@
         "release:prep": "npm run build:player && npm run validate:player"
     },
     "devDependencies": {
-        "electron": "30.0.0",
+        "electron": "^40.0.0",
         "electron-builder": "24.13.3",
         "electron-packager": "17.1.2"
     },

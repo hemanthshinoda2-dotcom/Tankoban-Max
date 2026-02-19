@@ -21,9 +21,34 @@
 .webBrowserToolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--sl-color-neutral-200);
+  gap: 4px;
+  padding: 0 8px;
+  height: 40px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+
+.webBackBtn {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  color: inherit;
+  cursor: pointer;
+}
+.webBackBtn:hover {
+  background: rgba(255,255,255,.12);
+  border-color: rgba(255,255,255,.20);
+}
+
+.webToolbarSep {
+  width: 1px;
+  height: 20px;
+  background: rgba(255,255,255,.20);
+  margin: 0 10px;
   flex-shrink: 0;
 }
 
@@ -40,6 +65,18 @@
 .webBrowserNav {
   display: flex;
   gap: 2px;
+  flex-shrink: 0;
+}
+
+/* URL bar row */
+.webUrlBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  min-height: 22px;
 }
 
 /* ======================================== */
@@ -53,6 +90,7 @@
   padding: 4px 8px;
   min-height: 32px;
   align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,.06);
 }
 
 .webTab {
@@ -67,18 +105,19 @@
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: var(--sl-color-neutral-100);
-  border: 1px solid var(--sl-color-neutral-200);
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  color: inherit;
   user-select: none;
 }
 
 .webTab.active {
-  background: var(--sl-color-primary-100);
-  border-color: var(--sl-color-primary-400);
+  background: rgba(255,255,255,.15);
+  border-color: rgba(255,255,255,.25);
 }
 
 .webTab:hover:not(.active) {
-  background: var(--sl-color-neutral-200);
+  background: rgba(255,255,255,.12);
 }
 
 .webTabLabel {
@@ -131,10 +170,11 @@
 }
 
 .webUrlDisplay {
-  padding: 2px 8px;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 
 /* ======================================== */
@@ -144,6 +184,7 @@
 .webViewContainer {
   flex: 1;
   position: relative;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -153,10 +194,16 @@
   left: 0;
   width: 100%;
   height: 100%;
+  border: 0;
 }
 
-.webViewContainer webview.hidden {
-  display: none;
+/* FIX-WEB-UI: ensure web home view scrolls */
+#webLibraryView .libContent {
+  overflow: hidden;
+}
+#webHomeView {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ======================================== */

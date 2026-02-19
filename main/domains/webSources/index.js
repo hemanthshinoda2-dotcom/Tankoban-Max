@@ -3,7 +3,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { session } = require('electron');
+const { app, session } = require('electron');
 
 const CONFIG_FILE = 'web_sources.json';
 
@@ -203,6 +203,7 @@ function setupDownloadHandler(ctx) {
 
           try {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+              ok: true,
               filename: filename,
               destination: route.destination,
               library: route.library,
@@ -216,6 +217,17 @@ function setupDownloadHandler(ctx) {
             });
           } catch {}
         }
+      });
+    });
+    // FIX-WEB-POPUP: intercept popups from webmode webviews
+    app.on('web-contents-created', function (_evt2, contents) {
+      if (contents.getType() !== 'webview') return;
+      try {
+        if (contents.session !== ses) return;
+      } catch (e) { return; }
+      contents.setWindowOpenHandler(function (details) {
+        try { contents.loadURL(details.url); } catch (e) {}
+        return { action: 'deny' };
       });
     });
   } catch (err) {

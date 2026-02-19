@@ -640,11 +640,9 @@
     var wv = document.createElement('webview');
     wv.className = 'webView';
     wv.setAttribute('partition', PARTITION);
-    wv.setAttribute('allowpopups', 'true');
     wv.src = startUrl;
-    wv.style.width = '100%';
-    wv.style.height = '100%';
-    wv.style.display = 'none';
+    wv.style.visibility = 'hidden';
+    wv.style.zIndex = '0';
 
     tab.webview = wv;
     state.tabs.push(tab);
@@ -687,14 +685,6 @@
       }
     });
 
-    wv.addEventListener('new-window', function (e) {
-      // Open in new tab
-      if (e && e.url) {
-        createTab(source, e.url);
-        renderContinue();
-      }
-    });
-
     // Activate
     state.activeTabId = tabId;
     activateTab(tabId);
@@ -709,7 +699,13 @@
     for (var i = 0; i < state.tabs.length; i++) {
       var t = state.tabs[i];
       if (t.webview) {
-        t.webview.style.display = (t.id === tabId) ? 'block' : 'none';
+        if (t.id === tabId) {
+          t.webview.style.visibility = 'visible';
+          t.webview.style.zIndex = '1';
+        } else {
+          t.webview.style.visibility = 'hidden';
+          t.webview.style.zIndex = '0';
+        }
       }
     }
     renderTabs();
@@ -1129,6 +1125,7 @@
         state.downloading = Math.max(0, state.downloading + 1);
         state.lastDownloadName = info && info.filename ? String(info.filename) : '';
         syncDownloadIndicator();
+        showToast('Downloading: ' + (info && info.filename ? info.filename : ''));
       });
     }
 

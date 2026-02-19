@@ -291,7 +291,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar,
 body:not(.inPlayer) #booksLibraryView .booksList,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid,
+body:not(.inPlayer) #webLibraryView .libSidebar,
+body:not(.inPlayer) #webLibraryView .homeView{
   scrollbar-width: thin;
   scrollbar-color: rgba(255,255,255,.30) transparent;
 }
@@ -308,7 +310,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar,
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar{
   width: 8px;
   height: 8px;
 }
@@ -325,7 +329,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar-track,
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar-track,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar-track,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar-track,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-track{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-track,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar-track,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-track{
   background: transparent;
 }
 
@@ -341,7 +347,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar-thumb,
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar-thumb,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar-thumb,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar-thumb,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar-thumb,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-thumb{
   background-color: rgba(255,255,255,.18);
   border-radius: 999px;
   border: 2px solid transparent;
@@ -360,7 +368,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar-thumb:hover
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar-thumb:hover,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar-thumb:hover,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar-thumb:hover,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb:hover{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar-thumb:hover,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-thumb:hover{
   background-color: rgba(255,255,255,.32);
 }
 
@@ -376,7 +386,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar-thumb:activ
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar-thumb:active,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar-thumb:active,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar-thumb:active,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb:active{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar-thumb:active,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-thumb:active{
   background-color: rgba(255,255,255,.44);
 }
 
@@ -392,7 +404,9 @@ body:not(.inPlayer) #booksLibraryView .libSidebar::-webkit-scrollbar-corner,
 body:not(.inPlayer) #booksLibraryView .booksList::-webkit-scrollbar-corner,
 body:not(.inPlayer) #booksLibraryView .booksContinueRow::-webkit-scrollbar-corner,
 body:not(.inPlayer) #booksLibraryView #booksContinuePanel::-webkit-scrollbar-corner,
-body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-corner{
+body:not(.inPlayer) #booksLibraryView #booksEpisodesGrid::-webkit-scrollbar-corner,
+body:not(.inPlayer) #webLibraryView .libSidebar::-webkit-scrollbar-corner,
+body:not(.inPlayer) #webLibraryView .homeView::-webkit-scrollbar-corner{
   background: transparent;
 }
 
