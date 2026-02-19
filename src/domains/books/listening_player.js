@@ -268,25 +268,67 @@
     tts.onProgress = null;
   }
 
+  // FIX-LISTEN-STAB2: Build the options object that tts_core.init() requires.
+  // Provides getViewEngine (the foliate rendering engine), getHost (reader host element),
+  // book format, and onNeedAdvance (section transition callback).
+  function _buildTtsInitOpts() {
+    var RS = window.booksReaderState;
+    var fmt = (_book && _book.format) ? String(_book.format).toLowerCase() : 'epub';
+    return {
+      format: fmt,
+      getHost: function () {
+        return RS && RS.state ? RS.state.host : null;
+      },
+      getViewEngine: function () {
+        return RS && RS.state ? RS.state.engine : null;
+      },
+      onNeedAdvance: function () {
+        var eng = RS && RS.state ? RS.state.engine : null;
+        if (!eng || typeof eng.advanceSection !== 'function') {
+          return Promise.resolve(false);
+        }
+        return eng.advanceSection(1).then(function () { return true; })
+          .catch(function () { return false; });
+      },
+    };
+  }
+
   function startTts() {
     if (_ttsStarted) return;
     _ttsStarted = true;
     wireTts();
-    populateVoiceSelect();
     renderTocPanel(); // LISTEN_P5: populate chapter list
 
     var tts = window.booksTTS;
     if (!tts) return;
-    // Show current state if already loaded
-    try {
-      var snap = tts.getSnippet ? tts.getSnippet() : null;
-      if (snap) updateCard(snap);
-      syncPlayPauseIcon(tts.getState ? tts.getState() : 'idle');
-    } catch {}
 
-    try { tts.play(); } catch (e) {
-      try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+    syncPlayPauseIcon('idle');
+
+    // FIX-LISTEN-STAB2: MUST init TTS engine before play — creates Edge engine,
+    // probes availability, loads voices, and pre-warms WebSocket.
+    // Without init(), state.engine is null and play() returns immediately.
+    if (typeof tts.init !== 'function') {
+      try { console.error('[listen-player] tts.init not available'); } catch {}
+      return;
     }
+    var opts = _buildTtsInitOpts();
+    tts.init(opts).then(function () {
+      if (!_open || !_ttsStarted) return; // Player closed during init
+      // Voices are now loaded — populate selector
+      populateVoiceSelect();
+      // Show current state
+      try {
+        var snap = tts.getSnippet ? tts.getSnippet() : null;
+        if (snap) updateCard(snap);
+        syncPlayPauseIcon(tts.getState ? tts.getState() : 'idle');
+      } catch {}
+      // Now safe to play
+      try { tts.play(); } catch (e) {
+        try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+      }
+    }).catch(function (e) {
+      try { console.error('[listen-player] tts.init() failed:', e); } catch {}
+    });
   }
 
   // ── Open / close ──────────────────────────────────────────────────────────────
@@ -339,10 +381,15 @@
     });
   }
 
-  function closePlayer() {
+  // FIX-LISTEN-STAB2: opts.skipModeRestore — when true, don't re-apply listen mode
+  // after closing. Used when close is triggered by a mode switch (Listen → Read).
+  function closePlayer(opts) {
     if (!_open) return;
     _open = false;
     _ttsStarted = false;
+
+    // FIX-LISTEN-STAB2: clear any pending debounce timer before flushing
+    if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
 
     // LISTEN_P4: flush progress immediately before stopping
     try {
@@ -355,9 +402,13 @@
     _navigating = false;
     showTocPanel(false);
 
-    // Stop TTS and clear callbacks
+    // FIX-LISTEN-STAB2: destroy TTS (not just stop) — frees engines, WebSocket,
+    // CSS highlights, queue items, and foliate TTS state. Without this, resources
+    // accumulate across book opens.
     var tts = window.booksTTS;
-    if (tts) try { tts.stop(); } catch {}
+    if (tts) {
+      try { tts.destroy(); } catch {}
+    }
     unwireTts();
 
     // Hide overlay
@@ -365,20 +416,22 @@
 
     // Close reader and return to listening library
     // booksApp.back() closes the reader and resets library nav state
+    var skipRestore = opts && opts.skipModeRestore;
     var shell = window.booksListeningShell;
     var booksApp = window.booksApp;
     if (booksApp && typeof booksApp.back === 'function') {
       booksApp.back().then(function () {
         // back() renders reading home — re-apply listen mode on top
-        if (shell && typeof shell.setMode === 'function') {
+        // (skip if close was triggered by a mode switch to prevent overriding user choice)
+        if (!skipRestore && shell && typeof shell.setMode === 'function') {
           shell.setMode(shell.MODE_LISTEN);
         }
       }).catch(function () {
-        if (shell && typeof shell.setMode === 'function') {
+        if (!skipRestore && shell && typeof shell.setMode === 'function') {
           shell.setMode(shell.MODE_LISTEN);
         }
       });
-    } else if (shell && typeof shell.setMode === 'function') {
+    } else if (!skipRestore && shell && typeof shell.setMode === 'function') {
       shell.setMode(shell.MODE_LISTEN);
     }
   }
@@ -438,6 +491,7 @@
       // Reader closed externally (e.g., Esc in reader) — sync player state
       if (!_open) return;
       // LISTEN_P4: flush progress on external close
+      if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; } // FIX-LISTEN-STAB2: clear pending debounce
       try {
         var tts3 = window.booksTTS;
         var snap3 = tts3 && tts3.getSnippet ? tts3.getSnippet() : null;
@@ -447,6 +501,9 @@
       showOverlay(false);
       _open = false;
       _ttsStarted = false;
+      // FIX-LISTEN-STAB2: destroy TTS on external close too
+      var ttsCleanup = window.booksTTS;
+      if (ttsCleanup) { try { ttsCleanup.destroy(); } catch {} }
       unwireTts();
       var shell = window.booksListeningShell;
       if (shell && typeof shell.setMode === 'function') {

@@ -22,6 +22,16 @@
   // ── Mode toggle ──────────────────────────────────────────────────────────────
 
   function applyMode(mode) {
+    // FIX-LISTEN-STAB2: close the listening player when switching away from listen mode.
+    // Without this, TTS keeps playing in the background with no UI to control it.
+    // skipModeRestore prevents closePlayer from re-applying listen mode after back().
+    if (mode !== MODE_LISTEN) {
+      var player = window.booksListenPlayer;
+      if (player && typeof player.isOpen === 'function' && player.isOpen()) {
+        try { player.close({ skipModeRestore: true }); } catch {}
+      }
+    }
+
     currentMode = mode;
     try { localStorage.setItem(STORAGE_KEY, mode); } catch {}
 
