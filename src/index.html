@@ -30,6 +30,8 @@ COMMON ANCHORS
   <link rel="stylesheet" href="./styles/video-library-match.css"/>
   <!-- BUILD_OVERHAUL: Books reader standard layout -->
   <link rel="stylesheet" href="./styles/books-reader.css"/>
+  <!-- BUILD_WEB: Web browser mode -->
+  <link rel="stylesheet" href="./styles/web-browser.css"/>
   <!-- Comic reader-only UI enhancement pack -->
 </head>
 <body>
@@ -50,6 +52,7 @@ COMMON ANCHORS
           <sl-button id="modeComicsBtn" class="modeBtn active" size="small" title="Comics">Comics</sl-button>
           <sl-button id="modeBooksBtn" class="modeBtn" size="small" title="Books">Books</sl-button>
           <sl-button id="modeVideosBtn" class="modeBtn" size="small" title="Videos">Videos</sl-button>
+          <sl-button id="modeWebBtn" class="modeBtn" size="small" title="Web">Web</sl-button>
         </div>
       </div>
 
@@ -223,11 +226,7 @@ COMMON ANCHORS
       <section id="booksLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Books library navigation">
-            <!-- LISTEN_P1: Books sub-mode toggle -->
-            <div class="books-mode-tabs">
-              <button id="booksModeReadBtn" class="books-mode-tab active" aria-pressed="true" title="Reading mode">Reading</button>
-              <button id="booksModeListenBtn" class="books-mode-tab" aria-pressed="false" title="Listening mode">Listening</button>
-            </div>
+            <!-- STRIP-LISTEN-MODE: mode tabs removed -->
             <div class="navSection">
               <div class="navHeader">Libraries</div>
               <div class="navItems">
@@ -259,7 +258,7 @@ COMMON ANCHORS
           </aside>
 
           <div class="libContent">
-            <!-- LISTEN_P1: Reading mode content wrapper (toggled by listening_shell.js) -->
+            <!-- Books reading content wrapper -->
             <div id="booksReadingContent">
             <div id="booksHomeView" class="homeView">
               <div class="panel continuePanel">
@@ -373,7 +372,8 @@ COMMON ANCHORS
                 <div class="br-toolbar-right">
                   <!-- FIX-TTS03: Flow mode toggle (paginated ↔ scrolled) -->
                   <button id="booksReaderFlowBtn" class="br-btn" title="Paginated (click to scroll)" aria-label="Paginated (click to scroll)"><svg viewBox="0 0 22 19" xmlns="http://www.w3.org/2000/svg"><path d="M20 0.5H14C13.4178 0.5 12.8437 0.635544 12.3229 0.895898C11.8022 1.15625 11.3493 1.53426 11 2C10.6507 1.53426 10.1978 1.15625 9.67705 0.895898C9.15634 0.635544 8.58217 0.5 8 0.5H2C1.60218 0.5 1.22064 0.658035 0.93934 0.93934C0.658035 1.22064 0.5 1.60218 0.5 2V14C0.5 14.3978 0.658035 14.7794 0.93934 15.0607C1.22064 15.342 1.60218 15.5 2 15.5H8C8.59674 15.5 9.16903 15.7371 9.59099 16.159C10.0129 16.581 10.25 17.1533 10.25 17.75C10.25 17.9489 10.329 18.1397 10.4697 18.2803C10.6103 18.421 10.8011 18.5 11 18.5C11.1989 18.5 11.3897 18.421 11.5303 18.2803C11.671 18.1397 11.75 17.9489 11.75 17.75C11.75 17.1533 11.9871 16.581 12.409 16.159C12.831 15.7371 13.4033 15.5 14 15.5H20C20.3978 15.5 20.7794 15.342 21.0607 15.0607C21.342 14.7794 21.5 14.3978 21.5 14V2C21.5 1.60218 21.342 1.22064 21.0607 0.93934C20.7794 0.658035 20.3978 0.5 20 0.5ZM8 14H2V2H8C8.59674 2 9.16903 2.23705 9.59099 2.65901C10.0129 3.08097 10.25 3.65326 10.25 4.25V14.75C9.6015 14.262 8.8116 13.9987 8 14ZM20 14H14C13.1884 13.9987 12.3985 14.262 11.75 14.75V4.25C11.75 3.65326 11.9871 3.08097 12.409 2.65901C12.831 2.23705 13.4033 2 14 2H20V14ZM14 4.25H17.75C17.9489 4.25 18.1397 4.32902 18.2803 4.46967C18.421 4.61032 18.5 4.80109 18.5 5C18.5 5.19891 18.421 5.38968 18.2803 5.53033C18.1397 5.67098 17.9489 5.75 17.75 5.75H14C13.8011 5.75 13.6103 5.67098 13.4697 5.53033C13.329 5.38968 13.25 5.19891 13.25 5C13.25 4.80109 13.329 4.61032 13.4697 4.46967C13.6103 4.32902 13.8011 4.25 14 4.25ZM18.5 8C18.5 8.19891 18.421 8.38968 18.2803 8.53033C18.1397 8.67098 17.9489 8.75 17.75 8.75H14C13.8011 8.75 13.6103 8.67098 13.4697 8.53033C13.329 8.38968 13.25 8.19891 13.25 8C13.25 7.80109 13.329 7.61032 13.4697 7.46967C13.6103 7.32902 13.8011 7.25 14 7.25H17.75C17.9489 7.25 18.1397 7.32902 18.2803 7.46967C18.421 7.61032 18.5 7.80109 18.5 8ZM18.5 11C18.5 11.1989 18.421 11.3897 18.2803 11.5303C18.1397 11.671 17.9489 11.75 17.75 11.75H14C13.8011 11.75 13.6103 11.671 13.4697 11.5303C13.329 11.3397 13.25 11.1989 13.25 11C13.25 10.8011 13.329 10.6103 13.4697 10.4697C13.6103 10.329 13.8011 10.25 14 10.25H17.75C17.9489 10.25 18.1397 10.329 18.2803 10.4697C18.421 10.6103 18.5 10.8011 18.5 11Z" fill="currentColor"/></svg></button>
-                  <!-- LISTEN_P0: booksReaderTtsLaunch removed — TTS moved to Listening mode -->
+                  <!-- STRIP-LISTEN-MODE: Listen button opens TTS player overlay -->
+                  <button id="booksReaderListenBtn" class="br-btn" title="Listen (TTS)" aria-label="Listen with TTS"><svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/></svg></button>
                   <button id="booksReaderSearchBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="search" title="Search (Ctrl+F)" aria-label="Search"><svg viewBox="0 0 20 14" xmlns="http://www.w3.org/2000/svg"><path d="M0 0.75C0 0.551088 0.0790178 0.360322 0.21967 0.21967C0.360322 0.0790178 0.551088 0 0.75 0H17.25C17.4489 0 17.6397 0.0790178 17.7803 0.21967C17.921 0.360322 18 0.551088 18 0.75C18 0.948912 17.921 1.13968 17.7803 1.28033C17.6397 1.42098 17.4489 1.5 17.25 1.5H0.75C0.551088 1.5 0.360322 1.42098 0.21967 1.28033C0.0790178 1.13968 0 0.948912 0 0.75ZM0.75 7.5H7.5C7.69891 7.5 7.88968 7.42098 8.03033 7.28033C8.17098 7.13968 8.25 6.94891 8.25 6.75C8.25 6.55109 8.17098 6.36032 8.03033 6.21967C7.88968 6.07902 7.69891 6 7.5 6H0.75C0.551088 6 0.360322 6.07902 0.21967 6.21967C0.0790178 6.36032 0 6.55109 0 6.75C0 6.94891 0.0790178 7.13968 0.21967 7.28033C0.360322 7.42098 0.551088 7.5 0.75 7.5ZM9 12H0.75C0.551088 12 0.360322 12.079 0.21967 12.2197C0.0790178 12.3603 0 12.5511 0 12.75C0 12.9489 0.0790178 13.1397 0.21967 13.2803C0.360322 13.421 0.551088 13.5 0.75 13.5H9C9.19891 13.5 9.38968 13.421 9.53033 13.2803C9.67098 13.1397 9.75 12.9489 9.75 12.75C9.75 12.5511 9.67098 12.3603 9.53033 12.2197C9.38968 12.079 9.19891 12 9 12ZM19.2806 13.2806C19.211 13.3504 19.1283 13.4057 19.0372 13.4434C18.9462 13.4812 18.8486 13.5006 18.75 13.5006C18.6514 13.5006 18.5538 13.4812 18.4628 13.4434C18.3717 13.4057 18.289 13.3504 18.2194 13.2806L16.3125 11.3775C15.537 11.8891 14.5993 12.0947 13.6809 11.9543C12.7625 11.814 11.9289 11.3377 11.3416 10.6179C10.7544 9.89799 10.4552 8.98574 10.5022 8.05789C10.5491 7.13004 10.9388 6.25265 11.5957 5.59572C12.2526 4.93879 13.13 4.5491 14.0579 4.50216C14.9857 4.45522 15.898 4.75437 16.6179 5.34164C17.3377 5.92891 17.814 6.7625 17.9543 7.68088C18.0947 8.59925 17.8891 9.53703 17.3775 10.3125L19.2806 12.2156C19.3509 12.2853 19.4067 12.3683 19.4448 12.4597C19.4829 12.5511 19.5025 12.6491 19.5025 12.7481C19.5025 12.8471 19.4829 12.9452 19.4448 13.0366C19.4067 13.128 19.3509 13.2109 19.2806 13.2806ZM14.25 10.5C14.695 10.5 15.13 10.368 15.5 10.1208C15.87 9.87357 16.1584 9.52217 16.3287 9.11104C16.499 8.6999 16.5436 8.2475 16.4568 7.81105C16.37 7.37459 16.1557 6.97368 15.841 6.65901C15.5263 6.34434 15.1254 6.13005 14.689 6.04323C14.2525 5.95642 13.8001 6.00097 13.389 6.17127C12.9778 6.34157 12.6264 6.62996 12.3792 6.99997C12.132 7.36998 12 7.80499 12 8.25C12 8.84674 12.2371 9.41903 12.659 9.84099C13.081 10.2629 13.6533 10.5 14.25 10.5Z" fill="currentColor"/></svg></button>
                   <button id="booksReaderFontBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="font" title="Font settings (?)" aria-label="Font settings"><svg viewBox="0 0 20 21" xmlns="http://www.w3.org/2000/svg"><g clip-path="url(#cTF)"><rect x="0.94" y="1.89605" width="18.12" height="18.1161" rx="1.06" stroke="currentColor" stroke-width="1.88" fill="none"/><path d="M4.60101 17.113C4.71254 17.1658 4.8334 17.1961 4.95666 17.2021C5.07992 17.2081 5.20315 17.1897 5.31928 17.1479C5.43542 17.1062 5.54217 17.042 5.63341 16.9589C5.72466 16.8758 5.7986 16.7755 5.85101 16.6638L7.06585 14.0771H12.9346L14.1518 16.6638C14.2577 16.8888 14.4486 17.0625 14.6826 17.1468C14.9166 17.231 15.1744 17.2189 15.3994 17.113C15.6245 17.0071 15.7982 16.8162 15.8825 16.5822C15.9667 16.3482 15.9545 16.0904 15.8487 15.8653L10.8487 5.24034C10.773 5.07928 10.653 4.94309 10.5027 4.8477C10.3525 4.75232 10.1782 4.70166 10.0002 4.70166C9.82226 4.70166 9.64797 4.75232 9.49773 4.8477C9.34748 4.94309 9.2275 5.07928 9.15179 5.24034L4.15179 15.8653C4.09934 15.9768 4.06935 16.0974 4.06354 16.2204C4.05773 16.3434 4.07622 16.4664 4.11793 16.5822C4.15965 16.6981 4.22378 16.8046 4.30667 16.8957C4.38956 16.9867 4.48957 17.0606 4.60101 17.113ZM10.0002 7.84112L12.0526 12.2021H7.94788L10.0002 7.84112Z" fill="currentColor"/></g><defs><clipPath id="cTF"><rect width="20" height="20" fill="currentColor" transform="translate(0 0.954102)"/></clipPath></defs></svg></button>
                   <button id="booksReaderThemeBtn" class="br-btn br-toolbar-overlay-btn" data-overlay="theme" title="Theme settings" aria-label="Theme settings"><svg viewBox="0 0 11 10" xmlns="http://www.w3.org/2000/svg"><path d="M10.875 0.5C10.875 0.400544 10.8355 0.305161 10.7652 0.234835C10.6949 0.164509 10.5995 0.125 10.5 0.125C8.43379 0.125 6.31363 2.45516 5.13613 3.99828C4.7156 3.86949 4.27073 3.84112 3.83725 3.91544C3.40376 3.98977 2.99375 4.16472 2.64014 4.42624C2.28654 4.68777 1.99919 5.02857 1.80119 5.42129C1.60318 5.81401 1.50004 6.24769 1.50004 6.6875C1.50004 8.135 0.584103 8.78422 0.540509 8.81422C0.473988 8.85914 0.423635 8.92421 0.396855 8.99988C0.370074 9.07555 0.368278 9.15781 0.391732 9.23458C0.415187 9.31134 0.462652 9.37855 0.52715 9.42633C0.591648 9.47411 0.669774 9.49993 0.750041 9.5H4.31254C4.75235 9.5 5.18603 9.39686 5.57875 9.19885C5.97147 9.00085 6.31227 8.7135 6.5738 8.3599C6.83532 8.00629 7.01027 7.59628 7.0846 7.16279C7.15892 6.72931 7.13055 6.28444 7.00176 5.86391C8.54535 4.68641 10.875 2.56625 10.875 0.5ZM4.31254 8.75H1.62332C1.93973 8.30047 2.25004 7.62125 2.25004 6.6875C2.25004 6.27958 2.371 5.88081 2.59763 5.54164C2.82427 5.20246 3.14638 4.9381 3.52326 4.782C3.90013 4.62589 4.31483 4.58505 4.71491 4.66463C5.115 4.74421 5.4825 4.94065 5.77095 5.22909C6.05939 5.51754 6.25583 5.88504 6.33541 6.28513C6.41499 6.68521 6.37415 7.09991 6.21804 7.47678C6.06194 7.85366 5.79758 8.17578 5.4584 8.40241C5.11923 8.62904 4.72046 8.75 4.31254 8.75ZM5.83223 4.32266C5.99285 4.11453 6.15051 3.91844 6.3052 3.73438C6.68382 3.99018 7.00986 4.31622 7.26567 4.69484C7.08129 4.84922 6.8852 5.00688 6.67738 5.16781C6.45886 4.82929 6.17075 4.54118 5.83223 4.32266ZM7.83379 4.19703C7.55068 3.79756 7.20201 3.44889 6.80254 3.16578C8.29223 1.54719 9.41582 1.05641 10.0791 0.92C9.94551 1.58375 9.45238 2.70734 7.83379 4.19703Z" fill="currentColor"/></svg></button>
@@ -702,15 +702,15 @@ COMMON ANCHORS
               <button id="booksReaderPlayBtn" class="hidden" aria-hidden="true"><svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg></button>
               <div id="booksReaderStatus" class="booksReaderStatus" role="status" aria-live="polite" aria-atomic="true"></div>
 
-              <!-- LISTEN-HUD: TTS Listening player overlay — covers reader while in Listening mode -->
+              <!-- TTS player overlay — covers reader while listening -->
               <!-- Replica of the pre-listening-mode TTS HUD bar from reader_tts_ui.js -->
               <div id="booksListenPlayerOverlay" class="lp-shell hidden" aria-label="Listening player" role="region">
 
                 <!-- Header: back button + book title + chapters -->
                 <div class="lp-header">
-                  <button id="lpBackBtn" class="lp-back-btn" title="Back to listening library">
+                  <button id="lpBackBtn" class="lp-back-btn" title="Back to reader">
                     <svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
-                    <span>Listening</span>
+                    <span>Reader</span>
                   </button>
                   <div id="lpBookTitle" class="lp-header-title" aria-live="polite"></div>
                   <!-- Chapters button -->
@@ -759,6 +759,9 @@ COMMON ANCHORS
                   <button id="lpTtsSlower" class="iconBtn booksReaderTtsBtn" title="Slower" aria-label="Slower">&#8722;</button>
                   <span id="lpTtsSpeed" class="booksReaderTtsSpeed">1.0&times;</span>
                   <button id="lpTtsFaster" class="iconBtn booksReaderTtsBtn" title="Faster" aria-label="Faster">+</button>
+                  <!-- TTS-QOL4: Volume slider -->
+                  <svg class="lp-vol-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" width="14" height="14" aria-hidden="true"><path d="M8 1.5L4.5 5H1.5v6h3L8 14.5V1.5z" fill="currentColor"/><path d="M11 4.5c1.3 1 2 2.5 2 3.5s-.7 2.5-2 3.5M10 6.5c.7.5 1 1.2 1 1.5s-.3 1-1 1.5" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round"/></svg>
+                  <input type="range" id="lpVolume" class="lp-volume-slider" min="0" max="1" step="0.05" value="1" title="Volume" aria-label="Volume">
                   <!-- LISTEN_THEME: cycle reader theme -->
                   <button id="lpThemeBtn" class="iconBtn booksReaderTtsBtn" title="Cycle theme" aria-label="Cycle theme"><svg viewBox="0 0 11 10" xmlns="http://www.w3.org/2000/svg"><path d="M10.875 0.5C10.875 0.400544 10.8355 0.305161 10.7652 0.234835C10.6949 0.164509 10.5995 0.125 10.5 0.125C8.43379 0.125 6.31363 2.45516 5.13613 3.99828C4.7156 3.86949 4.27073 3.84112 3.83725 3.91544C3.40376 3.98977 2.99375 4.16472 2.64014 4.42624C2.28654 4.68777 1.99919 5.02857 1.80119 5.42129C1.60318 5.81401 1.50004 6.24769 1.50004 6.6875C1.50004 8.135 0.584103 8.78422 0.540509 8.81422C0.473988 8.85914 0.423635 8.92421 0.396855 8.99988C0.370074 9.07555 0.368278 9.15781 0.391732 9.23458C0.415187 9.31134 0.462652 9.37855 0.52715 9.42633C0.591648 9.47411 0.669774 9.49993 0.750041 9.5H4.31254C4.75235 9.5 5.18603 9.39686 5.57875 9.19885C5.97147 9.00085 6.31227 8.7135 6.5738 8.3599C6.83532 8.00629 7.01027 7.59628 7.0846 7.16279C7.15892 6.72931 7.13055 6.28444 7.00176 5.86391C8.54535 4.68641 10.875 2.56625 10.875 0.5ZM4.31254 8.75H1.62332C1.93973 8.30047 2.25004 7.62125 2.25004 6.6875C2.25004 6.27958 2.371 5.88081 2.59763 5.54164C2.82427 5.20246 3.14638 4.9381 3.52326 4.782C3.90013 4.62589 4.31483 4.58505 4.71491 4.66463C5.115 4.74421 5.4825 4.94065 5.77095 5.22909C6.05939 5.51754 6.25583 5.88504 6.33541 6.28513C6.41499 6.68521 6.37415 7.09991 6.21804 7.47678C6.06194 7.85366 5.79758 8.17578 5.4584 8.40241C5.11923 8.62904 4.72046 8.75 4.31254 8.75ZM5.83223 4.32266C5.99285 4.11453 6.15051 3.91844 6.3052 3.73438C6.68382 3.99018 7.00986 4.31622 7.26567 4.69484C7.08129 4.84922 6.8852 5.00688 6.67738 5.16781C6.45886 4.82929 6.17075 4.54118 5.83223 4.32266ZM7.83379 4.19703C7.55068 3.79756 7.20201 3.44889 6.80254 3.16578C8.29223 1.54719 9.41582 1.05641 10.0791 0.92C9.94551 1.58375 9.45238 2.70734 7.83379 4.19703Z" fill="currentColor"/></svg></button>
                   <!-- Settings mega overlay trigger -->
@@ -785,6 +788,17 @@ COMMON ANCHORS
                         <option value="slow">Slow &amp; Steady</option>
                       </select>
                       <span id="lpTtsEngine" class="booksReaderTtsEngine" title="TTS engine"></span>
+                    </div>
+                    <div class="ttsMegaRow">
+                      <span class="ttsMegaLabel">Font</span>
+                      <select id="lpTtsFont" class="booksReaderTtsVoice" title="Card font" aria-label="Card font family">
+                        <option value="default">Default</option>
+                        <option value="oldStyleTf">Serif (Old Style)</option>
+                        <option value="modernTf">Serif (Modern)</option>
+                        <option value="sansTf">Sans-serif</option>
+                        <option value="humanistTf">Sans-serif (Humanist)</option>
+                        <option value="monospaceTf">Monospace</option>
+                      </select>
                     </div>
 <div class="ttsMegaRow">
                       <span class="ttsMegaLabel">Highlight</span>
@@ -1292,6 +1306,101 @@ COMMON ANCHORS
 
         </div>
       </section>
+
+      <!-- BUILD_WEB: Web sources browser view -->
+      <section id="webLibraryView" class="view hidden">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Web sources navigation">
+            <div class="navSection">
+              <div class="navHeader">Sources</div>
+              <div class="navItems">
+                <div id="webSourcesList" class="folderTree" role="list" aria-label="Bookmarked sources"></div>
+                <sl-button id="webAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Downloads</div>
+              <div class="navItems">
+                <div id="webDownloadStatus" class="muted tiny">No active downloads</div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Info</div>
+              <div class="navItems">
+                <div id="webDestInfo" class="muted tiny">
+                  Books &rarr; <span id="webDestBooks" class="webDestPath">Not configured</span><br/>
+                  Comics &rarr; <span id="webDestComics" class="webDestPath">Not configured</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <!-- BUILD_WEB_HOME: library home view (grid + continue row) -->
+          <div class="libContent">
+            <div id="webHomeView" class="homeView">
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Browsing...</div>
+                </div>
+                <div id="webContinuePanel" class="continueRow continueYacRow hidden"></div>
+                <div id="webContinueEmpty" class="muted tiny continueEmpty">No open tabs.</div>
+              </div>
+
+              <div class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Sources</div>
+                </div>
+                <div id="webSourcesGrid" class="seriesGrid"></div>
+                <div id="webSourcesEmpty" class="muted tiny hidden">No sources yet. Add a source from the sidebar.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add source dialog -->
+        <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
+          <div class="settingsCard">
+            <div class="settingsTop">
+              <div class="settingsTitle">Add Download Source</div>
+              <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
+            </div>
+            <div class="settingsGroup">
+              <label class="settingsLabel" for="webSourceName">Site name</label>
+              <input id="webSourceName" type="text" class="search" placeholder="e.g. MyBookSite" autocomplete="off" />
+            </div>
+            <div class="settingsGroup">
+              <label class="settingsLabel" for="webSourceUrl">URL</label>
+              <input id="webSourceUrl" type="url" class="search" placeholder="https://example.com" autocomplete="off" />
+            </div>
+            <div class="settingsActions">
+              <button id="webSourceSaveBtn" class="btn">Add Source</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BUILD_WEB_HOME: Web browser view (overlay, hidden by default) -->
+      <div id="webBrowserView" class="webBrowserView hidden">
+        <div class="webBrowserToolbar">
+          <button id="webBrowserBackBtn" class="iconBtn webNavBtn" title="Back to library" aria-label="Back to library">&#8592; Library</button>
+          <div id="webBrowserTitle" class="webBrowserTitle"></div>
+          <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
+          <div class="webBrowserNav">
+            <button id="webNavBack" class="iconBtn webNavBtn" title="Back" aria-label="Navigate back" disabled>&#8592;</button>
+            <button id="webNavForward" class="iconBtn webNavBtn" title="Forward" aria-label="Navigate forward" disabled>&#8594;</button>
+            <button id="webNavReload" class="iconBtn webNavBtn" title="Reload" aria-label="Reload page">&#8635;</button>
+            <button id="webNavHome" class="iconBtn webNavBtn" title="Source home page" aria-label="Source home">&#8962;</button>
+          </div>
+        </div>
+        <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
+        <div id="webViewContainer" class="webViewContainer"></div>
+      </div>
 
       <!-- FIND_THIS:CONTEXT_MENU_CONTAINER -->
       <div id="contextMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>

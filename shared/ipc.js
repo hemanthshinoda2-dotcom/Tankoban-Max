@@ -643,6 +643,28 @@ const CHANNEL = {
   
   /** Clear settings for a series. Returns: void */
   SERIES_SETTINGS_CLEAR: 'seriesSettings:clear',
+
+  // ========================================
+  // Web Sources (BUILD_WEB)
+  // ========================================
+
+  /** Get web sources config. Returns: { ok, sources: Array<{id, name, url, color}> } */
+  WEB_SOURCES_GET: 'webSources:get',
+
+  /** Add a web source. Args: { name, url, color? }. Returns: { ok, source? } */
+  WEB_SOURCES_ADD: 'webSources:add',
+
+  /** Remove a web source by id. Returns: { ok } */
+  WEB_SOURCES_REMOVE: 'webSources:remove',
+
+  /** Update a web source. Args: { id, name?, url?, color? }. Returns: { ok } */
+  WEB_SOURCES_UPDATE: 'webSources:update',
+
+  /** Route a downloaded file to the correct library folder. Args: { suggestedFilename }. Returns: { ok, destination?, library? } */
+  WEB_DOWNLOAD_ROUTE: 'webDownload:route',
+
+  /** Get download destination folders for each library type. Returns: { ok, books?: string, comics?: string } */
+  WEB_DOWNLOAD_DESTINATIONS: 'webDownload:destinations',
 };
 
 /**
@@ -710,6 +732,16 @@ const EVENT = {
    */
   mpvEvent: (playerId) => `mpv:event:${playerId}`,
   
+  // ========================================
+  // Web Events (BUILD_WEB)
+  // ========================================
+
+  /** Web sources config updated. Payload: { sources: Array } */
+  WEB_SOURCES_UPDATED: 'webSources:updated',
+
+  /** Download completed. Payload: { filename, destination?, library?, error? } */
+  WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
+
   /**
    * libmpv render update event (dynamic per handle).
    * @param {string|number} handleId - The libmpv handle ID

@@ -48,12 +48,14 @@ videoProgress IPC calls
     modeComicsBtn: qs('modeComicsBtn'),
     modeBooksBtn: qs('modeBooksBtn'),
     modeVideosBtn: qs('modeVideosBtn'),
+    modeWebBtn: qs('modeWebBtn'),
     qtPlayerToggleBtn: qs('qtPlayerToggleBtn'),
     libTitle: qs('libTitle'),
 
     libraryView: qs('libraryView'),
     playerView: qs('playerView'),
     booksLibraryView: qs('booksLibraryView'),
+    webLibraryView: qs('webLibraryView'),
     videoLibraryView: qs('videoLibraryView'),
     videoPlayerView: qs('videoPlayerView'),
 
@@ -208,6 +210,7 @@ videoProgress IPC calls
     try { el.modeComicsBtn?.addEventListener('click', () => setMode('comics')); } catch {}
     try { el.modeBooksBtn?.addEventListener('click', () => setMode('books')); } catch {}
     try { el.modeVideosBtn?.addEventListener('click', () => setMode('videos')); } catch {}
+    try { el.modeWebBtn?.addEventListener('click', () => setMode('web')); } catch {}
   }
   // Bind as early as possible so mode switch works even if later video init fails.
   try { bindModeButtons(); } catch {}
@@ -2504,9 +2507,11 @@ function closeTracksPanel(){
 
     const isVideo = next === 'videos';
     const isBooks = next === 'books';
-    const isComics = !isVideo && !isBooks;
+    const isWeb = next === 'web';
+    const isComics = !isVideo && !isBooks && !isWeb;
     document.body.classList.toggle('inVideoMode', isVideo);
     document.body.classList.toggle('inBooksMode', isBooks);
+    document.body.classList.toggle('inWebMode', isWeb);
     document.body.classList.toggle('inComicsMode', isComics);
     try {
       if (window.Tanko && window.Tanko.ui && typeof window.Tanko.ui.setModeTheme === 'function') {
@@ -2517,9 +2522,11 @@ function closeTracksPanel(){
     if (el.modeComicsBtn) el.modeComicsBtn.classList.toggle('active', isComics);
     if (el.modeBooksBtn) el.modeBooksBtn.classList.toggle('active', isBooks);
     if (el.modeVideosBtn) el.modeVideosBtn.classList.toggle('active', isVideo);
+    if (el.modeWebBtn) el.modeWebBtn.classList.toggle('active', isWeb);
 
     if (el.libraryView) el.libraryView.classList.toggle('hidden', !isComics);
     if (el.booksLibraryView) el.booksLibraryView.classList.toggle('hidden', !isBooks);
+    if (el.webLibraryView) el.webLibraryView.classList.toggle('hidden', !isWeb);
     if (el.playerView) el.playerView.classList.add('hidden');
 
     // BUILD 69: Show video library UI immediately for instant feedback
@@ -2542,7 +2549,7 @@ function closeTracksPanel(){
       document.body.classList.remove('videoUiHidden');
     }
 
-    if (el.libTitle) el.libTitle.textContent = isVideo ? 'Videos' : (isBooks ? 'Books' : 'Library');
+    if (el.libTitle) el.libTitle.textContent = isVideo ? 'Videos' : (isBooks ? 'Books' : (isWeb ? 'Web' : 'Library'));
 
     // Build 10.5: keep the shared top-bar button repurposed for Videos only.
     syncVideoThumbToggleBtn();
@@ -3174,7 +3181,8 @@ function ensureContinueEpisodesLoaded() {
 
     // BUILD 69: Progressive loading optimization
     // Show UI immediately, then render content in next frame to prevent blocking
-    if (el.videoLibraryView) el.videoLibraryView.classList.remove('hidden');
+    // FIX-VID-SIDEBAR: only show video view if we're actually in video mode
+    if (el.videoLibraryView && state.mode === 'videos') el.videoLibraryView.classList.remove('hidden');
     
     // Render sidebar immediately (it's lightweight)
     const sidebarStart = Date.now();
@@ -6377,7 +6385,8 @@ async function openVideo(v, opts = {}) {
     closeTracksPanel();
 
     if (el.videoPlayerView) el.videoPlayerView.classList.add('hidden');
-    if (el.videoLibraryView) el.videoLibraryView.classList.remove('hidden');
+    // FIX-VID-SIDEBAR: only show video view if we're actually in video mode
+    if (el.videoLibraryView && state.mode === 'videos') el.videoLibraryView.classList.remove('hidden');
 
     safe(() => state.player?.pause());
     safe(() => state.player?.unload());
@@ -9016,6 +9025,7 @@ function bindKeyboard(){
     el.modeComicsBtn?.addEventListener('click', () => setMode('comics'));
     el.modeBooksBtn?.addEventListener('click', () => setMode('books'));
     el.modeVideosBtn?.addEventListener('click', () => setMode('videos'));
+    el.modeWebBtn?.addEventListener('click', () => setMode('web'));
 
     // QT_ONLY: toggle disabled (embedded player retired)
     updateQtToggleUi();

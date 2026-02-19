@@ -392,6 +392,26 @@ const api = {
   },
 
   // ========================================
+  // webSources.* (BUILD_WEB)
+  // ========================================
+  webSources: {
+    get: () => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_GET),
+    add: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_ADD, payload),
+    remove: (id) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_REMOVE, id),
+    update: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_UPDATE, payload),
+    routeDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_ROUTE, payload),
+    getDestinations: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_DESTINATIONS),
+    onUpdated: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));
+    },
+    onDownloadCompleted: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_DOWNLOAD_COMPLETED, (_evt, data) => cb(data));
+    },
+  },
+
+  // ========================================
   // booksUi.*
   // ========================================
   booksUi: {

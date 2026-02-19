@@ -16,6 +16,8 @@
       videoLoadMs: null,
       readerLoadMs: null,
       booksLoadMs: null,
+      webFirstActivationMs: null,
+      webLoadMs: null,
     };
   }
 
@@ -183,10 +185,32 @@
     return booksModulesPromise;
   }
 
+  // BUILD_WEB: Web mode deferred loader
+  let webModulesPromise = null;
+  async function ensureWebModulesLoaded() {
+    if (window.__tankoWebModulesLoaded) return;
+    if (!webModulesPromise) {
+      webModulesPromise = (async () => {
+        const activationStart = perf.now();
+        await loadScriptOnce('./domains/web/web.js');
+        window.__tankoWebModulesLoaded = true;
+
+        const elapsed = Math.round(perf.now() - activationStart);
+        tanko.bootTiming.webLoadMs = elapsed;
+        if (tanko.bootTiming.webFirstActivationMs == null) {
+          tanko.bootTiming.webFirstActivationMs = Math.round(perf.now() - tanko.bootTiming.initialStartMs);
+          console.log(`[boot-timing] first web activation at ${tanko.bootTiming.webFirstActivationMs}ms (domain load ${elapsed}ms)`);
+        }
+      })();
+    }
+    return webModulesPromise;
+  }
+
   tanko.deferred = tanko.deferred || {};
   tanko.deferred.ensureVideoModulesLoaded = ensureVideoModulesLoaded;
   tanko.deferred.ensureReaderModulesLoaded = ensureReaderModulesLoaded;
   tanko.deferred.ensureBooksModulesLoaded = ensureBooksModulesLoaded;
+  tanko.deferred.ensureWebModulesLoaded = ensureWebModulesLoaded;
 
   // Reader open entry point wrapper. After reader modules load, open.js replaces window.openBook.
   if (!window.__tankoOpenBookDeferredBound) {
@@ -207,6 +231,7 @@
     const comicsBtn = document.getElementById('modeComicsBtn');
     const booksBtn = document.getElementById('modeBooksBtn');
     const videosBtn = document.getElementById('modeVideosBtn');
+    const webBtn = document.getElementById('modeWebBtn');
 
     videosBtn?.addEventListener('click', async (e) => {
       try {
@@ -232,6 +257,15 @@
       } catch {}
       await ensureBooksModulesLoaded();
       if (typeof window.setMode === 'function') window.setMode('books');
+    });
+
+    webBtn?.addEventListener('click', async (e) => {
+      try {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      } catch {}
+      await ensureWebModulesLoaded();
+      if (typeof window.setMode === 'function') window.setMode('web');
     });
   }
 

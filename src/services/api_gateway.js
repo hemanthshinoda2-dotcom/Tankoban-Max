@@ -373,6 +373,20 @@
     },
     
     // ========================================
+    // webSources.* (BUILD_WEB)
+    // ========================================
+    webSources: {
+      get: (...a) => ea.webSources?.get ? ea.webSources.get(...a) : Promise.resolve({ ok: false }),
+      add: (...a) => ea.webSources?.add ? ea.webSources.add(...a) : Promise.resolve({ ok: false }),
+      remove: (...a) => ea.webSources?.remove ? ea.webSources.remove(...a) : Promise.resolve({ ok: false }),
+      update: (...a) => ea.webSources?.update ? ea.webSources.update(...a) : Promise.resolve({ ok: false }),
+      routeDownload: (...a) => ea.webSources?.routeDownload ? ea.webSources.routeDownload(...a) : Promise.resolve({ ok: false }),
+      getDestinations: (...a) => ea.webSources?.getDestinations ? ea.webSources.getDestinations(...a) : Promise.resolve({ ok: false }),
+      onUpdated: (...a) => ea.webSources?.onUpdated ? ea.webSources.onUpdated(...a) : undefined,
+      onDownloadCompleted: (...a) => ea.webSources?.onDownloadCompleted ? ea.webSources.onDownloadCompleted(...a) : undefined,
+    },
+
+    // ========================================
     // Health check (BUILD 88 FIX 3.2)
     // ========================================
     ping: () => ea.ping ? ea.ping() : Promise.resolve({ ok: true, timestamp: Date.now() }),
