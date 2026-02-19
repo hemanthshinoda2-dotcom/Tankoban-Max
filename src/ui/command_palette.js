@@ -222,8 +222,14 @@
   // ---- Event handlers ----
 
   document.addEventListener('keydown', function (e) {
-    // Ctrl+K to toggle
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    // MERIDIAN_KEYS: check remapped shortcut, fallback to Ctrl+K
+    var matched = false;
+    if (window.__tankoMatchShortcut && window.__tankoGetShortcutKey) {
+      var combo = window.__tankoGetShortcutKey('cmdPalette');
+      if (combo) matched = window.__tankoMatchShortcut(e, combo);
+    }
+    if (!matched) matched = (e.ctrlKey || e.metaKey) && e.key === 'k';
+    if (matched) {
       e.preventDefault();
       e.stopPropagation();
       if (state.open) { close(); } else { open(); }

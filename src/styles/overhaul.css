@@ -1383,3 +1383,47 @@ body.sidebarPinned .drawerBackdrop{
 .themeSwatch.active::after{
   display: block;
 }
+
+/* ===== MERIDIAN_KEYS: Global shortcut remapping ===== */
+
+.globalShortcutsList{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.globalShortcutsList .br-shortcut-row{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.globalShortcutsList .br-shortcut-label{
+  color: rgba(255,255,255,.78);
+}
+.globalShortcutsList .br-shortcut-key-edit{
+  min-width: 110px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  background: rgba(255,255,255,.04);
+  color: rgba(255,255,255,.80);
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.globalShortcutsList .br-shortcut-key-edit:hover{
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.22);
+}
+.globalShortcutsList .br-shortcut-key-edit.capturing{
+  background: rgba(var(--vx-accent-rgb, 199,167,107), .18);
+  border-color: var(--vx-accent, #c7a76b);
+  color: var(--vx-accent, #c7a76b);
+  animation: capturePulse .8s ease infinite alternate;
+}
+@keyframes capturePulse{
+  from{ opacity: .7; }
+  to{ opacity: 1; }
+}

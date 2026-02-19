@@ -205,6 +205,145 @@
   // Render theme swatches when settings overlay opens (or immediately if present)
   renderThemeSwatches();
 
+  // MERIDIAN_KEYS: Global keyboard shortcut remapping
+  var GLOBAL_SHORTCUTS = [
+    { id: 'cmdPalette',   label: 'Command Palette',  defaultKey: 'Ctrl+K' },
+    { id: 'toggleFs',     label: 'Toggle Fullscreen', defaultKey: 'F11' },
+    { id: 'refreshLib',   label: 'Refresh Library',   defaultKey: 'Ctrl+R' },
+    { id: 'pinSidebar',   label: 'Pin Sidebar',       defaultKey: '' },
+    { id: 'drawerToggle', label: 'Toggle Drawer',     defaultKey: '' }
+  ];
+
+  var getGlobalShortcuts = function () {
+    var map = {};
+    try {
+      var raw = localStorage.getItem('globalShortcuts');
+      if (raw) map = JSON.parse(raw);
+    } catch (e) {}
+    var result = [];
+    for (var i = 0; i < GLOBAL_SHORTCUTS.length; i++) {
+      var s = GLOBAL_SHORTCUTS[i];
+      result.push({
+        id: s.id,
+        label: s.label,
+        defaultKey: s.defaultKey,
+        key: (map[s.id] !== undefined) ? map[s.id] : s.defaultKey
+      });
+    }
+    return result;
+  };
+
+  var saveGlobalShortcuts = function (shortcuts) {
+    var map = {};
+    for (var i = 0; i < shortcuts.length; i++) {
+      map[shortcuts[i].id] = shortcuts[i].key;
+    }
+    try { localStorage.setItem('globalShortcuts', JSON.stringify(map)); } catch (e) {}
+  };
+
+  var getShortcutKey = function (id) {
+    var shortcuts = getGlobalShortcuts();
+    for (var i = 0; i < shortcuts.length; i++) {
+      if (shortcuts[i].id === id) return shortcuts[i].key;
+    }
+    return '';
+  };
+
+  var formatKeyCombo = function (e) {
+    var parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    var key = String(e.key || '');
+    if (key === 'Control' || key === 'Meta' || key === 'Alt' || key === 'Shift') return '';
+    if (key === ' ') key = 'Space';
+    if (key.length === 1) key = key.toUpperCase();
+    parts.push(key);
+    return parts.join('+');
+  };
+
+  var matchesShortcut = function (e, combo) {
+    if (!combo) return false;
+    var parts = combo.split('+');
+    var needCtrl = false;
+    var needAlt = false;
+    var needShift = false;
+    var targetKey = '';
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (p === 'Ctrl') needCtrl = true;
+      else if (p === 'Alt') needAlt = true;
+      else if (p === 'Shift') needShift = true;
+      else targetKey = p;
+    }
+    if (!!(e.ctrlKey || e.metaKey) !== needCtrl) return false;
+    if (!!e.altKey !== needAlt) return false;
+    if (!!e.shiftKey !== needShift) return false;
+    var key = String(e.key || '');
+    if (key === ' ') key = 'Space';
+    if (key.length === 1) key = key.toUpperCase();
+    return key === targetKey;
+  };
+
+  var renderShortcutsList = function () {
+    var container = document.getElementById('globalShortcutsList');
+    if (!container) return;
+    var shortcuts = getGlobalShortcuts();
+    var html = '';
+    for (var i = 0; i < shortcuts.length; i++) {
+      var s = shortcuts[i];
+      var keyText = s.key || '(none)';
+      html += '<div class="br-shortcut-row" data-shortcut-id="' + s.id + '">'
+        + '<span class="br-shortcut-label">' + s.label + '</span>'
+        + '<button class="br-shortcut-key-edit" data-shortcut-idx="' + i + '" title="Click to remap">' + keyText + '</button>'
+        + '</div>';
+    }
+    container.innerHTML = html;
+
+    var btns = container.querySelectorAll('.br-shortcut-key-edit');
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].addEventListener('click', function () {
+        var btn = this;
+        var idx = parseInt(btn.getAttribute('data-shortcut-idx'), 10);
+        if (isNaN(idx)) return;
+        btn.textContent = 'Press key\u2026';
+        btn.classList.add('capturing');
+
+        var handler = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          if (e.key === 'Escape') {
+            // Cancel capture
+            document.removeEventListener('keydown', handler, true);
+            btn.classList.remove('capturing');
+            btn.textContent = shortcuts[idx].key || '(none)';
+            return;
+          }
+
+          var combo = formatKeyCombo(e);
+          if (!combo) return; // modifier-only press
+
+          document.removeEventListener('keydown', handler, true);
+          btn.classList.remove('capturing');
+
+          shortcuts[idx].key = combo;
+          saveGlobalShortcuts(shortcuts);
+          btn.textContent = combo;
+        };
+
+        document.addEventListener('keydown', handler, true);
+      });
+    }
+  };
+
+  renderShortcutsList();
+
+  // Expose for external use
+  window.__tankoMatchShortcut = matchesShortcut;
+  window.__tankoGetShortcutKey = getShortcutKey;
+
   el.refreshBtn.addEventListener('click', () => {
     if (document.body.classList.contains('inBooksMode')) {
       try { window.booksApp && window.booksApp.refresh && window.booksApp.refresh(); } catch {}
