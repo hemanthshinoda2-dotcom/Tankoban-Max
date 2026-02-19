@@ -357,20 +357,32 @@ function updateCard(info) {
 
   // ── Progress persistence (LISTEN_P4) ────────────────────────────────────────
   function saveProgress(info, immediate) {
-    if (!_book || !_book.id) return;
+    if (!_book || (!_book.id && !_book.path)) return;
     var entry = {
       blockIdx:   info ? info.blockIdx   : (_lastSavedBlockIdx >= 0 ? _lastSavedBlockIdx : 0),
       blockCount: info ? info.blockCount : 0,
       title:  _book.title  || '',
       format: _book.format || '',
     };
+
+    function progressKeys() {
+      var keys = [];
+      if (_book && _book.id) keys.push(String(_book.id));
+      if (_book && _book.path) keys.push(String(_book.path));
+      // De-dupe
+      return Array.from(new Set(keys));
+    }
+
     if (immediate) {
       if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
       try {
         var api = window.Tanko && window.Tanko.api;
         if (api && typeof api.saveBooksTtsProgress === 'function') {
           // FIX-LISTEN-CONT: return promise so closePlayer can await before re-render
-          return api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
+          var keys = progressKeys();
+          return Promise.all(keys.map(function (k) {
+            return api.saveBooksTtsProgress(k, entry).catch(function () {});
+          }));
         }
       } catch {}
     } else {
@@ -380,7 +392,10 @@ function updateCard(info) {
         try {
           var api = window.Tanko && window.Tanko.api;
           if (api && typeof api.saveBooksTtsProgress === 'function') {
-            api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
+            var keys = progressKeys();
+            keys.forEach(function (k) {
+              api.saveBooksTtsProgress(k, entry).catch(function () {});
+            });
           }
         } catch {}
       }, 2000);

@@ -8,6 +8,7 @@ Same IPC contract as before: probe, getVoices, synth.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { pathToFileURL } = require('url');
 
 let _audioCacheDir = null;
 
@@ -28,29 +29,35 @@ function audioCacheKey(text, voice, rate, pitch) {
     .slice(0, 40);
 }
 
-function audioCacheGet(cacheDir, key) {
+function audioCacheGet(cacheDir, key, returnBase64) {
   try {
     const mp3Path = path.join(cacheDir, key + '.mp3');
     const metaPath = path.join(cacheDir, key + '.meta.json');
-    const audioBuf = fs.readFileSync(mp3Path);
     const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-    return {
-      audioBase64: audioBuf.toString('base64'),
+    const audioPath = mp3Path;
+    const audioUrl = pathToFileURL(mp3Path).toString();
+    const out = {
+      audioPath,
+      audioUrl,
       boundaries: Array.isArray(meta.boundaries) ? meta.boundaries : [],
       mime: meta.mime || 'audio/mpeg',
     };
+    if (returnBase64) {
+      const audioBuf = fs.readFileSync(mp3Path);
+      out.audioBase64 = audioBuf.toString('base64');
+    }
+    return out;
   } catch {
     return null;
   }
 }
 
-function audioCacheSet(cacheDir, key, audioBase64, boundaries, mime) {
+function audioCacheSet(cacheDir, key, audioBuf, boundaries, mime) {
   try {
     fs.mkdirSync(cacheDir, { recursive: true });
-    const audioBuf = Buffer.from(audioBase64, 'base64');
     const mp3Path = path.join(cacheDir, key + '.mp3');
     const metaPath = path.join(cacheDir, key + '.meta.json');
-    fs.writeFileSync(mp3Path, audioBuf);
+    fs.writeFileSync(mp3Path, Buffer.isBuffer(audioBuf) ? audioBuf : Buffer.from(audioBuf || ''));
     fs.writeFileSync(metaPath, JSON.stringify({ boundaries: boundaries || [], mime: mime || 'audio/mpeg' }));
   } catch {}
 }
@@ -182,6 +189,9 @@ async function getVoices(_ctx, _evt, opts) {
 }
 
 async function synthEdge(payload) {
+  // By default keep backwards-compatible base64 responses.
+  // Renderers that want a file URL can pass { returnBase64: false }.
+  const returnBase64 = !(payload && payload.returnBase64 === false);
   const text = String(payload && payload.text || '').trim();
   if (!text) {
     return { ok: false, errorCode: 'edge_empty_text', reason: 'Text is empty', boundaries: [], audioBase64: '' };
@@ -265,8 +275,9 @@ async function synthEdge(payload) {
       ok: true,
       elapsedMs: nowMs() - startedAt,
       boundaries,
-      audioBase64: audioBuf.toString('base64'),
-      encoding: 'base64',
+      audioBuf,
+      audioBase64: returnBase64 ? audioBuf.toString('base64') : '',
+      encoding: returnBase64 ? 'base64' : 'buffer',
       mime: 'audio/mpeg',
     };
   } catch (err) {
@@ -285,6 +296,7 @@ async function synth(ctx, _evt, payload) {
   try {
     // LISTEN_P6: check disk cache before calling Edge TTS
     const cacheDir = getAudioCacheDir(ctx);
+    const returnBase64 = !(payload && payload.returnBase64 === false);
     if (cacheDir) {
       const text  = String(payload && payload.text || '').trim();
       const voice = String(payload && payload.voice || 'en-US-AriaNeural');
@@ -292,14 +304,16 @@ async function synth(ctx, _evt, payload) {
       const pitch = payload && payload.pitch != null ? Number(payload.pitch) : 1.0;
       if (text) {
         const key    = audioCacheKey(text, voice, rate, pitch);
-        const cached = audioCacheGet(cacheDir, key);
+        const cached = audioCacheGet(cacheDir, key, returnBase64);
         if (cached) {
           return {
             ok: true,
             elapsedMs: 0,
             boundaries: cached.boundaries,
-            audioBase64: cached.audioBase64,
-            encoding: 'base64',
+            audioBase64: cached.audioBase64 || '',
+            audioPath: cached.audioPath,
+            audioUrl: cached.audioUrl,
+            encoding: returnBase64 ? 'base64' : 'url',
             mime: cached.mime,
             fromCache: true,
           };
@@ -307,10 +321,17 @@ async function synth(ctx, _evt, payload) {
       }
     }
 
-    const result = await synthEdge(payload);
+    // If cache dir is unavailable, we cannot safely return file URLs.
+    // Fall back to base64 to keep synthesis working.
+    let payload2 = payload;
+    try {
+      if (payload && typeof payload === 'object') payload2 = { ...payload };
+      if (payload2 && payload2.returnBase64 === false && !cacheDir) payload2.returnBase64 = true;
+    } catch {}
+    const result = await synthEdge(payload2);
 
     // LISTEN_P6: write successful result to disk cache (async-safe; errors swallowed)
-    if (cacheDir && result && result.ok && result.audioBase64) {
+    if (cacheDir && result && result.ok && (result.audioBuf || result.audioBase64)) {
       try {
         const text  = String(payload && payload.text || '').trim();
         const voice = String(payload && payload.voice || 'en-US-AriaNeural');
@@ -318,11 +339,44 @@ async function synth(ctx, _evt, payload) {
         const pitch = payload && payload.pitch != null ? Number(payload.pitch) : 1.0;
         if (text) {
           const key = audioCacheKey(text, voice, rate, pitch);
-          audioCacheSet(cacheDir, key, result.audioBase64, result.boundaries, result.mime || 'audio/mpeg');
+          audioCacheSet(cacheDir, key, result.audioBuf ? result.audioBuf : Buffer.from(String(result.audioBase64 || ''), 'base64'), result.boundaries, result.mime || 'audio/mpeg');
         }
       } catch {}
     }
 
+    // If caller wants a file URL, avoid pushing huge base64 across IPC.
+    if (cacheDir && result && result.ok && (payload && payload.returnBase64 === false)) {
+      try {
+        const text  = String(payload && payload.text || '').trim();
+        const voice = String(payload && payload.voice || 'en-US-AriaNeural');
+        const rate  = payload && payload.rate  != null ? Number(payload.rate)  : 1.0;
+        const pitch = payload && payload.pitch != null ? Number(payload.pitch) : 1.0;
+        if (text) {
+          const key = audioCacheKey(text, voice, rate, pitch);
+          const cached = audioCacheGet(cacheDir, key, false);
+          if (cached) {
+            return {
+              ok: true,
+              elapsedMs: result.elapsedMs || 0,
+              boundaries: result.boundaries || [],
+              audioPath: cached.audioPath,
+              audioUrl: cached.audioUrl,
+              audioBase64: '',
+              encoding: 'url',
+              mime: cached.mime || result.mime || 'audio/mpeg',
+              fromCache: false,
+            };
+          }
+        }
+      } catch {}
+      // fall through: return original result
+    }
+
+    // Default / legacy path
+    if (result && result.audioBuf) {
+      // Never serialize raw Buffers over IPC
+      delete result.audioBuf;
+    }
     return result;
   } catch (err) {
     return {

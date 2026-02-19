@@ -103,8 +103,14 @@
           voice: state.voiceName,
           rate: state.rate,
           pitch: state.pitch,
+          returnBase64: false,
         });
-        if (!res || !res.ok || !res.audioBase64) return;
+        if (!res || !res.ok) return;
+        if (res.audioUrl) {
+          _lruSet(key, { audioUrl: String(res.audioUrl), boundaries: res.boundaries || [] });
+          return;
+        }
+        if (!res.audioBase64) return;
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) return;
         _lruSet(key, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
@@ -301,22 +307,78 @@
       }
     }
 
+    // FIX-LISTEN-STAB: Edge wordBoundary `text` values don't always match the exact
+    // substring in our spoken text (punctuation, quotes, repeated words). Doing a
+    // naive indexOf() causes highlight drift. We instead search in a normalized
+    // stream and map back to original char indices.
+    function _buildNormMap(original) {
+      var src = String(original || '');
+      var norm = '';
+      var map = [];
+      var lastWasSpace = false;
+      for (var i = 0; i < src.length; i++) {
+        var ch = src[i];
+        var lower = ch.toLowerCase();
+        // Normalize curly apostrophes
+        if (lower === '’') lower = "'";
+
+        var isWs = (lower === ' ' || lower === '\n' || lower === '\r' || lower === '\t' || lower === '\f');
+        if (isWs) {
+          if (!lastWasSpace) {
+            norm += ' ';
+            map.push(i);
+            lastWasSpace = true;
+          }
+          continue;
+        }
+
+        lastWasSpace = false;
+        var code = lower.charCodeAt(0);
+        var isAZ = (code >= 97 && code <= 122);
+        var is09 = (code >= 48 && code <= 57);
+        var isKeep = isAZ || is09 || lower === "'" || lower === '-';
+        if (!isKeep) continue;
+        norm += lower;
+        map.push(i);
+      }
+      return { norm: norm, map: map };
+    }
+
+    function _normWord(word) {
+      var w = String(word || '').toLowerCase();
+      w = w.replace(/’/g, "'");
+      // Keep only [a-z0-9' -] then trim & collapse spaces
+      w = w.replace(/[^a-z0-9\s'\-]+/g, ' ');
+      w = w.replace(/\s+/g, ' ').trim();
+      return w;
+    }
+
     function fireBoundaries(reqId, boundaries, spokenText) {
       _bdStop();
       var list = Array.isArray(boundaries) ? boundaries : [];
       var txt = String(spokenText || '');
-      var searchFrom = 0;
+      var normInfo = _buildNormMap(txt);
+      var normTxt = normInfo.norm;
+      var normMap = normInfo.map;
+      var normPos = 0;
+      var lastCharIndex = 0;
       var entries = [];
       for (var i = 0; i < list.length; i++) {
-        var word = list[i] && list[i].text || '';
-        var charIndex = 0;
+        var word = (list[i] && list[i].text) ? String(list[i].text) : '';
+        var charIndex = lastCharIndex;
         var charLength = 0;
-        if (word && txt) {
-          var idx = txt.indexOf(word, searchFrom);
-          if (idx >= 0) {
-            charIndex = idx;
-            charLength = word.length;
-            searchFrom = idx + word.length;
+
+        var nw = _normWord(word);
+        if (nw && normTxt) {
+          var idx2 = normTxt.indexOf(nw, normPos);
+          if (idx2 >= 0) {
+            var startOrig = normMap[idx2] != null ? normMap[idx2] : lastCharIndex;
+            var endNorm = idx2 + nw.length - 1;
+            var endOrig = normMap[endNorm] != null ? normMap[endNorm] : startOrig;
+            charIndex = startOrig;
+            charLength = Math.max(0, (endOrig - startOrig) + 1);
+            lastCharIndex = charIndex;
+            normPos = idx2 + nw.length;
           }
         }
         entries.push({
@@ -383,6 +445,56 @@
       }
     }
 
+    function _playUrl(myReq, srcUrl, boundaries, text) {
+      var audio = ensureAudio();
+      if (!audio) {
+        state.playing = false;
+        diag('edge_play_fail', 'no_audio_element');
+        if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: 'no_audio_element' });
+        return;
+      }
+
+      // If the previous segment used a blob URL, release it.
+      _revokeBlobUrl();
+
+      audio.src = String(srcUrl || '');
+
+      audio.onended = function () {
+        if (myReq !== state.requestId) return;
+        state.playing = false;
+        state.paused = false;
+        _synthErrorCount = 0;
+        diag('edge_play_ok', '');
+        if (typeof state.onEnd === 'function') state.onEnd();
+      };
+
+      audio.onerror = function () {
+        if (myReq !== state.requestId) return;
+        state.playing = false;
+        var reason = audio.error ? String(audio.error.message || audio.error.code || 'unknown') : 'unknown';
+        diag('edge_play_fail', reason);
+        if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: reason });
+      };
+
+      fireBoundaries(myReq, boundaries, text);
+
+      try {
+        var playPromise = audio.play();
+        if (playPromise && typeof playPromise.catch === 'function') {
+          playPromise.catch(function (err) {
+            if (myReq !== state.requestId) return;
+            state.playing = false;
+            diag('edge_play_fail', String(err && err.message ? err.message : err));
+            if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
+          });
+        }
+      } catch (err) {
+        state.playing = false;
+        diag('edge_play_fail', String(err && err.message ? err.message : err));
+        if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
+      }
+    }
+
     function _synthWithTimeout(api, payload, timeoutMs) {
       return new Promise(function (resolve, reject) {
         var timer = setTimeout(function () {
@@ -415,7 +527,11 @@
       var cached = _lruGet(cacheKey);
       if (cached) {
         diag('edge_preload_hit', '');
-        _playBlob(myReq, cached.blob, cached.boundaries, t);
+        if (cached.audioUrl) {
+          _playUrl(myReq, cached.audioUrl, cached.boundaries, t);
+        } else {
+          _playBlob(myReq, cached.blob, cached.boundaries, t);
+        }
         return;
       }
 
@@ -434,10 +550,11 @@
           voice: state.voiceName,
           rate: state.rate,
           pitch: state.pitch,
+          returnBase64: false,
         }, 15000);
         if (signal.aborted || myReq !== state.requestId) return;
 
-        if (!res || !res.ok || !res.audioBase64) {
+        if (!res || !res.ok || (!res.audioUrl && !res.audioBase64)) {
           state.playing = false;
           var code = String(res && (res.errorCode || res.reason) || 'edge_audio_chunk_recv_none');
           diag(code, String(res && res.reason || 'synth_failed'));
@@ -446,6 +563,14 @@
         }
 
         diag('edge_audio_chunk_recv_ok', '');
+        if (res.audioUrl) {
+          // Preferred: play from on-disk cache via file URL (avoids base64 decode/jank)
+          _lruSet(cacheKey, { audioUrl: String(res.audioUrl), boundaries: res.boundaries || [] });
+          _playUrl(myReq, String(res.audioUrl), res.boundaries || [], t);
+          return;
+        }
+
+        // Fallback: base64 → Blob
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) {
           state.playing = false;
@@ -456,9 +581,8 @@
         if (signal.aborted || myReq !== state.requestId) return;
         diag('edge_decode_ok', '');
 
-        // FIX-TTS05: Store in LRU cache for replay/seek
+        // Store in LRU cache for replay/seek
         _lruSet(cacheKey, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
-
         _playBlob(myReq, blob, res.boundaries || [], t);
       } catch (err3) {
         if (signal.aborted || myReq !== state.requestId) return;
@@ -485,7 +609,11 @@
       var cached = _lruGet(cacheKey);
       if (cached) {
         diag('edge_preload_hit', '');
-        _playBlob(newReqId, cached.blob, cached.boundaries, t);
+        if (cached.audioUrl) {
+          _playUrl(newReqId, cached.audioUrl, cached.boundaries, t);
+        } else {
+          _playBlob(newReqId, cached.blob, cached.boundaries, t);
+        }
         return;
       }
 
@@ -497,13 +625,19 @@
           voice: state.voiceName,
           rate: state.rate,
           pitch: state.pitch,
+          returnBase64: false,
         }, 15000);
         if (signal.aborted || newReqId !== state.requestId) return;
-        if (!res || !res.ok || !res.audioBase64) return;
+        if (!res || !res.ok) return;
+        if (res.audioUrl) {
+          _lruSet(_lruKey(t), { audioUrl: String(res.audioUrl), boundaries: res.boundaries || [] });
+          _playUrl(newReqId, String(res.audioUrl), res.boundaries || [], t);
+          return;
+        }
+        if (!res.audioBase64) return;
         var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
         if (!blob) return;
         if (signal.aborted || newReqId !== state.requestId) return;
-        // Store in LRU
         _lruSet(_lruKey(t), { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
         _playBlob(newReqId, blob, res.boundaries || [], t);
       } catch {}
