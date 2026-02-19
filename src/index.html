@@ -773,11 +773,16 @@ COMMON ANCHORS
                 <!-- Reading card: current block text with word highlight -->
                 <div class="lp-card-wrap">
                   <div class="lp-card" aria-live="polite" aria-atomic="false">
-                    <div id="lpCardText" class="lp-card-text"></div>
+                    <div class="lp-focus-band"></div>
+                    <div id="lpCardText" class="lp-card-text"><div id="lpCardInner" class="lp-card-inner"></div></div>
                     <div class="lp-card-footer">
-                      <span id="lpBlockIdx" class="lp-block-idx">0</span>
-                      <span class="lp-block-sep">/</span>
-                      <span id="lpBlockCount" class="lp-block-count">0</span>
+                      <div class="lp-progress-row">
+                        <span id="lpBlockIdx" class="lp-block-idx">0</span>
+                        <span class="lp-block-sep">/</span>
+                        <span id="lpBlockCount" class="lp-block-count">0</span>
+                        <span id="lpSeekPreview" class="lp-seek-preview" aria-live="polite"></span>
+                      </div>
+                      <input id="lpSeekBar" class="lp-seek" type="range" min="0" max="0" value="0" step="1" aria-label="Seek position" />
                     </div>
                   </div>
                 </div>
@@ -817,7 +822,7 @@ COMMON ANCHORS
                       </select>
                       <span id="lpTtsEngine" class="booksReaderTtsEngine" title="TTS engine"></span>
                     </div>
-                    <div class="ttsMegaRow">
+<div class="ttsMegaRow">
                       <span class="ttsMegaLabel">Highlight</span>
                       <select id="lpTtsHlStyle" class="booksReaderTtsHlStyle" title="Highlight style" aria-label="Highlight style"></select>
                       <div id="lpTtsHlColors" class="booksReaderTtsHlColors" title="Highlight color"></div>

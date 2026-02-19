@@ -83,7 +83,7 @@
   right: 0;
   bottom: 0;
   width: min(300px, 90%);
-  background: #111620;
+  background: var(--lp-panel-bg, #111620);
   border-left: 1px solid rgba(255,255,255,0.08);
   display: flex;
   flex-direction: column;
@@ -119,7 +119,7 @@
 .lp-toc-close:hover { color: #e4e8ef; background: rgba(255,255,255,0.07); }
 .lp-toc-list {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 6px 0;
 }
 .lp-toc-item {
@@ -156,23 +156,57 @@
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: #0d1117;
+  background: var(--lp-bg, #0d1117);
   display: flex;
   flex-direction: column;
-  color: #e4e8ef;
+  color: var(--lp-text, #e4e8ef);
   font-family: var(--br-font-ui, 'Segoe UI', system-ui, sans-serif);
   overflow: hidden;
 }
+
+/* LISTEN_THEME: mirror reader themes (light, sepia, dark, contrast3/h3) */
+.lp-shell[data-reader-theme="light"] {
+  --lp-bg: #f4f6fa;
+  --lp-text: #1b2230;
+  --lp-muted: #556074;
+  --lp-border: rgba(24,32,52,0.16);
+  --lp-surface: rgba(255,255,255,0.9);
+  --lp-panel-bg: #ffffff;
+}
+.lp-shell[data-reader-theme="sepia"] {
+  --lp-bg: #efe4d1;
+  --lp-text: #4a3a2b;
+  --lp-muted: #7b6754;
+  --lp-border: rgba(68,53,40,0.18);
+  --lp-surface: rgba(255,255,255,0.75);
+  --lp-panel-bg: #f6eddc;
+}
+.lp-shell[data-reader-theme="dark"] {
+  --lp-bg: #0d1117;
+  --lp-text: #e4e8ef;
+  --lp-muted: rgba(228,232,239,0.72);
+  --lp-border: rgba(255,255,255,0.10);
+  --lp-surface: rgba(17,22,32,0.75);
+  --lp-panel-bg: #111620;
+}
+.lp-shell[data-reader-theme="contrast3"],
+.lp-shell[data-reader-theme="h3"] {
+  --lp-bg: #000000;
+  --lp-text: #ffffff;
+  --lp-muted: rgba(255,255,255,0.70);
+  --lp-border: rgba(255,255,255,0.20);
+  --lp-surface: rgba(0,0,0,0.72);
+  --lp-panel-bg: #000000;
+}
+
 .lp-shell.hidden { display: none; }
 
 /* Header */
-.lp-header {
+.books-mode-tabs {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  gap: 4px;
+  padding: 10px 8px 8px;
+  border-bottom: 1px solid var(--lib-border, rgba(255,255,255,0.08));
   flex-shrink: 0;
 }
 .lp-back-btn {
@@ -229,7 +263,7 @@
   font-size: 1.15rem;
   line-height: 1.7;
   color: #c8d3e0;
-  overflow-y: auto;
+  overflow: hidden;
   word-break: break-word;
   white-space: pre-wrap;
 }
@@ -250,8 +284,53 @@
 }
 .lp-block-sep { opacity: 0.5; }
 
+
+.lp-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.lp-seek-preview {
+  margin-left: auto;
+  max-width: 58%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: rgba(255,255,255,0.42);
+}
+.lp-seek {
+  width: 100%;
+  height: 20px;
+  margin-top: 6px;
+  accent-color: #4a90d9;
+}
+.lp-inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.72);
+}
+.lp-inline-check input { transform: translateY(1px); }
+
 /* LP_TTS_REPLICA: TTS bar + mega + diag within listening player shell */
-.lp-shell > .booksReaderTtsBar {
+.lp-shell > .lp-shell .lp-tts-bar.booksReaderTtsBar {
+  /* FIX-TTS-HUD: opaque HUD that stays readable in all themes */
+  background: rgba(11,15,24,0.96) !important;
+  border: 1px solid rgba(255,255,255,0.16) !important;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+  backdrop-filter: none !important;
+  color: #e4e8ef !important;
+}
+.lp-shell .lp-tts-bar .booksReaderTtsBtn {
+  color: #e4e8ef !important;
+}
+.lp-shell .lp-tts-bar .booksReaderTtsBtn:hover {
+  background: rgba(255,255,255,0.10) !important;
+}
+
+.booksReaderTtsBar {
   bottom: 16px;
 }
 .lp-shell > .booksReaderTtsMega {
@@ -563,7 +642,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 0;
 }
 .br-pane.hidden { display: none !important; }
@@ -585,7 +664,7 @@
 /* Sidebar lists */
 .br-list {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 4px 0;
 }
 .br-list-item {
@@ -1849,7 +1928,7 @@ body.inBooksReader .br-reader {
 }
 .br-overlay-body {
   flex: 1;
-  overflow-y: auto;
+  overflow: hidden;
   padding: 4px 0;
 }
 

@@ -1,4 +1,4 @@
-// LISTEN-HUD: TTS Listening player — replica of pre-listening-mode TTS HUD bar
+// LISTEN-HUD: TTS Listening player - replica of pre-listening-mode TTS HUD bar
 // Ports the full reader_tts_ui.js feature set into the listening player overlay:
 // voices (grouped by locale, friendly names), presets, speed ±0.1, highlight
 // styles/colors, word tracking, enlarge scale, diagnostics, -10s/+10s jump,
@@ -17,6 +17,12 @@
   var _tocPanelOpen = false;
   var _navigating = false;
   var _activeTocHref = '';
+
+  var _pausedAtMs = 0;
+  var _autoRewindEnabled = false;
+  var AUTO_REWIND_MS = 5000;
+  var AUTO_REWIND_AFTER_PAUSE_MS = 20000;
+
 
   // ── SVG icons ───────────────────────────────────────────────────────────────
   var SVG_PLAY = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg>';
@@ -130,6 +136,13 @@
     try { return document.getElementById(id); } catch { return null; }
   }
 
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function toast(msg) {
+    try { if (typeof window.toast === 'function') { window.toast(String(msg)); return; } } catch {}
+    try { console.log('[listen]', msg); } catch {}
+  }
+
   // ── Overlay visibility ──────────────────────────────────────────────────────
   function showOverlay(show) {
     var el = qs('booksListenPlayerOverlay');
@@ -169,29 +182,116 @@
   }
 
   // ── Reading card update ─────────────────────────────────────────────────────
-  function updateCard(info) {
+  
+function updateCard(info) {
     if (!info) return;
-    var card = qs('lpCardText');
-    if (card) {
-      var text = String(info.text || '');
-      var wStart = info.wordStart;
-      var wEnd = info.wordEnd;
-      var html;
-      if (text && wStart >= 0 && wEnd > wStart && wEnd <= text.length) {
-        html = escHtml(text.slice(0, wStart))
-          + '<mark class="lp-word-active">' + escHtml(text.slice(wStart, wEnd)) + '</mark>'
-          + escHtml(text.slice(wEnd));
-      } else {
-        html = escHtml(text);
+
+    var outer = qs('lpCardText');
+    var inner = qs('lpCardInner');
+
+    // Fallback: if the new stage container isn't present for some reason,
+    // keep the old behavior (single snippet).
+    if (!outer || !inner) {
+      var card = outer;
+      if (card) {
+        var text = String(info.text || '');
+        var wStart = info.wordStart;
+        var wEnd = info.wordEnd;
+        var html;
+        if (text && wStart >= 0 && wEnd > wStart && wEnd <= text.length) {
+          html = escHtml(text.slice(0, wStart))
+            + '<mark class="lp-word-active">' + escHtml(text.slice(wStart, wEnd)) + '</mark>'
+            + escHtml(text.slice(wEnd));
+        } else {
+          html = escHtml(text);
+        }
+        card.innerHTML = html;
       }
-      card.innerHTML = html;
+    } else {
+      // Render a small window around the current segment to create a scrolling prose stage.
+      var win = null;
+      try {
+        if (window.booksTTS && typeof window.booksTTS.getSegmentWindow === 'function') {
+          win = window.booksTTS.getSegmentWindow(3, 3);
+        }
+      } catch (e) {}
+
+      if (!win || !win.segments || !win.segments.length) {
+        // If the engine can't provide a window yet, render just the current text.
+        var t = String(info.text || '');
+        inner.innerHTML = '<div class="lp-seg is-active">' + escHtml(t) + '</div>';
+        inner.style.transform = 'translateY(0px)';
+      } else {
+        var activeIdx = win.activeIdx;
+        var html2 = '';
+        for (var i = 0; i < win.segments.length; i++) {
+          var seg = win.segments[i];
+          var txt = String(seg.text || '');
+          var cls = 'lp-seg';
+          if (seg.idx === activeIdx) cls += ' is-active';
+          else if (Math.abs(seg.idx - activeIdx) === 1) cls += ' is-near';
+
+          if (seg.idx === activeIdx) {
+            // Apply word highlight inside the active segment if available.
+            var wS = info.wordStart;
+            var wE = info.wordEnd;
+            if (txt && wS >= 0 && wE > wS && wE <= txt.length) {
+              html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">'
+                + escHtml(txt.slice(0, wS))
+                + '<mark class="lp-word-active">' + escHtml(txt.slice(wS, wE)) + '</mark>'
+                + escHtml(txt.slice(wE))
+                + '</div>';
+            } else {
+              html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">' + escHtml(txt) + '</div>';
+            }
+          } else {
+            html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">' + escHtml(txt) + '</div>';
+          }
+        }
+
+        inner.innerHTML = html2;
+
+        // Auto-scroll so the active segment stays in a "focus band" in the 4:3 stage.
+        requestAnimationFrame(function () {
+          try {
+            var activeEl = inner.querySelector('.lp-seg.is-active');
+            if (!activeEl) return;
+
+            var stageH = outer.clientHeight || 0;
+            var innerH = inner.scrollHeight || 0;
+            if (!stageH || !innerH) return;
+
+            var focusY = Math.round(stageH * 0.48);
+            var targetCenter = activeEl.offsetTop + (activeEl.offsetHeight / 2);
+            var translate = focusY - targetCenter;
+
+            var minTranslate = stageH - innerH;
+            if (minTranslate > 0) minTranslate = 0;
+
+            if (translate > 0) translate = 0;
+            if (translate < minTranslate) translate = minTranslate;
+
+            inner.style.transform = 'translateY(' + String(Math.round(translate)) + 'px)';
+          } catch (e) {}
+        });
+      }
     }
+
     var idxEl = qs('lpBlockIdx');
     var cntEl = qs('lpBlockCount');
     var idx = (info.blockIdx >= 0) ? info.blockIdx + 1 : 0;
     var cnt = info.blockCount || 0;
     if (idxEl) idxEl.textContent = String(idx);
     if (cntEl) cntEl.textContent = String(cnt);
+    // QOL: seek bar sync
+    var seek = qs('lpSeekBar');
+    if (seek) {
+      var max = Math.max(0, (cnt || 0) - 1);
+      seek.max = String(max);
+      seek.value = String(clamp(((info.blockIdx >= 0) ? info.blockIdx : 0), 0, max));
+      var prev = qs('lpSeekPreview');
+      if (prev) prev.textContent = '';
+    }
 
     syncSpeed();
 
@@ -414,7 +514,12 @@
     if (st === 'section_transition') return;
     if (st === 'idle') tts.play();
     else if (st === 'playing') tts.pause();
-    else if (st === 'paused') tts.resume();
+    else if (st === 'paused') {
+      if (_autoRewindEnabled && _pausedAtMs && (Date.now() - _pausedAtMs) > AUTO_REWIND_AFTER_PAUSE_MS) {
+        try { tts.jumpApproxMs(-AUTO_REWIND_MS); } catch {}
+      }
+      tts.resume();
+    }
   }
 
   function ttsStop() {
@@ -543,6 +648,9 @@
     var tts = window.booksTTS;
     if (!tts) return;
     tts.onStateChange = function (status, info) {
+      if (status === 'paused') _pausedAtMs = Date.now();
+      if (status === 'playing') _pausedAtMs = 0;
+
       syncPlayPause(status);
       syncSpeed();
       syncEngine();
@@ -616,20 +724,41 @@
         syncPlayPause(tts.getState ? tts.getState() : 'idle');
       } catch {}
 
-      // Resume from saved progress
+      // Resume from saved progress (FIX-LISTEN-PROG): handle id/path normalization + update UI immediately
       var resumeIdx = 0;
       var api = window.Tanko && window.Tanko.api;
-      var bookId = _book && _book.id;
-      if (api && typeof api.getBooksTtsProgress === 'function' && bookId) {
-        api.getBooksTtsProgress(bookId).then(function (entry) {
-          if (!_open || !_ttsStarted) return;
-          if (entry && entry.blockIdx > 0) resumeIdx = entry.blockIdx;
-          try { tts.play(resumeIdx); } catch (e) {
-            try { console.error('[listen-player] tts.play() failed:', e); } catch {}
-          }
+      var bookId = _book && (_book.id || _book.path);
+      function applyEntry(entry) {
+        if (!_open || !_ttsStarted) return;
+        if (entry && typeof entry.blockIdx === 'number' && entry.blockIdx >= 0) resumeIdx = entry.blockIdx;
+        // Update UI immediately (labels) even before the first snippet render
+        try {
+          var idxEl = qs('lpBlockIdx');
+          var cntEl = qs('lpBlockCount');
+          var cnt = entry && typeof entry.blockCount === 'number' ? entry.blockCount : 0;
+          if (idxEl) idxEl.textContent = String((resumeIdx >= 0 ? resumeIdx + 1 : 0));
+          if (cntEl && cnt) cntEl.textContent = String(cnt);
+        } catch {}
+        try { tts.play(resumeIdx > 0 ? resumeIdx : 0); } catch (e) {
+          try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+        }
+      }
+      function fetchEntry(primaryId, fallbackId) {
+        if (!api || typeof api.getBooksTtsProgress !== 'function' || !primaryId) return Promise.resolve(null);
+        return api.getBooksTtsProgress(primaryId).then(function (e) {
+          if (e) return e;
+          if (fallbackId && fallbackId !== primaryId) return api.getBooksTtsProgress(fallbackId).catch(function () { return null; });
+          return null;
         }).catch(function () {
-          if (!_open || !_ttsStarted) return;
-          try { tts.play(0); } catch {}
+          if (fallbackId && fallbackId !== primaryId) return api.getBooksTtsProgress(fallbackId).catch(function () { return null; });
+          return null;
+        });
+      }
+      if (api && typeof api.getBooksTtsProgress === 'function' && bookId) {
+        var primary = _book && _book.id ? _book.id : null;
+        var fallback = _book && _book.path ? _book.path : null;
+        fetchEntry(primary || bookId, fallback).then(function (entry) {
+          applyEntry(entry);
         });
       } else {
         try { tts.play(0); } catch {}
@@ -669,6 +798,9 @@
     var bar = qs('lpTtsBar');
     if (bar) bar.classList.remove('hidden');
 
+    /* FIX-LISTEN-FLASH: show overlay before opening reader to prevent flash */
+    showOverlay(true);
+
     var booksApp = window.booksApp;
     if (!booksApp || typeof booksApp.openBookInReader !== 'function') return;
     booksApp.openBookInReader(book).catch(function (e) {
@@ -694,7 +826,8 @@
     var tts = window.booksTTS;
     if (tts) { try { tts.destroy(); } catch {} }
     unwireTts();
-    showOverlay(false);
+    // FIX-LISTEN-FLASH: keep overlay up during navigation back to avoid reader flash
+    // Overlay will be hidden after navigation completes.
     // Hide mega/diag panels
     var mega = qs('lpTtsMega');
     if (mega) mega.classList.add('hidden');
@@ -707,11 +840,16 @@
     if (booksApp && typeof booksApp.back === 'function') {
       booksApp.back().then(function () {
         if (!skipRestore && shell && typeof shell.setMode === 'function') shell.setMode(shell.MODE_LISTEN);
+        showOverlay(false);
       }).catch(function () {
         if (!skipRestore && shell && typeof shell.setMode === 'function') shell.setMode(shell.MODE_LISTEN);
+        showOverlay(false);
       });
     } else if (!skipRestore && shell && typeof shell.setMode === 'function') {
       shell.setMode(shell.MODE_LISTEN);
+      showOverlay(false);
+    } else {
+      showOverlay(false);
     }
   }
 
@@ -844,7 +982,7 @@
       if (!voiceId) return;
       tts.setVoice(voiceId);
       _settings.ttsVoice = voiceId;
-      // Quick preview via engine probe (simplified — no separate engine instance)
+      // Quick preview via engine probe (simplified - no separate engine instance)
     });
 
     // Preset selector
@@ -945,6 +1083,44 @@
       var diag = qs('lpTtsDiag');
       if (diag) diag.classList.add('hidden');
     });
+
+    // QOL: auto rewind + sleep timer prefs
+    try { _autoRewindEnabled = (localStorage.getItem('booksListenAutoRewind') === '1'); } catch {}
+    var ar = qs('lpAutoRewind');
+    if (ar) {
+      ar.checked = !!_autoRewindEnabled;
+      ar.addEventListener('change', function () {
+        _autoRewindEnabled = !!ar.checked;
+        try { localStorage.setItem('booksListenAutoRewind', _autoRewindEnabled ? '1' : '0'); } catch {}
+      });
+    }
+
+    // QOL: seek bar
+    var seek = qs('lpSeekBar');
+    var prev = qs('lpSeekPreview');
+    function _seekPreview(idx) {
+      if (!prev) return;
+      var t = '';
+      try { if (window.booksTTS && typeof window.booksTTS.getSegmentText === 'function') t = window.booksTTS.getSegmentText(idx) || ''; } catch {}
+      t = String(t || '').trim().replace(/\s+/g, ' ');
+      if (t.length > 90) t = t.slice(0, 90) + '…';
+      prev.textContent = t ? t : '';
+    }
+    if (seek) {
+      seek.addEventListener('input', function () {
+        var idx = parseInt(seek.value || '0', 10) || 0;
+        _seekPreview(idx);
+      });
+      seek.addEventListener('change', function () {
+        var idx = parseInt(seek.value || '0', 10) || 0;
+        var tts = window.booksTTS;
+        if (!tts || typeof tts.seekSegment !== 'function') return;
+        var st = tts.getState ? tts.getState() : 'idle';
+        var playing = (st === 'playing');
+        try { tts.seekSegment(idx, playing); } catch {}
+      });
+    }
+
 
     // TOC
     var tocBtn = qs('lpTocBtn');

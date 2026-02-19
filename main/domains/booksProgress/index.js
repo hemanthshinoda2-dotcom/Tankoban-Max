@@ -8,9 +8,47 @@ function normPath(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
 }
 
+
+function canonId(bookId) {
+  const raw = String(bookId || '');
+  const canon = normPath(raw);
+  return { raw, canon };
+}
+
+function getRecordByEither(all, raw, canon) {
+  if (!all || typeof all !== 'object') return null;
+  if (raw && all[raw]) return { key: raw, value: all[raw] };
+  if (canon && all[canon]) return { key: canon, value: all[canon] };
+  return null;
+}
+
+function migrateKeyIfNeeded(ctx, all, raw, canon) {
+  try {
+    if (!raw || !canon || raw === canon) return;
+    if (all[raw] && !all[canon]) {
+      all[canon] = all[raw];
+      delete all[raw];
+      ctx.storage.writeJSONDebounced(ctx.storage.dataPath('books_progress.json'), all);
+    }
+  } catch {}
+}
+
 function getBooksProgressMem(ctx) {
   if (booksProgressMem) return booksProgressMem;
   booksProgressMem = ctx.storage.readJSON(ctx.storage.dataPath('books_progress.json'), {});
+  // FIX-BOOK-PROG-NORM: one-time canonicalize keys
+  try {
+    const all = booksProgressMem;
+    for (const k of Object.keys(all)) {
+      const canon = normPath(k);
+      if (canon && canon !== k && !all[canon]) {
+        all[canon] = all[k];
+        delete all[k];
+      }
+    }
+  } catch {}
+  // FIX-BOOK-PROG-NORM
+
   return booksProgressMem;
 }
 
@@ -86,16 +124,21 @@ async function getAll(ctx) {
 async function get(ctx, _evt, bookId) {
   maybeMigrateByPath(ctx);
   const all = getBooksProgressMem(ctx);
-  return all[String(bookId || '')] || null;
+  const ids = canonId(bookId);
+  migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
+  const rec = getRecordByEither(all, ids.raw, ids.canon);
+  return rec ? rec.value : null;
 }
 
 async function save(ctx, _evt, bookId, progress) {
   maybeMigrateByPath(ctx);
-  const id = String(bookId || '');
+  const ids = canonId(bookId);
+  const id = ids.canon || ids.raw;
   if (!id) return { ok: false, error: 'invalid_book_id' };
 
   const p = ctx.storage.dataPath('books_progress.json');
   const all = getBooksProgressMem(ctx);
+  migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
   const prev = (all[id] && typeof all[id] === 'object') ? all[id] : {};
   const next = (progress && typeof progress === 'object') ? progress : {};
   all[id] = { ...prev, ...next, updatedAt: Date.now() };
@@ -105,11 +148,13 @@ async function save(ctx, _evt, bookId, progress) {
 
 async function clear(ctx, _evt, bookId) {
   maybeMigrateByPath(ctx);
-  const id = String(bookId || '');
+  const ids = canonId(bookId);
+  const id = ids.canon || ids.raw;
   if (!id) return { ok: false, error: 'invalid_book_id' };
 
   const p = ctx.storage.dataPath('books_progress.json');
   const all = getBooksProgressMem(ctx);
+  migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
   delete all[id];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };

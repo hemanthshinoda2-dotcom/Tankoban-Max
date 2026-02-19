@@ -12,6 +12,9 @@
     var nextTheme = String(theme || 'light');
     if (els.readerView) els.readerView.setAttribute('data-reader-theme', nextTheme);
     if (els.host) els.host.setAttribute('data-reader-theme', nextTheme);
+    // LISTEN_THEME: apply same theme to Listening player overlay
+    var lp = document.getElementById('booksListenPlayerOverlay');
+    if (lp) lp.setAttribute('data-reader-theme', nextTheme);
     // FIX-TTS03: set blend mode for TTS highlight overlayer (lighten for dark themes)
     // BUILD_THEMES: nord and gruvboxDark are dark themes
     var isDark = ['dark', 'contrast1', 'contrast2', 'contrast4', 'nord', 'gruvboxDark'].indexOf(nextTheme) !== -1;

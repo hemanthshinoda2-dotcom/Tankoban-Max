@@ -167,6 +167,45 @@
     };
   }
 
+  // TTS-QOL-V1: Provide a window of segments around the current playback position
+  // so the listening player can render a scrolling prose "stage".
+  function getSegmentWindow(beforeCount, afterCount) {
+    var before = (typeof beforeCount === 'number' ? beforeCount : 3) | 0;
+    var after = (typeof afterCount === 'number' ? afterCount : 3) | 0;
+    if (before < 0) before = 0;
+    if (after < 0) after = 0;
+
+    var total, active, src, getText;
+    if (state.format === 'txt') {
+      src = _txt.segments || [];
+      total = src.length;
+      active = _txt.segIdx | 0;
+      getText = function (seg) { return seg && seg.text ? String(seg.text) : ''; };
+    } else {
+      src = _queue.items || [];
+      total = src.length;
+      active = state.blockIdx | 0;
+      getText = function (item) { return item && item.text ? String(item.text) : ''; };
+    }
+
+    if (!total || active < 0) {
+      return { total: total || 0, activeIdx: active, startIdx: 0, endIdx: -1, segments: [] };
+    }
+
+    if (active >= total) active = total - 1;
+    var startIdx = active - before;
+    if (startIdx < 0) startIdx = 0;
+    var endIdx = active + after;
+    if (endIdx >= total) endIdx = total - 1;
+
+    var out = [];
+    for (var i = startIdx; i <= endIdx; i++) {
+      out.push({ idx: i, text: getText(src[i]), isActive: i === active });
+    }
+    return { total: total, activeIdx: active, startIdx: startIdx, endIdx: endIdx, segments: out };
+  }
+
+
   // ── SSML Parser ──────────────────────────────────────────────
 
   function parseSSML(ssmlString) {
@@ -1029,6 +1068,64 @@
     }
   }
 
+  // TTS-QOL: Seek to an absolute segment index (0-based).
+  // If autoplay is true, begins playback from that position (even if currently paused).
+  function seekSegment(targetIdx, autoplay) {
+    if (state.status !== PLAYING && state.status !== PAUSED) return;
+
+    // TXT legacy
+    if (state.format === 'txt') {
+      _txtSeekSegment(targetIdx, autoplay);
+      return;
+    }
+
+    if (!_queue.length) return;
+
+    var idx2 = (targetIdx | 0);
+    if (idx2 < 0) idx2 = 0;
+    if (idx2 >= _queue.length) idx2 = _queue.length - 1;
+
+    // cancel current synthesis before seeking
+    state._cancelFlag = true;
+    if (state.engine) { try { state.engine.cancel(); } catch {} }
+    state._cancelFlag = false;
+
+    var shouldPlay = !!autoplay;
+    if (state.status === PLAYING) shouldPlay = true;
+
+    if (!shouldPlay) {
+      var item = _queue.items[idx2];
+      if (!item) return;
+      _queue.index = idx2;
+      state.currentText = item.text;
+      state.blockIdx = idx2;
+      state.wordStart = -1;
+      state.wordEnd = -1;
+      if (item.ranges && item.ranges.size > 0) {
+        var r = item.ranges.values().next().value;
+        if (r) highlightRange(r.cloneRange());
+      }
+      fireProgress();
+      fire();
+      return;
+    }
+
+    _speakQueueItem(idx2);
+    fire();
+  }
+
+  // TTS-QOL: Get segment text at index (for UI previews).
+  function getSegmentText(idx) {
+    var i = (idx | 0);
+    if (state.format === 'txt') {
+      if (!_txt.segments || i < 0 || i >= _txt.segments.length) return '';
+      return String(_txt.segments[i].text || '');
+    }
+    if (!_queue.items || i < 0 || i >= _queue.items.length) return '';
+    return String(_queue.items[i].text || '');
+  }
+
+
   function jumpApproxMs(deltaMs) {
     if (state.status !== PLAYING && state.status !== PAUSED) return;
 
@@ -1389,6 +1486,37 @@
     }
   }
 
+  function _txtSeekSegment(targetIdx, autoplay) {
+    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_txt.segments.length) return;
+    var idx = (targetIdx | 0);
+    if (idx < 0) idx = 0;
+    if (idx >= _txt.segments.length) idx = _txt.segments.length - 1;
+
+    state._cancelFlag = true;
+    if (state.engine) { try { state.engine.cancel(); } catch {} }
+    state._cancelFlag = false;
+
+    _txt.segIdx = idx;
+    var shouldPlay = !!autoplay;
+    if (state.status === PLAYING) shouldPlay = true;
+
+    if (!shouldPlay) {
+      var seg = _txt.segments[_txt.segIdx];
+      state.currentText = seg.text;
+      state.blockIdx = seg.blockIdx;
+      state.wordStart = -1;
+      state.wordEnd = -1;
+      fireProgress();
+      fire();
+      return;
+    }
+
+    _txtSpeakSegment();
+    fire();
+  }
+
+
   function _txtJumpApproxMs(deltaMs) {
     var cps = 15 * (state.rate || 1.0);
     var deltaChars = Math.abs(deltaMs / 1000) * cps;
@@ -1478,6 +1606,8 @@
     getPresets: function () { return TTS_PRESETS; },
     getPitch: function () { return state.pitch; },
     stepSegment: stepBlock,
+    seekSegment: seekSegment,
+    getSegmentText: getSegmentText,
     playFromSelection: playFromSelection,
     playFromElement: playFromElement,
     playFromNode: playFromNode,

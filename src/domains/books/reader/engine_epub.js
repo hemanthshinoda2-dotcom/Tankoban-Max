@@ -332,7 +332,9 @@
         throw (lastErr || new Error('epub_open_failed'));
       }
 
-      state.rendition = state.book.renderTo(state.stage, {
+            try { if (state.book && state.book.ready) await state.book.ready; } catch {}
+
+state.rendition = state.book.renderTo(state.stage, {
         width: '100%',
         height: '100%',
         flow: 'paginated',
@@ -355,12 +357,42 @@
 
       applySettings(o.settings);
 
-      const loc = (o.locator && typeof o.locator === 'object') ? o.locator : null;
-      if (loc && (loc.cfi || loc.href)) {
-        await state.rendition.display(loc.cfi || loc.href);
-      } else {
-        await state.rendition.display();
+      async function safeDisplayFromLocator(locator) {
+        const loc = (locator && typeof locator === 'object') ? locator : null;
+        if (!state.rendition) return;
+        // 1) Preferred: CFI or href
+        if (loc && (loc.cfi || loc.href)) {
+          try {
+            await state.rendition.display(loc.cfi || loc.href);
+            return true;
+          } catch (e) {
+            // fall through to percent
+          }
+        }
+        // 2) Fallback: percent → CFI via locations
+        if (loc && typeof loc.percent === 'number' && isFinite(loc.percent) && state.book && state.book.locations) {
+          try {
+            if (!state.book.locations.length || state.book.locations.length < 2) {
+              // Generate locations only when needed (can be slow)
+              await state.book.locations.generate(1600);
+            }
+            if (typeof state.book.locations.cfiFromPercentage === 'function') {
+              const cfi = state.book.locations.cfiFromPercentage(loc.percent);
+              if (cfi) {
+                await state.rendition.display(cfi);
+                return true;
+              }
+            }
+          } catch (e2) {
+            // ignore and fall through
+          }
+        }
+        // 3) Default: start
+        try { await state.rendition.display(); } catch {}
+        return false;
       }
+
+      await safeDisplayFromLocator(o.locator);
       bindSelectionEvents();
     }
 

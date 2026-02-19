@@ -74,6 +74,8 @@
       progress: null,
     },
     progressAll: {},
+    // LISTEN_P5: listening progress map (booksTtsProgress)
+    ttsProgressAll: {},
 
     ui: {
       selectedRootId: null,
@@ -424,7 +426,31 @@
     return c;
   }
 
-  function getBookProgress(bookId) {
+  
+  // LISTEN_P5: resolve TTS progress entry by id or normalized path
+  function normPath(p) {
+    return String(p || '').replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
+  }
+  function getBookTtsProgress(book) {
+    if (!book) return null;
+    const by = state.ttsProgressAll && typeof state.ttsProgressAll === 'object' ? state.ttsProgressAll : {};
+    const rawId = String(book.id || '');
+    const rawPath = String(book.path || '');
+    const canonId = normPath(rawId);
+    const canonPath = normPath(rawPath);
+    return by[rawId] || by[canonId] || by[rawPath] || by[canonPath] || null;
+  }
+  function getBookTtsPct(book) {
+    const e = getBookTtsProgress(book);
+    if (!e) return null;
+    const idx = Number(e.blockIdx || 0);
+    const cnt = Number(e.blockCount || 0);
+    if (!(cnt > 0)) return null;
+    const pct = Math.round(Math.min(100, Math.max(0, (idx / cnt) * 100)));
+    return pct;
+  }
+
+function getBookProgress(bookId) {
     const p = state.progressAll && state.progressAll[bookId];
     return p && typeof p === 'object' ? p : null;
   }
@@ -1007,7 +1033,12 @@
       y: evt.clientY,
       items: [
         { label: 'Open series', onClick: () => openShow(show.id) },
-        { label: 'Continue reading', disabled: !(summary && summary.inProgress > 0), onClick: () => {
+        { label: (_listenMode ? 'Continue listening' : 'Continue reading'), disabled: _listenMode ? false : !(summary && summary.inProgress > 0), onClick: () => {
+          if (_listenMode) {
+            const shell = window.booksListeningShell;
+            if (shell && typeof shell.openListenShow === 'function') shell.openListenShow(show.id);
+            return;
+          }
           const items = getContinueItems().filter(it => String(it.show && it.show.id || '') === String(show.id || ''));
           if (items.length && items[0].book) openBook(items[0].book).catch(() => {});
           else openShow(show.id);
@@ -1727,7 +1758,7 @@
       return d;
     };
 
-    const pct = getBookPct(book, getBookProgress(book.id));
+    const pct = _listenMode ? getBookTtsPct(book) : getBookPct(book, getBookProgress(book.id));
     const pctTxt = (pct !== null) ? (pct >= 100 ? '100%' : `${pct}%`) : '-';
 
     row.appendChild(mkCell('num', String(displayNum || '')));
@@ -1790,9 +1821,12 @@
         x: e.clientX,
         y: e.clientY,
         items: [
-          { label: (pct > 0 && pct < 100) ? 'Continue reading' : 'Open book', onClick: () => openBook(book).catch(() => {}) },
+          { label: (pct > 0 && pct < 100) ? (_listenMode ? 'Continue listening' : 'Continue reading') : (_listenMode ? 'Listen' : 'Open book'), onClick: () => openBook(book).catch(() => {}) },
           { label: 'Open from beginning', onClick: async () => {
-            try { await api.booksProgress.clear(book.id); } catch {}
+            try {
+              if (_listenMode && api && typeof api.clearBooksTtsProgress === 'function') await api.clearBooksTtsProgress(book.id || book.path);
+              else if (api && api.booksProgress && typeof api.booksProgress.clear === 'function') await api.booksProgress.clear(book.id);
+            } catch {}
             delete state.progressAll[book.id];
             openBook(book).catch(() => {});
           }},
@@ -1834,24 +1868,35 @@
     const books = getBooksForShow(state.ui.selectedShowId);
     let best = null;
     let bestAt = -1;
+
     for (const b of books) {
-      const p = getBookProgress(b.id);
-      if (!p || p.finished) continue;
-      const pct = getBookPct(b, p);
-      if (pct == null || pct <= 0 || pct >= 100) continue;
-      const at = Number(p.updatedAt || 0);
-      if (at > bestAt) { bestAt = at; best = b; }
+      if (_listenMode) {
+        const e = getBookTtsProgress(b);
+        if (!e) continue;
+        const pct = getBookTtsPct(b);
+        if (pct == null || pct <= 0 || pct >= 100) continue;
+        const at = Number(e.updatedAt || 0);
+        if (at > bestAt) { bestAt = at; best = b; }
+      } else {
+        const p = getBookProgress(b.id);
+        if (!p || p.finished) continue;
+        const pct = getBookPct(b, p);
+        if (pct == null || pct <= 0 || pct >= 100) continue;
+        const at = Number(p.updatedAt || 0);
+        if (at > bestAt) { bestAt = at; best = b; }
+      }
     }
     if (!best) return;
 
-    const pct = getBookPct(best, getBookProgress(best.id)) || 0;
+    const pct = _listenMode ? (getBookTtsPct(best) || 0) : (getBookPct(best, getBookProgress(best.id)) || 0);
+    const label = _listenMode ? 'Continue listening' : 'Continue reading';
     container.classList.remove('hidden');
     container.innerHTML = `<div class="booksFolderContinueInner">` +
-      `<span class="booksFolderContinueLabel">Continue reading</span>` +
+      `<span class="booksFolderContinueLabel">${label}</span>` +
       `<span class="booksFolderContinueTitle">${escHtml(best.title || pathBase(best.path || ''))}</span>` +
       `<div class="booksFolderContinueBar"><div class="booksFolderContinueFill" style="width:${pct}%"></div></div>` +
       `<span class="booksFolderContinueHint">${pct}%</span>` +
-      `<button class="iconBtn booksFolderContinueBtn" title="Continue reading">&#9654;</button>` +
+      `<button class="iconBtn booksFolderContinueBtn" title="${label}">&#9654;</button>` +
       `</div>`;
     const bestRef = best;
     container.querySelector('.booksFolderContinueBtn')?.addEventListener('click', (ev) => { ev.stopPropagation(); openBook(bestRef).catch(() => {}); });
@@ -2605,12 +2650,33 @@
     // LISTEN_P2: data accessors for listening_shell.js
     getBooks: () => (state.derived.books || []).slice(),
     getShows: () => (state.derived.shows || []).slice(),
-    getBookById: (id) => state.derived.bookById.get(String(id || '')) || null,
+    getBookById: (id) => {
+      const k = String(id || '');
+      const m = state.derived.bookById;
+      return (m.get(k) || m.get(normalizePathKey(k)) || null);
+    },
     attachThumb: (imgEl, book) => attachThumb(imgEl, book),
     setGlobalSearchSelection: (idx) => setGlobalSearchSelection(idx),
     activateGlobalSearchSelection: () => activateGlobalSearchSelection(),
     // LISTEN_P2: listen mode toggle (called by listening_shell.js)
-    setListenMode: (v) => { _listenMode = !!v; renderContinue(); },
+    setListenMode: (v) => {
+      _listenMode = !!v;
+      // LISTEN_P5: pull TTS progress so folder/show views don't show reading progress in Listening mode
+      if (_listenMode) {
+        const api = window.Tanko && window.Tanko.api;
+        if (api && typeof api.getAllBooksTtsProgress === 'function') {
+          api.getAllBooksTtsProgress().then((m) => {
+            state.ttsProgressAll = (m && typeof m === 'object') ? m : {};
+            if (state.ui.booksSubView === 'show') renderShowView(); else renderHome();
+          }).catch(() => { state.ttsProgressAll = {}; });
+        } else {
+          state.ttsProgressAll = {};
+        }
+      } else {
+        state.ttsProgressAll = {};
+      }
+      renderContinue();
+    },
     isListenMode: () => _listenMode,
     setAllProgress: (p) => {
       state.progressAll = p && typeof p === 'object' ? p : {};

@@ -292,6 +292,10 @@
 
     var progress = null;
     try { progress = await Tanko.api.booksProgress.get(book.id); } catch (e) {}
+    // FIX-PROG-ID: fallback to path-based key (older migrations / differing normalization)
+    if (!progress && book && book.path) {
+      try { progress = await Tanko.api.booksProgress.get(book.path); } catch (e2) {}
+    }
 
     // BUILD_CHAP_PERSIST: restore chapter read state before renderToc() runs
     if (progress && progress.locator && progress.locator.chapterReadState &&
