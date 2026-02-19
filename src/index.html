@@ -89,6 +89,9 @@ COMMON ANCHORS
       <section id="libraryView" class="view">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Library navigation">
+            <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
+            </button>
             <div class="navSection">
               <div class="navHeader">Libraries</div>
               <div class="navItems">
@@ -234,6 +237,9 @@ COMMON ANCHORS
       <section id="booksLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Books library navigation">
+            <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
+            </button>
             <!-- STRIP-LISTEN-MODE: mode tabs removed -->
             <div class="navSection">
               <div class="navHeader">Libraries</div>
@@ -897,6 +903,9 @@ COMMON ANCHORS
       <section id="videoLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Video library navigation">
+            <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
+            </button>
             <div class="navSection">
               <div class="navHeader">Video Libraries</div>
               <div class="navItems">
@@ -1360,6 +1369,9 @@ COMMON ANCHORS
       <section id="webLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Web sources navigation">
+            <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
+            </button>
             <div class="navSection">
               <div class="navHeader">Sources</div>
               <div class="navItems">
@@ -1528,6 +1540,12 @@ COMMON ANCHORS
           <div class="muted tiny">
             Matches are case-insensitive substring checks against full paths (folders + files). Hidden folders and common junk dirs are ignored automatically.
           </div>
+        </div>
+
+        <!-- MERIDIAN_THEME: color theme picker -->
+        <div class="settingsGroup">
+          <label class="settingsLabel">App Theme</label>
+          <div id="appThemeSwatches" class="themeSwatches"></div>
         </div>
 
         <div class="settingsActions">

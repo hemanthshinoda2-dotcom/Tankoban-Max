@@ -1299,3 +1299,87 @@ code, pre, .mono{
   font-size: 13px;
   color: rgba(255,255,255,.35);
 }
+
+/* ===== MERIDIAN_PIN: Sidebar pin/float toggle ===== */
+
+.sidebarPinBtn{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255,255,255,.45);
+  cursor: pointer;
+  margin: 8px 8px 0 auto;
+  transition: color .12s, background .12s, transform .12s;
+  flex-shrink: 0;
+}
+.sidebarPinBtn:hover{
+  background: rgba(255,255,255,.10);
+  color: rgba(255,255,255,.80);
+}
+body.sidebarPinned .sidebarPinBtn{
+  color: var(--vx-accent, rgba(255,255,255,.90));
+  transform: rotate(45deg);
+}
+
+/* When pinned: sidebar is static, pushes content */
+body:not(.inPlayer).sidebarPinned .view:not(.hidden) > .libraryShell{
+  grid-template-columns: var(--lib-side-w, 280px) 1fr !important;
+}
+body:not(.inPlayer).sidebarPinned .view:not(.hidden) > .libraryShell > .libSidebar{
+  position: static;
+  transform: none !important;
+  width: auto;
+  box-shadow: none;
+  transition: none;
+}
+/* Hide drawer backdrop when pinned */
+body.sidebarPinned .drawerBackdrop{
+  display: none;
+}
+
+/* ===== MERIDIAN_THEME: Color theme picker ===== */
+
+.themeSwatches{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 4px 0;
+}
+.themeSwatch{
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .12s;
+  position: relative;
+  outline: none;
+}
+.themeSwatch:hover{
+  transform: scale(1.12);
+  box-shadow: 0 0 12px rgba(255,255,255,.15);
+}
+.themeSwatch.active{
+  border-color: rgba(255,255,255,.85);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.25);
+}
+.themeSwatch::after{
+  content: '';
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.90);
+  transform: translate(-50%, -50%);
+}
+.themeSwatch.active::after{
+  display: block;
+}

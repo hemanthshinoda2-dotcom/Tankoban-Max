@@ -107,6 +107,104 @@
     setDrawerOpen(false);
   });
 
+  // MERIDIAN_PIN: Sidebar pin/float toggle
+  var getSidebarPinned = function () {
+    try { return localStorage.getItem('sidebarPinned') === '1'; } catch (e) { return false; }
+  };
+  var setSidebarPinned = function (pinned) {
+    var val = !!pinned;
+    document.body.classList.toggle('sidebarPinned', val);
+    try { localStorage.setItem('sidebarPinned', val ? '1' : '0'); } catch (e) {}
+    // When pinning, close the floating drawer (no longer needed)
+    if (val) setDrawerOpen(false);
+    // Update all pin button titles
+    try {
+      var btns = document.querySelectorAll('.sidebarPinBtn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].title = val ? 'Unpin sidebar' : 'Pin sidebar';
+        btns[i].setAttribute('aria-label', val ? 'Unpin sidebar' : 'Pin sidebar');
+      }
+    } catch (e) {}
+  };
+
+  // Restore pinned state on boot
+  if (getSidebarPinned()) setSidebarPinned(true);
+
+  // Bind all pin buttons (one per sidebar)
+  try {
+    var pinBtns = document.querySelectorAll('.sidebarPinBtn');
+    for (var pi = 0; pi < pinBtns.length; pi++) {
+      pinBtns[pi].addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        setSidebarPinned(!document.body.classList.contains('sidebarPinned'));
+      });
+    }
+  } catch (e) {}
+
+  // MERIDIAN_THEME: Color theme picker
+  var THEME_PRESETS = [
+    { id: 'noir',     label: 'Noir',     bg0: '#050505', bg1: '#0a0a0a', accent: '#c7a76b', accentRgb: '199,167,107', swatch: '#1a1c24' },
+    { id: 'midnight', label: 'Midnight',  bg0: '#080d14', bg1: '#0d1117', accent: '#58a6ff', accentRgb: '88,166,255',  swatch: '#162030' },
+    { id: 'ember',    label: 'Ember',     bg0: '#100808', bg1: '#1a0c0c', accent: '#ff6b4a', accentRgb: '255,107,74',  swatch: '#2a1410' },
+    { id: 'forest',   label: 'Forest',    bg0: '#060e08', bg1: '#0c1a10', accent: '#4ade80', accentRgb: '74,222,128',  swatch: '#0f2418' },
+    { id: 'lavender', label: 'Lavender',  bg0: '#0c080e', bg1: '#140c1a', accent: '#c084fc', accentRgb: '192,132,252', swatch: '#1e1228' },
+    { id: 'arctic',   label: 'Arctic',    bg0: '#060c14', bg1: '#0c1420', accent: '#7dd3fc', accentRgb: '125,211,252', swatch: '#0e1c30' },
+    { id: 'warm',     label: 'Warm',      bg0: '#0e0c04', bg1: '#1a1408', accent: '#fbbf24', accentRgb: '251,191,36',  swatch: '#2a2010' }
+  ];
+
+  var applyTheme = function (themeId) {
+    var theme = null;
+    for (var i = 0; i < THEME_PRESETS.length; i++) {
+      if (THEME_PRESETS[i].id === themeId) { theme = THEME_PRESETS[i]; break; }
+    }
+    if (!theme) return;
+    try {
+      var root = document.documentElement;
+      root.style.setProperty('--vx-bg0', theme.bg0);
+      root.style.setProperty('--vx-bg1', theme.bg1);
+      root.style.setProperty('--vx-accent', theme.accent);
+      root.style.setProperty('--vx-accent-rgb', theme.accentRgb);
+    } catch (e) {}
+    try { localStorage.setItem('appTheme', themeId); } catch (e) {}
+    // Sync active swatch
+    try {
+      var swatches = document.querySelectorAll('.themeSwatch');
+      for (var j = 0; j < swatches.length; j++) {
+        swatches[j].classList.toggle('active', swatches[j].getAttribute('data-theme') === themeId);
+      }
+    } catch (e) {}
+  };
+
+  var renderThemeSwatches = function () {
+    var container = document.getElementById('appThemeSwatches');
+    if (!container) return;
+    var savedTheme = '';
+    try { savedTheme = localStorage.getItem('appTheme') || ''; } catch (e) {}
+    var html = '';
+    for (var i = 0; i < THEME_PRESETS.length; i++) {
+      var t = THEME_PRESETS[i];
+      var cls = 'themeSwatch' + (t.id === savedTheme ? ' active' : '');
+      html += '<button class="' + cls + '" data-theme="' + t.id + '" title="' + t.label + '" aria-label="' + t.label + ' theme" style="background:' + t.swatch + '"></button>';
+    }
+    container.innerHTML = html;
+    container.addEventListener('click', function (e) {
+      var btn = e.target;
+      if (!btn.classList.contains('themeSwatch')) return;
+      var themeId = btn.getAttribute('data-theme');
+      if (themeId) applyTheme(themeId);
+    });
+  };
+
+  // Restore saved theme on boot
+  try {
+    var savedTheme = localStorage.getItem('appTheme');
+    if (savedTheme) applyTheme(savedTheme);
+  } catch (e) {}
+
+  // Render theme swatches when settings overlay opens (or immediately if present)
+  renderThemeSwatches();
+
   el.refreshBtn.addEventListener('click', () => {
     if (document.body.classList.contains('inBooksMode')) {
       try { window.booksApp && window.booksApp.refresh && window.booksApp.refresh(); } catch {}
