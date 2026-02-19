@@ -98,9 +98,8 @@
     orange: { sentence: '#ffb450', word: '#ffc878',  line: '#ffa032' },
   };
 
-  // Pause debounce
-  var _lastToggleAt = 0;
-  var TOGGLE_COOLDOWN = 200;
+  // FIX-PAUSE: Removed shared cooldown — status guards (PLAYING/PAUSED) already
+  // prevent double-fire. The shared cooldown silently blocked rapid pause→resume.
 
   // GAP2: Screen Wake Lock
   var _wakeLock = null;
@@ -306,21 +305,27 @@
   }
 
   // FIX-TTS08: Build the word ::highlight CSS rule based on current style + color.
-  // CSS Highlight API supports: background-color, color, text-decoration*, -webkit-text-stroke.
+  // FIX-TTS-HL: Electron 30 (Chromium 124) does NOT support text-decoration in ::highlight().
+  // That requires Chrome 131+. Always include a visible background-color as the primary
+  // indicator and add text-decoration as a progressive enhancement for future Electron upgrades.
   function _buildHighlightCss() {
     var colors = TTS_HL_COLORS[state.ttsHlColor] || TTS_HL_COLORS.grey;
     var sentenceCss = '::highlight(tts-sentence) { background-color: ' + _hexToRgba(colors.sentence, 0.18) + '; }';
     var wordCss = '';
     var style = state.ttsHlStyle;
+    var wordBg = _hexToRgba(colors.word, 0.38);
     if (style === 'underline') {
-      wordCss = '::highlight(tts-word) { text-decoration: underline 2px ' + colors.word + '; background-color: transparent; }';
+      // Visible bg + underline (text-decoration is progressive enhancement)
+      wordCss = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.22) + '; text-decoration-line: underline; text-decoration-color: ' + colors.word + '; }';
     } else if (style === 'squiggly') {
-      wordCss = '::highlight(tts-word) { text-decoration: underline wavy ' + colors.word + '; background-color: transparent; }';
+      // Visible bg + wavy underline (progressive enhancement)
+      wordCss = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.22) + '; text-decoration-line: underline; text-decoration-style: wavy; text-decoration-color: ' + colors.word + '; }';
     } else if (style === 'strikethrough') {
-      wordCss = '::highlight(tts-word) { text-decoration: line-through 2px ' + colors.word + '; background-color: transparent; }';
+      // Visible bg + line-through (progressive enhancement)
+      wordCss = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.22) + '; text-decoration-line: line-through; text-decoration-color: ' + colors.word + '; }';
     } else {
       // 'highlight' (default) and 'enlarge' — enlarge uses span wrapping, not CSS highlight
-      wordCss = '::highlight(tts-word) { background-color: ' + _hexToRgba(colors.word, 0.38) + '; }';
+      wordCss = '::highlight(tts-word) { background-color: ' + wordBg + '; }';
     }
     return sentenceCss + '\n' + wordCss;
   }
@@ -970,8 +975,6 @@
 
   function pause() {
     if (!state.engine || state.status !== PLAYING) return;
-    if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
-    _lastToggleAt = Date.now();
 
     // FIX-TTS05: Set cancel flag BEFORE engine.cancel() — Thorium r2_cancel pattern
     // This prevents handleBoundary/handleBlockEnd from firing during the cancel transition
@@ -986,13 +989,20 @@
 
   function resume() {
     if (!state.engine || state.status !== PAUSED) return;
-    if (Date.now() - _lastToggleAt < TOGGLE_COOLDOWN) return;
-    _lastToggleAt = Date.now();
 
     // FIX-TTS05: Clear cancel flag on resume
     state._cancelFlag = false;
     state._pauseStartedAt = 0;
     state.engine.resume();
+    // FIX-PAUSE: Verify engine actually resumed — if audio.play() failed inside
+    // the engine, its paused flag stays true. Detect and force-correct.
+    if (typeof state.engine.isPaused === 'function' && state.engine.isPaused()) {
+      // Engine failed to resume — stay paused so UI stays consistent
+      state._cancelFlag = true;
+      state.status = PAUSED;
+      fire();
+      return;
+    }
     state.status = PLAYING;
     acquireWakeLock();
     fire();

@@ -46,11 +46,6 @@
     episodesWrap: qs('booksEpisodesWrap') || qs('booksVolumesWrap'),
     epPreviewInfo: qs('booksEpPreviewInfo') || qs('booksVolPreviewInfo'),
     epPreviewImg: qs('booksEpPreviewImg') || qs('booksVolPreviewImg'),
-    epOpenBtn: qs('booksEpOpenBtn') || qs('booksVolOpenBtn'),
-    epSort: qs('booksEpSort') || qs('booksVolSort'),
-    epSearch: qs('booksEpSearch'),
-    epSearchClear: qs('booksEpSearchClear'),
-    epHidePreviewToggle: qs('booksEpHidePreviewToggle'),
     epTableHead: qs('booksEpTableHead') || qs('booksVolTableHead'),
     episodesGrid: qs('booksEpisodesGrid') || qs('booksVolumesList'),
     episodesEmpty: qs('booksEpisodesEmpty') || qs('booksVolumesEmpty'),
@@ -88,8 +83,6 @@
       dismissedContinueShows: {},
       hiddenShowIds: new Set(),
       epSort: 'title_asc',
-      epSearch: '',
-      epHidePreview: false,
       globalSearchSel: 0,
     },
 
@@ -451,8 +444,17 @@
   }
 
 function getBookProgress(bookId) {
-    const p = state.progressAll && state.progressAll[bookId];
-    return p && typeof p === 'object' ? p : null;
+    if (!state.progressAll || typeof state.progressAll !== 'object') return null;
+    const raw = String(bookId || '');
+    const p = state.progressAll[raw];
+    if (p && typeof p === 'object') return p;
+    // FIX-CONT-TRACK: progress domain lowercases base64url IDs via normPath(); fallback to lowercased key
+    const canon = normPath(raw);
+    if (canon && canon !== raw) {
+      const p2 = state.progressAll[canon];
+      if (p2 && typeof p2 === 'object') return p2;
+    }
+    return null;
   }
 
   function getBookPct(book, progress) {
@@ -507,11 +509,22 @@ function getBookProgress(bookId) {
     state.derived.showProgressSummary = out;
   }
 
+  // FIX-CONT-TRACK: resolve the actual key in progressAll (may be lowercased by main process)
+  function resolveProgressKey(bookId) {
+    const raw = String(bookId || '');
+    if (state.progressAll && state.progressAll[raw]) return raw;
+    const canon = normPath(raw);
+    if (canon && state.progressAll && state.progressAll[canon]) return canon;
+    return canon || raw;
+  }
+
   // R3: book-level progress actions
   async function clearBookProgress(bookId) {
     if (!bookId) return;
     try { await api.booksProgress.clear(bookId); } catch {}
-    delete state.progressAll[bookId];
+    // FIX-CONT-TRACK: resolve actual key (may be lowercased)
+    const key = resolveProgressKey(bookId);
+    delete state.progressAll[key];
     rebuildShowProgressSummary();
     renderContinue();
     if (state.ui.booksSubView === 'show') renderShowView();
@@ -520,10 +533,11 @@ function getBookProgress(bookId) {
 
   async function markBookFinished(bookId) {
     if (!bookId) return;
-    const existing = state.progressAll[bookId] || {};
+    const key = resolveProgressKey(bookId);
+    const existing = state.progressAll[key] || {};
     const payload = { ...existing, finished: true, updatedAt: Date.now() };
     try { await api.booksProgress.save(bookId, payload); } catch {}
-    state.progressAll[bookId] = payload;
+    state.progressAll[key] = payload;
     rebuildShowProgressSummary();
     renderContinue();
     if (state.ui.booksSubView === 'show') renderShowView();
@@ -532,10 +546,11 @@ function getBookProgress(bookId) {
 
   async function markBookInProgress(bookId) {
     if (!bookId) return;
-    const existing = state.progressAll[bookId] || {};
+    const key = resolveProgressKey(bookId);
+    const existing = state.progressAll[key] || {};
     const payload = { ...existing, finished: false, updatedAt: Date.now() };
     try { await api.booksProgress.save(bookId, payload); } catch {}
-    state.progressAll[bookId] = payload;
+    state.progressAll[key] = payload;
     rebuildShowProgressSummary();
     renderContinue();
     if (state.ui.booksSubView === 'show') renderShowView();
@@ -556,7 +571,6 @@ function getBookProgress(bookId) {
         showTreeExpanded: { ...(state.ui.showTreeExpanded || {}) },
         dismissedContinueShows: { ...(state.ui.dismissedContinueShows || {}) },
         epSort: String(state.ui.epSort || 'title_asc'),
-        epHidePreview: !!state.ui.epHidePreview,
         hiddenShowIds: state.ui.hiddenShowIds ? Array.from(state.ui.hiddenShowIds) : [],
 
         // Backward compat
@@ -565,7 +579,6 @@ function getBookProgress(bookId) {
         selectedSeriesId: state.ui.selectedShowId || null,
         selectedFolderRel: normalizeRel(state.ui.showFolderRel),
         booksVolSort: String(state.ui.epSort || 'title_asc'),
-        booksVolSearch: String(state.ui.epSearch || ''),
         booksVolSelBookId: state.ui.selectedBookId || null,
       }).catch(() => {});
     }, 150);
@@ -585,7 +598,6 @@ function getBookProgress(bookId) {
       state.ui.showTreeExpanded = ui.showTreeExpanded && typeof ui.showTreeExpanded === 'object' ? ui.showTreeExpanded : {};
       state.ui.dismissedContinueShows = ui.dismissedContinueShows && typeof ui.dismissedContinueShows === 'object' ? ui.dismissedContinueShows : {};
       state.ui.epSort = String(ui.epSort || 'title_asc');
-      state.ui.epHidePreview = !!ui.epHidePreview;
       state.ui.hiddenShowIds = Array.isArray(ui.hiddenShowIds) ? new Set(ui.hiddenShowIds.map(String)) : new Set();
 
       if (!state.ui.hideFinishedShows && typeof ui.booksHideFinished === 'boolean') state.ui.hideFinishedShows = !!ui.booksHideFinished;
@@ -594,7 +606,6 @@ function getBookProgress(bookId) {
       }
       if (!state.ui.selectedShowId && ui.selectedSeriesId) state.ui.selectedShowId = String(ui.selectedSeriesId);
       if (!state.ui.selectedBookId && ui.booksVolSelBookId) state.ui.selectedBookId = String(ui.booksVolSelBookId);
-      if (!state.ui.epSearch && ui.booksVolSearch) state.ui.epSearch = String(ui.booksVolSearch || '');
       if (!state.ui.showFolderRel && ui.selectedFolderRel) state.ui.showFolderRel = normalizeRel(ui.selectedFolderRel);
       if (!ui.showFolderRel && !state.ui.showFolderRel && ui.selectedFolderRel) state.ui.showFolderRel = normalizeRel(ui.selectedFolderRel);
       if (!ui.epSort && ui.booksVolSort) {
@@ -737,6 +748,9 @@ function getBookProgress(bookId) {
       if (!b || !b.id) continue;
       const bid = String(b.id);
       bookById.set(bid, b);
+      // FIX-CONT-TRACK: also index by lowercased ID so progress-domain lowercased keys can resolve
+      const bidLower = normalizePathKey(bid);
+      if (bidLower !== bid) bookById.set(bidLower, b);
       const sid = String(b.seriesId || '').trim();
       if (sid) {
         const s = ensureSeries({
@@ -1153,7 +1167,11 @@ function getBookProgress(bookId) {
     const bid = String(bookId || '');
     if (bid) {
       try { await api.booksProgress.clear(bid); } catch {}
-      if (state.progressAll && typeof state.progressAll === 'object') delete state.progressAll[bid];
+      // FIX-CONT-TRACK: resolve actual key (may be lowercased)
+      if (state.progressAll && typeof state.progressAll === 'object') {
+        const key = resolveProgressKey(bid);
+        delete state.progressAll[key];
+      }
     }
 
     rebuildShowProgressSummary();
@@ -1805,7 +1823,6 @@ function getBookProgress(bookId) {
 
     row.onclick = () => {
       selectBookInShow(book.id, buildShowFolderModel(getShowById(state.ui.selectedShowId)), { persist: true });
-      if (el.epOpenBtn) el.epOpenBtn.disabled = false;
     };
     row.ondblclick = () => {
       selectBookInShow(book.id, buildShowFolderModel(getShowById(state.ui.selectedShowId)), { persist: true });
@@ -1827,7 +1844,8 @@ function getBookProgress(bookId) {
               if (_listenMode && api && typeof api.clearBooksTtsProgress === 'function') await api.clearBooksTtsProgress(book.id || book.path);
               else if (api && api.booksProgress && typeof api.booksProgress.clear === 'function') await api.booksProgress.clear(book.id);
             } catch {}
-            delete state.progressAll[book.id];
+            // FIX-CONT-TRACK: resolve actual key (may be lowercased)
+            delete state.progressAll[resolveProgressKey(book.id)];
             openBook(book).catch(() => {});
           }},
           // LISTEN_P2: launch TTS player for this book
@@ -1918,21 +1936,9 @@ function getBookProgress(bookId) {
 
     const allowedSort = new Set(['title_asc', 'modified_desc', 'modified_asc']);
     if (!allowedSort.has(String(state.ui.epSort || ''))) state.ui.epSort = 'title_asc';
-    if (el.epSort) el.epSort.value = String(state.ui.epSort || 'title_asc');
-    if (el.epSearch) el.epSearch.value = String(state.ui.epSearch || '');
-
-    if (el.epHidePreviewToggle) el.epHidePreviewToggle.checked = !!state.ui.epHidePreview;
-    el.episodesWrap.classList.toggle('previewHidden', !!state.ui.epHidePreview);
 
     const model = buildShowFolderModel(show);
-    const q = String(state.ui.epSearch || '').trim().toLowerCase();
-    const files = q
-      ? model.files.filter((b) => {
-          const title = String(b && b.title || '').toLowerCase();
-          const file = pathBase(b && b.path || '').toLowerCase();
-          return title.includes(q) || file.includes(q);
-        })
-      : model.files;
+    const files = model.files;
 
     if (el.crumb) el.crumb.classList.remove('hidden');
     if (el.crumbText) {
@@ -1949,7 +1955,6 @@ function getBookProgress(bookId) {
       el.episodesEmpty.classList.remove('hidden');
       el.episodesEmpty.innerHTML = 'No volumes found in this folder.<br><span class="muted tiny">Try adding an EPUB, PDF, or TXT file to this folder.</span>';
       if (el.epTableHead) el.epTableHead.classList.add('hidden');
-      if (el.epOpenBtn) el.epOpenBtn.disabled = true;
       updateShowPreview(model, null);
       return;
     }
@@ -1957,9 +1962,8 @@ function getBookProgress(bookId) {
     if (!model.folders.length && !files.length) {
       el.episodesWrap.classList.add('hidden');
       el.episodesEmpty.classList.remove('hidden');
-      el.episodesEmpty.textContent = q ? 'No matching volumes.' : 'This folder is empty.';
+      el.episodesEmpty.textContent = 'This folder is empty.';
       if (el.epTableHead) el.epTableHead.classList.add('hidden');
-      if (el.epOpenBtn) el.epOpenBtn.disabled = true;
       updateShowPreview(model, null);
       return;
     }
@@ -2003,10 +2007,8 @@ function getBookProgress(bookId) {
       }
       if (state.ui.selectedBookId) {
         selectBookInShow(state.ui.selectedBookId, { ...model, files }, { persist: false });
-        if (el.epOpenBtn) el.epOpenBtn.disabled = false;
       } else {
         updateShowPreview(model, null);
-        if (el.epOpenBtn) el.epOpenBtn.disabled = true;
       }
       renderFolderContinue();
     };
@@ -2498,34 +2500,6 @@ function getBookProgress(bookId) {
       renderAll();
     });
 
-    el.epSort && el.epSort.addEventListener('change', () => {
-      state.ui.epSort = String(el.epSort.value || 'title_asc');
-      renderShowView();
-      scheduleSaveUi();
-    });
-    el.epSearch && el.epSearch.addEventListener('input', () => {
-      state.ui.epSearch = String(el.epSearch.value || '');
-      renderShowView();
-      scheduleSaveUi();
-    });
-    el.epSearchClear && el.epSearchClear.addEventListener('click', () => {
-      state.ui.epSearch = '';
-      if (el.epSearch) el.epSearch.value = '';
-      renderShowView();
-      scheduleSaveUi();
-    });
-
-    el.epHidePreviewToggle && el.epHidePreviewToggle.addEventListener('change', () => {
-      state.ui.epHidePreview = !!el.epHidePreviewToggle.checked;
-      if (el.episodesWrap) el.episodesWrap.classList.toggle('previewHidden', !!state.ui.epHidePreview);
-      scheduleSaveUi();
-    });
-
-    el.epOpenBtn && el.epOpenBtn.addEventListener('click', () => {
-      const b = state.ui.selectedBookId ? state.derived.bookById.get(String(state.ui.selectedBookId || '')) : null;
-      if (b) openBook(b).catch(() => {});
-    });
-
     // R7: keyboard navigation (Backspace, K)
     document.addEventListener('keydown', (e) => {
       if (!document.body.classList.contains('inBooksMode')) return;
@@ -2666,7 +2640,9 @@ function getBookProgress(bookId) {
         const api = window.Tanko && window.Tanko.api;
         if (api && typeof api.getAllBooksTtsProgress === 'function') {
           api.getAllBooksTtsProgress().then((m) => {
-            state.ttsProgressAll = (m && typeof m === 'object') ? m : {};
+            // FIX-CONT-TRACK: unwrap byBook from API response; getAll returns { byBook: { ... } }
+            const byBook = (m && typeof m.byBook === 'object') ? m.byBook : (m && typeof m === 'object' ? m : {});
+            state.ttsProgressAll = byBook;
             if (state.ui.booksSubView === 'show') renderShowView(); else renderHome();
           }).catch(() => { state.ttsProgressAll = {}; });
         } else {
