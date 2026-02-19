@@ -3331,10 +3331,17 @@ body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:aut
 .seriesCard.posterDropTarget .seriesCoverWrap{ outline:2px dashed var(--accent); outline-offset:4px; }
 .contTile.posterDropTarget .contCover{ outline:2px dashed var(--accent); outline-offset:4px; }
 
+/* FIX-TILES: density-aware books grid (match comics/video) */
 #booksShowsGrid.seriesGrid{
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 8px;
   padding: 2px;
+}
+body[data-tile-density="comfortable"] #booksShowsGrid.seriesGrid{
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+body[data-tile-density="compact"] #booksShowsGrid.seriesGrid{
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
 }
 
 #booksLibraryView .videoRootRemove{
@@ -3569,7 +3576,6 @@ body.mpvEngine .videoToast {
 /* =========================================================
    Tankoban Max: Books mode + Books reader
    ========================================================= */
-body.inBooksMode #tileDensityBtn,
 body.inBooksMode #hiddenSeriesBtn,
 body.inWebMode #tileDensityBtn,
 body.inWebMode #hiddenSeriesBtn {

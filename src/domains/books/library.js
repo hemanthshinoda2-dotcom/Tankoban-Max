@@ -1114,7 +1114,11 @@ function getBookProgress(bookId) {
       // coverHeight = list.height - (verticalPadding * 2)
       // coverWidth  = floor(coverHeight * 0.65)
       const verticalPadding = 20;
-      const coverH = Math.max(0, listH - (verticalPadding * 2));
+      // FIX-TILES: density-aware clamping (match video continue geometry)
+      const density = (document.body && document.body.getAttribute('data-tile-density')) || 'comfortable';
+      const maxH = (density === 'compact') ? 261 : 323;
+      const minH = (density === 'compact') ? 210 : 240;
+      const coverH = Math.min(maxH, Math.max(minH, listH - (verticalPadding * 2)));
       if (coverH === booksContinueGeom.lastCoverH) return;
       booksContinueGeom.lastCoverH = coverH;
       const coverW = Math.floor(coverH * 0.65);
@@ -1122,6 +1126,14 @@ function getBookProgress(bookId) {
       row.style.setProperty('--cont-cover-w', `${coverW}px`);
     });
   }
+
+  // FIX-TILES: retrigger continue geometry when tile density changes
+  try {
+    document.body.addEventListener('tileDensityChanged', function () {
+      booksContinueGeom.lastCoverH = 0;
+      scheduleBooksContinueGeometry();
+    });
+  } catch {}
 
   function getContinueItems() {
     const dismissed = (state.ui.dismissedContinueShows && typeof state.ui.dismissedContinueShows === 'object') ? state.ui.dismissedContinueShows : {};

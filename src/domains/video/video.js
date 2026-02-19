@@ -3589,6 +3589,14 @@ function getContinueVideos() {
     });
   }
 
+  // FIX-TILES: retrigger continue geometry when tile density changes
+  try {
+    document.body.addEventListener('tileDensityChanged', function () {
+      videoContinueGeom.lastCoverH = 0;
+      scheduleVideoContinueGeometry();
+    });
+  } catch {}
+
   function renderContinue() {
     if (!el.videoContinuePanel || !el.videoContinueList) return;
     // Build 104b: ensure Continue Watching has episode metadata even when the main snapshot is lite-capped.

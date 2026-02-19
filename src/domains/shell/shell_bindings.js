@@ -13,6 +13,8 @@
     try {
       if (el.tileDensityBtn) el.tileDensityBtn.textContent = (d === 'compact') ? 'Tiles: Medium' : 'Tiles: Large';
     } catch {}
+    // FIX-TILES: notify JS geometry schedulers (Video/Books continue shelves)
+    try { document.body.dispatchEvent(new CustomEvent('tileDensityChanged')); } catch {}
   };
   const toggleTileDensity = () => {
     const cur = (document.body.dataset.tileDensity || 'comfortable');
