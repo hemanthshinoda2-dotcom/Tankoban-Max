@@ -25,6 +25,7 @@
       blobUrl: null,
       rate: 1.0,
       pitch: 1.0,
+      volume: 1.0, // TTS-QOL4
       voiceName: 'en-US-AriaNeural',
       playing: false,
       paused: false,
@@ -47,8 +48,9 @@
 
     // FIX-TTS05: LRU audio cache — keyed by "voice|rate|pitch|text"
     // Uses Map for insertion-order iteration (oldest first for eviction).
+    // OPT1: increased from 20 to 50 for longer listening sessions
     var _lruCache = new Map();
-    var LRU_MAX = 20;
+    var LRU_MAX = 50;
 
     function _lruKey(text) {
       return state.voiceName + '|' + state.rate + '|' + state.pitch + '|' + text;
@@ -138,6 +140,7 @@
         try {
           state.audio = new Audio();
           state.audio.preload = 'auto';
+          state.audio.volume = state.volume; // TTS-QOL4
         } catch {
           state.audio = null;
         }
@@ -227,6 +230,12 @@
 
     function setRate(rate) {
       state.rate = Math.max(0.5, Math.min(2.0, Number(rate) || 1.0));
+    }
+
+    // TTS-QOL4: Volume control via HTMLAudioElement.volume (0–1)
+    function setVolume(vol) {
+      state.volume = Math.max(0, Math.min(1, Number(vol) || 1.0));
+      if (state.audio) state.audio.volume = state.volume;
     }
 
     function setPitch(pitch) {
@@ -569,6 +578,7 @@
     return {
       getVoices: getVoices,
       setRate: setRate,
+      setVolume: setVolume, // TTS-QOL4
       setVoice: setVoice,
       setPitch: setPitch,
       speak: speak,

@@ -378,6 +378,7 @@
 .lp-card-text {
   flex: 1;
   position: relative; /* FIX-LP-SCROLL: offsetParent for auto-scroll offsetTop */
+  font-family: var(--lp-card-font-family, Georgia, "Times New Roman", serif);
   font-size: var(--lp-card-font, 1.15rem);
   line-height: 1.7;
   color: var(--lp-text, #c8d3e0);
@@ -420,6 +421,18 @@
   text-overflow: ellipsis;
   color: var(--lp-muted, rgba(255,255,255,0.42));
 }
+/* OPT1: time estimate display */
+.lp-time-estimate {
+  font-size: 11px;
+  color: var(--lp-muted, rgba(255,255,255,0.52));
+  white-space: nowrap;
+}
+.lp-sleep-countdown {
+  font-size: 11px;
+  color: var(--lp-accent, #4a90d9);
+  margin-left: 6px;
+  white-space: nowrap;
+}
 .lp-seek {
   width: 100%;
   height: 20px;
@@ -448,6 +461,19 @@
 }
 .lp-shell .lp-tts-bar .booksReaderTtsBtn:hover {
   background: rgba(var(--lp-accent-rgb, 74,144,217), 0.12) !important;
+}
+/* TTS-QOL4: Volume slider in TTS bar */
+.lp-vol-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.lp-volume-slider {
+  width: 56px;
+  height: 4px;
+  cursor: pointer;
+  accent-color: var(--lp-accent, #4a90d9);
+  margin-right: 2px;
 }
 
 .booksReaderTtsBar {
@@ -708,6 +734,8 @@
   border-right: 1px solid var(--lib-border, rgba(255,255,255,0.07));
   overflow: hidden;
   transition: margin-left 0.2s ease, opacity 0.2s ease;
+  position: relative;
+  z-index: 14; /* FIX-SIDEBAR01: above corner overlays (z-index 12) */
 }
 .br-sidebar.collapsed {
   margin-left: -310px;
@@ -784,7 +812,7 @@
 /* Sidebar lists */
 .br-list {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
   padding: 4px 0;
 }
 .br-list-item {

@@ -7,6 +7,7 @@
   var hudHideTimer = null;
   var isReadingAction = false;   // TASK2: suppress HUD during scroll/page-turn
   var REVEAL_ZONE = 48; // FIX_HUD: top/bottom edge zone in px that triggers HUD
+  var _lastMouseActivityMs = 0; // OPT1: throttle mousemove to reduce getBoundingClientRect calls
 
   // ── Module registry ──────────────────────────────────────────
 
@@ -179,6 +180,10 @@
   // FIX_HUD: show HUD only on top/bottom edge when hidden; otherwise keep-alive on movement
   function onMouseActivity(e) {
     if (!RS.state.open) return;
+    // OPT1: throttle to ~20/sec to reduce getBoundingClientRect calls
+    var now = Date.now();
+    if (now - _lastMouseActivityMs < 50) return;
+    _lastMouseActivityMs = now;
     if (isReadingAction) { isReadingAction = false; }
     var els = RS.ensureEls();
     if (!els.readerView) return;
@@ -458,6 +463,19 @@
 
     // Fullscreen button
     els.fsBtn && els.fsBtn.addEventListener('click', function () { toggleReaderFullscreen().catch(function () {}); });
+
+    // STRIP-LISTEN-MODE: in-reader Listen button toggles TTS player overlay
+    els.listenBtn && els.listenBtn.addEventListener('click', function () {
+      var player = window.booksListenPlayer;
+      if (!player || typeof player.open !== 'function') return;
+      if (player.isOpen && player.isOpen()) {
+        player.close();
+        return;
+      }
+      if (!RS.state.book) return;
+      player.open(RS.state.book);
+    });
+
     // BUILD_OVERHAUL: host-level dict/annot handlers live in dedicated modules
 
     // Bus events

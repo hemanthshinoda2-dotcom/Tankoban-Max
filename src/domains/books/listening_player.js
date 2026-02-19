@@ -23,6 +23,13 @@
   var AUTO_REWIND_MS = 5000;
   var AUTO_REWIND_AFTER_PAUSE_MS = 20000;
 
+  // OPT1: Sleep timer state
+  var _sleepTimerId = null;
+  var _sleepEndMs = 0;
+  var _sleepMode = 'off';
+  var _sleepCountdownId = null;
+  var _preMuteVolume = -1; // OPT1: for mute toggle keyboard shortcut
+
 
   // ── SVG icons ───────────────────────────────────────────────────────────────
   var SVG_PLAY = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg>';
@@ -119,6 +126,15 @@
     slow:    { rate: 0.7, pitch: 0.95 },
   };
 
+  // LP-FONT: card font family map — standard stacks matching ReadiumCSS
+  var LP_FONT_MAP = {
+    oldStyleTf:   '"Iowan Old Style", "Sitka Text", Palatino, "Book Antiqua", serif',
+    modernTf:     'Athelas, Constantia, Georgia, serif',
+    sansTf:       'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    humanistTf:   'Seravek, Calibri, Roboto, Arial, sans-serif',
+    monospaceTf:  '"Andale Mono", Consolas, monospace',
+  };
+
   // ── Persisted settings (stored per-session in the player, not per-book) ─────
   var _settings = {
     ttsVoice: '',
@@ -130,7 +146,33 @@
     ttsWordHlStyle: 'highlight',
     ttsWordHlColor: 'blue',
     ttsEnlargeScale: 1.35,
+    ttsFont: 'default',
+    ttsVolume: 1.0, // TTS-QOL4
   };
+
+  // TTS-QOL4: load all saved preferences from localStorage
+  try {
+    var _ls = localStorage;
+    _settings.ttsFont = _ls.getItem('booksListenFont') || 'default';
+    var sv = _ls.getItem('booksListenVoice');     if (sv) _settings.ttsVoice = sv;
+    var sr = _ls.getItem('booksListenRate');       if (sr) _settings.ttsRate = parseFloat(sr) || 1.0;
+    var sp = _ls.getItem('booksListenPreset');     if (sp) _settings.ttsPreset = sp;
+    var sh = _ls.getItem('booksListenHlStyle');    if (sh) _settings.ttsHlStyle = sh;
+    var sc = _ls.getItem('booksListenHlColor');    if (sc) _settings.ttsHlColor = sc;
+    var sg = _ls.getItem('booksListenHlGran');     if (sg) _settings.ttsHlGranularity = sg;
+    var sw = _ls.getItem('booksListenWordStyle');   if (sw) _settings.ttsWordHlStyle = sw;
+    var swc = _ls.getItem('booksListenWordColor'); if (swc) _settings.ttsWordHlColor = swc;
+    var se = _ls.getItem('booksListenEnlarge');    if (se) _settings.ttsEnlargeScale = parseFloat(se) || 1.35;
+    var svol = _ls.getItem('booksListenVolume');   if (svol) _settings.ttsVolume = parseFloat(svol) || 1.0;
+  } catch {}
+
+  function _applyCardFont(key) {
+    var shell = document.getElementById('booksListenPlayerOverlay');
+    if (!shell) return;
+    if (!key || key === 'default') { shell.style.removeProperty('--lp-card-font-family'); return; }
+    var stack = LP_FONT_MAP[key];
+    if (stack) shell.style.setProperty('--lp-card-font-family', stack);
+  }
 
   function qs(id) {
     try { return document.getElementById(id); } catch { return null; }
@@ -301,6 +343,10 @@ function updateCard(info) {
 
     syncSpeed();
 
+    // OPT1: update time estimate
+    var timeEl = qs('lpTimeEstimate');
+    if (timeEl) timeEl.textContent = _estimateTimeRemaining(info);
+
     // Progress save on block change
     var blockIdx = (info.blockIdx >= 0) ? info.blockIdx : -1;
     if (blockIdx >= 0 && blockIdx !== _lastSavedBlockIdx) {
@@ -323,7 +369,8 @@ function updateCard(info) {
       try {
         var api = window.Tanko && window.Tanko.api;
         if (api && typeof api.saveBooksTtsProgress === 'function') {
-          api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
+          // FIX-LISTEN-CONT: return promise so closePlayer can await before re-render
+          return api.saveBooksTtsProgress(_book.id, entry).catch(function () {});
         }
       } catch {}
     } else {
@@ -541,6 +588,7 @@ function updateCard(info) {
     var next = Math.max(limits.min, Math.min(limits.max, Math.round((current + delta) * 10) / 10));
     tts.setRate(next);
     _settings.ttsRate = next;
+    try { localStorage.setItem('booksListenRate', String(next)); } catch {} // TTS-QOL4
     syncSpeed();
   }
 
@@ -631,6 +679,68 @@ function updateCard(info) {
     }
   }
 
+  // OPT1: Sleep timer — pause TTS after user-configured duration
+  function _clearSleepTimer() {
+    if (_sleepTimerId) { clearInterval(_sleepTimerId); _sleepTimerId = null; }
+    if (_sleepCountdownId) { clearInterval(_sleepCountdownId); _sleepCountdownId = null; }
+    _sleepEndMs = 0;
+    _sleepMode = 'off';
+    var el = qs('lpSleepCountdown');
+    if (el) el.textContent = '';
+    var sel = qs('lpSleepTimer');
+    if (sel) sel.value = 'off';
+  }
+
+  function _updateSleepCountdown() {
+    var el = qs('lpSleepCountdown');
+    if (!el) return;
+    if (_sleepMode === 'off') { el.textContent = ''; return; }
+    if (_sleepMode === 'chapter') { el.textContent = '(end of chapter)'; return; }
+    var remaining = Math.max(0, _sleepEndMs - Date.now());
+    if (remaining <= 0) { el.textContent = ''; return; }
+    var mins = Math.ceil(remaining / 60000);
+    el.textContent = mins + 'm left';
+  }
+
+  function setSleepTimer(mode) {
+    _clearSleepTimer();
+    if (!mode || mode === 'off') return;
+    _sleepMode = mode;
+    if (mode === 'chapter') {
+      _updateSleepCountdown();
+      return;
+    }
+    var minutes = parseInt(mode, 10);
+    if (!minutes || minutes <= 0) return;
+    _sleepEndMs = Date.now() + minutes * 60000;
+    _sleepTimerId = setInterval(function () {
+      if (Date.now() >= _sleepEndMs) {
+        var tts = window.booksTTS;
+        if (tts && tts.getState() === 'playing') tts.pause();
+        _clearSleepTimer();
+      }
+    }, 1000);
+    _sleepCountdownId = setInterval(_updateSleepCountdown, 10000);
+    _updateSleepCountdown();
+  }
+
+  // OPT1: Reading time estimate
+  function _estimateTimeRemaining(info) {
+    if (!info || info.blockCount <= 0 || info.blockIdx < 0) return '';
+    var remaining = info.blockCount - info.blockIdx - 1;
+    if (remaining <= 0) return '';
+    var avgWords = 25;
+    var wpm = 150 * (_settings.ttsRate || 1.0);
+    var mins = Math.round((remaining * avgWords) / wpm);
+    if (mins < 1) return '<1m';
+    if (mins >= 60) {
+      var h = Math.floor(mins / 60);
+      var m = mins % 60;
+      return '~' + h + 'h ' + m + 'm';
+    }
+    return '~' + mins + 'm';
+  }
+
   function navigateToChapter(href, idx) {
     if (!href) return;
     var tts = window.booksTTS;
@@ -687,6 +797,13 @@ function updateCard(info) {
       getHost: function () { return RS && RS.state ? RS.state.host : null; },
       getViewEngine: function () { return RS && RS.state ? RS.state.engine : null; },
       onNeedAdvance: function () {
+        // OPT1: sleep timer "end of chapter" — pause instead of advancing
+        if (_sleepMode === 'chapter') {
+          var tts = window.booksTTS;
+          if (tts) try { tts.pause(); } catch {}
+          _clearSleepTimer();
+          return Promise.resolve(false);
+        }
         var eng = RS && RS.state ? RS.state.engine : null;
         if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false);
         return eng.advanceSection(1).then(function () { return true; }).catch(function () { return false; });
@@ -716,6 +833,8 @@ function updateCard(info) {
       if (_settings.ttsWordHlStyle && typeof tts.setWordHighlightStyle === 'function') tts.setWordHighlightStyle(_settings.ttsWordHlStyle);
       if (_settings.ttsWordHlColor && typeof tts.setWordHighlightColor === 'function') tts.setWordHighlightColor(_settings.ttsWordHlColor);
       if (_settings.ttsEnlargeScale && typeof tts.setEnlargeScale === 'function') tts.setEnlargeScale(_settings.ttsEnlargeScale);
+      // TTS-QOL4: apply saved volume
+      if (typeof tts.setVolume === 'function') tts.setVolume(_settings.ttsVolume || 1.0);
 
       populateVoices();
       populateHlControls();
@@ -723,6 +842,11 @@ function updateCard(info) {
       syncEngine();
       var presetSel = qs('lpTtsPresetSel');
       if (presetSel && _settings.ttsPreset) presetSel.value = _settings.ttsPreset;
+      // TTS-QOL4: sync enlarge slider + volume slider to saved values
+      var enlargeSlider = qs('lpTtsEnlargeScale');
+      if (enlargeSlider) { enlargeSlider.value = String(_settings.ttsEnlargeScale || 1.35); var ev2 = qs('lpTtsEnlargeVal'); if (ev2) ev2.textContent = (_settings.ttsEnlargeScale || 1.35).toFixed(2) + 'x'; }
+      var volS = qs('lpVolume');
+      if (volS) volS.value = String(_settings.ttsVolume || 1.0);
 
       try {
         var snap = tts.getSnippet ? tts.getSnippet() : null;
@@ -804,8 +928,19 @@ function updateCard(info) {
     var bar = qs('lpTtsBar');
     if (bar) bar.classList.remove('hidden');
 
-    /* FIX-LISTEN-FLASH: show overlay before opening reader to prevent flash */
     showOverlay(true);
+    _applyCardFont(_settings.ttsFont);
+
+    // STRIP-LISTEN-MODE: skip re-opening if reader already has this book
+    var ctl = window.booksReaderController;
+    var RS = window.booksReaderState;
+    var alreadyOpen = ctl && typeof ctl.isOpen === 'function' && ctl.isOpen()
+      && RS && RS.state && RS.state.book
+      && String(RS.state.book.id || '') === String(book.id || '');
+    if (alreadyOpen) {
+      startTts();
+      return;
+    }
 
     var booksApp = window.booksApp;
     if (!booksApp || typeof booksApp.openBookInReader !== 'function') return;
@@ -815,48 +950,57 @@ function updateCard(info) {
     });
   }
 
-  function closePlayer(opts) {
+  function closePlayer() {
     if (!_open) return;
     _open = false;
     _ttsStarted = false;
+    _clearSleepTimer(); // OPT1
     if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+    // Save final progress
     try {
       var tts2 = window.booksTTS;
       var snap = tts2 && tts2.getSnippet ? tts2.getSnippet() : null;
       saveProgress(snap, true);
     } catch {}
+    // TTS-RESUME-HL: Before destroy, scroll reader to last spoken block and highlight it
+    try {
+      var ttsR = window.booksTTS;
+      if (ttsR && typeof ttsR.getLastBlockInfo === 'function') {
+        var blockInfo = ttsR.getLastBlockInfo();
+        if (blockInfo && blockInfo.range) {
+          // Scroll reader viewport to the last spoken block
+          var renderer = blockInfo.renderer;
+          if (renderer && typeof renderer.scrollToAnchorCentered === 'function') {
+            try { renderer.scrollToAnchorCentered(blockInfo.range); } catch {}
+          }
+          // Apply persistent highlight on the sentence
+          var RS = window.booksReaderState;
+          var eng = RS && RS.state && RS.state.engine;
+          if (eng && typeof eng.showResumeHighlight === 'function') {
+            eng.showResumeHighlight(blockInfo.blockRange || blockInfo.range);
+          }
+          // Save reader progress at the new position so it persists
+          if (RS && typeof RS.saveProgress === 'function') {
+            try { RS.saveProgress(); } catch {}
+          }
+        }
+      }
+    } catch {}
     _lastSavedBlockIdx = -1;
     _tocPanelOpen = false;
     _navigating = false;
     showTocPanel(false);
+    // Destroy TTS
     var tts = window.booksTTS;
     if (tts) { try { tts.destroy(); } catch {} }
     unwireTts();
-    // FIX-LISTEN-FLASH: keep overlay up during navigation back to avoid reader flash
-    // Overlay will be hidden after navigation completes.
-    // Hide mega/diag panels
+    // Hide sub-panels
     var mega = qs('lpTtsMega');
     if (mega) mega.classList.add('hidden');
     var diag = qs('lpTtsDiag');
     if (diag) diag.classList.add('hidden');
-
-    var skipRestore = opts && opts.skipModeRestore;
-    var shell = window.booksListeningShell;
-    var booksApp = window.booksApp;
-    if (booksApp && typeof booksApp.back === 'function') {
-      booksApp.back().then(function () {
-        if (!skipRestore && shell && typeof shell.setMode === 'function') shell.setMode(shell.MODE_LISTEN);
-        showOverlay(false);
-      }).catch(function () {
-        if (!skipRestore && shell && typeof shell.setMode === 'function') shell.setMode(shell.MODE_LISTEN);
-        showOverlay(false);
-      });
-    } else if (!skipRestore && shell && typeof shell.setMode === 'function') {
-      shell.setMode(shell.MODE_LISTEN);
-      showOverlay(false);
-    } else {
-      showOverlay(false);
-    }
+    // STRIP-LISTEN-MODE: just hide overlay — reader stays open underneath
+    showOverlay(false);
   }
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
@@ -890,6 +1034,28 @@ function updateCard(info) {
         if (diag && !diag.classList.contains('hidden')) { diag.classList.add('hidden'); break; }
         closePlayer();
         break;
+      // OPT1: additional keyboard shortcuts
+      case 'm': case 'M':
+        e.preventDefault(); e.stopPropagation();
+        if (typeof tts.setVolume === 'function' && typeof tts.getVolume === 'function') {
+          var curVol = tts.getVolume();
+          if (curVol > 0) { _preMuteVolume = curVol; tts.setVolume(0); }
+          else { tts.setVolume(_preMuteVolume > 0 ? _preMuteVolume : 1.0); _preMuteVolume = -1; }
+          var volS = qs('lpVolume'); if (volS) volS.value = String(tts.getVolume());
+        }
+        break;
+      case 's': case 'S':
+        e.preventDefault(); e.stopPropagation();
+        ttsStop();
+        break;
+      case '+': case '=':
+        e.preventDefault(); e.stopPropagation();
+        ttsAdjustSpeed(0.1);
+        break;
+      case '-':
+        e.preventDefault(); e.stopPropagation();
+        ttsAdjustSpeed(-0.1);
+        break;
     }
   }
 
@@ -915,8 +1081,6 @@ function updateCard(info) {
       var ttsCleanup = window.booksTTS;
       if (ttsCleanup) { try { ttsCleanup.destroy(); } catch {} }
       unwireTts();
-      var shell = window.booksListeningShell;
-      if (shell && typeof shell.setMode === 'function') shell.setMode(shell.MODE_LISTEN);
     });
 
     // Back button
@@ -985,6 +1149,7 @@ function updateCard(info) {
       var voiceId = voiceSel.value;
       tts.setVoice(voiceId);
       _settings.ttsVoice = voiceId;
+      try { localStorage.setItem('booksListenVoice', voiceId); } catch {} // TTS-QOL4
     });
 
     // Voice preview
@@ -996,6 +1161,7 @@ function updateCard(info) {
       if (!voiceId) return;
       tts.setVoice(voiceId);
       _settings.ttsVoice = voiceId;
+      try { localStorage.setItem('booksListenVoice', voiceId); } catch {} // TTS-QOL4
       // Quick preview via engine probe (simplified - no separate engine instance)
     });
 
@@ -1009,9 +1175,21 @@ function updateCard(info) {
         tts.setPreset(pid);
         _settings.ttsPreset = pid;
         _settings.ttsRate = tts.getRate();
+        try { localStorage.setItem('booksListenPreset', pid); localStorage.setItem('booksListenRate', String(_settings.ttsRate)); } catch {} // TTS-QOL4
       }
       syncSpeed();
     });
+
+    // LP-FONT: card font family selector
+    var fontSel = qs('lpTtsFont');
+    if (fontSel) {
+      fontSel.value = _settings.ttsFont || 'default';
+      fontSel.addEventListener('change', function () {
+        _settings.ttsFont = fontSel.value;
+        _applyCardFont(fontSel.value);
+        try { localStorage.setItem('booksListenFont', fontSel.value); } catch {}
+      });
+    }
 
     // Highlight style
     var hlStyleSel = qs('lpTtsHlStyle');
@@ -1020,6 +1198,7 @@ function updateCard(info) {
       if (!tts || typeof tts.setHighlightStyle !== 'function') return;
       tts.setHighlightStyle(hlStyleSel.value);
       _settings.ttsHlStyle = hlStyleSel.value;
+      try { localStorage.setItem('booksListenHlStyle', hlStyleSel.value); } catch {} // TTS-QOL4
       var enlargeRow = qs('lpEnlargeRow');
       if (enlargeRow) enlargeRow.style.display = (hlStyleSel.value === 'enlarge') ? '' : 'none';
     });
@@ -1033,6 +1212,7 @@ function updateCard(info) {
       if (!tts || typeof tts.setHighlightColor !== 'function') return;
       tts.setHighlightColor(btn.dataset.color);
       _settings.ttsHlColor = btn.dataset.color;
+      try { localStorage.setItem('booksListenHlColor', btn.dataset.color); } catch {} // TTS-QOL4
       populateHlControls();
     });
 
@@ -1044,6 +1224,7 @@ function updateCard(info) {
       var val = wt.checked ? 'word' : 'sentence';
       tts.setHighlightGranularity(val);
       _settings.ttsHlGranularity = val;
+      try { localStorage.setItem('booksListenHlGran', val); } catch {} // TTS-QOL4
       populateHlControls();
     });
 
@@ -1054,6 +1235,7 @@ function updateCard(info) {
       if (!tts || typeof tts.setWordHighlightStyle !== 'function') return;
       tts.setWordHighlightStyle(wStyleSel.value);
       _settings.ttsWordHlStyle = wStyleSel.value;
+      try { localStorage.setItem('booksListenWordStyle', wStyleSel.value); } catch {} // TTS-QOL4
     });
 
     // Word highlight color swatches
@@ -1065,6 +1247,7 @@ function updateCard(info) {
       if (!tts || typeof tts.setWordHighlightColor !== 'function') return;
       tts.setWordHighlightColor(btn.dataset.color);
       _settings.ttsWordHlColor = btn.dataset.color;
+      try { localStorage.setItem('booksListenWordColor', btn.dataset.color); } catch {} // TTS-QOL4
       populateHlControls();
     });
 
@@ -1075,6 +1258,7 @@ function updateCard(info) {
       var tts = window.booksTTS;
       if (tts && typeof tts.setEnlargeScale === 'function') tts.setEnlargeScale(val);
       _settings.ttsEnlargeScale = val;
+      try { localStorage.setItem('booksListenEnlarge', String(val)); } catch {} // TTS-QOL4
       var valEl = qs('lpTtsEnlargeVal');
       if (valEl) valEl.textContent = val.toFixed(2) + 'x';
     });
@@ -1105,6 +1289,12 @@ function updateCard(info) {
       });
     }
 
+    // OPT1: Sleep timer
+    var sleepSel = qs('lpSleepTimer');
+    if (sleepSel) sleepSel.addEventListener('change', function () {
+      setSleepTimer(sleepSel.value);
+    });
+
     // Read from selection
     var fromSel = qs('lpTtsFromSel');
     if (fromSel) fromSel.addEventListener('click', function () { ttsPlayFromSelection(); });
@@ -1132,6 +1322,22 @@ function updateCard(info) {
       ar.addEventListener('change', function () {
         _autoRewindEnabled = !!ar.checked;
         try { localStorage.setItem('booksListenAutoRewind', _autoRewindEnabled ? '1' : '0'); } catch {}
+      });
+    }
+
+    // TTS-QOL4: volume slider
+    var volSlider = qs('lpVolume');
+    if (volSlider) {
+      var savedVol = 1;
+      try { savedVol = parseFloat(localStorage.getItem('booksListenVolume')) || 1; } catch {}
+      _settings.ttsVolume = savedVol;
+      volSlider.value = String(savedVol);
+      volSlider.addEventListener('input', function () {
+        var v = parseFloat(volSlider.value) || 1;
+        _settings.ttsVolume = v;
+        var tts = window.booksTTS;
+        if (tts && typeof tts.setVolume === 'function') tts.setVolume(v);
+        try { localStorage.setItem('booksListenVolume', String(v)); } catch {}
       });
     }
 

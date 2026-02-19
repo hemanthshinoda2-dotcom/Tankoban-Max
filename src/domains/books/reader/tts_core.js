@@ -32,6 +32,7 @@
 
     rate: 1.0,
     pitch: 1.0,
+    volume: 1.0, // TTS-QOL4
     preset: '',
     voiceId: '',
 
@@ -395,13 +396,25 @@
     } catch {}
   }
 
+  // OPT1: RAF-throttle boundary updates to reduce layout thrashing
+  var _pendingBoundary = null;
+  var _boundaryRafId = null;
+
   // FIX-TTS08: Enlarge style — wrap current word range in a <span class="tts-enlarge">,
   // remove the previous one. This is the only style that mutates the DOM.
   var _enlargeSpan = null;
 
   function _applyEnlargeSpan(range) {
+    if (!range) { _clearEnlargeSpan(); return; }
+    // OPT1: skip DOM teardown+rebuild if enlarge span already wraps the same range
+    if (_enlargeSpan && _enlargeSpan.parentNode) {
+      try {
+        var txt = _enlargeSpan.textContent || '';
+        var rangeText = range.toString() || '';
+        if (txt === rangeText) return;
+      } catch {}
+    }
     _clearEnlargeSpan();
-    if (!range) return;
     try {
       var doc = range.startContainer.ownerDocument || document;
       var span = doc.createElement('span');
@@ -629,9 +642,18 @@
     fireProgress();
 
     // FIX-TTS05: Pre-synthesize ahead (multi-chunk lookahead)
-    _preloadAhead(queueIdx + 1, 3);
+    // OPT1: adaptive count based on playback rate
+    _preloadAhead(queueIdx + 1, _adaptivePreloadCount());
 
     state.engine.speak(item.text);
+  }
+
+  // OPT1: Adaptive preload count — more blocks at higher playback rates
+  function _adaptivePreloadCount() {
+    var base = 3;
+    var extra = Math.ceil((state.rate - 1.0) * 3);
+    if (extra < 0) extra = 0;
+    return Math.min(base + extra, 8);
   }
 
   // FIX-TTS05: Multi-chunk lookahead — synthesize next N blocks in background
@@ -691,6 +713,31 @@
     }
   }
 
+  // OPT1: Flush pending boundary — runs inside requestAnimationFrame to batch DOM writes
+  function _flushBoundary() {
+    _boundaryRafId = null;
+    var bd = _pendingBoundary;
+    if (!bd) return;
+    _pendingBoundary = null;
+    if (state._cancelFlag || state.status !== PLAYING) return;
+
+    var item = _queue.items[_queue.index];
+    if (item && item.marks && item.marks.length && item.ranges) {
+      var markName = findNearestMark(item.marks, bd.charIndex);
+      if (markName) {
+        var range = item.ranges.get(markName);
+        if (range) {
+          try {
+            var cloned = range.cloneRange();
+            highlightWord(cloned);
+            _scrollToRange(cloned);
+          } catch {}
+        }
+      }
+    }
+    fireProgress();
+  }
+
   function handleBoundary(charIndex, charLength, name) {
     // FIX-TTS05: cancel flag check — first line
     if (state._cancelFlag) return;
@@ -704,43 +751,43 @@
       if (m) state.wordEnd = charIndex + m[0].length;
     }
 
-    // FIX-TTS05: Map charIndex to nearest mark → highlight via CSS Highlight API
-    // FIX-TTS07: Also scroll to keep highlighted word visible and centered
-    var item = _queue.items[_queue.index];
-    if (item && item.marks && item.marks.length && item.ranges) {
-      var markName = findNearestMark(item.marks, charIndex);
-      if (markName) {
-        var range = item.ranges.get(markName);
-        if (range) {
-          try {
-            var cloned = range.cloneRange();
-            highlightWord(cloned);
-            // FIX-TTS07: scroll to tracked word — keep narrated text visible/centered
-            _scrollToRange(cloned);
-          } catch {}
-        }
-      }
+    // OPT1: defer DOM highlight/scroll to RAF to reduce layout thrashing
+    _pendingBoundary = { charIndex: charIndex, charLength: charLength };
+    if (!_boundaryRafId) {
+      _boundaryRafId = requestAnimationFrame(_flushBoundary);
     }
-    fireProgress();
   }
 
   // FIX-TTS06: Track consecutive errors to detect persistent failures
   var _consecutiveErrors = 0;
   var MAX_CONSECUTIVE_ERRORS = 3;
 
+  // OPT1: Known transient error codes — skip block immediately without counting
+  var _SKIP_IMMEDIATELY_CODES = ['edge_synth_timeout', 'edge_audio_chunk_recv_none'];
+
+  function _isSkipImmediatelyError(err) {
+    if (!err) return false;
+    var code = String(err.error || err.code || err.reason || err || '');
+    for (var i = 0; i < _SKIP_IMMEDIATELY_CODES.length; i++) {
+      if (code.indexOf(_SKIP_IMMEDIATELY_CODES[i]) >= 0) return true;
+    }
+    return false;
+  }
+
   function handleError(err) {
     // FIX-TTS05: cancel flag check
     if (state._cancelFlag) return;
     state.lastError = normalizeErr(err, 'tts_error');
 
-    // FIX-TTS06: Instead of stopping entirely on error, try to skip to the next block.
-    // This prevents a single bad block (short title, chapter number) from killing TTS.
-    // Only stop if we hit too many consecutive errors (indicates real engine failure).
-    _consecutiveErrors++;
-    if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-      _consecutiveErrors = 0;
-      stop();
-      return;
+    // OPT1: known transient errors skip block immediately without counting
+    // toward consecutive error threshold — prevents hanging on bad blocks
+    if (!_isSkipImmediatelyError(err)) {
+      _consecutiveErrors++;
+      if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        _consecutiveErrors = 0;
+        stop();
+        return;
+      }
     }
 
     if (state.status !== PLAYING) { stop(); return; }
@@ -781,6 +828,10 @@
     if (state.voiceId) engine.setVoice(state.voiceId);
     if (state.pitch !== 1.0 && typeof engine.setPitch === 'function') {
       engine.setPitch(state.pitch);
+    }
+    // TTS-QOL4: apply saved volume to engine
+    if (state.volume < 1.0 && typeof engine.setVolume === 'function') {
+      engine.setVolume(state.volume);
     }
   }
 
@@ -1011,6 +1062,9 @@
   function stop() {
     // FIX-TTS05: Set cancel flag before cancel
     state._cancelFlag = true;
+    // OPT1: cancel pending RAF boundary flush
+    if (_boundaryRafId) { cancelAnimationFrame(_boundaryRafId); _boundaryRafId = null; }
+    _pendingBoundary = null;
     if (state.engine) {
       try { state.engine.cancel(); } catch {}
     }
@@ -1284,26 +1338,36 @@
       try { state.engine.cancel(); } catch {}
       state.engine.speak(item.text);
     }
-    _preloadAhead(_queue.index + 1, 3);
+    _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
   }
 
   var TTS_RATE_MIN = 0.5;
   var TTS_RATE_MAX = 3.0;
 
+  // TTS-QOL4: removed _respeakCurrentBlock() — rate change applies to next block,
+  // avoids restarting the current sentence from the beginning.
   function setRate(r) {
     state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(r) || 1.0));
     if (state.engine) state.engine.setRate(state.rate);
-    _respeakCurrentBlock();
   }
 
+  // TTS-QOL4: Volume control — passes through to engine's HTMLAudioElement.volume
+  function setVolume(v) {
+    state.volume = Math.max(0, Math.min(1, Number(v) || 1.0));
+    if (state.engine && typeof state.engine.setVolume === 'function') {
+      state.engine.setVolume(state.volume);
+    }
+  }
+
+  // TTS-QOL4: removed _respeakCurrentBlock() — pitch change applies to next block
   function setPitch(p) {
     state.pitch = Math.max(0.5, Math.min(2.0, Number(p) || 1.0));
     if (state.engine && typeof state.engine.setPitch === 'function') {
       state.engine.setPitch(state.pitch);
     }
-    _respeakCurrentBlock();
   }
 
+  // TTS-QOL4: removed _respeakCurrentBlock() — preset change applies to next block
   function setPreset(presetId) {
     var p = TTS_PRESETS[presetId];
     if (!p) return;
@@ -1314,7 +1378,6 @@
     if (state.engine && typeof state.engine.setPitch === 'function') {
       state.engine.setPitch(state.pitch);
     }
-    _respeakCurrentBlock();
   }
 
   function setHighlightStyle(style) {
@@ -1599,6 +1662,34 @@
     return false;
   }
 
+  // TTS-RESUME-HL: Return range info for the current TTS block (must be called before destroy)
+  function getLastBlockInfo() {
+    if (state.format === 'txt') return null;
+    var idx = _queue.index;
+    if (idx < 0 || idx >= _queue.length) return null;
+    var item = _queue.items[idx];
+    if (!item || !item.ranges || !item.ranges.size) return null;
+
+    var firstRange = item.ranges.values().next().value;
+    if (!firstRange) return null;
+
+    var blockEl = _findBlockParent(firstRange.startContainer);
+    var blockRange = null;
+    if (blockEl) {
+      try {
+        var doc = blockEl.ownerDocument || document;
+        blockRange = doc.createRange();
+        blockRange.selectNodeContents(blockEl);
+      } catch {}
+    }
+
+    return {
+      range: firstRange,
+      blockRange: blockRange,
+      renderer: _fol.renderer || null,
+    };
+  }
+
   // ── Public API ───────────────────────────────────────────────
 
   window.booksTTS = {
@@ -1609,6 +1700,8 @@
     stop: stop,
     destroy: destroy,
     setRate: setRate,
+    setVolume: setVolume, // TTS-QOL4
+    getVolume: function () { return state.volume; }, // TTS-QOL4
     setVoice: setVoice,
     getVoices: getVoices,
     setPitch: setPitch,
@@ -1640,6 +1733,7 @@
     getHighlightColor: function () { return state.ttsHlColor; },
     setEnlargeScale: setEnlargeScale,
     getEnlargeScale: function () { return state.ttsEnlargeScale; },
+    getLastBlockInfo: getLastBlockInfo, // TTS-RESUME-HL
     _reinitFoliateTTS: _reinitFoliateTTS,
     // FIX-TTS05: expose queue regeneration for section transitions
     _regenerateQueue: _generateQueue,
