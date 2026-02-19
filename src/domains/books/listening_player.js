@@ -322,9 +322,28 @@
         if (snap) updateCard(snap);
         syncPlayPauseIcon(tts.getState ? tts.getState() : 'idle');
       } catch {}
-      // Now safe to play
-      try { tts.play(); } catch (e) {
-        try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+      // FIX-LISTEN-STAB3: load saved progress and resume from saved blockIdx.
+      // Without this, TTS always starts from block 0 even if the user was mid-book.
+      var resumeIdx = 0;
+      var api = window.Tanko && window.Tanko.api;
+      var bookId = _book && _book.id;
+      if (api && typeof api.getBooksTtsProgress === 'function' && bookId) {
+        api.getBooksTtsProgress(bookId).then(function (entry) {
+          if (!_open || !_ttsStarted) return;
+          if (entry && entry.blockIdx > 0) resumeIdx = entry.blockIdx;
+          try { tts.play(resumeIdx); } catch (e) {
+            try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+          }
+        }).catch(function () {
+          if (!_open || !_ttsStarted) return;
+          try { tts.play(0); } catch (e) {
+            try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+          }
+        });
+      } else {
+        try { tts.play(0); } catch (e) {
+          try { console.error('[listen-player] tts.play() failed:', e); } catch {}
+        }
       }
     }).catch(function (e) {
       try { console.error('[listen-player] tts.init() failed:', e); } catch {}

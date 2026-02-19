@@ -55,6 +55,7 @@
 
     initDone: false,
     initPromise: null,
+    _destroyed: false, // FIX-LISTEN-STAB3: set by destroy() to cancel pending init()
   };
 
   // FIX-TTS05: Thorium-style pre-generated text queue
@@ -627,10 +628,13 @@
 
   function handleAllBlocksDone() {
     if (typeof state.onNeedAdvance === 'function') {
-      state.onNeedAdvance().then(function (advanced) {
+      state.onNeedAdvance().then(async function (advanced) {
         if (!advanced || state.status !== PLAYING) { stop(); return; }
-        if (!_fol.tts) { stop(); return; }
-        // FIX-TTS05: regenerate queue for new section
+        // FIX-LISTEN-STAB3: After section advance, the old _fol.tts is stale (bound to
+        // the previous section's document). Must re-init foliate TTS for the new section
+        // before generating queue. Without this, next() returns null → empty queue → stop.
+        var ok = await _reinitFoliateTTS();
+        if (!ok) { stop(); return; }
         _generateQueue();
         if (_queue.length > 0) {
           _speakQueueItem(0);
@@ -791,6 +795,9 @@
   async function init(opts) {
     if (state.initPromise) return state.initPromise;
 
+    // FIX-LISTEN-STAB3: clear destroyed flag — a new init supersedes previous destroy
+    state._destroyed = false;
+
     state.initPromise = (async function () {
       var o = (opts && typeof opts === 'object') ? opts : {};
       state.hostFn = o.getHost || null;
@@ -820,12 +827,18 @@
         } catch {}
       }
 
+      // FIX-LISTEN-STAB3: bail out if destroyed during engine creation
+      if (state._destroyed) return;
+
       if (state.allEngines.edge) {
         state.engineUsable.edge = !!(await probeEngine('edge', state.allEngines.edge));
         if (state.engineUsable.edge && typeof state.allEngines.edge.loadVoices === 'function') {
           try { await state.allEngines.edge.loadVoices({ maxAgeMs: 0 }); } catch {}
         }
       }
+
+      // FIX-LISTEN-STAB3: bail out if destroyed during probe/voice loading
+      if (state._destroyed) return;
 
       // Select edge if usable
       if (state.allEngines.edge && isEngineUsable('edge')) {
@@ -864,7 +877,8 @@
 
   // ── Play / Pause / Resume / Stop ─────────────────────────────
 
-  async function play() {
+  // FIX-LISTEN-STAB3: optional startBlockIdx — resume from saved position instead of always block 0
+  async function play(startBlockIdx) {
     if (!state.engine) return;
 
     if (state.status === PAUSED) {
@@ -881,6 +895,8 @@
     // FIX-TTS05: Clear cancel flag
     state._cancelFlag = false;
 
+    var resumeIdx = (typeof startBlockIdx === 'number' && startBlockIdx > 0) ? startBlockIdx : 0;
+
     // EPUB/PDF: initialize foliate-js TTS
     var ok = await _initFoliateTTS();
     if (!ok) {
@@ -889,13 +905,12 @@
         retries++;
         ok = await _initFoliateTTS();
         if (ok && _fol.tts) {
-          // FIX-TTS05: generate queue and start from first item
           _generateQueue();
           if (_queue.length > 0) {
             state.status = PLAYING;
             acquireWakeLock();
             fire();
-            _speakQueueItem(0);
+            _speakQueueItem(Math.min(resumeIdx, _queue.length - 1));
           }
         } else if (retries < 3) {
           setTimeout(tryInit, 300 * retries);
@@ -905,14 +920,13 @@
       return;
     }
 
-    // FIX-TTS05: generate queue and start from first item
     _generateQueue();
     if (!_queue.length) return;
 
     state.status = PLAYING;
     acquireWakeLock();
     fire();
-    _speakQueueItem(0);
+    _speakQueueItem(Math.min(resumeIdx, _queue.length - 1));
   }
 
   function pause() {
@@ -1247,6 +1261,8 @@
   // ── Destroy ──────────────────────────────────────────────────
 
   function destroy() {
+    // FIX-LISTEN-STAB3: signal any pending init() to bail out
+    state._destroyed = true;
     stop();
     var ids = Object.keys(state.allEngines);
     for (var i = 0; i < ids.length; i++) {
