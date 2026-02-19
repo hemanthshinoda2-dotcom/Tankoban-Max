@@ -744,6 +744,9 @@ const EVENT = {
   WEB_DOWNLOAD_STARTED: 'webDownload:started',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
 
+  // FIX-WEB-POPUP: webview popup requested (window.open / target=_blank)
+  WEB_POPUP_OPEN: 'web:popupOpen',
+
   /**
    * libmpv render update event (dynamic per handle).
    * @param {string|number} handleId - The libmpv handle ID

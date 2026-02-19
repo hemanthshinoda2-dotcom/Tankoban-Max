@@ -86,8 +86,8 @@ async function update(ctx, _evt, payload) {
 
 // ---- Download routing ----
 
-var BOOK_EXTS = ['.epub', '.pdf', '.txt', '.mobi', '.azw3'];
-var COMIC_EXTS = ['.cbz', '.cbr'];
+var BOOK_EXTS = ['.epub', '.txt', '.mobi', '.azw3'];
+var COMIC_EXTS = ['.cbz', '.cbr', '.pdf'];
 
 function routeDownloadSync(ctx, filename) {
   var ext = path.extname(String(filename || '')).toLowerCase();
@@ -226,7 +226,13 @@ function setupDownloadHandler(ctx) {
         if (contents.session !== ses) return;
       } catch (e) { return; }
       contents.setWindowOpenHandler(function (details) {
-        try { contents.loadURL(details.url); } catch (e) {}
+        try {
+          ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_POPUP_OPEN, {
+            url: details && details.url ? details.url : '',
+            disposition: details && details.disposition ? details.disposition : '',
+            sourceWebContentsId: contents && contents.id ? contents.id : null,
+          });
+        } catch (e) {}
         return { action: 'deny' };
       });
     });

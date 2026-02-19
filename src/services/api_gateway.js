@@ -383,7 +383,9 @@
       routeDownload: (...a) => ea.webSources?.routeDownload ? ea.webSources.routeDownload(...a) : Promise.resolve({ ok: false }),
       getDestinations: (...a) => ea.webSources?.getDestinations ? ea.webSources.getDestinations(...a) : Promise.resolve({ ok: false }),
       onUpdated: (...a) => ea.webSources?.onUpdated ? ea.webSources.onUpdated(...a) : undefined,
+      onDownloadStarted: (...a) => ea.webSources?.onDownloadStarted ? ea.webSources.onDownloadStarted(...a) : undefined,
       onDownloadCompleted: (...a) => ea.webSources?.onDownloadCompleted ? ea.webSources.onDownloadCompleted(...a) : undefined,
+      onPopupOpen: (...a) => ea.webSources?.onPopupOpen ? ea.webSources.onPopupOpen(...a) : undefined,
     },
 
     // ========================================

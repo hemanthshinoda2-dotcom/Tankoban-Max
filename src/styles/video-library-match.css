@@ -178,7 +178,8 @@ body:not(.inPlayer) main{
 
 body:not(.inPlayer) #libraryView,
 body:not(.inPlayer) #videoLibraryView,
-body:not(.inPlayer) #booksLibraryView{
+body:not(.inPlayer) #booksLibraryView,
+body:not(.inPlayer) #webLibraryView{
   height: 100% !important;
 }
 

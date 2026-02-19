@@ -414,6 +414,10 @@ const api = {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_COMPLETED, (_evt, data) => cb(data));
     },
+    onPopupOpen: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_POPUP_OPEN, (_evt, data) => cb(data));
+    },
   },
 
   // ========================================

@@ -1443,6 +1443,15 @@ COMMON ANCHORS
         <div class="webUrlBar">
           <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
           <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading&hellip;</div>
+          <button id="webDlBtn" class="iconBtn webDlBtn" title="Downloads" aria-label="Downloads">&#11123;<span id="webDlBadge" class="webDlBadge hidden" aria-hidden="true"></span></button>
+        </div>
+        <div id="webDlPanel" class="webDlPanel hidden" role="dialog" aria-label="Downloads" aria-hidden="true">
+          <div class="webDlPanelTop">
+            <div class="webDlPanelTitle">Downloads</div>
+            <button id="webDlClearBtn" class="btn btn-ghost btn-sm">Clear</button>
+          </div>
+          <div id="webDlList" class="webDlList"></div>
+          <div id="webDlEmpty" class="muted tiny webDlEmpty hidden">No downloads yet.</div>
         </div>
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
         <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>

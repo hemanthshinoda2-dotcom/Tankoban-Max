@@ -36,6 +36,12 @@
     viewContainer: qs('webViewContainer'),
     loadBar: qs('webLoadBar'),
     dlPill: qs('webDlPill'),
+    dlBtn: qs('webDlBtn'),
+    dlBadge: qs('webDlBadge'),
+    dlPanel: qs('webDlPanel'),
+    dlList: qs('webDlList'),
+    dlEmpty: qs('webDlEmpty'),
+    dlClearBtn: qs('webDlClearBtn'),
     // Sidebar
     sourcesList: qs('webSourcesList'),
     addSourceBtn: qs('webAddSourceBtn'),
@@ -67,6 +73,8 @@
     nextTabId: 1,
     downloading: 0,
     lastDownloadName: '',
+    downloads: [],      // { id, filename, destination?, library?, state, startedAt, finishedAt?, error? }
+    dlPanelOpen: false,
     browserOpen: false, // BUILD_WEB_HOME
     // BUILD_WEB_PARITY
     editSourceId: null,
@@ -612,10 +620,195 @@
         if (!el.downloadStatus.textContent) el.downloadStatus.textContent = 'No active downloads';
       }
     }
+
+    if (el.dlBadge) {
+      el.dlBadge.classList.toggle('hidden', !(state.downloading > 0));
+    }
   }
 
-  function createTab(source, urlOverride) {
+  // ---- Downloads panel ----
+
+  function makeDlId(filename, destination) {
+    return 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + String(filename || '') + '_' + String(destination || '');
+  }
+
+  function findDownloadMatch(info) {
+    var fn = info && info.filename ? String(info.filename) : '';
+    var dest = info && (info.destination || info.path) ? String(info.destination || info.path) : '';
+    for (var i = state.downloads.length - 1; i >= 0; i--) {
+      var d = state.downloads[i];
+      if (dest && d.destination && d.destination === dest) return d;
+      if (fn && d.filename === fn && d.state === 'downloading') return d;
+    }
+    return null;
+  }
+
+  function addDownloadStarted(info) {
+    var filename = info && info.filename ? String(info.filename) : 'Download';
+    var destination = info && (info.destination || info.path) ? String(info.destination || info.path) : '';
+    var library = info && info.library ? String(info.library) : '';
+
+    var entry = {
+      id: makeDlId(filename, destination),
+      filename: filename,
+      destination: destination,
+      library: library,
+      state: 'downloading',
+      startedAt: Date.now(),
+      finishedAt: null,
+      error: ''
+    };
+
+    state.downloads.unshift(entry);
+    if (state.downloads.length > 40) state.downloads.length = 40;
+    renderDownloadsPanel();
+  }
+
+  function addDownloadCompleted(info) {
+    var match = findDownloadMatch(info);
+    var ok = !!(info && info.ok);
+    var filename = info && info.filename ? String(info.filename) : (match ? match.filename : 'Download');
+    var destination = info && (info.destination || info.path) ? String(info.destination || info.path) : (match ? match.destination : '');
+    var library = info && info.library ? String(info.library) : (match ? match.library : '');
+    var error = info && info.error ? String(info.error) : '';
+
+    if (!match) {
+      match = {
+        id: makeDlId(filename, destination),
+        filename: filename,
+        destination: destination,
+        library: library,
+        state: ok ? 'completed' : 'failed',
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+        error: error
+      };
+      state.downloads.unshift(match);
+    } else {
+      match.filename = filename;
+      match.destination = destination;
+      match.library = library;
+      match.state = ok ? 'completed' : 'failed';
+      match.finishedAt = Date.now();
+      match.error = error;
+    }
+
+    renderDownloadsPanel();
+  }
+
+  function renderDownloadsPanel() {
+    if (!el.dlList || !el.dlEmpty) return;
+
+    if (!state.downloads.length) {
+      el.dlList.innerHTML = '';
+      el.dlEmpty.classList.remove('hidden');
+      return;
+    }
+
+    el.dlEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      var stateTxt = d.state === 'downloading' ? 'Downloading\u2026' : (d.state === 'completed' ? 'Saved' : 'Failed');
+      var sub = '';
+      if (d.state === 'downloading') {
+        sub = d.library ? ('\u2192 ' + d.library) : '';
+      } else if (d.state === 'completed') {
+        sub = d.library ? ('\u2192 ' + d.library) : '';
+        if (d.destination) sub = (sub ? (sub + ' \u2022 ') : '') + shortPath(d.destination);
+      } else {
+        sub = d.error ? d.error : 'Download failed';
+      }
+
+      html += '' +
+        '<div class="webDlItem" data-dl-id="' + escapeHtml(d.id) + '">' +
+          '<div class="webDlMeta">' +
+            '<div class="webDlName">' + escapeHtml(d.filename) + '</div>' +
+            '<div class="webDlSub">' + escapeHtml(sub) + '</div>' +
+          '</div>' +
+          '<div class="webDlState">' + escapeHtml(stateTxt) + '</div>' +
+        '</div>';
+    }
+    el.dlList.innerHTML = html;
+
+    var items = el.dlList.querySelectorAll('.webDlItem');
+    for (var j = 0; j < items.length; j++) {
+      items[j].onclick = function () {
+        var id = this.getAttribute('data-dl-id');
+        var d = null;
+        for (var k = 0; k < state.downloads.length; k++) {
+          if (state.downloads[k].id === id) { d = state.downloads[k]; break; }
+        }
+        if (!d) return;
+        if (d.destination && api && api.shell && api.shell.revealPath) {
+          try { api.shell.revealPath(d.destination); } catch (e) {}
+        }
+      };
+    }
+  }
+
+  function openDownloadsPanel() {
+    if (!el.dlPanel) return;
+    state.dlPanelOpen = true;
+    el.dlPanel.classList.remove('hidden');
+    try { el.dlPanel.setAttribute('aria-hidden', 'false'); } catch (e) {}
+    renderDownloadsPanel();
+  }
+
+  function closeDownloadsPanel() {
+    if (!el.dlPanel) return;
+    state.dlPanelOpen = false;
+    el.dlPanel.classList.add('hidden');
+    try { el.dlPanel.setAttribute('aria-hidden', 'true'); } catch (e) {}
+  }
+
+  function toggleDownloadsPanel() {
+    if (state.dlPanelOpen) closeDownloadsPanel();
+    else openDownloadsPanel();
+  }
+
+  // ---- Popup → new tab ----
+
+  function openPopupUrlInNewTab(url, parentTab) {
+    url = String(url || '').trim();
+    if (!url) return;
+
+    var src = null;
+    if (parentTab && parentTab.sourceId != null) {
+      src = getSourceById(parentTab.sourceId);
+      if (!src) {
+        src = {
+          id: parentTab.sourceId || 0,
+          name: parentTab.sourceName || 'Tab',
+          url: parentTab.homeUrl || parentTab.url || url,
+          color: '#555'
+        };
+      }
+    }
+
+    if (!src) {
+      var at = getActiveTab();
+      if (at) {
+        src = getSourceById(at.sourceId) || {
+          id: at.sourceId || 0,
+          name: at.sourceName || 'Tab',
+          url: at.homeUrl || at.url || url,
+          color: '#555'
+        };
+      }
+    }
+
+    if (!src) {
+      src = { id: 0, name: 'New Tab', url: url, color: '#555' };
+    }
+
+    createTab(src, url, { toastText: 'Opened in new tab' });
+  }
+
+  function createTab(source, urlOverride, opts) {
     if (!el.viewContainer) return;
+    opts = opts || {};
     if (state.tabs.length >= MAX_TABS) {
       showToast('Tab limit reached');
       return;
@@ -633,7 +826,8 @@
       url: startUrl,
       homeUrl: homeUrl,
       webview: null,
-      loading: false
+      loading: false,
+      wcId: null
     };
 
     // Create webview
@@ -649,6 +843,10 @@
     el.viewContainer.appendChild(wv);
 
     // Webview events
+    wv.addEventListener('dom-ready', function () {
+      try { tab.wcId = wv.getWebContentsId(); } catch (e) {}
+    });
+
     wv.addEventListener('page-title-updated', function (e) {
       tab.title = e && e.title ? e.title : (tab.sourceName || 'Tab');
       renderTabs();
@@ -691,7 +889,9 @@
     renderTabs();
     renderContinue();
 
-    showToast('Opened: ' + (source.name || 'Source'));
+    if (!opts.silentToast) {
+      showToast(opts.toastText || ('Opened: ' + (source.name || 'Source')));
+    }
   }
 
   function activateTab(tabId) {
@@ -882,6 +1082,11 @@
 
     // Escape should always close overlays first
     if (e.key === 'Escape') {
+      if (state.dlPanelOpen) {
+        e.preventDefault();
+        closeDownloadsPanel();
+        return;
+      }
       if (state.ctxOpen) {
         e.preventDefault();
         hideContextMenu();
@@ -1100,6 +1305,23 @@
       };
     }
 
+    if (el.dlBtn) {
+      el.dlBtn.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        toggleDownloadsPanel();
+      };
+    }
+
+    if (el.dlClearBtn) {
+      el.dlClearBtn.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        state.downloads = [];
+        renderDownloadsPanel();
+        closeDownloadsPanel();
+        showToast('Downloads cleared');
+      };
+    }
+
     // BUILD_WEB_PARITY: tips close button
     if (el.tipsClose) {
       el.tipsClose.onclick = function () {
@@ -1119,12 +1341,23 @@
     // Context menu global close handlers
     withContextMenuCloseHandlers();
 
+    // Downloads panel outside-click close
+    document.addEventListener('mousedown', function (evt) {
+      if (!state.dlPanelOpen) return;
+      var t = evt && evt.target ? evt.target : null;
+      if (!t) return;
+      if (el.dlPanel && el.dlPanel.contains(t)) return;
+      if (el.dlBtn && el.dlBtn.contains(t)) return;
+      closeDownloadsPanel();
+    }, true);
+
     // Download events
     if (api.webSources.onDownloadStarted) {
       api.webSources.onDownloadStarted(function (info) {
         state.downloading = Math.max(0, state.downloading + 1);
         state.lastDownloadName = info && info.filename ? String(info.filename) : '';
         syncDownloadIndicator();
+        addDownloadStarted(info);
         showToast('Downloading: ' + (info && info.filename ? info.filename : ''));
       });
     }
@@ -1133,12 +1366,14 @@
       state.downloading = Math.max(0, state.downloading - 1);
       syncDownloadIndicator();
 
+      addDownloadCompleted(info);
+
       if (info && info.ok) {
         var msg = 'Download saved';
         if (info && info.library) msg += ' to ' + info.library;
         showToast(msg);
         if (el.downloadStatus) {
-          el.downloadStatus.textContent = 'Saved: ' + (info.filename || '') + (info.library ? (' → ' + info.library) : '');
+          el.downloadStatus.textContent = 'Saved: ' + (info.filename || '') + (info.library ? (' \u2192 ' + info.library) : '');
         }
       } else {
         showToast('Download failed');
@@ -1155,6 +1390,23 @@
       }
     });
 
+    // Popup → new tab (main-side handler)
+    if (api.webSources.onPopupOpen) {
+      api.webSources.onPopupOpen(function (info) {
+        var url = info && info.url ? String(info.url) : '';
+        if (!url) return;
+        var wcId = info && info.sourceWebContentsId ? info.sourceWebContentsId : null;
+        var parent = null;
+        if (wcId != null) {
+          for (var i = 0; i < state.tabs.length; i++) {
+            if (state.tabs[i].wcId === wcId) { parent = state.tabs[i]; break; }
+          }
+        }
+        if (!parent) parent = getActiveTab();
+        openPopupUrlInNewTab(url, parent);
+      });
+    }
+
     api.webSources.onUpdated(function () {
       loadSources();
       loadDestinations();
@@ -1164,6 +1416,7 @@
     loadSources();
     loadDestinations();
     syncDownloadIndicator();
+    renderDownloadsPanel();
   }
 
   // ---- Init ----
