@@ -318,7 +318,7 @@ function createWindow(opts = {}) {
       // Keep the renderer sandbox disabled so IPC + dialogs + persisted libraries work reliably.
       sandbox: false,
       devTools: __allowDevTools,
-      webviewTag: true, // BUILD_WEB: enable <webview> for Web mode
+      // BUILD_WCV: webviewTag removed — web browser uses WebContentsView now
     },
   });
 

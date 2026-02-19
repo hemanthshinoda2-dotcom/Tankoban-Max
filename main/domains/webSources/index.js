@@ -219,23 +219,7 @@ function setupDownloadHandler(ctx) {
         }
       });
     });
-    // FIX-WEB-POPUP: intercept popups from webmode webviews
-    app.on('web-contents-created', function (_evt2, contents) {
-      if (contents.getType() !== 'webview') return;
-      try {
-        if (contents.session !== ses) return;
-      } catch (e) { return; }
-      contents.setWindowOpenHandler(function (details) {
-        try {
-          ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_POPUP_OPEN, {
-            url: details && details.url ? details.url : '',
-            disposition: details && details.disposition ? details.disposition : '',
-            sourceWebContentsId: contents && contents.id ? contents.id : null,
-          });
-        } catch (e) {}
-        return { action: 'deny' };
-      });
-    });
+    // BUILD_WCV: popup handling moved to webTabs domain (per-view setWindowOpenHandler)
   } catch (err) {
     console.error('[BUILD_WEB] Failed to set up download handler:', err);
   }

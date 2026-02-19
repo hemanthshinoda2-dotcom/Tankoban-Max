@@ -665,6 +665,34 @@ const CHANNEL = {
 
   /** Get download destination folders for each library type. Returns: { ok, books?: string, comics?: string } */
   WEB_DOWNLOAD_DESTINATIONS: 'webDownload:destinations',
+
+  // ========================================
+  // Web Tabs (BUILD_WCV)
+  // ========================================
+
+  /** Create a WebContentsView tab. Args: { url }. Returns: { ok, tabId } */
+  WEB_TAB_CREATE: 'webTab:create',
+
+  /** Close a tab. Args: { tabId }. Returns: { ok } */
+  WEB_TAB_CLOSE: 'webTab:close',
+
+  /** Activate a tab (show it, hide others). Args: { tabId }. Returns: { ok } */
+  WEB_TAB_ACTIVATE: 'webTab:activate',
+
+  /** Navigate a tab. Args: { tabId, action, url? }. action: 'back'|'forward'|'reload'|'stop'|'loadUrl'. Returns: { ok } */
+  WEB_TAB_NAVIGATE: 'webTab:navigate',
+
+  /** Set tab view bounds. Args: { tabId, bounds: {x,y,width,height} }. Returns: { ok } */
+  WEB_TAB_BOUNDS: 'webTab:bounds',
+
+  /** Hide all tab views (zero-bounds). Returns: { ok } */
+  WEB_TAB_HIDE_ALL: 'webTab:hideAll',
+
+  /** Query tab state. Args: { tabId }. Returns: { canGoBack, canGoForward, url, title, loading } */
+  WEB_TAB_QUERY: 'webTab:query',
+
+  /** Set split view bounds for two tabs. Args: { left: {tabId,bounds}, right: {tabId,bounds} }. Returns: { ok } */
+  WEB_TAB_SPLIT_BOUNDS: 'webTab:splitBounds',
 };
 
 /**
@@ -744,8 +772,14 @@ const EVENT = {
   WEB_DOWNLOAD_STARTED: 'webDownload:started',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
 
-  // FIX-WEB-POPUP: webview popup requested (window.open / target=_blank)
+  // FIX-WEB-POPUP: popup requested (window.open / target=_blank)
   WEB_POPUP_OPEN: 'web:popupOpen',
+
+  // BUILD_WCV: WebContentsView tab events
+  WEB_TAB_TITLE_UPDATED: 'webTab:titleUpdated',
+  WEB_TAB_URL_UPDATED: 'webTab:urlUpdated',
+  WEB_TAB_LOADING: 'webTab:loading',
+  WEB_TAB_NAV_STATE: 'webTab:navState',
 
   /**
    * libmpv render update event (dynamic per handle).

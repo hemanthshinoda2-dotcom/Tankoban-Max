@@ -421,6 +421,36 @@ const api = {
   },
 
   // ========================================
+  // webTabs.* (BUILD_WCV)
+  // ========================================
+  webTabs: {
+    create: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_CREATE, opts),
+    close: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_CLOSE, opts),
+    activate: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_ACTIVATE, opts),
+    navigate: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_NAVIGATE, opts),
+    setBounds: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_BOUNDS, opts),
+    hideAll: () => ipcRenderer.invoke(CHANNEL.WEB_TAB_HIDE_ALL),
+    query: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_QUERY, opts),
+    splitBounds: (opts) => ipcRenderer.invoke(CHANNEL.WEB_TAB_SPLIT_BOUNDS, opts),
+    onTitleUpdated: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_TAB_TITLE_UPDATED, (_evt, data) => cb(data));
+    },
+    onUrlUpdated: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_TAB_URL_UPDATED, (_evt, data) => cb(data));
+    },
+    onLoading: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_TAB_LOADING, (_evt, data) => cb(data));
+    },
+    onNavState: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_TAB_NAV_STATE, (_evt, data) => cb(data));
+    },
+  },
+
+  // ========================================
   // booksUi.*
   // ========================================
   booksUi: {

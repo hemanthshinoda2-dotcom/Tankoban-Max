@@ -1,4 +1,5 @@
-// Tankoban Max — Web browser mode renderer (BUILD_WEB + BUILD_WEB_HOME)
+// Tankoban Max — Web browser mode renderer (BUILD_WEB + BUILD_WEB_HOME + BUILD_WCV)
+// BUILD_WCV: Replaced <webview> tags with main-process WebContentsView via IPC.
 (function webBrowserDomain() {
   'use strict';
 
@@ -6,8 +7,8 @@
   window.__tankoWebBrowserBound = true;
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
-  if (!api || !api.webSources) {
-    console.warn('[BUILD_WEB] Tanko.api.webSources not available');
+  if (!api || !api.webSources || !api.webTabs) {
+    console.warn('[BUILD_WCV] Tanko.api.webSources or webTabs not available');
     return;
   }
 
@@ -64,11 +65,10 @@
   };
 
   var MAX_TABS = 8;
-  var PARTITION = 'persist:webmode';
 
   var state = {
     sources: [],
-    tabs: [],          // { id, sourceId, sourceName, title, url, homeUrl, webview, loading }
+    tabs: [],          // BUILD_WCV: { id, sourceId, sourceName, title, url, homeUrl, mainTabId, loading, canGoBack, canGoForward }
     activeTabId: null,
     nextTabId: 1,
     downloading: 0,
@@ -129,6 +129,14 @@
     if (!state.activeTabId) return null;
     for (var i = 0; i < state.tabs.length; i++) {
       if (state.tabs[i].id === state.activeTabId) return state.tabs[i];
+    }
+    return null;
+  }
+
+  // BUILD_WCV: find tab by main-process tabId
+  function getTabByMainId(mainTabId) {
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].mainTabId === mainTabId) return state.tabs[i];
     }
     return null;
   }
@@ -298,6 +306,76 @@
       if (!state.ctxOpen) return;
       hideContextMenu();
     });
+  }
+
+  // ---- BUILD_WCV: Bounds reporting ----
+
+  function getContainerBounds() {
+    if (!el.viewContainer) return { x: 0, y: 0, width: 0, height: 0 };
+    var rect = el.viewContainer.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    return {
+      x: Math.round(rect.left * dpr),
+      y: Math.round(rect.top * dpr),
+      width: Math.round(rect.width * dpr),
+      height: Math.round(rect.height * dpr)
+    };
+  }
+
+  function reportBoundsForActiveTab() {
+    var tab = getActiveTab();
+    if (!tab || !tab.mainTabId || !state.browserOpen) return;
+    if (state.split) {
+      reportSplitBounds();
+      return;
+    }
+    var bounds = getContainerBounds();
+    api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: bounds }).catch(function () {});
+  }
+
+  function reportSplitBounds() {
+    if (!state.split || !el.viewContainer) return;
+    var mainTab = getActiveTab();
+    if (!mainTab || !mainTab.mainTabId) return;
+
+    var splitTab = null;
+    if (state.splitTabId) {
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === state.splitTabId && state.tabs[i].id !== mainTab.id) {
+          splitTab = state.tabs[i];
+          break;
+        }
+      }
+    }
+    if (!splitTab || !splitTab.mainTabId) return;
+
+    var rect = el.viewContainer.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var totalW = rect.width;
+    var dividerW = 4; // matches CSS .webSplitDivider width
+    var leftW = Math.round((totalW - dividerW) * state.splitRatio);
+    var rightW = Math.round((totalW - dividerW) * (1 - state.splitRatio));
+
+    api.webTabs.splitBounds({
+      left: {
+        tabId: mainTab.mainTabId,
+        bounds: {
+          x: Math.round(rect.left * dpr),
+          y: Math.round(rect.top * dpr),
+          width: Math.round(leftW * dpr),
+          height: Math.round(rect.height * dpr)
+        }
+      },
+      right: {
+        tabId: splitTab.mainTabId,
+        bounds: {
+          x: Math.round((rect.left + leftW + dividerW) * dpr),
+          y: Math.round(rect.top * dpr),
+          width: Math.round(rightW * dpr),
+          height: Math.round(rect.height * dpr)
+        }
+      }
+    }).catch(function () {});
   }
 
   // ---- Sources management ----
@@ -513,6 +591,8 @@
     if (el.browserTitle) el.browserTitle.textContent = source.name || '';
     renderSources();
     syncLoadBar();
+    // BUILD_WCV: report bounds after browser opens (needs a frame for layout)
+    setTimeout(reportBoundsForActiveTab, 50);
   }
 
   function openBrowserForTab(tabId) {
@@ -530,6 +610,8 @@
     if (el.browserTitle) el.browserTitle.textContent = tab.sourceName || '';
     renderSources();
     syncLoadBar();
+    // BUILD_WCV: report bounds after browser opens
+    setTimeout(reportBoundsForActiveTab, 50);
   }
 
   function closeBrowser() {
@@ -537,7 +619,6 @@
     if (state.split) {
       state.split = false;
       state.splitTabId = null;
-      try { applySplitLayout(); } catch (e) {}
       var splitBtnEl = document.getElementById('webSplitBtn');
       if (splitBtnEl) splitBtnEl.classList.remove('active');
     }
@@ -554,6 +635,8 @@
     hideTips();
     hideContextMenu();
     syncLoadBar();
+    // BUILD_WCV: hide all views in main process
+    api.webTabs.hideAll().catch(function () {});
   }
 
   // ---- Tabs management ----
@@ -865,8 +948,8 @@
     createTab(src, url, { toastText: 'Opened in new tab' });
   }
 
+  // BUILD_WCV: createTab now uses IPC instead of DOM webview
   function createTab(source, urlOverride, opts) {
-    if (!el.viewContainer) return;
     opts = opts || {};
     if (state.tabs.length >= MAX_TABS) {
       showToast('Tab limit reached');
@@ -884,88 +967,43 @@
       title: source.name,
       url: startUrl,
       homeUrl: homeUrl,
-      webview: null,
+      mainTabId: null,  // BUILD_WCV: set after IPC create resolves
       loading: false,
-      wcId: null
+      canGoBack: false,
+      canGoForward: false
     };
 
-    // Create webview
-    var wv = document.createElement('webview');
-    wv.className = 'webView';
-    wv.setAttribute('partition', PARTITION);
-    wv.src = startUrl;
-    wv.style.visibility = 'hidden';
-    wv.style.zIndex = '0';
-
-    tab.webview = wv;
     state.tabs.push(tab);
-    el.viewContainer.appendChild(wv);
-
-    // Webview events
-    wv.addEventListener('dom-ready', function () {
-      try { tab.wcId = wv.getWebContentsId(); } catch (e) {}
-    });
-
-    wv.addEventListener('page-title-updated', function (e) {
-      tab.title = e && e.title ? e.title : (tab.sourceName || 'Tab');
-      renderTabs();
-      renderContinue();
-    });
-
-    wv.addEventListener('did-start-loading', function () {
-      tab.loading = true;
-      renderTabs();
-      syncLoadBar();
-    });
-
-    wv.addEventListener('did-stop-loading', function () {
-      tab.loading = false;
-      renderTabs();
-      syncLoadBar();
-      updateNavButtons();
-    });
-
-    wv.addEventListener('did-navigate', function (e) {
-      if (e && e.url) tab.url = e.url;
-      if (tab.id === state.activeTabId) {
-        updateUrlDisplay();
-        updateNavButtons();
-      }
-      renderContinue();
-    });
-
-    wv.addEventListener('did-navigate-in-page', function (e) {
-      if (e && e.url) tab.url = e.url;
-      if (tab.id === state.activeTabId) {
-        updateUrlDisplay();
-        updateNavButtons();
-      }
-    });
-
-    // Activate
     state.activeTabId = tabId;
-    activateTab(tabId);
     renderTabs();
     renderContinue();
 
     if (!opts.silentToast) {
       showToast(opts.toastText || ('Opened: ' + (source.name || 'Source')));
     }
+
+    // BUILD_WCV: create WebContentsView in main process
+    api.webTabs.create({ url: startUrl }).then(function (res) {
+      if (res && res.ok && res.tabId) {
+        tab.mainTabId = res.tabId;
+        // Activate this tab's view (show it, hide others)
+        api.webTabs.activate({ tabId: res.tabId }).catch(function () {});
+        // Report bounds after a frame so layout is settled
+        setTimeout(reportBoundsForActiveTab, 50);
+      }
+    }).catch(function (e) {
+      console.warn('[BUILD_WCV] Failed to create tab view', e);
+    });
   }
 
+  // BUILD_WCV: activateTab uses IPC instead of CSS visibility
   function activateTab(tabId) {
     state.activeTabId = tabId;
-    for (var i = 0; i < state.tabs.length; i++) {
-      var t = state.tabs[i];
-      if (t.webview) {
-        if (t.id === tabId) {
-          t.webview.style.visibility = 'visible';
-          t.webview.style.zIndex = '1';
-        } else {
-          t.webview.style.visibility = 'hidden';
-          t.webview.style.zIndex = '0';
-        }
-      }
+    var tab = getActiveTab();
+    if (tab && tab.mainTabId) {
+      api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
+      // Defer bounds report to let layout settle
+      setTimeout(reportBoundsForActiveTab, 30);
     }
     renderTabs();
     updateNavButtons();
@@ -974,6 +1012,7 @@
     renderSources();
   }
 
+  // BUILD_WCV: closeTab uses IPC to destroy view
   function closeTab(tabId) {
     var idx = -1;
     for (var i = 0; i < state.tabs.length; i++) {
@@ -987,15 +1026,13 @@
     if (state.split && (tabId === state.activeTabId || tabId === state.splitTabId)) {
       state.split = false;
       state.splitTabId = null;
-      // Move all webviews back to container before removal
-      try { applySplitLayout(); } catch (e) {}
       var splitBtnEl = document.getElementById('webSplitBtn');
       if (splitBtnEl) splitBtnEl.classList.remove('active');
     }
 
-    // Remove webview
-    if (tab.webview && tab.webview.parentNode) {
-      try { tab.webview.parentNode.removeChild(tab.webview); } catch (e) {}
+    // BUILD_WCV: destroy view in main process
+    if (tab.mainTabId) {
+      api.webTabs.close({ tabId: tab.mainTabId }).catch(function () {});
     }
 
     state.tabs.splice(idx, 1);
@@ -1034,21 +1071,16 @@
     syncLoadBar();
   }
 
+  // BUILD_WCV: nav state from cached tab properties (updated via IPC events)
   function updateNavButtons() {
     var tab = getActiveTab();
-    if (!tab || !tab.webview) {
+    if (!tab) {
       if (el.navBack) el.navBack.disabled = true;
       if (el.navForward) el.navForward.disabled = true;
       return;
     }
-
-    try {
-      if (el.navBack) el.navBack.disabled = !tab.webview.canGoBack();
-      if (el.navForward) el.navForward.disabled = !tab.webview.canGoForward();
-    } catch (e) {
-      if (el.navBack) el.navBack.disabled = true;
-      if (el.navForward) el.navForward.disabled = true;
-    }
+    if (el.navBack) el.navBack.disabled = !tab.canGoBack;
+    if (el.navForward) el.navForward.disabled = !tab.canGoForward;
   }
 
   function updateUrlDisplay() {
@@ -1058,24 +1090,16 @@
     el.urlDisplay.textContent = tab.url || '';
   }
 
-  // MERIDIAN_SPLIT: Split view
+  // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
 
   function applySplitLayout() {
-    if (!el.viewContainer) return;
-    var panes = el.viewContainer.querySelectorAll('.webSplitPane');
-    var divider = el.viewContainer.querySelector('.webSplitDivider');
-
     if (!state.split) {
-      // Remove split panes: move webviews back to container root
-      for (var p = 0; p < panes.length; p++) {
-        var wvs = panes[p].querySelectorAll('webview');
-        for (var w = 0; w < wvs.length; w++) el.viewContainer.appendChild(wvs[w]);
-        panes[p].parentNode.removeChild(panes[p]);
+      // Unsplit: just activate the current tab normally
+      var tab = getActiveTab();
+      if (tab && tab.mainTabId) {
+        api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
+        setTimeout(reportBoundsForActiveTab, 30);
       }
-      if (divider) divider.parentNode.removeChild(divider);
-      el.viewContainer.classList.remove('webSplitActive');
-      // Restore normal tab visibility
-      activateTab(state.activeTabId);
       return;
     }
 
@@ -1083,7 +1107,6 @@
     var mainTab = getActiveTab();
     if (!mainTab) { state.split = false; return; }
 
-    // Pick the split tab (the next tab after active, or first different one)
     var splitTab = null;
     if (state.splitTabId) {
       for (var s = 0; s < state.tabs.length; s++) {
@@ -1101,70 +1124,8 @@
     if (!splitTab) { state.split = false; showToast('Need at least 2 tabs to split'); return; }
     state.splitTabId = splitTab.id;
 
-    // Clean up any existing panes
-    for (var ep = 0; ep < panes.length; ep++) panes[ep].parentNode.removeChild(panes[ep]);
-    if (divider) divider.parentNode.removeChild(divider);
-
-    el.viewContainer.classList.add('webSplitActive');
-
-    var leftPane = document.createElement('div');
-    leftPane.className = 'webSplitPane webSplitLeft';
-    leftPane.style.flex = String(state.splitRatio);
-
-    var rightPane = document.createElement('div');
-    rightPane.className = 'webSplitPane webSplitRight';
-    rightPane.style.flex = String(1 - state.splitRatio);
-
-    var div = document.createElement('div');
-    div.className = 'webSplitDivider';
-
-    // Move webviews into panes (do not recreate — avoids reload)
-    if (mainTab.webview) {
-      mainTab.webview.style.visibility = 'visible';
-      mainTab.webview.style.zIndex = '1';
-      leftPane.appendChild(mainTab.webview);
-    }
-    if (splitTab.webview) {
-      splitTab.webview.style.visibility = 'visible';
-      splitTab.webview.style.zIndex = '1';
-      rightPane.appendChild(splitTab.webview);
-    }
-
-    // Hide all other webviews
-    for (var h = 0; h < state.tabs.length; h++) {
-      if (state.tabs[h].id !== mainTab.id && state.tabs[h].id !== splitTab.id && state.tabs[h].webview) {
-        state.tabs[h].webview.style.visibility = 'hidden';
-        state.tabs[h].webview.style.zIndex = '0';
-      }
-    }
-
-    el.viewContainer.appendChild(leftPane);
-    el.viewContainer.appendChild(div);
-    el.viewContainer.appendChild(rightPane);
-
-    // Divider drag
-    div.addEventListener('mousedown', function (e) {
-      e.preventDefault();
-      var startX = e.clientX;
-      var containerRect = el.viewContainer.getBoundingClientRect();
-      var totalW = containerRect.width;
-
-      var onMove = function (ev) {
-        var dx = ev.clientX - containerRect.left;
-        var ratio = Math.max(0.15, Math.min(0.85, dx / totalW));
-        state.splitRatio = ratio;
-        leftPane.style.flex = String(ratio);
-        rightPane.style.flex = String(1 - ratio);
-      };
-
-      var onUp = function () {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-      };
-
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
+    // BUILD_WCV: report split bounds to main process
+    setTimeout(reportSplitBounds, 30);
   }
 
   function toggleSplit() {
@@ -1330,13 +1291,8 @@
 
       e.preventDefault();
       var tab = getActiveTab();
-      if (tab && tab.webview) {
-        try {
-          if (tab.webview.canGoBack()) tab.webview.goBack();
-          else closeBrowser();
-        } catch (e2) {
-          closeBrowser();
-        }
+      if (tab && tab.canGoBack && tab.mainTabId) {
+        api.webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
       } else {
         closeBrowser();
       }
@@ -1347,8 +1303,8 @@
       e.preventDefault();
       if (state.browserOpen) {
         var t = getActiveTab();
-        if (t && t.webview) {
-          try { t.webview.reload(); } catch (e3) {}
+        if (t && t.mainTabId) {
+          api.webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {});
           showToast('Reloading…');
         }
       } else {
@@ -1458,11 +1414,12 @@
       };
     }
 
+    // BUILD_WCV: navigation via IPC
     if (el.navBack) {
       el.navBack.onclick = function () {
         var tab = getActiveTab();
-        if (tab && tab.webview) {
-          try { tab.webview.goBack(); } catch (e) {}
+        if (tab && tab.mainTabId) {
+          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
         }
       };
     }
@@ -1470,8 +1427,8 @@
     if (el.navForward) {
       el.navForward.onclick = function () {
         var tab = getActiveTab();
-        if (tab && tab.webview) {
-          try { tab.webview.goForward(); } catch (e) {}
+        if (tab && tab.mainTabId) {
+          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
         }
       };
     }
@@ -1479,8 +1436,8 @@
     if (el.navReload) {
       el.navReload.onclick = function () {
         var tab = getActiveTab();
-        if (tab && tab.webview) {
-          try { tab.webview.reload(); } catch (e) {}
+        if (tab && tab.mainTabId) {
+          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
           showToast('Reloading…');
         }
       };
@@ -1489,8 +1446,8 @@
     if (el.navHome) {
       el.navHome.onclick = function () {
         var tab = getActiveTab();
-        if (tab && tab.webview) {
-          try { tab.webview.loadURL(tab.homeUrl || tab.url || ''); } catch (e) {}
+        if (tab && tab.mainTabId) {
+          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
         }
       };
     }
@@ -1589,17 +1546,15 @@
       }
     });
 
-    // Popup → new tab (main-side handler)
+    // BUILD_WCV: Popup → new tab (main-process handler now sends tabId instead of wcId)
     if (api.webSources.onPopupOpen) {
       api.webSources.onPopupOpen(function (info) {
         var url = info && info.url ? String(info.url) : '';
         if (!url) return;
-        var wcId = info && info.sourceWebContentsId ? info.sourceWebContentsId : null;
+        var mainTabId = info && info.tabId ? info.tabId : null;
         var parent = null;
-        if (wcId != null) {
-          for (var i = 0; i < state.tabs.length; i++) {
-            if (state.tabs[i].wcId === wcId) { parent = state.tabs[i]; break; }
-          }
+        if (mainTabId != null) {
+          parent = getTabByMainId(mainTabId);
         }
         if (!parent) parent = getActiveTab();
         openPopupUrlInNewTab(url, parent);
@@ -1610,6 +1565,56 @@
       loadSources();
       loadDestinations();
     });
+
+    // BUILD_WCV: Listen to main-process tab events
+    api.webTabs.onTitleUpdated(function (data) {
+      var tab = getTabByMainId(data && data.tabId);
+      if (!tab) return;
+      tab.title = data.title || tab.sourceName || 'Tab';
+      renderTabs();
+      renderContinue();
+    });
+
+    api.webTabs.onUrlUpdated(function (data) {
+      var tab = getTabByMainId(data && data.tabId);
+      if (!tab) return;
+      tab.url = data.url || '';
+      if (tab.id === state.activeTabId) {
+        updateUrlDisplay();
+      }
+      renderContinue();
+    });
+
+    api.webTabs.onLoading(function (data) {
+      var tab = getTabByMainId(data && data.tabId);
+      if (!tab) return;
+      tab.loading = !!data.loading;
+      renderTabs();
+      syncLoadBar();
+    });
+
+    api.webTabs.onNavState(function (data) {
+      var tab = getTabByMainId(data && data.tabId);
+      if (!tab) return;
+      tab.canGoBack = !!data.canGoBack;
+      tab.canGoForward = !!data.canGoForward;
+      if (tab.id === state.activeTabId) {
+        updateNavButtons();
+      }
+    });
+
+    // BUILD_WCV: ResizeObserver for bounds reporting
+    if (el.viewContainer && typeof ResizeObserver !== 'undefined') {
+      var _resizeObs = new ResizeObserver(function () {
+        if (!state.browserOpen) return;
+        if (state.split) {
+          reportSplitBounds();
+        } else {
+          reportBoundsForActiveTab();
+        }
+      });
+      _resizeObs.observe(el.viewContainer);
+    }
 
     // Init
     loadSources();
@@ -1623,7 +1628,7 @@
   try {
     bindUI();
   } catch (e) {
-    console.warn('[BUILD_WEB] bindUI failed', e);
+    console.warn('[BUILD_WCV] bindUI failed', e);
   }
 
 })();

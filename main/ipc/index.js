@@ -89,7 +89,9 @@ __bLog('registerIpc: Phase 4D domains OK (player_core, clipboard, files, comic)'
 
 // BUILD_WEB: Web Sources domain
 const webSourcesDomain = require('../domains/webSources');
-__bLog('registerIpc: BUILD_WEB webSourcesDomain OK');
+// BUILD_WCV: Web Tabs domain (WebContentsView)
+const webTabsDomain = require('../domains/webTabs');
+__bLog('registerIpc: BUILD_WEB webSourcesDomain + webTabsDomain OK');
 
 // Phase 4A/4B: Build context object for domain handlers
 // Note: createWindow and createVideoShellWindow are defined below and added to ctx after definition
@@ -1174,6 +1176,7 @@ try {
     require('./register/books_annotations'), // BUILD_ANNOT
     require('./register/health_check'),
     require('./register/web_sources'), // BUILD_WEB
+    require('./register/web_tabs'), // BUILD_WCV
   ];
   __bLog('registerIpc: all register modules required OK (' + registerModules.length + ' modules)');
 } catch (e) {
@@ -1181,7 +1184,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','health_check','web_sources'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','health_check','web_sources','web_tabs'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -1211,6 +1214,7 @@ for (let i = 0; i < registerModules.length; i++) {
     videoUi,
     seriesSettings,
     webSourcesDomain, // BUILD_WEB
+    webTabsDomain, // BUILD_WCV
     }});
     __bLog('registerIpc: registered ' + (registerModuleNames[i] || i));
   } catch (e) {
