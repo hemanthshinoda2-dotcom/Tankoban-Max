@@ -1494,6 +1494,29 @@
       };
     }
 
+    // FIX-WEB-MODE: window controls inside browser overlay
+    var webWinMin = qs('webWinMinBtn');
+    var webWinMax = qs('webWinMaxBtn');
+    var webWinClose = qs('webWinCloseBtn');
+    if (webWinMin) {
+      webWinMin.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try { api.window.minimize(); } catch (err) {}
+      });
+    }
+    if (webWinMax) {
+      webWinMax.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try { api.window.toggleFullscreen(); } catch (err) {}
+      });
+    }
+    if (webWinClose) {
+      webWinClose.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation();
+        try { api.window.close(); } catch (err) {}
+      });
+    }
+
     if (el.dlBtn) {
       el.dlBtn.onclick = function (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}

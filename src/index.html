@@ -39,6 +39,7 @@ COMMON ANCHORS
   <div class="bgFx" aria-hidden="true"></div>
   <div id="app">
     <header class="topbar">
+      <div class="topbarDragRegion"></div>
       <div class="tbLeft">
         <button id="libMenuBtn" class="iconBtn" title="Library menu" aria-label="Library menu" aria-expanded="false">Menu</button>
         <button id="libBackBtn" class="iconBtn" title="Back" aria-label="Back">Back</button>
@@ -1450,6 +1451,7 @@ COMMON ANCHORS
       <!-- BUILD_WEB_HOME: Web browser view (overlay, hidden by default) -->
       <div id="webBrowserView" class="webBrowserView hidden">
         <div class="webBrowserToolbar">
+          <div class="webToolbarDragRegion"></div>
           <button id="webBrowserBackBtn" class="webBackBtn" title="Back to library" aria-label="Back to library">&#8592; Library</button>
           <div class="webToolbarSep"></div>
           <div id="webBrowserTitle" class="webBrowserTitle"></div>
@@ -1459,6 +1461,18 @@ COMMON ANCHORS
             <button id="webNavReload" class="iconBtn webNavBtn" title="Reload" aria-label="Reload page">&#8635;</button>
             <button id="webNavHome" class="iconBtn webNavBtn" title="Source home page" aria-label="Source home">&#8962;</button>
             <button id="webSplitBtn" class="iconBtn webNavBtn" title="Split view" aria-label="Split view">&#9707;</button>
+          </div>
+          <!-- FIX-WEB-MODE: window controls (overlay hides the topbar ones) -->
+          <div class="winControls">
+            <button id="webWinMinBtn" class="winCtrl" title="Minimize" aria-label="Minimize">
+              <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
+            </button>
+            <button id="webWinMaxBtn" class="winCtrl" title="Maximize" aria-label="Maximize">
+              <svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+            </button>
+            <button id="webWinCloseBtn" class="winCtrl winCtrl--close" title="Close" aria-label="Close">
+              <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg>
+            </button>
           </div>
         </div>
         <div class="webUrlBar">

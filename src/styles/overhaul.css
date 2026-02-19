@@ -156,6 +156,7 @@ body{
 ------------------*/
 
 .topbar{
+  position: relative;
   height: var(--lib-topbar-h);
   padding: 6px 12px;
   background: rgba(10,12,20,.52) !important;
@@ -1121,8 +1122,11 @@ code, pre, .mono{
    MERIDIAN_FRAME: Frameless window + drag region
    ============================================= */
 
-.topbar{
+.topbarDragRegion{
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
   -webkit-app-region: drag;
+  z-index: 0;
 }
 .topbar button,
 .topbar input,
