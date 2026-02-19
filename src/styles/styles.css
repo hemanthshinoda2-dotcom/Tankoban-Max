@@ -3570,7 +3570,9 @@ body.mpvEngine .videoToast {
    Tankoban Max: Books mode + Books reader
    ========================================================= */
 body.inBooksMode #tileDensityBtn,
-body.inBooksMode #hiddenSeriesBtn {
+body.inBooksMode #hiddenSeriesBtn,
+body.inWebMode #tileDensityBtn,
+body.inWebMode #hiddenSeriesBtn {
   display: none !important;
 }
 
