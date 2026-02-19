@@ -117,6 +117,20 @@
     return null;
   }
 
+  // FIX-WEB-MODE: derive a friendly site name from a URL
+  function siteNameFromUrl(url) {
+    try {
+      var h = new URL(url).hostname.replace(/^www\./, '');
+      // Capitalize first letter of each part before TLD
+      var parts = h.split('.');
+      if (parts.length > 1) parts.pop(); // drop TLD
+      var name = parts.join(' ');
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    } catch (e) {
+      return '';
+    }
+  }
+
   function getFaviconUrl(url) {
     try {
       var domain = new URL(url).hostname;
@@ -1214,6 +1228,24 @@
     });
   }
 
+  // FIX-WEB-MODE: paste a URL from clipboard as a new source
+  function pasteUrlAsSource(clipText) {
+    var url = String(clipText || '').trim();
+    if (!url) return;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    var name = siteNameFromUrl(url) || 'New Source';
+    api.webSources.add({ name: name, url: url }).then(function (res) {
+      if (res && res.ok) {
+        loadSources();
+        showToast('Source added: ' + name);
+      } else {
+        showToast('Failed to add source');
+      }
+    }).catch(function () {
+      showToast('Failed to add source');
+    });
+  }
+
   function removeSource(sourceId) {
     api.webSources.remove(sourceId).then(function (res) {
       if (res && res.ok) {
@@ -1490,6 +1522,45 @@
       el.tipsBtn.onclick = function () {
         toggleTips();
       };
+    }
+
+    // FIX-WEB-MODE: right-click on library home → paste link as source
+    if (el.homeView) {
+      el.homeView.addEventListener('contextmenu', function (e) {
+        // Don't hijack right-click on source cards (they have their own menu)
+        var t = e.target;
+        while (t && t !== el.homeView) {
+          if (t.classList && t.classList.contains('webSourceCard')) return;
+          if (t.classList && t.classList.contains('contTile')) return;
+          t = t.parentNode;
+        }
+        e.preventDefault();
+        var items = [
+          { label: 'Add source\u2026', onClick: function () { openAddSourceDialog(null); } },
+        ];
+        // Read clipboard — async, so build menu after
+        var clipPromise = null;
+        try {
+          if (navigator.clipboard && navigator.clipboard.readText) {
+            clipPromise = navigator.clipboard.readText();
+          }
+        } catch (ex) {}
+        if (clipPromise) {
+          clipPromise.then(function (text) {
+            var clip = String(text || '').trim();
+            var looksLikeUrl = /^https?:\/\//i.test(clip) || /^[a-z0-9][-a-z0-9]*(\.[a-z]{2,})+/i.test(clip);
+            if (looksLikeUrl) {
+              var preview = clip.length > 50 ? clip.slice(0, 47) + '\u2026' : clip;
+              items.unshift({ label: 'Paste link: ' + preview, onClick: function () { pasteUrlAsSource(clip); } });
+            }
+            showContextMenu(items, e.clientX, e.clientY);
+          }).catch(function () {
+            showContextMenu(items, e.clientX, e.clientY);
+          });
+        } else {
+          showContextMenu(items, e.clientX, e.clientY);
+        }
+      });
     }
 
     // Global key handler (scoped)
