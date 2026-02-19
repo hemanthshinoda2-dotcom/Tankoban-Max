@@ -731,7 +731,6 @@ Hot search tokens:
     mountVolumeRows();
 
     if (el.volPreviewInfo) el.volPreviewInfo.textContent = `${idx + 1}/${state.sorted.length}`;
-    if (el.volOpenBtn) el.volOpenBtn.disabled = false;
 
     if (open) openBook(nextBook);
     else {
@@ -827,14 +826,9 @@ Hot search tokens:
 
     el.crumbText.textContent = s ? `${s.name} · ${books.length} volumes` : '';
 
-    // Controls
-    if (el.volSort) el.volSort.value = appState.ui.volSort || 'numerical';
-    if (el.volHidePreviewToggle) el.volHidePreviewToggle.checked = !!appState.ui.volHidePreview;
-    el.volumesWrap.classList.toggle('previewHidden', !!appState.ui.volHidePreview);
-
-    const q = (appState.ui.volSearch || '').trim().toLowerCase();
-    const qNums = (q.match(/\d+/g) || []).map(n => parseInt(n, 10)).filter(n => Number.isFinite(n));
-    const sortMode = appState.ui.volSort || 'numerical';
+    const q = '';
+    const qNums = [];
+    const sortMode = 'numerical';
 
     const sorted = getCachedVisibleVolumes({ sid, books, q, qNums, sortMode });
 
@@ -875,7 +869,6 @@ Hot search tokens:
 
     if (sorted.length === 0) {
       setPreview(null, 0, 0);
-      if (el.volOpenBtn) el.volOpenBtn.disabled = true;
       return;
     }
 
@@ -889,7 +882,6 @@ Hot search tokens:
     const selBook = (selIdx >= 0) ? sorted[selIdx] : sorted[0];
 
     setPreview(selBook, (selIdx >= 0 ? selIdx : 0), sorted.length);
-    if (el.volOpenBtn) el.volOpenBtn.disabled = !selBook;
 
     if (!el.volumesGrid.hasAttribute('tabindex')) el.volumesGrid.tabIndex = 0;
     mountVolumeRows();

@@ -695,37 +695,6 @@ function getThumbWarmupMode(){
     }
   });
 
-  // Volumes controls
-  el.volSort?.addEventListener('change', () => {
-    const v = el.volSort.value || 'numerical';
-    appState.ui.volSort = v;
-    try { localStorage.setItem('volSort', v); } catch {}
-    renderVolumes();
-  });
-
-  el.volSearch?.addEventListener('input', () => {
-    appState.ui.volSearch = el.volSearch.value || '';
-    renderVolumes();
-  });
-
-  el.clearVolSearch?.addEventListener('click', () => {
-    if (el.volSearch) el.volSearch.value = '';
-    appState.ui.volSearch = '';
-    renderVolumes();
-  });
-
-  el.volOpenBtn?.addEventListener('click', () => {
-    const id = appState.ui.volSelBookId;
-    const b = id ? bookById.get(id) : null;
-    if (b) openBook(b);
-  });
-
-  el.volHidePreviewToggle?.addEventListener('change', () => {
-    appState.ui.volHidePreview = !!el.volHidePreviewToggle.checked;
-    try { localStorage.setItem('volHidePreview', appState.ui.volHidePreview ? '1' : '0'); } catch {}
-    el.volumesWrap?.classList.toggle('previewHidden', !!appState.ui.volHidePreview);
-  });
-
   // BUILD40_VIDEO_MODE_DETECT: volume_nav_overlay is shared across Comics + Videos;
   // detect the current app mode safely without relying on reader-only state.
   function isVideoTopBarMode() {

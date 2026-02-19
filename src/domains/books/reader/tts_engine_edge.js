@@ -503,13 +503,23 @@
 
     function resume() {
       if (!state.audio || !state.paused) return;
+      // FIX-PAUSE: Only clear paused flag if audio.play() succeeds.
+      // Previously, paused was set false even on failure → state corruption.
       try {
         var playPromise = state.audio.play();
-        if (playPromise && typeof playPromise.catch === 'function') {
-          playPromise.catch(function () {});
+        if (playPromise && typeof playPromise.then === 'function') {
+          state.paused = false; // optimistic — corrected in catch if it fails
+          playPromise.catch(function (err) {
+            state.paused = true; // play() rejected — still paused
+            diag('edge_resume_fail', String(err && err.message ? err.message : err));
+          });
+        } else {
+          state.paused = false;
         }
-      } catch {}
-      state.paused = false;
+      } catch (err) {
+        // synchronous throw — stay paused
+        diag('edge_resume_fail', String(err && err.message ? err.message : err));
+      }
     }
 
     function cancel() {

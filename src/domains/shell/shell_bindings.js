@@ -74,7 +74,7 @@
     if (open) {
       // Focus the first actionable item inside the drawer for keyboard users.
       try {
-        const first = document.querySelector('.libSidebar button, .libSidebar [tabindex]');
+        const first = document.querySelector('.view:not(.hidden) .libSidebar button, .view:not(.hidden) .libSidebar [tabindex]');
         first && first.focus && first.focus();
       } catch {}
     }

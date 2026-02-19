@@ -75,11 +75,6 @@ sl-select.select::part(combobox) {
   color: var(--ui-text);
 }
 
-sl-input.search-sm,
-sl-select.select-sm {
-  --sl-input-height-small: 28px;
-}
-
 sl-input.search {
   min-width: 220px;
 }

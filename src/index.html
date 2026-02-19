@@ -152,27 +152,6 @@ COMMON ANCHORS
                     </div>
                   </div>
 
-                  <div class="volActionStrip" role="toolbar" aria-label="Volume actions">
-                    <div class="volActionLeft">
-                      <sl-button id="volOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Open selected" aria-label="Open selected">Open</sl-button>
-                      <div class="volActionSep"></div>
-
-                      <label class="muted tiny" for="volSort">Sort</label>
-                      <sl-select id="volSort" class="select select-sm" size="small">
-                        <sl-option value="numerical">Numerical</sl-option>
-                        <sl-option value="alphabetical">Alphabetical</sl-option>
-                        <sl-option value="newest">Newest</sl-option>
-                        <sl-option value="lastread">Last read</sl-option>
-                      </sl-select>
-
-                      <sl-input id="volSearch" class="search search-sm" size="small" placeholder="Search volumes (try: vol 12)"></sl-input>
-                      <sl-button id="clearVolSearch" class="iconBtn btn btn-ghost btn-sm" size="small" title="Clear search" aria-label="Clear search">Clear</sl-button>
-                    </div>
-
-                    <div class="volActionRight">
-                      <sl-switch id="volHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
-                    </div>
-                  </div>
 
                   <div class="volTableWrap" role="table" aria-label="Volumes">
                     <div class="volTableHead" id="volTableHead" role="row">
@@ -330,23 +309,6 @@ COMMON ANCHORS
                     </div>
                   </div>
 
-                  <div class="volActionStrip" role="toolbar" aria-label="Volume actions">
-                    <div class="volActionLeft">
-                      <sl-button id="booksEpOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Open selected" aria-label="Open selected">Open</sl-button>
-                      <div class="volActionSep"></div>
-                      <label class="muted tiny" for="booksEpSort">Sort</label>
-                      <sl-select id="booksEpSort" class="select select-sm" size="small">
-                        <sl-option value="title_asc">Title (A-Z)</sl-option>
-                        <sl-option value="modified_desc">Newest</sl-option>
-                        <sl-option value="modified_asc">Oldest</sl-option>
-                      </sl-select>
-                      <sl-input id="booksEpSearch" class="search search-sm" size="small" placeholder="Search volumes"></sl-input>
-                      <sl-button id="booksEpSearchClear" class="iconBtn btn btn-ghost btn-sm" size="small" title="Clear search" aria-label="Clear search">Clear</sl-button>
-                    </div>
-                    <div class="volActionRight">
-                      <sl-switch id="booksEpHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
-                    </div>
-                  </div>
 
                   <div class="volTableWrap" role="table" aria-label="Volumes">
                     <div id="booksEpTableHead" class="volTableHead" role="row">
@@ -797,8 +759,10 @@ COMMON ANCHORS
                   <button id="lpTtsSlower" class="iconBtn booksReaderTtsBtn" title="Slower" aria-label="Slower">&#8722;</button>
                   <span id="lpTtsSpeed" class="booksReaderTtsSpeed">1.0&times;</span>
                   <button id="lpTtsFaster" class="iconBtn booksReaderTtsBtn" title="Faster" aria-label="Faster">+</button>
+                  <!-- LISTEN_THEME: cycle reader theme -->
+                  <button id="lpThemeBtn" class="iconBtn booksReaderTtsBtn" title="Cycle theme" aria-label="Cycle theme"><svg viewBox="0 0 11 10" xmlns="http://www.w3.org/2000/svg"><path d="M10.875 0.5C10.875 0.400544 10.8355 0.305161 10.7652 0.234835C10.6949 0.164509 10.5995 0.125 10.5 0.125C8.43379 0.125 6.31363 2.45516 5.13613 3.99828C4.7156 3.86949 4.27073 3.84112 3.83725 3.91544C3.40376 3.98977 2.99375 4.16472 2.64014 4.42624C2.28654 4.68777 1.99919 5.02857 1.80119 5.42129C1.60318 5.81401 1.50004 6.24769 1.50004 6.6875C1.50004 8.135 0.584103 8.78422 0.540509 8.81422C0.473988 8.85914 0.423635 8.92421 0.396855 8.99988C0.370074 9.07555 0.368278 9.15781 0.391732 9.23458C0.415187 9.31134 0.462652 9.37855 0.52715 9.42633C0.591648 9.47411 0.669774 9.49993 0.750041 9.5H4.31254C4.75235 9.5 5.18603 9.39686 5.57875 9.19885C5.97147 9.00085 6.31227 8.7135 6.5738 8.3599C6.83532 8.00629 7.01027 7.59628 7.0846 7.16279C7.15892 6.72931 7.13055 6.28444 7.00176 5.86391C8.54535 4.68641 10.875 2.56625 10.875 0.5ZM4.31254 8.75H1.62332C1.93973 8.30047 2.25004 7.62125 2.25004 6.6875C2.25004 6.27958 2.371 5.88081 2.59763 5.54164C2.82427 5.20246 3.14638 4.9381 3.52326 4.782C3.90013 4.62589 4.31483 4.58505 4.71491 4.66463C5.115 4.74421 5.4825 4.94065 5.77095 5.22909C6.05939 5.51754 6.25583 5.88504 6.33541 6.28513C6.41499 6.68521 6.37415 7.09991 6.21804 7.47678C6.06194 7.85366 5.79758 8.17578 5.4584 8.40241C5.11923 8.62904 4.72046 8.75 4.31254 8.75ZM5.83223 4.32266C5.99285 4.11453 6.15051 3.91844 6.3052 3.73438C6.68382 3.99018 7.00986 4.31622 7.26567 4.69484C7.08129 4.84922 6.8852 5.00688 6.67738 5.16781C6.45886 4.82929 6.17075 4.54118 5.83223 4.32266ZM7.83379 4.19703C7.55068 3.79756 7.20201 3.44889 6.80254 3.16578C8.29223 1.54719 9.41582 1.05641 10.0791 0.92C9.94551 1.58375 9.45238 2.70734 7.83379 4.19703Z" fill="currentColor"/></svg></button>
                   <!-- Settings mega overlay trigger -->
-                  <button id="lpTtsSettingsBtn" class="iconBtn booksReaderTtsBtn" title="TTS settings" aria-label="TTS settings"><svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="7" cy="5" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="10" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="15" r="2" fill="var(--br-reader-bg,#101216)" stroke="currentColor" stroke-width="1.5"/></svg></button>
+                  <button id="lpTtsSettingsBtn" class="iconBtn booksReaderTtsBtn" title="TTS settings" aria-label="TTS settings"><svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/><circle cx="7" cy="5" r="2" fill="var(--lp-bg,var(--br-reader-bg,#101216))" stroke="currentColor" stroke-width="1.5"/><circle cx="13" cy="10" r="2" fill="var(--lp-bg,var(--br-reader-bg,#101216))" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="15" r="2" fill="var(--lp-bg,var(--br-reader-bg,#101216))" stroke="currentColor" stroke-width="1.5"/></svg></button>
                   <button id="lpTtsStop" class="iconBtn booksReaderTtsBtn" title="Stop" aria-label="Stop TTS"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M13.682 0.867188H2.31797C1.91888 0.867807 1.53632 1.02662 1.25413 1.30881C0.97193 1.59101 0.81312 1.97357 0.8125 2.37266V13.7367C0.81312 14.1358 0.97193 14.5184 1.25413 14.8006C1.53632 15.0828 1.91888 15.2416 2.31797 15.2422H13.682C14.0811 15.2416 14.4637 15.0828 14.7459 14.8006C15.0281 14.5184 15.1869 14.1358 15.1875 13.7367V2.37266C15.1869 1.97357 15.0281 1.59101 14.7459 1.30881C14.4637 1.02662 14.0811 0.867807 13.682 0.867188ZM13.3125 13.3672H2.6875V2.74219H13.3125V13.3672Z" fill="currentColor"/></svg></button>
                 </div>
 
@@ -840,6 +804,11 @@ COMMON ANCHORS
                       <span class="ttsMegaLabel">Enlarge</span>
                       <input type="range" id="lpTtsEnlargeScale" min="1.1" max="2.5" step="0.05" value="1.35" title="Enlarge scale" aria-label="Enlarge scale">
                       <span id="lpTtsEnlargeVal" class="ttsMegaVal">1.35x</span>
+                    </div>
+                    <div class="ttsMegaRow">
+                      <span class="ttsMegaLabel">Card size</span>
+                      <input type="range" id="lpCardSize" min="280" max="720" step="20" value="480" title="Card size" aria-label="Card size">
+                      <span id="lpCardSizeVal" class="ttsMegaVal">480</span>
                     </div>
                     <div class="ttsMegaRow">
                       <button id="lpTtsFromSel" class="iconBtn booksReaderTtsBtn" title="Read from selection" aria-label="Read from selection"><svg viewBox="0 0 12 13" xmlns="http://www.w3.org/2000/svg"><path d="M11.058 2.51764L8.87055 0.330137C8.80956 0.269214 8.73716 0.220905 8.65749 0.187969C8.57783 0.155033 8.49246 0.138116 8.40625 0.138184H4.03125C3.74117 0.138184 3.46297 0.253418 3.25785 0.458536C3.05273 0.663654 2.9375 0.941853 2.9375 1.23193V2.32568H2.0625C1.77242 2.32568 1.49422 2.44092 1.2891 2.64604C1.08398 2.85115 0.96875 3.12935 0.96875 3.41943V11.0757C0.96875 11.3658 1.08398 11.644 1.2891 11.8491C1.49422 12.0542 1.77242 12.1694 2.0625 12.1694H7.96875C8.25883 12.1694 8.53703 12.0542 8.74215 11.8491C8.94727 11.644 9.0625 11.3658 9.0625 11.0757V9.98193H10.1562C10.4463 9.98193 10.7245 9.8667 10.9296 9.66158C11.1348 9.45646 11.25 9.17826 11.25 8.88818V2.98193C11.2501 2.89573 11.2332 2.81035 11.2002 2.73069C11.1673 2.65102 11.119 2.57863 11.058 2.51764ZM7.75 10.8569H2.28125V3.63818H5.94531L7.75 5.44287V10.8569ZM9.9375 8.66943H9.0625V5.16943C9.06257 5.08323 9.04565 4.99785 9.01271 4.91819C8.97978 4.83852 8.93147 4.76613 8.87055 4.70514L6.68305 2.51764C6.62206 2.45671 6.54966 2.40841 6.46999 2.37547C6.39033 2.34253 6.30496 2.32562 6.21875 2.32568H4.25V1.45068H8.13281L9.9375 3.25537V8.66943ZM6.875 7.13818C6.875 7.31223 6.80586 7.47915 6.68279 7.60222C6.55972 7.72529 6.3928 7.79443 6.21875 7.79443H3.8125C3.63845 7.79443 3.47153 7.72529 3.34846 7.60222C3.22539 7.47915 3.15625 7.31223 3.15625 7.13818C3.15625 6.96414 3.22539 6.79722 3.34846 6.67415C3.47153 6.55107 3.63845 6.48193 3.8125 6.48193H6.21875C6.3928 6.48193 6.55972 6.55107 6.68279 6.67415C6.80586 6.79722 6.875 6.96414 6.875 7.13818ZM6.875 9.32568C6.875 9.49973 6.80586 9.66665 6.68279 9.78972C6.55972 9.91279 6.3928 9.98193 6.21875 9.98193H3.8125C3.63845 9.98193 3.47153 9.91279 3.34846 9.78972C3.22539 9.66665 3.15625 9.49973 3.15625 9.32568C3.15625 9.15164 3.22539 8.98472 3.34846 8.86165C3.47153 8.73857 3.63845 8.66943 3.8125 8.66943H6.21875C6.3928 8.66943 6.55972 8.73857 6.68279 8.86165C6.80586 8.98472 6.875 9.15164 6.875 9.32568Z" fill="currentColor"/></svg></button>
@@ -944,26 +913,6 @@ COMMON ANCHORS
                     </div>
                   </div>
 
-                  <div class="volActionStrip" role="toolbar" aria-label="Episode actions">
-                    <div class="volActionLeft">
-                      <sl-button id="videoEpOpenBtn" class="iconBtn btn btn-ghost btn-sm" size="small" title="Play selected" aria-label="Play selected">Play</sl-button>
-                      <div class="volActionSep"></div>
-
-                      <label class="muted tiny" for="videoEpSort">Sort</label>
-                      <sl-select id="videoEpSort" class="select select-sm" size="small">
-                        <sl-option value="title_asc">Title (A-Z)</sl-option>
-                        <sl-option value="title_desc">Title (Z-A)</sl-option>
-                        <sl-option value="date_new">Newest</sl-option>
-                        <sl-option value="date_old">Oldest</sl-option>
-                      </sl-select>
-
-                      <!-- Build 11: removed episode search (replaced by Continue watching in preview area) -->
-                    </div>
-
-                    <div class="volActionRight">
-                      <sl-switch id="videoEpHidePreviewToggle" class="toggle muted tiny" size="small" title="Hide preview">Hide preview</sl-switch>
-                    </div>
-                  </div>
 
                   <div class="volTableWrap" role="table" aria-label="Episodes">
                     <div class="volTableHead" id="videoEpTableHead" role="row">

@@ -181,16 +181,10 @@ Hot search tokens:
     volPreviewPane: $('#volPreviewPane'),
     volPreviewImg: $('#volPreviewImg'),
     volPreviewInfo: $('#volPreviewInfo'),
-    volOpenBtn: $('#volOpenBtn'),
-    volHidePreviewToggle: $('#volHidePreviewToggle'),
     volTableHead: $('#volTableHead'),
 
     volumesGrid: $('#volumesGrid'),
     volumesEmpty: $('#volumesEmpty'),
-
-    volSort: $('#volSort'),
-    volSearch: $('#volSearch'),
-    clearVolSearch: $('#clearVolSearch'),
 
     crumb: $('#crumb'),
     seriesBackBtn: $('#seriesBackBtn'),
@@ -2012,9 +2006,6 @@ async function clearSeriesSettings(seriesId) {
     wasPlayingBeforeEnd: false,
 
     ui: {
-      volSort: (localStorage.getItem('volSort') || 'numerical'),
-      volSearch: '',
-      volHidePreview: (localStorage.getItem('volHidePreview') === '1'),
       volSelBookId: null,
       hideFinished: (localStorage.getItem('hideFinished') === '1'),
 

@@ -3,18 +3,10 @@
   'use strict';
 
   const CONTROL_IDS = new Set([
-    'volSort',
-    'volSearch',
     'globalSearch',
     'hideFinishedToggle',
-    'volHidePreviewToggle',
-    'booksEpSort',
     'booksHideFinishedToggle',
-    'booksEpHidePreviewToggle',
-    'videoEpSort',
-    'videoEpSearch',
     'videoHideWatchedToggle',
-    'videoEpHidePreviewToggle',
   ]);
 
   function isTarget(el) {

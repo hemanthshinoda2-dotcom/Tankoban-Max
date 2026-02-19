@@ -21,9 +21,6 @@
     libraryScanCancel: 'x',
     mangaLibTipsClose: 'x',
     seriesBackBtn: 'arrow-left',
-    volOpenBtn: 'play',
-    clearVolSearch: 'x',
-
     booksAddRootBtn: 'plus',
     booksAddSeriesBtn: 'folder-plus',
     booksAddFilesBtn: 'files',
@@ -32,7 +29,6 @@
     booksScanCancel: 'x',
     booksLibTipsClose: 'x',
     booksShowBackBtn: 'arrow-left',
-    booksEpOpenBtn: 'play',
 
     videoAddFolderBtn: 'plus',
     videoAddShowFolderBtn: 'folder-plus',
@@ -42,8 +38,6 @@
     videoScanCancel: 'x',
     videoLibTipsClose: 'x',
     videoShowBackBtn: 'arrow-left',
-    videoEpOpenBtn: 'play',
-    clearVideoEpSearch: 'x',
   };
 
   window.Tanko = window.Tanko || {};

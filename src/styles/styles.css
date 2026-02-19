@@ -1080,23 +1080,6 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .videoFolderContinueBar > div{ height:100%; width:0%; background: rgba(var(--accent-rgb),.78); border-radius:999px; }
 .videoFolderContinueHint{ opacity:.8; font-size: 11px; }
 
-.volActionStrip{
-  flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  border:1px solid var(--lib-border);
-  border-radius: var(--lib-radius-sm);
-  background: rgba(var(--surface-rgb),.34);
-  padding: 4px 6px;
-}
-.volActionLeft{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
-.volActionRight{ display:flex; align-items:center; gap:8px; }
-.volActionSep{ width:1px; height:18px; background: rgba(255,255,255,.22); margin: 0 6px; }
-
-body:not(.inPlayer) .select-sm{ padding:4px 6px; height:28px; border-radius: var(--lib-radius-sm); font-size: 11px; }
-body:not(.inPlayer) .search-sm{ padding:4px 6px; height:28px; border-radius: var(--lib-radius-sm); font-size: 11px; min-width: 220px; }
 
 .volTableWrap{
   flex: 1 1 0;

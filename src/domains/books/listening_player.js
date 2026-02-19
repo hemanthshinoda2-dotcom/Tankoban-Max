@@ -251,7 +251,10 @@ function updateCard(info) {
 
         inner.innerHTML = html2;
 
-        // Auto-scroll so the active segment stays in a "focus band" in the 4:3 stage.
+        // FIX-LP-SCROLL: Auto-scroll to keep the narrated word visible in the
+        // 4:3 prose stage. Targets the <mark> word highlight when present (so
+        // long paragraphs scroll within themselves), falling back to the active
+        // segment div for block-level tracking.
         requestAnimationFrame(function () {
           try {
             var activeEl = inner.querySelector('.lp-seg.is-active');
@@ -261,8 +264,11 @@ function updateCard(info) {
             var innerH = inner.scrollHeight || 0;
             if (!stageH || !innerH) return;
 
+            // FIX-LP-SCROLL: prefer the word-level <mark> for scroll target so
+            // the view follows each word, not just each paragraph.
+            var target = activeEl.querySelector('mark.lp-word-active') || activeEl;
             var focusY = Math.round(stageH * 0.48);
-            var targetCenter = activeEl.offsetTop + (activeEl.offsetHeight / 2);
+            var targetCenter = target.offsetTop + (target.offsetHeight / 2);
             var translate = focusY - targetCenter;
 
             var minTranslate = stageH - innerH;
@@ -948,6 +954,14 @@ function updateCard(info) {
     var faster = qs('lpTtsFaster');
     if (faster) faster.addEventListener('click', function () { ttsAdjustSpeed(0.1); });
 
+    // LISTEN_THEME: cycle reader theme from LP HUD
+    var themeBtn = qs('lpThemeBtn');
+    if (themeBtn) themeBtn.addEventListener('click', function () {
+      if (window.booksReaderAppearance && typeof window.booksReaderAppearance.cycleTheme === 'function') {
+        window.booksReaderAppearance.cycleTheme();
+      }
+    });
+
     // ── Mega settings panel ──
     var settingsBtn = qs('lpTtsSettingsBtn');
     if (settingsBtn) settingsBtn.addEventListener('click', function () {
@@ -1064,6 +1078,32 @@ function updateCard(info) {
       var valEl = qs('lpTtsEnlargeVal');
       if (valEl) valEl.textContent = val.toFixed(2) + 'x';
     });
+
+    // LISTEN_THEME: card size slider — scales both card width and text size
+    var cardSizeSlider = qs('lpCardSize');
+    var cardSizeVal = qs('lpCardSizeVal');
+    var _savedCardW = 480;
+    var _cardBaseW = 480;
+    var _cardBaseFontRem = 1.15;
+    try { _savedCardW = parseInt(localStorage.getItem('booksListenCardWidth'), 10) || 480; } catch {}
+    var shell = document.getElementById('booksListenPlayerOverlay');
+    function _applyCardSize(w) {
+      if (!shell) return;
+      shell.style.setProperty('--lp-card-width', w + 'px');
+      var fontRem = (_cardBaseFontRem * w / _cardBaseW).toFixed(3);
+      shell.style.setProperty('--lp-card-font', fontRem + 'rem');
+    }
+    _applyCardSize(_savedCardW);
+    if (cardSizeSlider) {
+      cardSizeSlider.value = _savedCardW;
+      if (cardSizeVal) cardSizeVal.textContent = _savedCardW;
+      cardSizeSlider.addEventListener('input', function () {
+        var w = parseInt(cardSizeSlider.value, 10) || 480;
+        _applyCardSize(w);
+        if (cardSizeVal) cardSizeVal.textContent = w;
+        try { localStorage.setItem('booksListenCardWidth', String(w)); } catch {}
+      });
+    }
 
     // Read from selection
     var fromSel = qs('lpTtsFromSel');

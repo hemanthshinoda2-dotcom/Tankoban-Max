@@ -101,9 +101,6 @@ videoProgress IPC calls
     // Episode list controls (Build 3.4)
     videoEpSearch: qs('videoEpSearch'),
     clearVideoEpSearch: qs('clearVideoEpSearch'),
-    videoEpOpenBtn: qs('videoEpOpenBtn'),
-    videoEpSort: qs('videoEpSort'),
-    videoEpHidePreviewToggle: qs('videoEpHidePreviewToggle'),
 
     // Player
     videoBackBtn: qs('videoBackBtn'),
@@ -5422,19 +5419,6 @@ function getEpisodeById(epId){
       state.epSort = 'title_asc';
       persistVideoUiState();
     }
-    if (el.videoEpSort) {
-      el.videoEpSort.disabled = false;
-      el.videoEpSort.title = 'Inside-show view supports Name (natural) and Modified date sorting';
-      for (const opt of Array.from(el.videoEpSort.options || [])) {
-        const v = String(opt.value || '');
-        opt.disabled = !allowedSort.has(v);
-      }
-      el.videoEpSort.value = String(state.epSort || 'title_asc');
-    }
-
-    if (el.videoEpHidePreviewToggle) el.videoEpHidePreviewToggle.checked = !!state.epHidePreview;
-    el.videoEpisodesWrap.classList.toggle('previewHidden', !!state.epHidePreview);
-
     // Build 22: explorer-like folder navigation
     const normRel = (s) => String(s || '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     const parentRel = (rel) => {
@@ -9095,37 +9079,6 @@ function bindKeyboard(){
 
     el.videoShowBackBtn?.addEventListener('click', () => {
       goVideoHome();
-    });
-
-    el.videoEpOpenBtn?.addEventListener('click', () => {
-      if (!state.selectedEpisodeId) return;
-      const ep = getEpisodeById(state.selectedEpisodeId);
-      if (ep) safe(() => openVideo(ep));
-    });
-
-    el.videoEpSearch?.addEventListener('input', () => {
-      state.epSearch = String(el.videoEpSearch.value || '');
-      renderVideoShowView();
-      persistVideoUiState();
-    });
-
-    el.clearVideoEpSearch?.addEventListener('click', () => {
-      state.epSearch = '';
-      if (el.videoEpSearch) el.videoEpSearch.value = '';
-      renderVideoShowView();
-      persistVideoUiState();
-    });
-
-    el.videoEpSort?.addEventListener('change', () => {
-      state.epSort = String(el.videoEpSort.value || 'title_asc');
-      renderVideoShowView();
-      persistVideoUiState();
-    });
-
-    el.videoEpHidePreviewToggle?.addEventListener('change', () => {
-      state.epHidePreview = !!el.videoEpHidePreviewToggle.checked;
-      if (el.videoEpisodesWrap) el.videoEpisodesWrap.classList.toggle('previewHidden', state.epHidePreview);
-      persistVideoUiState();
     });
 
     el.videoHideWatchedToggle?.addEventListener('change', () => {

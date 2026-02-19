@@ -234,8 +234,6 @@ body{
 /* Inputs / selects */
 .search,
 .select,
-.search-sm,
-.select-sm,
 .settingsTextArea{
   border-radius: 12px !important;
   border: 1px solid rgba(255,255,255,.12) !important;
@@ -271,7 +269,8 @@ body:not(.inPlayer) .libSidebar{
   box-shadow: 0 22px 60px -38px rgba(0,0,0,.95);
 }
 
-body:not(.inPlayer).libDrawerOpen .libSidebar{
+/* FIX-DRAWER: scope to active view only — prevents other-mode sidebar flash */
+body:not(.inPlayer).libDrawerOpen .view:not(.hidden) > .libraryShell > .libSidebar{
   transform: translateX(0);
 }
 

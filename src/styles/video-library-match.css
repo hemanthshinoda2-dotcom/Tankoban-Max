@@ -409,58 +409,6 @@ body:not(.inPlayer) .homeView{
   color: rgba(229,231,235,.92) !important;
 }
 
-/* ===================================
-   VIDEO CONTROLS - Match Comic Library
-   =================================== */
-
-#videoLibraryView .volActionStrip {
-  flex: 0 0 auto !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 10px !important;
-  border: 1px solid var(--lib-border) !important;
-  border-radius: var(--lib-radius-sm) !important;
-  background: rgba(var(--surface-rgb),.34) !important;
-  padding: 6px 8px !important;
-  margin-bottom: 10px !important;
-}
-
-#videoLibraryView .search-sm {
-  padding: 6px 10px !important;
-  height: 32px !important;
-  border-radius: var(--lib-radius-sm) !important;
-  font-size: 12px !important;
-  min-width: 220px !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-  background: rgba(255,255,255,.05) !important;
-  color: rgba(229,231,235,.92) !important;
-  transition: all 90ms ease-out !important;
-}
-
-#videoLibraryView .search-sm:focus {
-  border-color: rgba(var(--vx-accent-rgb),.4) !important;
-  background: rgba(255,255,255,.08) !important;
-  outline: none !important;
-}
-
-#videoLibraryView .select-sm {
-  padding: 6px 10px !important;
-  height: 32px !important;
-  border-radius: var(--lib-radius-sm) !important;
-  font-size: 11px !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-  background: rgba(255,255,255,.05) !important;
-  color: rgba(229,231,235,.92) !important;
-  transition: all 90ms ease-out !important;
-  cursor: pointer !important;
-}
-
-#videoLibraryView .select-sm:hover {
-  background: rgba(255,255,255,.08) !important;
-  border-color: rgba(255,255,255,.16) !important;
-}
-
 #videoLibraryView .iconBtn {
   width: 32px !important;
   height: 32px !important;
