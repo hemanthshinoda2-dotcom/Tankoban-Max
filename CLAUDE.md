@@ -92,6 +92,7 @@ From this directory (`projects/Tankoban Max/`):
 
 ## Git workflow
 
+- **ALWAYS commit and push immediately after applying a patch or completing a fix. Not committing after doing a patch is criminal. Never wait for the user to remind you.**
 - Commit all changes before ending a session — don't leave uncommitted work
 - Use descriptive commit messages with the fix/feature tag (e.g. `FIX-TTS03: ...`)
 - Group related changes into a single commit per fix/feature round

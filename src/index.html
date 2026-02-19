@@ -1469,6 +1469,14 @@ COMMON ANCHORS
       <!-- BUILD_WEB_PARITY: Web toast -->
       <div id="webToast" class="videoToast hidden" role="status" aria-live="polite"></div>
 
+      <!-- MERIDIAN_CMD: Command palette overlay (Ctrl+K) -->
+      <div id="cmdPaletteOverlay" class="cmdPalette hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="cmdPaletteCard glass-overlay">
+          <input id="cmdPaletteInput" class="cmdPaletteInput" type="text" placeholder="Type a command or search..." autocomplete="off" spellcheck="false" />
+          <div id="cmdPaletteResults" class="cmdPaletteResults" role="listbox" aria-label="Results"></div>
+        </div>
+      </div>
+
       <!-- FIND_THIS:CONTEXT_MENU_CONTAINER -->
       <div id="contextMenu" class="contextMenu hidden" role="menu" aria-hidden="true"></div>
 
@@ -1651,6 +1659,7 @@ COMMON ANCHORS
   <script src="./domains/library/library.js"></script>
   <script src="./state/reader.js"></script>
   <script src="./domains/shell/shell_bindings.js"></script>
+  <script src="./ui/command_palette.js"></script>
 </body>
 </html>
 
