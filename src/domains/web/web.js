@@ -79,7 +79,13 @@
     // BUILD_WEB_PARITY
     editSourceId: null,
     toastTimer: null,
-    ctxOpen: false
+    ctxOpen: false,
+    // MERIDIAN_DRAG
+    dragTabId: null,
+    // MERIDIAN_SPLIT
+    split: false,
+    splitTabId: null,
+    splitRatio: 0.5
   };
 
   // ---- Utilities ----
@@ -527,6 +533,15 @@
   }
 
   function closeBrowser() {
+    // MERIDIAN_SPLIT: unsplit when closing browser
+    if (state.split) {
+      state.split = false;
+      state.splitTabId = null;
+      try { applySplitLayout(); } catch (e) {}
+      var splitBtnEl = document.getElementById('webSplitBtn');
+      if (splitBtnEl) splitBtnEl.classList.remove('active');
+    }
+
     state.browserOpen = false;
     if (el.browserView) el.browserView.classList.add('hidden');
     if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
@@ -550,7 +565,7 @@
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
       var loadingClass = t.loading ? ' loading' : '';
-      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '">' +
+      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
         '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
         '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">×</button>' +
         '</div>';
@@ -590,6 +605,50 @@
       addBtn.onclick = function () {
         openTabPicker();
       };
+    }
+
+    // MERIDIAN_DRAG: Tab drag reorder
+    var tabEls = el.tabBar.querySelectorAll('.webTab[draggable]');
+    for (var di = 0; di < tabEls.length; di++) {
+      tabEls[di].addEventListener('dragstart', function (e) {
+        var id = this.getAttribute('data-tab-id');
+        state.dragTabId = parseInt(id, 10);
+        this.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; } catch (ex) {}
+      });
+      tabEls[di].addEventListener('dragend', function () {
+        this.classList.remove('dragging');
+        state.dragTabId = null;
+        var all = el.tabBar.querySelectorAll('.webTab');
+        for (var r = 0; r < all.length; r++) all[r].classList.remove('dragOver');
+      });
+      tabEls[di].addEventListener('dragover', function (e) {
+        e.preventDefault();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (ex) {}
+        var all = el.tabBar.querySelectorAll('.webTab');
+        for (var r = 0; r < all.length; r++) all[r].classList.remove('dragOver');
+        this.classList.add('dragOver');
+      });
+      tabEls[di].addEventListener('dragleave', function () {
+        this.classList.remove('dragOver');
+      });
+      tabEls[di].addEventListener('drop', function (e) {
+        e.preventDefault();
+        this.classList.remove('dragOver');
+        var targetId = parseInt(this.getAttribute('data-tab-id'), 10);
+        if (isNaN(targetId) || state.dragTabId == null || state.dragTabId === targetId) return;
+        var fromIdx = -1;
+        var toIdx = -1;
+        for (var ti = 0; ti < state.tabs.length; ti++) {
+          if (state.tabs[ti].id === state.dragTabId) fromIdx = ti;
+          if (state.tabs[ti].id === targetId) toIdx = ti;
+        }
+        if (fromIdx === -1 || toIdx === -1) return;
+        var moved = state.tabs.splice(fromIdx, 1)[0];
+        state.tabs.splice(toIdx, 0, moved);
+        state.dragTabId = null;
+        renderTabs();
+      });
     }
 
     syncLoadBar();
@@ -924,6 +983,16 @@
 
     var tab = state.tabs[idx];
 
+    // MERIDIAN_SPLIT: unsplit if closing a tab involved in split
+    if (state.split && (tabId === state.activeTabId || tabId === state.splitTabId)) {
+      state.split = false;
+      state.splitTabId = null;
+      // Move all webviews back to container before removal
+      try { applySplitLayout(); } catch (e) {}
+      var splitBtnEl = document.getElementById('webSplitBtn');
+      if (splitBtnEl) splitBtnEl.classList.remove('active');
+    }
+
     // Remove webview
     if (tab.webview && tab.webview.parentNode) {
       try { tab.webview.parentNode.removeChild(tab.webview); } catch (e) {}
@@ -987,6 +1056,127 @@
     var tab = getActiveTab();
     if (!tab) { el.urlDisplay.textContent = ''; return; }
     el.urlDisplay.textContent = tab.url || '';
+  }
+
+  // MERIDIAN_SPLIT: Split view
+
+  function applySplitLayout() {
+    if (!el.viewContainer) return;
+    var panes = el.viewContainer.querySelectorAll('.webSplitPane');
+    var divider = el.viewContainer.querySelector('.webSplitDivider');
+
+    if (!state.split) {
+      // Remove split panes: move webviews back to container root
+      for (var p = 0; p < panes.length; p++) {
+        var wvs = panes[p].querySelectorAll('webview');
+        for (var w = 0; w < wvs.length; w++) el.viewContainer.appendChild(wvs[w]);
+        panes[p].parentNode.removeChild(panes[p]);
+      }
+      if (divider) divider.parentNode.removeChild(divider);
+      el.viewContainer.classList.remove('webSplitActive');
+      // Restore normal tab visibility
+      activateTab(state.activeTabId);
+      return;
+    }
+
+    // Find two tabs to show: active + splitTab
+    var mainTab = getActiveTab();
+    if (!mainTab) { state.split = false; return; }
+
+    // Pick the split tab (the next tab after active, or first different one)
+    var splitTab = null;
+    if (state.splitTabId) {
+      for (var s = 0; s < state.tabs.length; s++) {
+        if (state.tabs[s].id === state.splitTabId && state.tabs[s].id !== mainTab.id) {
+          splitTab = state.tabs[s];
+          break;
+        }
+      }
+    }
+    if (!splitTab) {
+      for (var t = 0; t < state.tabs.length; t++) {
+        if (state.tabs[t].id !== mainTab.id) { splitTab = state.tabs[t]; break; }
+      }
+    }
+    if (!splitTab) { state.split = false; showToast('Need at least 2 tabs to split'); return; }
+    state.splitTabId = splitTab.id;
+
+    // Clean up any existing panes
+    for (var ep = 0; ep < panes.length; ep++) panes[ep].parentNode.removeChild(panes[ep]);
+    if (divider) divider.parentNode.removeChild(divider);
+
+    el.viewContainer.classList.add('webSplitActive');
+
+    var leftPane = document.createElement('div');
+    leftPane.className = 'webSplitPane webSplitLeft';
+    leftPane.style.flex = String(state.splitRatio);
+
+    var rightPane = document.createElement('div');
+    rightPane.className = 'webSplitPane webSplitRight';
+    rightPane.style.flex = String(1 - state.splitRatio);
+
+    var div = document.createElement('div');
+    div.className = 'webSplitDivider';
+
+    // Move webviews into panes (do not recreate — avoids reload)
+    if (mainTab.webview) {
+      mainTab.webview.style.visibility = 'visible';
+      mainTab.webview.style.zIndex = '1';
+      leftPane.appendChild(mainTab.webview);
+    }
+    if (splitTab.webview) {
+      splitTab.webview.style.visibility = 'visible';
+      splitTab.webview.style.zIndex = '1';
+      rightPane.appendChild(splitTab.webview);
+    }
+
+    // Hide all other webviews
+    for (var h = 0; h < state.tabs.length; h++) {
+      if (state.tabs[h].id !== mainTab.id && state.tabs[h].id !== splitTab.id && state.tabs[h].webview) {
+        state.tabs[h].webview.style.visibility = 'hidden';
+        state.tabs[h].webview.style.zIndex = '0';
+      }
+    }
+
+    el.viewContainer.appendChild(leftPane);
+    el.viewContainer.appendChild(div);
+    el.viewContainer.appendChild(rightPane);
+
+    // Divider drag
+    div.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      var startX = e.clientX;
+      var containerRect = el.viewContainer.getBoundingClientRect();
+      var totalW = containerRect.width;
+
+      var onMove = function (ev) {
+        var dx = ev.clientX - containerRect.left;
+        var ratio = Math.max(0.15, Math.min(0.85, dx / totalW));
+        state.splitRatio = ratio;
+        leftPane.style.flex = String(ratio);
+        rightPane.style.flex = String(1 - ratio);
+      };
+
+      var onUp = function () {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      };
+
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+  }
+
+  function toggleSplit() {
+    if (state.tabs.length < 2) {
+      showToast('Need at least 2 tabs to split');
+      return;
+    }
+    state.split = !state.split;
+    if (!state.split) state.splitTabId = null;
+    applySplitLayout();
+    var btn = document.getElementById('webSplitBtn');
+    if (btn) btn.classList.toggle('active', state.split);
   }
 
   function openTabPicker() {
@@ -1302,6 +1492,15 @@
         if (tab && tab.webview) {
           try { tab.webview.loadURL(tab.homeUrl || tab.url || ''); } catch (e) {}
         }
+      };
+    }
+
+    // MERIDIAN_SPLIT: split view toggle button
+    var splitBtn = document.getElementById('webSplitBtn');
+    if (splitBtn) {
+      splitBtn.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        toggleSplit();
       };
     }
 

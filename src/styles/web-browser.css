@@ -507,3 +507,44 @@
   pointer-events: none;
 }
 
+/* ===== MERIDIAN_DRAG: Tab drag reorder ===== */
+
+.webTab.dragging{
+  opacity: 0.45;
+}
+.webTab.dragOver{
+  border-left: 2px solid var(--vx-accent, #c7a76b);
+}
+
+/* ===== MERIDIAN_SPLIT: Split view ===== */
+
+.webViewContainer.webSplitActive{
+  display: flex;
+  flex-direction: row;
+}
+.webSplitPane{
+  position: relative;
+  overflow: hidden;
+  min-width: 80px;
+}
+.webSplitPane webview{
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+.webSplitDivider{
+  width: 4px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,.12);
+  cursor: col-resize;
+  transition: background .12s;
+}
+.webSplitDivider:hover{
+  background: rgba(255,255,255,.28);
+}
+.webNavBtn.active{
+  color: var(--vx-accent, #c7a76b);
+}
+
