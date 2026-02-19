@@ -227,6 +227,9 @@ function scanTreeTarget(target, ctx) {
       newestMtimeMs = Math.max(newestMtimeMs, Number(stFile.mtimeMs || 0));
     }
 
+    // ROOT-TILES: detect whether we're scanning the root folder itself.
+    const isRoot = !relPath;
+
     if (!folderSeen.has(fKey)) {
       folderSeen.add(fKey);
       ctx.folders.push({
@@ -237,7 +240,8 @@ function scanTreeTarget(target, ctx) {
         name: relPath ? (path.basename(dir) || relPath) : (target.name || path.basename(rootPath) || rootPath),
         folderKey: fKey,
         childFolderCount: childDirs.length,
-        seriesCount: includedBookFiles.length > 0 ? 1 : 0,
+        // ROOT-TILES: at root level each book is its own series
+        seriesCount: isRoot ? includedBookFiles.length : (includedBookFiles.length > 0 ? 1 : 0),
         bookCount: directBookCount,
         newestMtimeMs,
       });
@@ -245,40 +249,73 @@ function scanTreeTarget(target, ctx) {
 
     // FIX-R09: any folder with direct book files is a series (one-file folders included).
     if (includedBookFiles.length > 0) {
-      const sid = seriesIdForFolder(dir);
-      const seriesName = path.basename(dir) || dir;
+      if (isRoot) {
+        // ROOT-TILES: each root-level file becomes its own series (1 tile per file).
+        for (const item of includedBookFiles) {
+          ctx.bookPathSeen.add(item.key);
+          const sid = seriesIdForFolder(item.path);
+          const seriesName = fileTitle(item.path);
+          const rec = makeBookRecord(item.path, item.st, {
+            seriesId: sid,
+            seriesName,
+            seriesPath: dir,
+            rootPath,
+            rootId,
+            folderRelPath: relPath || '',
+            folderKey: fKey,
+            sourceKind: 'series',
+          });
+          ctx.books.push(rec);
+          ctx.series.push({
+            id: sid,
+            name: seriesName,
+            path: dir,
+            mediaType: 'bookSeries',
+            rootPath: rootPath || null,
+            rootId: rootId || null,
+            folderRelPath: relPath || '',
+            folderKey: fKey,
+            count: 1,
+            newestMtimeMs: Number(rec.mtimeMs || 0),
+          });
+        }
+      } else {
+        // Original behavior: all books in subfolder grouped as one series.
+        const sid = seriesIdForFolder(dir);
+        const seriesName = path.basename(dir) || dir;
 
-      let seriesCount = 0;
-      let seriesNewest = 0;
-      for (const item of includedBookFiles) {
-        ctx.bookPathSeen.add(item.key);
-        const rec = makeBookRecord(item.path, item.st, {
-          seriesId: sid,
-          seriesName,
-          seriesPath: dir,
-          rootPath,
-          rootId,
+        let seriesCount = 0;
+        let seriesNewest = 0;
+        for (const item of includedBookFiles) {
+          ctx.bookPathSeen.add(item.key);
+          const rec = makeBookRecord(item.path, item.st, {
+            seriesId: sid,
+            seriesName,
+            seriesPath: dir,
+            rootPath,
+            rootId,
+            folderRelPath: relPath || '',
+            folderKey: fKey,
+            sourceKind: 'series',
+          });
+          ctx.books.push(rec);
+          seriesCount += 1;
+          seriesNewest = Math.max(seriesNewest, Number(rec.mtimeMs || 0));
+        }
+
+        ctx.series.push({
+          id: sid,
+          name: seriesName,
+          path: dir,
+          mediaType: 'bookSeries',
+          rootPath: rootPath || null,
+          rootId: rootId || null,
           folderRelPath: relPath || '',
           folderKey: fKey,
-          sourceKind: 'series',
+          count: seriesCount,
+          newestMtimeMs: seriesNewest,
         });
-        ctx.books.push(rec);
-        seriesCount += 1;
-        seriesNewest = Math.max(seriesNewest, Number(rec.mtimeMs || 0));
       }
-
-      ctx.series.push({
-        id: sid,
-        name: seriesName,
-        path: dir,
-        mediaType: 'bookSeries',
-        rootPath: rootPath || null,
-        rootId: rootId || null,
-        folderRelPath: relPath || '',
-        folderKey: fKey,
-        count: seriesCount,
-        newestMtimeMs: seriesNewest,
-      });
     }
 
     for (let i = childDirs.length - 1; i >= 0; i -= 1) {
