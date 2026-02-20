@@ -1100,10 +1100,6 @@ function getBookProgress(bookId) {
             api.clipboard.copyText(show.path).then(() => toast('Path copied')).catch(() => {});
           }
         }},
-        { separator: true },
-        { label: 'Remove series folder', danger: true, disabled: !removableSeriesPath, onClick: async () => {
-          if (removableSeriesPath) await removeSeriesFolderAction(removableSeriesPath);
-        }},
       ],
     });
   }
@@ -1309,23 +1305,6 @@ function getBookProgress(bookId) {
     const card = document.createElement('div');
     card.className = 'seriesCard';
 
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'seriesRemove';
-    removeBtn.title = 'Remove series';
-    removeBtn.textContent = 'X';
-    const removableSeriesPath = show && show.removableSeriesPath ? String(show.removableSeriesPath) : '';
-    if (!removableSeriesPath) {
-      removeBtn.disabled = true;
-      removeBtn.style.opacity = '0';
-      removeBtn.style.pointerEvents = 'none';
-    } else {
-      removeBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        removeSeriesFolderAction(removableSeriesPath).catch(() => {});
-      });
-    }
-    card.appendChild(removeBtn);
 
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
