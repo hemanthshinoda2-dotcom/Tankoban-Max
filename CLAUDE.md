@@ -2,6 +2,13 @@
 
 Electron desktop app: Comics, Video, and Books modes. This guide covers Books mode (EPUB/PDF/TXT reader + TTS).
 
+## Communicating with Hemanth
+Hemanth is the project owner, not a programmer. When explaining changes or asking questions:
+- Talk in terms of **what the user sees in the app** — buttons, screens, behaviors — not internal code details
+- Avoid jargon dumps; if a technical term is needed, explain it briefly in plain language
+- Hemanth is capable of learning — don't oversimplify, just explain clearly
+- When presenting options, frame them as "what will happen in the app" rather than "which code pattern to use"
+
 ## Architecture
 
 ```
@@ -18,19 +25,22 @@ Renderer (src/) → Preload (preload/) → Main (main/) → Workers (workers/)
 ### Reader (`src/domains/books/reader/`)
 - `reader_core.js` — Lifecycle, book loading
 - `reader_state.js` — Shared state, `ensureEls()` DOM cache
+- `engine_epub.js` — EPUB rendering (epub.js)
 - `engine_foliate.js` — EPUB rendering (foliate-js)
 - `engine_pdf.js` — PDF rendering
 - `engine_txt.js` — Plain text rendering
 
 ### TTS
 ```
-reader_tts_ui.js → tts_core.js → tts_engine_edge.js → [IPC] → booksTtsEdge/index.js (msedge-tts)
-                                → tts_engine_webspeech.js (fallback)
-                   foliate/tts.js (text extraction + SSML)
+listening_player.js (TTS player UI, replaces old reader_tts_ui.js)
+listening_shell.js  (reading/listening mode toggle)
+tts_core.js → tts_engine_edge.js → [IPC] → booksTtsEdge/index.js (msedge-tts)
+              vendor/foliate/tts.js (text extraction + SSML)
 ```
 
 ### Main Process Domains (`main/domains/`)
-books/, booksTtsEdge/, booksAnnotations/, booksBookmarks/, booksProgress/, booksSettings/, booksUi/
+Books: books/, booksTtsEdge/, booksTtsProgress/, booksAnnotations/, booksBookmarks/, booksProgress/, booksSettings/, booksUi/
+Other: archives/, clipboard/, comic/, export/, files/, library/, player_core/, progress/, seriesSettings/, shell/, thumbs/, video/, videoProgress/, videoSettings/, videoUi/, webSources/, webTabs/, window/
 
 ### Storage
 - `main/lib/storage.js` — Atomic JSON writes (temp + rename), debounced
