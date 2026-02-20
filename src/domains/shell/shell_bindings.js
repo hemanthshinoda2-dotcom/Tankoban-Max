@@ -419,6 +419,32 @@
     });
   }
 
+  // FIX-WIN-CTRL2: browser overlay window controls (same actions, different IDs)
+  var webWinMinBtn = document.getElementById('webWinMinBtn');
+  var webWinMaxBtn = document.getElementById('webWinMaxBtn');
+  var webWinCloseBtn = document.getElementById('webWinCloseBtn');
+  if (webWinMinBtn) {
+    webWinMinBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.minimize(); } catch (err) {}
+    });
+  }
+  if (webWinMaxBtn) {
+    webWinMaxBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.toggleMaximize(); } catch (err) {}
+    });
+  }
+  if (webWinCloseBtn) {
+    webWinCloseBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { Tanko.api.window.close(); } catch (err) {}
+    });
+  }
+
   el.seriesBackBtn.addEventListener('click', () => {
     appState.selectedSeriesId = null;
     renderLibrary();

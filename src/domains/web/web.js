@@ -665,6 +665,8 @@
     }
 
     state.browserOpen = false;
+    // BUILD_WCV: hide native views BEFORE showing library (prevents stale overlay)
+    api.webTabs.hideAll().catch(function () {});
     if (el.browserView) el.browserView.classList.add('hidden');
     _showCurrentLibraryView();
     if (el.browserTitle) el.browserTitle.textContent = '';
@@ -674,9 +676,8 @@
     renderContinue();
     hideTips();
     hideContextMenu();
+    closeDownloadsPanel();
     syncLoadBar();
-    // BUILD_WCV: hide all views in main process
-    api.webTabs.hideAll().catch(function () {});
   }
 
   // ---- Tabs management ----
@@ -1090,6 +1091,11 @@
     el.dlPanel.classList.remove('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'false'); } catch (e) {}
     renderDownloadsPanel();
+    // Hide native WebContentsView so it doesn't cover the panel
+    var tab = getActiveTab();
+    if (tab && tab.mainTabId) {
+      api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: { x: 0, y: 0, width: 0, height: 0 } }).catch(function () {});
+    }
   }
 
   function closeDownloadsPanel() {
@@ -1097,6 +1103,8 @@
     state.dlPanelOpen = false;
     el.dlPanel.classList.add('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'true'); } catch (e) {}
+    // Restore native WebContentsView bounds
+    reportBoundsForActiveTab();
   }
 
   function toggleDownloadsPanel() {
