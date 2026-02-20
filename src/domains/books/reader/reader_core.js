@@ -449,8 +449,9 @@
   function bind() {
     var els = RS.ensureEls();
 
-    // Back / close buttons
+    // Back / close / minimize buttons
     els.backBtn && els.backBtn.addEventListener('click', function () { close().catch(function () {}); });
+    els.minBtn && els.minBtn.addEventListener('click', function () { try { Tanko.api.window.minimize(); } catch (e) {} });
     els.closeBtn && els.closeBtn.addEventListener('click', function () { try { Tanko.api.window.close(); } catch (e) {} });
 
     // Error banner actions
