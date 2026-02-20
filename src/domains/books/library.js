@@ -3007,6 +3007,19 @@ function getBookProgress(bookId) {
       var hidden = el.booksDownloadsItems.classList.toggle('hidden');
       el.booksDownloadsHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Downloads';
     });
+    el.booksDownloadsHeader.oncontextmenu = function (e) {
+      try { e.preventDefault(); } catch (err) {}
+      var items = [];
+      items.push({ label: 'Remove all', onClick: function () {
+        if (api.webSources && api.webSources.clearDownloadHistory) {
+          api.webSources.clearDownloadHistory().then(function () {
+            _booksDls = _booksDls.filter(function (x) { return x && (x.state === 'progressing' || x.state === 'paused'); });
+            renderBooksDownloads();
+          }).catch(function () {});
+        }
+      }});
+      showCtx({ x: e.clientX, y: e.clientY, items: items });
+    };
   }
 
   init().catch((err) => {

@@ -779,6 +779,19 @@ Hot search tokens:
       var hidden = el.comicsDownloadsItems.classList.toggle('hidden');
       el.comicsDownloadsHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Downloads';
     });
+    el.comicsDownloadsHeader.oncontextmenu = function (e) {
+      try { e.preventDefault(); } catch (err) {}
+      var _a = window.Tanko && window.Tanko.api;
+      if (!_a || !_a.webSources || !_a.webSources.clearDownloadHistory) return;
+      var items = [];
+      items.push({ label: 'Remove all', onClick: function () {
+        _a.webSources.clearDownloadHistory().then(function () {
+          _comicsDls = _comicsDls.filter(function (x) { return x && (x.state === 'progressing' || x.state === 'paused'); });
+          renderComicsDownloads();
+        }).catch(function () {});
+      }});
+      showContextMenu({ x: e.clientX, y: e.clientY, items: items });
+    };
   }
 
   function renderSeriesGrid() {
