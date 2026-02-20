@@ -78,6 +78,9 @@ const CHANNEL = {
   /** Reveal path in file explorer. Returns: void */
   SHELL_REVEAL_PATH: 'shell:revealPath',
 
+  /** Open a file with the OS default handler. Args: { path }. Returns: { ok, error? } */
+  SHELL_OPEN_PATH: 'shell:openPath',
+
   // ========================================
   // Clipboard
   // ========================================
@@ -680,6 +683,15 @@ const CHANNEL = {
 
   /** Remove a single download history entry by id. Args: { id }. Returns: { ok } */
   WEB_DOWNLOAD_HISTORY_REMOVE: 'webDownload:historyRemove',
+
+  /** Pause an active download. Args: { id }. Returns: { ok, error? } */
+  WEB_DOWNLOAD_PAUSE: 'webDownload:pause',
+
+  /** Resume a paused download. Args: { id }. Returns: { ok, error? } */
+  WEB_DOWNLOAD_RESUME: 'webDownload:resume',
+
+  /** Cancel an active download. Args: { id }. Returns: { ok, error? } */
+  WEB_DOWNLOAD_CANCEL: 'webDownload:cancel',
 
   // ========================================
   // Web Tabs (BUILD_WCV)

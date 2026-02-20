@@ -46,6 +46,23 @@ async function revealPath(ctx, _evt, targetPath) {
   }
 }
 
+/**
+ * Open a path with the OS default handler.
+ * - If it's a folder: open the folder.
+ * - If it's a file: open the file.
+ */
+async function openPath(ctx, _evt, targetPath) {
+  try {
+    const p = String(targetPath || '');
+    if (!p) return { ok: false, error: 'Missing path' };
+    const err = await shell.openPath(p);
+    return err ? { ok: false, error: err } : { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 module.exports = {
   revealPath,
+  openPath,
 };

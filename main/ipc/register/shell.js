@@ -5,6 +5,7 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   // ========== IPC: Shell (Phase 4B: delegated to domains/shell) ==========
     // TRACE:IPC_IN ipcMain.handle(CHANNEL.SHELL_REVEAL_PATH, (e, ...args) => domains.shellDomain.revealPath(ctx, e, ...args));
   ipcMain.handle(CHANNEL.SHELL_REVEAL_PATH, (e, ...args) => domains.shellDomain.revealPath(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.SHELL_OPEN_PATH, (e, ...args) => domains.shellDomain.openPath(ctx, e, ...args));
 
     // TRACE:IPC_IN ipcMain.handle(CHANNEL.CLIPBOARD_WRITE_TEXT, async (_evt, text) => domains.clipboardDomain.writeText(ctx, _evt, text));
   ipcMain.handle(CHANNEL.CLIPBOARD_WRITE_TEXT, async (_evt, text) => domains.clipboardDomain.writeText(ctx, _evt, text));

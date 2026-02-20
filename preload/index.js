@@ -59,6 +59,7 @@ const api = {
   shell: {
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     revealPath: (path) => ipcRenderer.invoke(CHANNEL.SHELL_REVEAL_PATH, path),
+    openPath: (path) => ipcRenderer.invoke(CHANNEL.SHELL_OPEN_PATH, path),
   },
 
   // ========================================
@@ -406,6 +407,9 @@ const api = {
     getDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_GET),
     clearDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_CLEAR),
     removeDownloadHistory: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_REMOVE, payload),
+    pauseDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_PAUSE, payload),
+    resumeDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_RESUME, payload),
+    cancelDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_CANCEL, payload),
     onUpdated: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));

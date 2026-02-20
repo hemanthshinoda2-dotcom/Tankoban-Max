@@ -758,6 +758,36 @@
   border-color: rgba(255,255,255,.18);
 }
 
+.webDlSvg { display: inline-flex; align-items: center; justify-content: center; }
+.webDlSvg svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+.webDlFavicon { width: 16px; height: 16px; border-radius: 3px; display: block; }
+
+.webDlActions{
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.webDlItem:hover .webDlActions{ opacity: 1; }
+
+.webDlAction,
+.webDlRemove{
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+.webDlAction:hover{ background: rgba(255,255,255,0.10); }
+.webDlAction:active{ transform: translateY(1px); }
+
 /* FIX-WEB-DL: Chrome-like download bottom bar */
 .webDlBar{
   flex-shrink: 0;

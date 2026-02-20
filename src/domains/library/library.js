@@ -577,6 +577,44 @@ Hot search tokens:
   var _comicsDls = [];
   var _comicsDlTimer = null;
 
+  function normalizeComicsDl(info) {
+    if (!info) return null;
+    var d = Object.assign({}, info);
+    d.id = String(d.id || '');
+    d.filename = String(d.filename || '');
+    d.destination = d.destination ? String(d.destination) : '';
+    d.library = d.library ? String(d.library) : '';
+    d.state = String(d.state || '');
+    if (d.state === 'downloading' || d.state === 'in_progress' || d.state === 'progressing') d.state = 'progressing';
+    if (d.state === 'paused') d.state = 'paused';
+    if (d.state === 'cancelled') d.state = 'cancelled';
+    d.receivedBytes = Number(d.receivedBytes || 0);
+    d.totalBytes = Number(d.totalBytes || 0);
+    if (typeof d.progress !== 'number' || !isFinite(d.progress)) d.progress = null;
+    if (d.progress == null && d.totalBytes > 0) d.progress = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
+    if (typeof d.progress === 'number') d.progress = Math.max(0, Math.min(1, d.progress));
+    d.bytesPerSec = Number(d.bytesPerSec || 0);
+    return d;
+  }
+
+  function formatBytes(n) {
+    n = Number(n || 0);
+    if (!isFinite(n) || n <= 0) return '0 B';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
+    var dp = i <= 1 ? 0 : (i === 2 ? 1 : 2);
+    return n.toFixed(dp) + ' ' + u[i];
+  }
+
+  function shortPath(p) {
+    if (!p) return '';
+    var s = String(p).replace(/\\/g, '/');
+    var parts = s.split('/');
+    if (parts.length <= 2) return s;
+    return '…/' + parts.slice(-2).join('/');
+  }
+
   function renderComicsDownloads() {
     var wrap = el.comicsDownloadsList;
     var empty = el.comicsDownloadsEmpty;
@@ -603,7 +641,9 @@ Hot search tokens:
     var html = '';
     for (var j = 0; j < list.length; j++) {
       var d = list[j];
-      var isActive = d.state === 'progressing';
+      var isActive = (d.state === 'progressing' || d.state === 'paused');
+      var isPaused = d.state === 'paused';
+      var isOk = d.state === 'completed';
       var isBad = d.state === 'interrupted' || d.state === 'cancelled';
       var p = null;
       if (isActive) {
@@ -611,8 +651,9 @@ Hot search tokens:
         else if (d.totalBytes > 0 && d.receivedBytes != null) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
       }
       var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
-      var sub = isActive ? (pctTxt || 'Downloading...') : (isBad ? 'Failed' : 'Saved');
-      html += '<div class="sidebarDlItem' + (isActive ? ' sidebarDlItem--active' : '') + (isBad ? ' sidebarDlItem--bad' : '') + '" data-dl-dest="' + escapeHtml(d.destination || '') + '">'
+      var stateTxt = isPaused ? 'Paused' : (isActive ? 'Downloading' : (isOk ? 'Saved' : (d.state === 'cancelled' ? 'Cancelled' : 'Failed')));
+      var sub = isActive ? ((isPaused ? 'Paused' : pctTxt) + ' \u2022 ' + formatBytes(d.receivedBytes) + '/' + formatBytes(d.totalBytes)) : (isOk ? shortPath(d.destination) : (d.error || (d.state === 'cancelled' ? 'Cancelled' : 'Failed')));
+      html += '<div class="sidebarDlItem' + (isActive ? ' sidebarDlItem--active' : '') + (isBad ? ' sidebarDlItem--bad' : '') + '" data-dl-id="' + escapeHtml(d.id || '') + '" data-dl-dest="' + escapeHtml(d.destination || '') + '">'
         + '<div class="sidebarDlName">' + escapeHtml(d.filename) + '</div>'
         + '<div class="sidebarDlSub">' + escapeHtml(sub) + '</div>'
         + (isActive ? '<div class="sidebarDlBar"><div class="sidebarDlFill" style="width:' + (pctTxt || '0%') + '"></div></div>' : '')
@@ -623,26 +664,45 @@ Hot search tokens:
     var items = wrap.querySelectorAll('.sidebarDlItem');
     for (var k = 0; k < items.length; k++) {
       items[k].addEventListener('click', function () {
-        var dest = this.getAttribute('data-dl-dest');
-        if (!dest) return;
-        var _api = window.Tanko && window.Tanko.api;
-        if (!_api) return;
-        if (_api.library && _api.library.bookFromPath) {
-          _api.library.bookFromPath(dest).then(function (res) {
-            if (res && res.ok && res.book && res.book.path) {
-              try { window.openBook(res.book); } catch (err) {}
-            } else if (_api.shell && _api.shell.revealPath) {
-              try { _api.shell.revealPath(dest); } catch (err) {}
-            }
-          }).catch(function () {
-            if (_api.shell && _api.shell.revealPath) {
-              try { _api.shell.revealPath(dest); } catch (err) {}
-            }
-          });
-        } else if (_api.shell && _api.shell.revealPath) {
-          try { _api.shell.revealPath(dest); } catch (err) {}
+        var id = this.getAttribute('data-dl-id');
+        var d = _comicsDls.find(function (x) { return x && x.id === id; });
+        if (!d) return;
+        if (d.state === 'completed' && d.destination) {
+          if (api && api.shell && api.shell.revealPath) api.shell.revealPath(d.destination);
+          return;
         }
+        if (d.destination) openBook(d.destination, { id: d.id });
       });
+
+      items[k].oncontextmenu = function (e) {
+        try { e.preventDefault(); } catch (err) {}
+        var id = this.getAttribute('data-dl-id');
+        var d = null;
+        for (var m = 0; m < _comicsDls.length; m++) { if (_comicsDls[m] && _comicsDls[m].id === id) { d = _comicsDls[m]; break; } }
+        if (!d) return;
+        var _a = window.Tanko && window.Tanko.api;
+        if (!_a) return;
+
+        var isActive = (d.state === 'progressing' || d.state === 'paused');
+        var isPaused = d.state === 'paused';
+        var isOk = d.state === 'completed';
+
+        var menu = [];
+        if (isOk && d.destination) {
+          menu.push({ label: 'Open', onClick: function () { try { _a.shell.openPath ? _a.shell.openPath(d.destination) : _a.shell.revealPath(d.destination); } catch (err2) {} } });
+          menu.push({ label: 'Show in folder', onClick: function () { try { _a.shell.revealPath(d.destination); } catch (err3) {} } });
+        }
+        if (isActive && _a.webSources) {
+          if (isPaused && _a.webSources.resumeDownload) menu.push({ label: 'Resume', onClick: function () { _a.webSources.resumeDownload({ id: d.id }).catch(function () {}); } });
+          if (!isPaused && _a.webSources.pauseDownload) menu.push({ label: 'Pause', onClick: function () { _a.webSources.pauseDownload({ id: d.id }).catch(function () {}); } });
+          if (_a.webSources.cancelDownload) menu.push({ label: 'Cancel', onClick: function () { _a.webSources.cancelDownload({ id: d.id }).catch(function () {}); } });
+        }
+        if (!isActive && _a.webSources && _a.webSources.removeDownloadHistory) {
+          menu.push({ label: 'Remove', onClick: function () { _a.webSources.removeDownloadHistory({ id: d.id }).then(function () { _comicsDls = _comicsDls.filter(function (x) { return x && x.id !== d.id; }); renderComicsDownloads(); }).catch(function () {}); } });
+        }
+        if (!menu.length) return;
+        showContextMenu({ x: e.clientX, y: e.clientY, items: menu });
+      };
     }
   }
 
@@ -655,6 +715,7 @@ Hot search tokens:
   }
 
   function comicsDlUpsert(info) {
+    info = normalizeComicsDl(info);
     if (!info) return;
     var id = info.id != null ? String(info.id) : '';
     var found = null;
@@ -683,7 +744,7 @@ Hot search tokens:
     if (!_api || !_api.webSources || !_api.webSources.getDownloadHistory) return;
     _api.webSources.getDownloadHistory().then(function (res) {
       if (!res || !res.ok || !Array.isArray(res.downloads)) return;
-      _comicsDls = res.downloads;
+      _comicsDls = (res.downloads || []).map(normalizeComicsDl).filter(Boolean);
       renderComicsDownloads();
     }).catch(function () {});
   }

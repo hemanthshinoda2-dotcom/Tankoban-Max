@@ -87,6 +87,7 @@
     activeTabId: null,
     nextTabId: 1,
     downloading: 0,
+    downloadingHasProgress: false,
     lastDownloadName: '',
     lastDownloadProgress: null,
     downloads: [],      // { id, filename, destination?, library?, state, startedAt, finishedAt?, error? }
@@ -779,6 +780,46 @@
     // MERIDIAN_DRAG: Tab drag reorder
     var tabEls = el.tabBar.querySelectorAll('.webTab[draggable]');
     for (var di = 0; di < tabEls.length; di++) {
+      // Tab context menu + middle click close
+      tabEls[di].addEventListener('auxclick', function (e) {
+        if (!e || e.button !== 1) return;
+        e.preventDefault();
+        var id = Number(this.getAttribute('data-tab-id'));
+        if (!isFinite(id)) return;
+        closeTab(id);
+      });
+
+      tabEls[di].addEventListener('contextmenu', function (e) {
+        try { e.preventDefault(); } catch (err) {}
+        var id = Number(this.getAttribute('data-tab-id'));
+        if (!isFinite(id)) return;
+        var t = null, idx = -1;
+        for (var i = 0; i < state.tabs.length; i++) {
+          if (state.tabs[i] && state.tabs[i].id === id) { t = state.tabs[i]; idx = i; break; }
+        }
+        if (!t) return;
+        var items = [];
+        items.push({ label: 'New tab', onClick: function () { createTab(''); } });
+        items.push({ label: 'Duplicate tab', onClick: function () { createTab(t.url || ''); } });
+        items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) api.webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+        items.push({ separator: true });
+        items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
+        items.push({ separator: true });
+        items.push({ label: 'Close tab', onClick: function () { closeTab(id); } });
+        items.push({ label: 'Close other tabs', onClick: function () {
+          var ids = [];
+          for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i] && state.tabs[i].id !== id) ids.push(state.tabs[i].id);
+          for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
+        }});
+        items.push({ label: 'Close tabs to the right', onClick: function () {
+          if (idx < 0) return;
+          var ids = [];
+          for (var i = idx + 1; i < state.tabs.length; i++) if (state.tabs[i]) ids.push(state.tabs[i].id);
+          for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
+        }});
+        showContextMenu(items, e.clientX, e.clientY);
+      });
+
       tabEls[di].addEventListener('dragstart', function (e) {
         var id = this.getAttribute('data-tab-id');
         state.dragTabId = parseInt(id, 10);
@@ -835,14 +876,15 @@
       var show = state.downloading > 0;
       el.dlPill.classList.toggle('hidden', !show);
       if (show) {
-        if (state.downloading > 1) el.dlPill.textContent = 'Downloading… (' + state.downloading + ')';
-        else el.dlPill.textContent = 'Downloading…';
+        var label = state.downloadingHasProgress ? 'Downloading…' : 'Paused…';
+        if (state.downloading > 1) el.dlPill.textContent = label + ' (' + state.downloading + ')';
+        else el.dlPill.textContent = label;
       }
     }
 
     if (el.downloadStatus) {
       if (state.downloading > 0) {
-        el.downloadStatus.textContent = state.lastDownloadName ? ('Downloading: ' + state.lastDownloadName) : ('Downloading… (' + state.downloading + ')');
+        el.downloadStatus.textContent = state.lastDownloadName ? ((state.downloadingHasProgress ? 'Downloading: ' : 'Paused: ') + state.lastDownloadName) : ((state.downloadingHasProgress ? 'Downloading… (' : 'Paused… (') + state.downloading + ')');
       } else {
         // keep whatever latest completion message set; fall back if blank
         if (!el.downloadStatus.textContent) el.downloadStatus.textContent = 'No active downloads';
@@ -865,7 +907,7 @@
         var bestAt = -1;
         for (var i = 0; i < state.downloads.length; i++) {
           var d = state.downloads[i];
-          if (!d || d.state !== 'progressing') continue;
+          if (!d || (d.state !== 'progressing' && d.state !== 'paused')) continue;
           var at = Number(d.startedAt || 0);
           if (at >= bestAt) {
             bestAt = at;
@@ -941,11 +983,11 @@
   function normalizeDownload(d) {
     if (!d) return null;
     var out = {
-      id: d.id != null ? String(d.id) : '',
-      filename: d.filename != null ? String(d.filename) : 'Download',
+      id: String(d.id || ''),
+      filename: String(d.filename || ''),
       destination: d.destination != null ? String(d.destination) : '',
       library: d.library != null ? String(d.library) : '',
-      state: d.state != null ? String(d.state) : 'completed',
+      state: String(d.state || ''),
       startedAt: d.startedAt != null ? Number(d.startedAt) : null,
       finishedAt: d.finishedAt != null ? Number(d.finishedAt) : null,
       error: d.error != null ? String(d.error) : '',
@@ -956,18 +998,26 @@
       progress: d.progress != null ? Number(d.progress) : null,
       bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
     };
-    if (out.state === 'downloading' || out.state === 'in_progress') out.state = 'progressing';
+    if (out.state === 'downloading' || out.state === 'in_progress' || out.state === 'progressing') out.state = 'progressing';
+    if (out.state === 'paused') out.state = 'paused';
+    if (out.state === 'cancelled') out.state = 'cancelled';
+    if (typeof out.progress === 'number') out.progress = Math.max(0, Math.min(1, out.progress));
+    if (out.progress == null && out.totalBytes > 0 && out.receivedBytes >= 0) out.progress = Math.max(0, Math.min(1, out.receivedBytes / out.totalBytes));
     if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     return out;
   }
 
   function recomputeDownloadingCount() {
-    var c = 0;
+    var active = 0;
+    var hasProgress = false;
     for (var i = 0; i < state.downloads.length; i++) {
-      if (state.downloads[i] && state.downloads[i].state === 'progressing') c++;
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (d.state === 'progressing') { active++; hasProgress = true; }
+      else if (d.state === 'paused') { active++; }
     }
-    state.downloading = c;
-    syncDownloadIndicator();
+    state.downloading = active;
+    state.downloadingHasProgress = hasProgress;
   }
 
   var dlRenderTimer = null;
@@ -1167,13 +1217,6 @@
     el.dlPanel.classList.remove('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'false'); } catch (e) {}
     renderDownloadsPanel();
-    // Shrink native WebContentsView to leave room for the downloads panel on the right
-    var tab = getActiveTab();
-    if (tab && tab.mainTabId) {
-      var bounds = getContainerBounds();
-      bounds.width = Math.max(0, bounds.width - 384);
-      api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: bounds }).catch(function () {});
-    }
   }
 
   function closeDownloadsPanel() {
@@ -1181,8 +1224,7 @@
     state.dlPanelOpen = false;
     el.dlPanel.classList.add('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'true'); } catch (e) {}
-    // Restore native WebContentsView bounds (only if browser is still open)
-    if (state.browserOpen) reportBoundsForActiveTab();
+    // No native resize needed; downloads panel floats above the content like Chrome.
   }
 
   function toggleDownloadsPanel() {
@@ -1626,6 +1668,11 @@
       } catch (err) {}
       return;
     }
+    if (ctrl && !e.shiftKey && (lower === 'j')) {
+      e.preventDefault();
+      toggleDownloadsPanel();
+      return;
+    }
 
     // Chrome-like tab switching
     if (ctrl && key === 'Tab') {
@@ -1999,7 +2046,14 @@
             break;
           }
         }
+        if (state.lastDownloadProgress == null) {
+          for (var j2 = 0; j2 < state.downloads.length; j2++) {
+            var dd2 = state.downloads[j2];
+            if (dd2 && dd2.state === 'paused' && typeof dd2.progress === 'number' && isFinite(dd2.progress)) { state.lastDownloadProgress = dd2.progress; break; }
+          }
+        }
         recomputeDownloadingCount();
+        syncDownloadIndicator();
         renderDownloadsPanel();
         renderHomeDownloads();
       });
@@ -2019,17 +2073,29 @@
     if (api.webSources.onDownloadProgress) {
       api.webSources.onDownloadProgress(function (info) {
         var fn = (info && info.filename) ? String(info.filename) : '';
+        var st = (info && info.state) ? String(info.state) : '';
         var p = (info && typeof info.progress === 'number') ? info.progress : null;
         if (p != null && isFinite(p)) state.lastDownloadProgress = p;
         upsertDownload(info);
         var pctStr = (p != null) ? (' ' + Math.round(p * 100) + '%') : '';
-        showDlBar('Downloading: ' + fn + pctStr, p);
+        if (st === 'paused') showDlBar('Paused: ' + fn + pctStr, p);
+        else showDlBar('Downloading: ' + fn + pctStr, p);
+        syncDownloadIndicator();
       });
     }
 
     if (api.webSources.onDownloadCompleted) {
       api.webSources.onDownloadCompleted(function (info) {
         upsertDownload(info);
+        var cancelled = (info && (String(info.error || '') === 'Cancelled' || String(info.state || '') === 'cancelled'));
+        if (cancelled) {
+          showToast('Download cancelled');
+          showDlBar('Cancelled: ' + ((info && info.filename) ? info.filename : ''), null);
+          if (el.downloadStatus) el.downloadStatus.textContent = 'Cancelled: ' + ((info && info.filename) ? info.filename : '');
+          autohideDlBar();
+          syncDownloadIndicator();
+          return;
+        }
 
         if (info && info.ok) {
           var msg = 'Download saved';
@@ -2047,6 +2113,7 @@
           }
         }
         autohideDlBar();
+        syncDownloadIndicator();
 
         if (state.downloading === 0) {
           setTimeout(function () {
