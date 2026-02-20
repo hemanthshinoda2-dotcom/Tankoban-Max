@@ -155,15 +155,16 @@
 
   async function applyPdfFit(mode) {
     var state = RS.state;
-    if (!state.engine) return;
-    if (mode === 'page' && typeof state.engine.fitPage === 'function') await state.engine.fitPage();
-    else if (mode === 'width' && typeof state.engine.fitWidth === 'function') await state.engine.fitWidth();
+    if (!state.engine || typeof state.engine.setFitMode !== 'function') return;
+    await state.engine.setFitMode(mode);
   }
 
   async function adjustPdfZoom(delta) {
     var state = RS.state;
-    if (!state.engine || typeof state.engine.zoom !== 'function') return;
-    await state.engine.zoom(delta);
+    if (!state.engine || typeof state.engine.setZoom !== 'function') return;
+    var loc = (typeof state.engine.getLocator === 'function') ? state.engine.getLocator() : {};
+    var current = Number(loc.zoom || 1);
+    await state.engine.setZoom(current + delta);
   }
 
   // ── Flow mode toggle ────────────────────────────────────────────
