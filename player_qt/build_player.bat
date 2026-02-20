@@ -12,11 +12,11 @@ echo [player] preflight checks
 REM Pick a Python launcher
 set "PY_CMD="
 where py >nul 2>nul
-if %errorlevel%==0 (
+if not errorlevel 1 (
   set "PY_CMD=py"
 ) else (
   where python >nul 2>nul
-  if %errorlevel%==0 set "PY_CMD=python"
+  if not errorlevel 1 set "PY_CMD=python"
 )
 
 if "%PY_CMD%"=="" (
