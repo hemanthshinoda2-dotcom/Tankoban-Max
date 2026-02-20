@@ -595,12 +595,14 @@
   // ── Block Playback (EPUB via queue) ─────────────────────────────
 
   // FIX-TTS05: Play the queue item at _queue.index
-  function _speakQueueItem(queueIdx) {
+  function _speakQueueItem(queueIdx, opts) {
     if (queueIdx < 0 || queueIdx >= _queue.length) {
       handleAllBlocksDone();
       return;
     }
     if (!state.engine) { stop(); return; }
+
+    var useGapless = !!(opts && opts.gapless);
 
     var item = _queue.items[queueIdx];
     // FIX-TTS06: Skip empty blocks AND whitespace-only / trivially short text.
@@ -648,7 +650,14 @@
     // OPT1: adaptive count based on playback rate
     _preloadAhead(queueIdx + 1, _adaptivePreloadCount());
 
-    state.engine.speak(item.text);
+    // PATCH3: Use gapless speak when advancing sequentially.
+    // This keeps the current audio playing until the next block audio is ready,
+    // reducing micro-gaps in long listening sessions.
+    if (useGapless && typeof state.engine.speakGapless === 'function') {
+      state.engine.speakGapless(item.text);
+    } else {
+      state.engine.speak(item.text);
+    }
   }
 
   // OPT1: Adaptive preload count — more blocks at higher playback rates
@@ -689,7 +698,7 @@
     // Advance to next queue item
     var nextIdx = _queue.index + 1;
     if (nextIdx < _queue.length) {
-      _speakQueueItem(nextIdx);
+      _speakQueueItem(nextIdx, { gapless: true });
     } else {
       handleAllBlocksDone();
     }
