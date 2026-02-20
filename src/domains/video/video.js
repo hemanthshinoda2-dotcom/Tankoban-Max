@@ -96,6 +96,7 @@ videoProgress IPC calls
     videoContinueList: qs('videoContinueList'),
 
     videoContinueEmpty: qs('videoContinueEmpty'),
+    videoClearContinueBtn: qs('videoClearContinueBtn'),
     // Episode list controls (Build 3.4)
     videoEpSearch: qs('videoEpSearch'),
     clearVideoEpSearch: qs('clearVideoEpSearch'),
@@ -9174,6 +9175,18 @@ function bindKeyboard(){
 
     el.videoScanCancel?.addEventListener('click', () => {
       safe(() => Tanko.api.video.cancelScan());
+    });
+
+    el.videoClearContinueBtn?.addEventListener('click', async () => {
+      const ok = window.confirm('Clear all Continue items? This will remove saved watch progress.');
+      if (!ok) return;
+      try { await Tanko.api.videoProgress.clearAll(); } catch {}
+      state.progress = {};
+      state.dismissedContinueShows = {};
+      persistVideoUiState();
+      renderContinue();
+      if (state.videoSubView === 'home') renderVideoHome();
+      toast('Continue cleared');
     });
 
     // Listen to video scan events

@@ -34,6 +34,7 @@
     scanPill: qs('booksScanPill'),
     scanText: qs('booksScanText'),
     scanCancel: qs('booksScanCancel'),
+    clearContinueBtn: qs('booksClearContinueBtn'),
 
     rootLabel: qs('booksRootLabel'),
     showsGrid: qs('booksShowsGrid') || qs('booksSeriesGrid'),
@@ -2661,6 +2662,19 @@ function getBookProgress(bookId) {
       e.preventDefault();
       e.stopPropagation();
       try { await api.books.cancelScan(); toast('Refresh canceled'); } catch {}
+    });
+
+    el.clearContinueBtn && el.clearContinueBtn.addEventListener('click', async function () {
+      var ok = window.confirm('Clear all Continue items? This will remove saved reading progress.');
+      if (!ok) return;
+      try { await api.booksProgress.clearAll(); } catch {}
+      state.progressAll = {};
+      state.ui.dismissedContinueShows = {};
+      scheduleSaveUi();
+      rebuildShowProgressSummary();
+      renderContinue();
+      if (state.ui.booksSubView === 'home') renderHome();
+      toast('Continue cleared');
     });
 
     el.showBackBtn && el.showBackBtn.addEventListener('click', () => {
