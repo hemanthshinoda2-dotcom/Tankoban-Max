@@ -599,7 +599,9 @@
           // Map user margin to paginator gap + max-inline-size (paginator handles margins, not ReadiumCSS)
           const margin = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
-            state.view.renderer.setAttribute('gap', Math.round(margin * 7) + '%');
+            // FIX-MARGIN-MINPAD: enforce 2% minimum gap so text never overlaps HUD/chapter footer
+            var gapPct = Math.max(2, Math.round(margin * 7));
+            state.view.renderer.setAttribute('gap', gapPct + '%');
             // FIX-MARGIN-FULLWIDTH: remove the default 720px column cap so text can expand fully;
             // the gap percentage above still controls side spacing
             state.view.renderer.setAttribute('max-inline-size', '9999px');
