@@ -906,7 +906,7 @@ function getBookProgress(bookId) {
           path: s.path || resolveRootRelPath(root.path, s.folderRelPath || ''),
           relPath: normalizeRel(s.folderRelPath || ''),
           seriesId: String(s.id || ''),
-          removableSeriesPath: explicitSeriesPaths.has(normalizePathKey(s.path || '')) ? String(s.path || '') : null,
+          removableSeriesPath: (s.path || '') ? String(s.path || '') : null,
         }, list);
       }
     }
@@ -1204,6 +1204,39 @@ function getBookProgress(bookId) {
     else renderHome();
   }
 
+  function openContinueTileContextMenu(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    var show = item && item.show;
+    var book = item && item.book;
+    if (!show || !book) return;
+    showCtx({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: _listenMode ? 'Continue listening' : 'Continue reading', onClick: function () { openBook(book).catch(function () {}); } },
+        { label: 'Open series', onClick: function () { openShow(show.id); } },
+        { label: 'Listen to book', onClick: function () {
+          var shell = window.booksListeningShell;
+          if (shell && typeof shell.openListenBook === 'function') shell.openListenBook(book);
+          else if (shell) shell.setMode(shell.MODE_LISTEN);
+        }},
+        { separator: true },
+        { label: 'Mark as finished', onClick: function () { markBookFinished(book.id); } },
+        { label: 'Clear from Continue Reading', onClick: function () { clearContinueShow(show.id, book.id); } },
+        { separator: true },
+        { label: 'Reveal in Explorer', disabled: !(canReveal() && book.path), onClick: function () {
+          if (book.path) api.shell.revealPath(book.path);
+        }},
+        { label: 'Copy path', disabled: !book.path, onClick: function () {
+          if (book.path && api.clipboard && api.clipboard.copyText) {
+            api.clipboard.copyText(book.path).then(function () { toast('Path copied'); }).catch(function () {});
+          }
+        }},
+      ],
+    });
+  }
+
   function makeContinueTile(item) {
     const show = item && item.show;
     const book = item && item.book;
@@ -1257,6 +1290,9 @@ function getBookProgress(bookId) {
     tile.onclick = () => {
       openBook(book).catch(() => {});
     };
+    tile.addEventListener('contextmenu', (e) => {
+      openContinueTileContextMenu(e, item);
+    });
     return tile;
   }
 

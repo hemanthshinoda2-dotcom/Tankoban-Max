@@ -463,13 +463,41 @@ async function removeSeriesFolder(ctx, _evt, folderPath) {
   try { booksCache.pendingPrunePrevBookIds = (booksCache.idx.books || []).map((b) => b && b.id).filter(Boolean); } catch {}
 
   const state = readBooksConfig(ctx);
-  state.bookSeriesFolders = (state.bookSeriesFolders || []).filter((p) => pathKey(p) !== pathKey(target));
-  await writeBooksConfig(ctx, state);
+  const wasExplicit = (state.bookSeriesFolders || []).some((p) => pathKey(p) === pathKey(target));
+
+  if (wasExplicit) {
+    state.bookSeriesFolders = (state.bookSeriesFolders || []).filter((p) => pathKey(p) !== pathKey(target));
+    await writeBooksConfig(ctx, state);
+  }
+
+  // Remove matching series + their books from the in-memory index
+  const tk = pathKey(target);
+  const removedIds = new Set();
+  booksCache.idx.series = (booksCache.idx.series || []).filter((s) => {
+    if (pathKey(s.path || '') === tk) { removedIds.add(String(s.id || '')); return false; }
+    return true;
+  });
+  if (removedIds.size) {
+    booksCache.idx.books = (booksCache.idx.books || []).filter((b) => !removedIds.has(String(b.seriesId || '')));
+  }
+
+  // Persist the trimmed index so it survives restarts (until next scan)
+  try {
+    const indexPath = ctx.storage.dataPath('books_library_index.json');
+    fs.writeFileSync(indexPath, JSON.stringify(booksCache.idx, null, 2), 'utf-8');
+  } catch (_e) { /* best-effort */ }
 
   booksCache.pendingPruneProgress = true;
 
+  if (wasExplicit) {
+    const snap = makeBooksStateSnapshot(ctx, state);
+    startBooksScan(ctx, state, { force: true });
+    return { ok: true, state: snap };
+  }
+
+  // Auto-discovered series: no rescan (it would rediscover immediately)
   const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  emitBooksUpdated(ctx);
   return { ok: true, state: snap };
 }
 
