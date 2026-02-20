@@ -834,6 +834,11 @@ export class Paginator extends HTMLElement {
         element[scrollProp] = Math.max(min, Math.min(max,
             element[scrollProp] + delta))
     }
+    // FIX-SCROLL: expose container scrolling for external callers (wheel forwarding)
+    scrollByDelta(delta) {
+        if (!this.scrolled) return
+        this.#container.scrollBy({ top: delta, behavior: 'auto' })
+    }
     snap(vx, vy) {
         const velocity = this.#vertical ? vy : vx
         const [offset, a, b] = this.#scrollBounds

@@ -313,7 +313,7 @@
     var state = RS.state;
     if (!state.engine || typeof state.engine.setPauseBoundary !== 'function') return;
     // FIX_AUDIT: scrolled EPUB/TXT should continue directly into the next chapter.
-    state.engine.setPauseBoundary(!isScrolledTextFlow());
+    state.engine.setPauseBoundary(false);
   }
 
   var syncOnActivityTs = 0;

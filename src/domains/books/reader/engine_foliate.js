@@ -355,7 +355,7 @@
       const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
       const userOverrides = fontSize !== 100
         ? (isScrolled
-          ? (':root{--USER__fontSize:' + fontSize + '% !important;}\nhtml,body{font-size:' + fontSize + '% !important;}\nhtml{scroll-behavior:auto !important;scroll-snap-type:none !important;}\nbody{scroll-behavior:auto !important;}\n:root{overscroll-behavior:contain;}')
+          ? (':root{--USER__fontSize:' + fontSize + '% !important;}\nhtml,body{font-size:' + fontSize + '% !important;}\nhtml{scroll-behavior:auto !important;scroll-snap-type:none !important;}\nbody{scroll-behavior:auto !important;}')
           : ('body { font-size: ' + fontSize + '% !important; }'))
         : (isScrolled ? ':root{--USER__fontSize:100% !important;}' : '');
       // BUILD_JUSTIFY: prevent last-line stretch when text-align is justify
@@ -529,8 +529,6 @@
         try {
           // PATCH7_SCROLL: preserve scroll position in scrolled flow when typography changes
           const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
-          // PATCH8_SCROLL: ensure wheel forwarding is installed in scrolled flow
-          if (isScrolled) installWheelBridgeIfNeeded();
           let beforeScrollY = null;
           try {
             const renderer = state.view && state.view.renderer;
@@ -1297,112 +1295,12 @@
       return state.view.renderer.prevSection();
     }
 
-    // PATCH8_SCROLL: wheel/trackpad forwarding in scrolled flow so scrolling feels consistent
-    // even when the pointer is over margins/HUD containers. Also normalizes deltaMode.
-    let _wheelBridgeInstalled = false;
-    let _wheelPendingY = 0;
-    let _wheelRaf = 0;
-    let _wheelVelY = 0;
-    let _wheelAnimating = false;
-
-    function installWheelBridgeIfNeeded() {
-      if (_wheelBridgeInstalled) return;
-      try {
-        const els = window.booksReaderState && window.booksReaderState.ensureEls ? window.booksReaderState.ensureEls() : null;
-        const host = els && els.readerView ? els.readerView : null;
-        const renderer = state.view && state.view.renderer;
-        const iframe = renderer && renderer.element ? renderer.element : null;
-        if (!host || !iframe) return;
-
-        const normalizeDelta = (e) => {
-          let dy = e.deltaY || 0;
-          const mode = Number(e.deltaMode || 0);
-          if (mode === 1) dy *= 16; // lines -> px-ish
-          else if (mode === 2) dy *= (host.clientHeight || window.innerHeight || 800) * 0.9; // pages
-          // tame extreme wheel spikes (some mice)
-          if (dy > 220) dy = 220;
-          if (dy < -220) dy = -220;
-          return dy;
-        };
-
-        const onWheel = (e) => {
-          // Let browser zoom gestures work normally
-          if (e.ctrlKey) return;
-          // Ignore if an overlay is open and wants the wheel
-          const t = e.target;
-          if (t && t.closest && t.closest('.br-overlay, .br-settings, .br-modal, [data-overlay]')) return;
-
-          const win = iframe.contentWindow;
-          if (!win) return;
-
-          e.preventDefault();
-          // PATCH9_SCROLL: kinetic scrolling in scrolled flow.
-          // Trackpads produce many tiny deltas; wheels produce fewer large deltas.
-          // We accumulate velocity and decay it over animation frames to feel less "steppy".
-          _wheelPendingY += normalizeDelta(e);
-
-          // Clamp per-event contribution to avoid insane spikes from some devices.
-          const add = Math.max(-240, Math.min(240, _wheelPendingY));
-          _wheelPendingY = 0;
-          _wheelVelY += add;
-
-          // Clamp velocity so it doesn't run away.
-          _wheelVelY = Math.max(-900, Math.min(900, _wheelVelY));
-
-          if (_wheelAnimating) return;
-          _wheelAnimating = true;
-
-          const tick = () => {
-            try {
-              // Apply current velocity
-              const y = _wheelVelY;
-              win.scrollBy({ top: y, left: 0, behavior: 'auto' });
-
-              // Decay (friction). Slightly stronger decay for large velocities.
-              const decay = (Math.abs(_wheelVelY) > 300) ? 0.78 : 0.85;
-              _wheelVelY = _wheelVelY * decay;
-
-              if (Math.abs(_wheelVelY) < 0.6) {
-                _wheelVelY = 0;
-                _wheelAnimating = false;
-                _wheelRaf = 0;
-                return;
-              }
-              _wheelRaf = win.requestAnimationFrame(tick);
-            } catch {
-              _wheelVelY = 0;
-              _wheelAnimating = false;
-              _wheelRaf = 0;
-            }
-          };
-
-          _wheelRaf = win.requestAnimationFrame(tick);
-        };
-
-        host.addEventListener('wheel', onWheel, { passive: false, capture: true });
-        // PATCH9_SCROLL: also capture wheel inside the iframe itself
-        try { win.addEventListener('wheel', onWheel, { passive: false, capture: true }); } catch {}
-        _wheelBridgeInstalled = true;
-      } catch {}
-    }
-
-    // FIX_HUD: programmatic scroll for arrow keys in scrolled mode
+    // FIX-SCROLL: programmatic scroll targeting the paginator's shadow DOM container
     function scrollContent(deltaY) {
       try {
-        const renderer = state.view && state.view.renderer;
-        if (!renderer) return;
-        const el = renderer.element;
-        if (el && el.contentWindow) {
-          el.contentWindow.scrollBy({ top: deltaY, behavior: 'smooth' });
-          return;
-        }
-        if (typeof renderer.getContents === 'function') {
-          for (const c of renderer.getContents()) {
-            if (c && c.doc && c.doc.defaultView) {
-              c.doc.defaultView.scrollBy({ top: deltaY, behavior: 'smooth' });
-              return;
-            }
-          }
+        var renderer = state.view && state.view.renderer;
+        if (renderer && typeof renderer.scrollByDelta === 'function') {
+          renderer.scrollByDelta(deltaY);
         }
       } catch {}
     }
