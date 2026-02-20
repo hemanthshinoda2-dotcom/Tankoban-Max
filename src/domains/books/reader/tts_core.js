@@ -122,9 +122,12 @@
   function releaseWakeLock() {
     if (_wakeLock) { try { _wakeLock.release(); } catch {} _wakeLock = null; }
   }
-  document.addEventListener('visibilitychange', function () {
+  // FIX-TTS-B2: named reference for cleanup in destroy()
+  var _onVisibilityChange = function () {
+    if (state._destroyed) return;
     if (document.visibilityState === 'visible' && state.status === PLAYING) acquireWakeLock();
-  });
+  };
+  document.addEventListener('visibilitychange', _onVisibilityChange);
 
   // ── Utility ──────────────────────────────────────────────────
 
@@ -1503,7 +1506,10 @@
   function destroy() {
     // FIX-LISTEN-STAB3: signal any pending init() to bail out
     state._destroyed = true;
-    stop();
+    try { stop(); } catch {}
+    // FIX-TTS-B2: explicit wake lock release + listener cleanup
+    releaseWakeLock();
+    document.removeEventListener('visibilitychange', _onVisibilityChange);
     var ids = Object.keys(state.allEngines);
     for (var i = 0; i < ids.length; i++) {
       try { state.allEngines[ids[i]].cancel(); } catch {}

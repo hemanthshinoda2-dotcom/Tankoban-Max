@@ -19,10 +19,10 @@ Core playback state machine fixes. Should be done first since everything else de
 ## Batch 2 — Wake Lock & Resource Management
 Prevents battery drain during long listening sessions.
 
-- [ ] **#4 HIGH — Wake lock not re-acquired after tab switch**
+- [x] **#4 HIGH — Wake lock not re-acquired after tab switch**
   `tts_core.js:112-127` — Visibility change listener only re-acquires wake lock if `status === PLAYING`. If user pauses → switches tabs → returns → resumes, wake lock is gone. Device can sleep mid-listen.
 
-- [ ] **#5 HIGH — destroy() doesn't guarantee wake lock release**
+- [x] **#5 HIGH — destroy() doesn't guarantee wake lock release**
   `tts_core.js:1503-1530` — `destroy()` calls `stop()` which releases wake lock. If `stop()` throws before reaching `releaseWakeLock()`, lock leaks. Visibility change listener also never removed after destroy.
 
 ---
