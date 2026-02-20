@@ -110,8 +110,21 @@
       if (detailMaybe && detailMaybe.tocItem && detailMaybe.tocItem.label) {
         label = String(detailMaybe.tocItem.label);
         state._lastChapterLabel = label;
-        renderPageText(label);
       }
+
+      // Add a small "where am I" hint (Readest vibe): chapter + page label when available.
+      var chapterLabel = String(state._lastChapterLabel || label || '');
+      var pageLabel = (detailMaybe && detailMaybe.pageItem && detailMaybe.pageItem.label != null)
+        ? String(detailMaybe.pageItem.label)
+        : (locator && locator.pageLabel != null ? String(locator.pageLabel) : '');
+
+      var leftText = chapterLabel;
+      if (pageLabel) {
+        // If it's already like "12/340" keep; otherwise prefix with "p." for clarity.
+        var looksLikeFraction = /\d+\s*\/\s*\d+/.test(pageLabel);
+        leftText = chapterLabel ? (chapterLabel + '  ·  ' + (looksLikeFraction ? pageLabel : ('p.' + pageLabel))) : (looksLikeFraction ? pageLabel : ('p.' + pageLabel));
+      }
+      if (leftText) renderPageText(leftText);
 
       renderProgressFraction(fraction);
       renderProgressPct(fraction);

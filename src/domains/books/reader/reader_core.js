@@ -289,6 +289,8 @@
     await close({ save: false, silent: true });
 
     state.book = book;
+    // Per-book view settings (font/theme/layout)
+    try { if (typeof RS.loadBookViewSettings === 'function') RS.loadBookViewSettings(book); } catch (e) {}
     state.opening = true;
     state.lastError = '';
     state.lastBookInput = bookInput;

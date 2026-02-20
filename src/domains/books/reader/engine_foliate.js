@@ -941,41 +941,63 @@
       }
     }
 
-    // WAVE1: search collects all hits for prev/next navigation
+    // WAVE1: search collects hits + excerpts for results list
     async function search(query) {
       state.searchHits = [];
-      if (!state.view || typeof state.view.search !== 'function') return { ok: false, count: 0, hits: [] };
+      state.searchGroups = [];
+      if (!state.view || typeof state.view.search !== 'function') return { ok: false, count: 0, hits: [], groups: [] };
 
       const q = String(query || '').trim();
-      if (!q) return { ok: false, count: 0, hits: [] };
+      if (!q) return { ok: false, count: 0, hits: [], groups: [] };
 
-      const hits = [];
+      const flatHits = []; // [{cfi, excerpt, label}]
+      const groups = [];   // [{label, subitems:[{cfi, excerpt}]}]
+
+      const pushMatch = (label, it) => {
+        const cfi = String(it && it.cfi || '');
+        if (!cfi) return;
+        const excerpt = (it && it.excerpt && typeof it.excerpt === 'object') ? it.excerpt : null;
+        flatHits.push({ cfi, excerpt, label: String(label || '') });
+      };
+
       try {
         for await (const res of state.view.search({ query: q })) {
           if (res === 'done') break;
 
+          // Grouped results (Foliate returns sections with subitems)
           if (res && Array.isArray(res.subitems)) {
+            const label = String(res.label || '');
+            const subitems = [];
             for (const it of res.subitems) {
               const cfi = String(it && it.cfi || '');
-              if (cfi) hits.push(cfi);
+              if (!cfi) continue;
+              const excerpt = (it && it.excerpt && typeof it.excerpt === 'object') ? it.excerpt : null;
+              subitems.push({ cfi, excerpt });
+              pushMatch(label, it);
             }
+            if (subitems.length) groups.push({ label, subitems });
             continue;
           }
 
+          // Flat result (older/alternate implementations)
           const cfi = String(res && res.cfi || '');
-          if (cfi) hits.push(cfi);
+          if (cfi) {
+            flatHits.push({ cfi, excerpt: null, label: '' });
+          }
         }
       } catch {
-        return { ok: false, count: 0, hits: [] };
+        return { ok: false, count: 0, hits: [], groups: [] };
       }
 
-      state.searchHits = hits;
+      // Store flattened CFIs for prev/next navigation
+      state.searchHits = flatHits.map(x => x.cfi);
+      state.searchGroups = groups;
 
-      if (hits.length > 0) {
-        try { await state.view.goTo(hits[0]); } catch {}
+      if (state.searchHits.length > 0) {
+        try { await state.view.goTo(state.searchHits[0]); } catch {}
       }
 
-      return { ok: true, count: hits.length, hits };
+      return { ok: true, count: state.searchHits.length, hits: state.searchHits, groups, flat: flatHits };
     }
 
     // WAVE1: navigate to specific search hit by index

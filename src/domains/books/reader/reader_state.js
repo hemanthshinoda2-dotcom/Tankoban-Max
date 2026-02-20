@@ -67,9 +67,6 @@
     progressFraction: 0,
     progressDragFraction: 0,
     shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
-    // When true, reader progress is not persisted to reading progress (used by listening mode).
-    suspendProgressSave: false,
-    suspendProgressSaveReason: '',
     // BUILD_ANNOT
     annotations: [],
     annotEditId: null,
@@ -356,15 +353,69 @@
     }
   }
 
+  // Readest-ish: per-book view settings (font/theme/layout) stored locally.
+  // This keeps global defaults, but lets each book remember its own reading vibe.
+  function bookSettingsKey(book) {
+    try {
+      if (book && book.id) return 'tankoban.bookViewSettings:' + String(book.id);
+      if (book && book.path) return 'tankoban.bookViewSettings:' + String(book.path);
+    } catch (e) {}
+    return '';
+  }
+
+  function pickViewSettings(settingsObj) {
+    var s = (settingsObj && typeof settingsObj === 'object') ? settingsObj : {};
+    return {
+      theme: s.theme,
+      fontFamily: s.fontFamily,
+      fontSize: s.fontSize,
+      lineHeight: s.lineHeight,
+      margin: s.margin,
+      columns: s.columns,
+      flowMode: s.flowMode,
+      letterSpacing: s.letterSpacing,
+      wordSpacing: s.wordSpacing,
+      paraSpacing: s.paraSpacing,
+      paraIndent: s.paraIndent,
+      hyphens: s.hyphens,
+      zoom: s.zoom,
+      fitMode: s.fitMode,
+    };
+  }
+
+  function loadBookViewSettings(book) {
+    var key = bookSettingsKey(book);
+    if (!key) return;
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      // Merge per-book over global settings
+      state.settings = Object.assign({}, state.settings, parsed);
+    } catch (e) { /* swallow */ }
+  }
+
+  function persistBookViewSettings() {
+    var key = bookSettingsKey(state.book);
+    if (!key) return;
+    try {
+      var payload = pickViewSettings(state.settings);
+      localStorage.setItem(key, JSON.stringify(payload));
+    } catch (e) { /* swallow */ }
+  }
+
   async function persistSettings() {
     try {
       await Tanko.api.booksSettings.save(Object.assign({}, state.settings));
     } catch (e) { /* swallow */ }
+
+    // Also persist per-book view settings (safe no-op if no book is open)
+    persistBookViewSettings();
   }
 
   // ── Progress save ──────────────────────────────────────────────
   async function saveProgress() {
-    if (state.suspendProgressSave) return;
     if (!state.open || !state.engine || !state.book) return;
     if (typeof state.engine.getLocator !== 'function') return;
 
@@ -402,12 +453,6 @@
     } catch (e) { /* swallow */ }
   }
 
-  // LISTEN_PATCH1: allow Listening mode to prevent writes into reading progress.
-  function setSuspendProgressSave(flag, reason) {
-    state.suspendProgressSave = !!flag;
-    state.suspendProgressSaveReason = flag ? String(reason || 'listening_mode') : '';
-  }
-
   // ── Export via window ──────────────────────────────────────────
   window.booksReaderState = {
     state: state,
@@ -438,9 +483,9 @@
     // Settings
     loadSettings: loadSettings,
     persistSettings: persistSettings,
+    loadBookViewSettings: loadBookViewSettings,
     // Progress
     saveProgress: saveProgress,
     saveShortcuts: saveShortcuts,
-    setSuspendProgressSave: setSuspendProgressSave,
   };
 })();
