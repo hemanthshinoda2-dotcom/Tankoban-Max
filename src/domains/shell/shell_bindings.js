@@ -408,7 +408,7 @@
     winMaxBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      try { Tanko.api.window.toggleFullscreen(); } catch (err) {}
+      try { Tanko.api.window.toggleMaximize(); } catch (err) {}
     });
   }
   if (winCloseBtn) {

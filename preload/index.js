@@ -26,8 +26,10 @@ const api = {
   window: {
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     isFullscreen: () => ipcRenderer.invoke(CHANNEL.WINDOW_IS_FULLSCREEN),
+    isMaximized: () => ipcRenderer.invoke(CHANNEL.WINDOW_IS_MAXIMIZED),
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     toggleFullscreen: () => ipcRenderer.invoke(CHANNEL.WINDOW_TOGGLE_FULLSCREEN),
+    toggleMaximize: () => ipcRenderer.invoke(CHANNEL.WINDOW_TOGGLE_MAXIMIZE),
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
     setFullscreen: (v) => ipcRenderer.invoke(CHANNEL.WINDOW_SET_FULLSCREEN, v),
   // TRACE:IPC_OUT ipcRenderer.invoke @ index.js
@@ -401,9 +403,6 @@ const api = {
     update: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_UPDATE, payload),
     routeDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_ROUTE, payload),
     getDestinations: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_DESTINATIONS),
-    getDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_GET),
-    clearDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_CLEAR),
-    removeDownloadHistory: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_REMOVE, payload),
     onUpdated: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));
@@ -413,17 +412,9 @@ const api = {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_STARTED, (_evt, data) => cb(data));
     },
-    onDownloadProgress: (cb) => {
-      if (typeof cb !== 'function') return;
-      ipcRenderer.on(EVENT.WEB_DOWNLOAD_PROGRESS, (_evt, data) => cb(data));
-    },
     onDownloadCompleted: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_COMPLETED, (_evt, data) => cb(data));
-    },
-    onDownloadsUpdated: (cb) => {
-      if (typeof cb !== 'function') return;
-      ipcRenderer.on(EVENT.WEB_DOWNLOADS_UPDATED, (_evt, data) => cb(data));
     },
     onPopupOpen: (cb) => {
       if (typeof cb !== 'function') return;
@@ -905,7 +896,9 @@ player: {
 const legacy = {
   // window
   isFullscreen: (...args) => api.window.isFullscreen(...args),
+  isMaximized: (...args) => api.window.isMaximized(...args),
   toggleFullscreen: (...args) => api.window.toggleFullscreen(...args),
+  toggleMaximize: (...args) => api.window.toggleMaximize(...args),
   setFullscreen: (...args) => api.window.setFullscreen(...args),
   isAlwaysOnTop: (...args) => api.window.isAlwaysOnTop(...args),
   toggleAlwaysOnTop: (...args) => api.window.toggleAlwaysOnTop(...args),

@@ -80,6 +80,51 @@ async function isFullscreen(ctx, evt) {
 }
 
 /**
+ * Get maximized state.
+ */
+async function isMaximized(ctx, evt) {
+  const w = winFromEvt(evt) || ctx.win;
+  try { return !!w?.isMaximized(); } catch {}
+  return false;
+}
+
+/**
+ * Toggle maximize / restore.
+ * NOTE: This is different from fullscreen. Used by the top window control bar.
+ */
+async function toggleMaximize(ctx, evt) {
+  const w = winFromEvt(evt) || ctx.win;
+  if (!w) return { ok: false };
+
+  // If minimized, restore first so maximize/unmaximize is visible.
+  try { if (w.isMinimized && w.isMinimized()) w.restore(); } catch {}
+
+  // If currently fullscreen, exit fullscreen then maximize (matches Windows UX).
+  try {
+    if (w.isFullScreen && w.isFullScreen()) {
+      try { w.setFullScreen(false); } catch {}
+      setImmediate(() => { try { w.maximize(); } catch {} });
+      return { ok: true, value: true };
+    }
+  } catch {}
+
+  try {
+    const cur = !!w.isMaximized();
+    if (cur) {
+      w.unmaximize();
+    } else {
+      w.maximize();
+    }
+    let next = !cur;
+    try { next = !!w.isMaximized(); } catch {}
+    return { ok: true, value: next };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+
+/**
  * Open book in new window.
  * BUILD21_MULTI_WINDOW_OPEN (Build 21)
  * Lifted from Build 78A index.js lines 1400-1407.
@@ -259,6 +304,8 @@ module.exports = {
   setFullscreen,
   toggleFullscreen,
   isFullscreen,
+  isMaximized,
+  toggleMaximize,
   openBookInNewWindow,
   openVideoShell,
   minimize,
