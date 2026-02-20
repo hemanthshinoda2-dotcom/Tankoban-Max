@@ -1,36 +1,13 @@
 // BUILD_WCV: Web Tabs domain — manages WebContentsView instances for browser mode.
 // Replaces renderer-side <webview> tags with main-process-managed views.
 
-const { WebContentsView, session, app } = require('electron');
-var { ElectronBlocker } = require('@ghostery/adblocker-electron');
-var fs = require('fs');
-var path = require('path');
+const { WebContentsView, session } = require('electron');
 
 var PARTITION = 'persist:webmode';
 var tabs = new Map(); // tabId → { view, id, bounds }
 var nextId = 1;
 var activeBounds = { x: 0, y: 0, width: 0, height: 0 };
 var activeTabId = null;
-
-// --- Ad blocker (Ghostery/EasyList) ---
-var _blockerPromise = null;
-function ensureAdBlocker(ses) {
-  if (!_blockerPromise) {
-    var cachePath = path.join(app.getPath('userData'), 'adblocker-engine.bin');
-    _blockerPromise = ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, {
-      path: cachePath,
-      read: fs.promises.readFile,
-      write: fs.promises.writeFile,
-    }).then(function (blocker) {
-      blocker.enableBlockingInSession(ses);
-      return blocker;
-    }).catch(function (err) {
-      console.error('[webTabs] Ad blocker init failed:', err);
-      _blockerPromise = null;
-    });
-  }
-  return _blockerPromise;
-}
 
 function getIpc() {
   try { return require('../../../shared/ipc'); } catch (e) { return null; }
@@ -51,9 +28,6 @@ async function create(ctx, _evt, payload) {
   } catch (e) {
     return { ok: false, error: 'Failed to create session' };
   }
-
-  // Activate ad blocker on the browser session (non-blocking after first load)
-  ensureAdBlocker(ses);
 
   var view;
   try {

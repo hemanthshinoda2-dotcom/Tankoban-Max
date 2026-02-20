@@ -3,7 +3,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { app, session } = require('electron');
+const { session } = require('electron');
 
 const CONFIG_FILE = 'web_sources.json';
 const DOWNLOAD_HISTORY_FILE = 'web_download_history.json';
@@ -225,7 +225,6 @@ var downloadHandlerBound = false;
 function setupDownloadHandler(ctx) {
   if (downloadHandlerBound) return;
   downloadHandlerBound = true;
-
   try {
     var ses = session.fromPartition('persist:webmode');
     var ipc = require('../../../shared/ipc');
