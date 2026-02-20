@@ -104,6 +104,8 @@
       bookmarksBtn: qs('booksReaderBookmarksBtn'),
       annotBtn: qs('booksReaderAnnotBtn'),
       sidebarToggle: qs('booksReaderTocNavBtn'),
+      histBackBtn: qs('booksReaderHistBackBtn'),
+      histFwdBtn: qs('booksReaderHistFwdBtn'),
       fontBtn: qs('booksReaderFontBtn'),
       themeBtn: qs('booksReaderThemeBtn'),
       // FIX_TTSH: settings button triggers mega panel
@@ -371,13 +373,14 @@
       fontSize: s.fontSize,
       lineHeight: s.lineHeight,
       margin: s.margin,
-      columns: s.columns,
+      columnMode: s.columnMode,
       flowMode: s.flowMode,
       letterSpacing: s.letterSpacing,
       wordSpacing: s.wordSpacing,
       paraSpacing: s.paraSpacing,
       paraIndent: s.paraIndent,
-      hyphens: s.hyphens,
+      bodyHyphens: s.bodyHyphens,
+      textAlign: s.textAlign,
       zoom: s.zoom,
       fitMode: s.fitMode,
     };
@@ -391,6 +394,9 @@
       if (!raw) return;
       var parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return;
+      // FIX-READER-GAPS: migrate old wrong-name keys from earlier pickViewSettings bug
+      if (parsed.columns !== undefined && parsed.columnMode === undefined) parsed.columnMode = parsed.columns;
+      if (parsed.hyphens !== undefined && parsed.bodyHyphens === undefined) parsed.bodyHyphens = parsed.hyphens;
       // Merge per-book over global settings
       state.settings = Object.assign({}, state.settings, parsed);
     } catch (e) { /* swallow */ }

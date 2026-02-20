@@ -69,7 +69,7 @@
     if (!annotationsSupported()) return;
     if (!state.engine || !Array.isArray(state.annotations)) return;
     for (var i = 0; i < state.annotations.length; i++) {
-      var ann = anns[i];
+      var ann = state.annotations[i];
       if (!ann || !ann.cfi) continue;
       try {
         if (typeof state.engine.setAnnotationMeta === 'function') {

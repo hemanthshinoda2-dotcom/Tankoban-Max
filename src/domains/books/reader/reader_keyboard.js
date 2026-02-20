@@ -239,11 +239,13 @@
       }
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault();
+        if (e.key === 'ArrowRight' && String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) return;
         bus.emit('nav:next');
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
+        if (e.key === 'ArrowLeft' && String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) return;
         bus.emit('nav:prev');
         return;
       }

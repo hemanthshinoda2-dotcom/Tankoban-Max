@@ -83,12 +83,15 @@
     function applySettings(settings) {
       if (!state.content) return;
       const s = settings || {};
-      const fontSize = Number(s.fontSize || 18);
+      // FIX-READER-GAPS: convert percentage/factor settings to pixels
+      const rawSize = Number(s.fontSize || 100);
+      const fontSize = (rawSize / 100) * 18; // base 18px at 100%
       const lineHeight = Number(s.lineHeight || 1.6);
-      const margin = Number(s.margin || 24);
+      const rawMargin = Number(s.margin || 1);
+      const margin = rawMargin * 24; // base 24px at 1.0x
       const theme = String(s.theme || 'light');
 
-      state.content.style.fontSize = `${Math.max(8, Math.min(30, fontSize))}px`; // WAVE2: range 8-30
+      state.content.style.fontSize = `${Math.max(8, Math.min(45, fontSize))}px`;
       state.content.style.lineHeight = String(Math.max(1.0, Math.min(2.4, lineHeight)));
       state.content.style.padding = `${Math.max(0, Math.min(80, margin))}px`;
 

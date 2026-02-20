@@ -67,6 +67,7 @@
       rendition: null,
       lastCfi: null,
       lastHref: null,
+      lastFraction: null,
       theme: 'light',
       onUserActivity: (api && typeof api.onUserActivity === 'function') ? api.onUserActivity : null,
       lastActivityAt: 0,
@@ -345,6 +346,17 @@ state.rendition = state.book.renderTo(state.stage, {
         try {
           state.lastCfi = loc && loc.start ? (loc.start.cfi || null) : null;
           state.lastHref = loc && loc.start ? (loc.start.href || null) : null;
+          // FIX-READER-GAPS: compute approximate book-level fraction from spine position
+          state.lastFraction = null;
+          if (loc && loc.start && state.book && state.book.spine) {
+            const spineLen = state.book.spine.length;
+            if (spineLen > 0) {
+              const idx = Number(loc.start.index) || 0;
+              const d = loc.start.displayed;
+              const pageFrac = (d && d.total > 0) ? ((d.page || 1) - 1) / d.total : 0;
+              state.lastFraction = (idx + pageFrac) / spineLen;
+            }
+          }
         } catch {}
       });
       state.rendition.on('rendered', (_section, view) => {
@@ -403,6 +415,7 @@ state.rendition = state.book.renderTo(state.stage, {
       state.rendition = null;
       state.lastCfi = null;
       state.lastHref = null;
+      state.lastFraction = null;
       state.onUserActivity = null;
       state.lastActivityAt = 0;
       state.onDblClick = null;
@@ -424,9 +437,12 @@ state.rendition = state.book.renderTo(state.stage, {
     }
 
     async function getLocator() {
+      const frac = state.lastFraction;
       return {
         cfi: state.lastCfi || null,
         href: state.lastHref || null,
+        fraction: (typeof frac === 'number' && isFinite(frac)) ? frac : null,
+        percent: (typeof frac === 'number' && isFinite(frac)) ? frac : null,
       };
     }
 

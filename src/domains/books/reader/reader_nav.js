@@ -454,6 +454,14 @@
     els.prevBtn && els.prevBtn.addEventListener('click', function () { stepPrevSmart().catch(function () {}); });
     els.nextBtn && els.nextBtn.addEventListener('click', function () { stepNextSmart().catch(function () {}); });
 
+    // FIX-READER-GAPS: history back/forward buttons
+    els.histBackBtn && els.histBackBtn.addEventListener('click', function () {
+      if (state.engine && typeof state.engine.historyBack === 'function') state.engine.historyBack();
+    });
+    els.histFwdBtn && els.histFwdBtn.addEventListener('click', function () {
+      if (state.engine && typeof state.engine.historyForward === 'function') state.engine.historyForward();
+    });
+
     // Chapter transition Continue button
     els.chapterTransContinue && els.chapterTransContinue.addEventListener('click', function () {
       dismissChapterTransition(true);
@@ -589,6 +597,14 @@
     if (state.engine && typeof state.engine.onRelocateEvent === 'function') {
       state.engine.onRelocateEvent(handleRelocate);
     }
+    // FIX-READER-GAPS: wire history button enabled/disabled state
+    if (state.engine && typeof state.engine.onHistoryChange === 'function') {
+      state.engine.onHistoryChange(function (info) {
+        var els = RS.ensureEls();
+        if (els.histBackBtn) els.histBackBtn.disabled = !info.canGoBack;
+        if (els.histFwdBtn) els.histFwdBtn.disabled = !info.canGoForward;
+      });
+    }
     // BUILD_CHAP_TRANS: wire section boundary callback + enable pause (EPUB only)
     if (!RS.isPdfOpen()) {
       if (state.engine && typeof state.engine.onSectionBoundary === 'function') {
@@ -608,6 +624,10 @@
     // BUILD_CHAP_TRANS: clean up transition state
     dismissChapterTransition(false);
     state.chapterReadState = {};
+    // FIX-READER-GAPS: reset history buttons
+    var els = RS.ensureEls();
+    if (els.histBackBtn) els.histBackBtn.disabled = true;
+    if (els.histFwdBtn) els.histFwdBtn.disabled = true;
   }
 
   // ── Export ────────────────────────────────────────────────────
