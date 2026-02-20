@@ -403,6 +403,9 @@ const api = {
     update: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_UPDATE, payload),
     routeDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_ROUTE, payload),
     getDestinations: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_DESTINATIONS),
+    getDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_GET),
+    clearDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_CLEAR),
+    removeDownloadHistory: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_REMOVE, payload),
     onUpdated: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));
@@ -412,9 +415,17 @@ const api = {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_STARTED, (_evt, data) => cb(data));
     },
+    onDownloadProgress: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_DOWNLOAD_PROGRESS, (_evt, data) => cb(data));
+    },
     onDownloadCompleted: (cb) => {
       if (typeof cb !== 'function') return;
       ipcRenderer.on(EVENT.WEB_DOWNLOAD_COMPLETED, (_evt, data) => cb(data));
+    },
+    onDownloadsUpdated: (cb) => {
+      if (typeof cb !== 'function') return;
+      ipcRenderer.on(EVENT.WEB_DOWNLOADS_UPDATED, (_evt, data) => cb(data));
     },
     onPopupOpen: (cb) => {
       if (typeof cb !== 'function') return;
