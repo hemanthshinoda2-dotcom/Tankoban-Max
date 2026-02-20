@@ -93,7 +93,7 @@
       const s = settings || {};
       const fontSize = Math.max(12, Math.min(42, Number(s.fontSize || 18)));
       const lineHeight = Math.max(1.1, Math.min(2.4, Number(s.lineHeight || 1.6)));
-      const margin = Math.max(0, Math.min(80, Number(s.margin || 24)));
+      const margin = Math.max(0, Math.min(80, (Number(s.margin || 1) * 24)));
       const theme = String(s.theme || 'light');
       state.theme = theme;
 
