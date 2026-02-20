@@ -63,6 +63,8 @@
       toggleAlwaysOnTop: (...a) => ea.window?.toggleAlwaysOnTop ? ea.window.toggleAlwaysOnTop(...a) : ea.toggleAlwaysOnTop(...a),
       takeScreenshot: (...a) => ea.window?.takeScreenshot ? ea.window.takeScreenshot(...a) : ea.takeScreenshot(...a),
       openSubtitleDialog: (...a) => ea.window?.openSubtitleDialog ? ea.window.openSubtitleDialog(...a) : ea.openSubtitleDialog(...a),
+      isMaximized: (...a) => ea.window?.isMaximized ? ea.window.isMaximized(...a) : ea.isMaximized(...a),
+      toggleMaximize: (...a) => ea.window?.toggleMaximize ? ea.window.toggleMaximize(...a) : ea.toggleMaximize(...a),
       minimize: (...a) => ea.window?.minimize ? ea.window.minimize(...a) : ea.minimize(...a),
       close: (...a) => ea.window?.close ? ea.window.close(...a) : ea.close(...a),
       openBookInNewWindow: (...a) => ea.window?.openBookInNewWindow ? ea.window.openBookInNewWindow(...a) : ea.openBookInNewWindow(...a),
