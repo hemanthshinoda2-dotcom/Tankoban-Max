@@ -1,7 +1,6 @@
 node_modules/
 dist/
 build/
-player_qt/
 resources/
 .claude/
 /Books
