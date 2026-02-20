@@ -419,57 +419,6 @@
     });
   }
 
-  // FIX-WIN-CTRL2: web overlay window controls (consolidated from web.js)
-  var webWinMinBtn = document.getElementById('webWinMinBtn');
-  var webWinMaxBtn = document.getElementById('webWinMaxBtn');
-  var webWinCloseBtn = document.getElementById('webWinCloseBtn');
-  if (webWinMinBtn) {
-    webWinMinBtn.addEventListener('click', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      try { Tanko.api.window.minimize(); } catch (err) {}
-    });
-  }
-  if (webWinMaxBtn) {
-    webWinMaxBtn.addEventListener('click', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      try { Tanko.api.window.toggleMaximize(); } catch (err) {}
-      syncMaximizeButtons();
-    });
-  }
-  if (webWinCloseBtn) {
-    webWinCloseBtn.addEventListener('click', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      try { Tanko.api.window.close(); } catch (err) {}
-    });
-  }
-
-  // FIX-WIN-CTRL2: sync maximize button icon/title across topbar + web overlay
-  var MAX_SVG = '<svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
-  var RESTORE_SVG = '<svg viewBox="0 0 10 10" width="10" height="10"><rect x="2" y="0.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/><rect x="0.5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
-  function syncMaximizeButtons() {
-    try {
-      Tanko.api.window.isMaximized().then(function (maximized) {
-        var svg = maximized ? RESTORE_SVG : MAX_SVG;
-        var label = maximized ? 'Restore' : 'Maximize';
-        var btns = [winMaxBtn, webWinMaxBtn];
-        for (var i = 0; i < btns.length; i++) {
-          if (!btns[i]) continue;
-          btns[i].innerHTML = svg;
-          btns[i].title = label;
-          btns[i].setAttribute('aria-label', label);
-        }
-      }).catch(function () {});
-    } catch (err) {}
-  }
-
-  // Sync after topbar maximize click
-  if (winMaxBtn) {
-    winMaxBtn.addEventListener('click', function () { syncMaximizeButtons(); });
-  }
-
-  // Sync on resize (fires on maximize/unmaximize/restore)
-  window.addEventListener('resize', syncMaximizeButtons);
-
   el.seriesBackBtn.addEventListener('click', () => {
     appState.selectedSeriesId = null;
     renderLibrary();
@@ -488,8 +437,5 @@
   // Sync fullscreen button titles at least once on startup.
   try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
   try { if (typeof syncLibraryFullscreenBtn === 'function') syncLibraryFullscreenBtn().catch(()=>{}); } catch {}
-
-  // FIX-WIN-CTRL2: sync maximize button icon on startup
-  syncMaximizeButtons();
 
 })();

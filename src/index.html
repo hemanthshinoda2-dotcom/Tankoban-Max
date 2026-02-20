@@ -1503,6 +1503,17 @@ COMMON ANCHORS
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
         <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
         <div id="webViewContainer" class="webViewContainer"></div>
+        <!-- FIX-WEB-DL: Chrome-like download bottom bar -->
+        <div id="webDlBar" class="webDlBar hidden" role="status" aria-live="polite">
+          <div class="webDlBarInner">
+            <div class="webDlBarIcon">&#11123;</div>
+            <div id="webDlBarText" class="webDlBarText"></div>
+            <div id="webDlBarProgress" class="webDlBarProgress hidden">
+              <div id="webDlBarProgressFill" class="webDlBarProgressFill"></div>
+            </div>
+            <button id="webDlBarClose" class="webDlBarClose" title="Dismiss" aria-label="Dismiss">&times;</button>
+          </div>
+        </div>
       </div>
 
       <!-- BUILD_WEB_PARITY: Web toast -->

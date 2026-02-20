@@ -48,6 +48,12 @@
     dlList: qs('webDlList'),
     dlEmpty: qs('webDlEmpty'),
     dlClearBtn: qs('webDlClearBtn'),
+    // FIX-WEB-DL: Chrome-like bottom bar
+    dlBar: qs('webDlBar'),
+    dlBarText: qs('webDlBarText'),
+    dlBarProgress: qs('webDlBarProgress'),
+    dlBarProgressFill: qs('webDlBarProgressFill'),
+    dlBarClose: qs('webDlBarClose'),
     // Sidebar
     sourcesList: qs('webSourcesList'),
     addSourceBtn: qs('webAddSourceBtn'),
@@ -80,6 +86,8 @@
     lastDownloadName: '',
     downloads: [],      // { id, filename, destination?, library?, state, startedAt, finishedAt?, error? }
     dlPanelOpen: false,
+    dlBarDismissed: false,
+    dlBarTimer: null,
     browserOpen: false, // BUILD_WEB_HOME
     // BUILD_WEB_PARITY
     editSourceId: null,
@@ -1083,6 +1091,37 @@
     else openDownloadsPanel();
   }
 
+  // FIX-WEB-DL: Chrome-like download bottom bar
+
+  var DL_BAR_AUTO_HIDE_MS = 5000;
+
+  function showDlBar(text, progress) {
+    if (!el.dlBar || state.dlBarDismissed) return;
+    if (el.dlBarText) el.dlBarText.textContent = text || '';
+    if (typeof progress === 'number' && progress >= 0) {
+      if (el.dlBarProgress) el.dlBarProgress.classList.remove('hidden');
+      if (el.dlBarProgressFill) el.dlBarProgressFill.style.width = Math.round(Math.max(0, Math.min(1, progress)) * 100) + '%';
+    } else {
+      if (el.dlBarProgress) el.dlBarProgress.classList.add('hidden');
+    }
+    el.dlBar.classList.remove('hidden');
+    if (state.dlBarTimer) { try { clearTimeout(state.dlBarTimer); } catch (e) {} state.dlBarTimer = null; }
+  }
+
+  function hideDlBar() {
+    if (!el.dlBar) return;
+    el.dlBar.classList.add('hidden');
+    if (state.dlBarTimer) { try { clearTimeout(state.dlBarTimer); } catch (e) {} state.dlBarTimer = null; }
+  }
+
+  function autohideDlBar() {
+    if (state.dlBarTimer) { try { clearTimeout(state.dlBarTimer); } catch (e) {} }
+    state.dlBarTimer = setTimeout(function () {
+      state.dlBarTimer = null;
+      hideDlBar();
+    }, DL_BAR_AUTO_HIDE_MS);
+  }
+
   // ---- Popup → new tab ----
 
   function openPopupUrlInNewTab(url, parentTab) {
@@ -1671,6 +1710,15 @@
       };
     }
 
+    // FIX-WEB-DL: dismiss bottom bar
+    if (el.dlBarClose) {
+      el.dlBarClose.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        state.dlBarDismissed = true;
+        hideDlBar();
+      };
+    }
+
     // BUILD_WEB_PARITY: tips close button
     if (el.tipsClose) {
       el.tipsClose.onclick = function () {
@@ -1769,14 +1817,20 @@
     if (api.webSources.onDownloadStarted) {
       api.webSources.onDownloadStarted(function (info) {
         state.lastDownloadName = info && info.filename ? String(info.filename) : '';
+        state.dlBarDismissed = false;
         upsertDownload(info);
         showToast('Downloading: ' + (info && info.filename ? info.filename : ''));
+        showDlBar('Downloading: ' + (info && info.filename ? info.filename : ''), null);
       });
     }
 
     if (api.webSources.onDownloadProgress) {
       api.webSources.onDownloadProgress(function (info) {
         upsertDownload(info);
+        var fn = (info && info.filename) ? String(info.filename) : '';
+        var p = (info && typeof info.progress === 'number') ? info.progress : null;
+        var pctStr = (p != null) ? (' ' + Math.round(p * 100) + '%') : '';
+        showDlBar('Downloading: ' + fn + pctStr, p);
       });
     }
 
@@ -1788,15 +1842,18 @@
           var msg = 'Download saved';
           if (info && info.library) msg += ' to ' + info.library;
           showToast(msg);
+          showDlBar('Saved: ' + (info.filename || '') + (info.library ? (' \u2192 ' + info.library) : ''), 1);
           if (el.downloadStatus) {
             el.downloadStatus.textContent = 'Saved: ' + (info.filename || '') + (info.library ? (' \u2192 ' + info.library) : '');
           }
         } else {
           showToast('Download failed');
+          showDlBar('Failed: ' + ((info && info.filename) ? info.filename : ''), null);
           if (el.downloadStatus) {
             el.downloadStatus.textContent = 'Download failed: ' + ((info && info.filename) ? info.filename : '');
           }
         }
+        autohideDlBar();
 
         if (state.downloading === 0) {
           setTimeout(function () {

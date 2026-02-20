@@ -674,3 +674,72 @@
   border-color: rgba(255,255,255,.18);
 }
 
+/* FIX-WEB-DL: Chrome-like download bottom bar */
+.webDlBar{
+  flex-shrink: 0;
+  width: 100%;
+  background: rgba(30,30,50,.92);
+  border-top: 1px solid rgba(255,255,255,.10);
+  z-index: 25;
+}
+.webDlBar.hidden{
+  display: none !important;
+}
+.webDlBarInner{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  min-height: 36px;
+}
+.webDlBarIcon{
+  flex-shrink: 0;
+  font-size: 14px;
+  opacity: .7;
+}
+.webDlBarText{
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255,255,255,.85);
+}
+.webDlBarProgress{
+  width: 120px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.webDlBarProgress.hidden{
+  display: none;
+}
+.webDlBarProgressFill{
+  height: 100%;
+  width: 0%;
+  background: rgba(255,255,255,.55);
+  border-radius: 999px;
+  transition: width .15s linear;
+}
+.webDlBarClose{
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,.6);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.webDlBarClose:hover{
+  background: rgba(255,255,255,.10);
+  color: rgba(255,255,255,.9);
+}
+
