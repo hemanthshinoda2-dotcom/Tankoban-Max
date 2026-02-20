@@ -62,8 +62,8 @@ Every changed line must be required by the task. When in doubt, change less.
 - NEVER: refactor nearby code, extract helpers, remove "unused" code unless asked
 - Don't create new files unless absolutely necessary
 
-## Git
-Commit and push after every fix. Tag commits (e.g. `FIX-TTS03:`).
+## Git (MANDATORY)
+Commit and push after every fix — do NOT wait for Hemanth to ask. Tag commits (e.g. `FIX-TTS03:`).
 Vendor patches → document in `THIRD_PARTY_NOTICES.md`.
 
 ## Testing (MANDATORY)
