@@ -32,7 +32,7 @@ function readDownloads(ctx) {
 
 function writeDownloads(ctx, data) {
   var p = ctx.storage.dataPath(DOWNLOAD_HISTORY_FILE);
-  ctx.storage.writeJSON(p, data);
+  return ctx.storage.writeJSON(p, data);
 }
 
 function ensureDownloadsCache(ctx) {
@@ -194,7 +194,7 @@ async function clearDownloadHistory(ctx) {
   cfg.downloads = (cfg.downloads || []).filter(function (d) { return d && (d.state === 'downloading' || d.state === 'paused'); });
   cfg.updatedAt = Date.now();
   capDownloads(cfg);
-  writeDownloads(ctx, cfg);
+  await writeDownloads(ctx, cfg);
   emitDownloadsUpdated(ctx);
   return { ok: true };
 }
@@ -213,7 +213,7 @@ async function removeDownloadHistory(ctx, _evt, payload) {
   if ((cfg.downloads || []).length === before) return { ok: false, error: 'Not found' };
   cfg.updatedAt = Date.now();
   capDownloads(cfg);
-  writeDownloads(ctx, cfg);
+  await writeDownloads(ctx, cfg);
   emitDownloadsUpdated(ctx);
   return { ok: true };
 }
