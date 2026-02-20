@@ -43,6 +43,55 @@ function getPrimaryWindow(ctx) {
   return null;
 }
 
+
+/**
+ * Small async sleep to allow window state transitions (maximize <-> fullscreen) to settle.
+ * Helps on Windows where fullscreen toggles can be ignored when the window is maximized.
+ */
+function __sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+/**
+ * Robust fullscreen setter:
+ * - If entering fullscreen while maximized (Windows), unmaximize first then enter fullscreen.
+ * - Wait a tick between transitions so Electron applies them consistently.
+ * Returns the final fullscreen state (best-effort).
+ */
+async function __applyFullscreen(w, want) {
+  if (!w || (w.isDestroyed && w.isDestroyed())) return false;
+
+  const platform = process.platform;
+  let wasMax = false;
+  try { wasMax = !!(w.isMaximized && w.isMaximized()); } catch {}
+
+  if (want) {
+    try { w.__tankoWasMaxBeforeFs = wasMax; } catch {}
+    // Windows: fullscreen can be flaky if called while maximized (esp. frameless windows).
+    if (platform === 'win32' && wasMax) {
+      try { w.unmaximize(); } catch {}
+      await __sleep(45);
+    }
+    try { w.setFullScreen(true); } catch {}
+    await __sleep(45);
+    // Retry once if the state didn't stick.
+    try { if (!(w.isFullScreen && w.isFullScreen())) w.setFullScreen(true); } catch {}
+    await __sleep(20);
+  } else {
+    try { w.setFullScreen(false); } catch {}
+    await __sleep(35);
+    // If we captured a pre-fullscreen maximize state, restore it (Windows UX).
+    let restoreMax = false;
+    try { restoreMax = !!w.__tankoWasMaxBeforeFs; } catch {}
+    if (platform === 'win32' && restoreMax) {
+      try { w.maximize(); } catch {}
+      await __sleep(20);
+    }
+  }
+
+  try { return !!(w.isFullScreen && w.isFullScreen()); } catch {}
+  return !!want;
+}
+
+
 // ========== DOMAIN HANDLERS ==========
 
 /**
@@ -52,10 +101,14 @@ function getPrimaryWindow(ctx) {
 async function setFullscreen(ctx, evt, value) {
   const w = winFromEvt(evt) || ctx.win;
   if (!w) return { ok: false };
-  try { w.setFullScreen(!!value); } catch {}
-  try { return { ok: true, value: !!w.isFullScreen() }; } catch {}
-  return { ok: true, value: false };
+  try {
+    const next = await __applyFullscreen(w, !!value);
+    return { ok: true, value: !!next };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
 }
+
 
 /**
  * Toggle fullscreen state.
@@ -64,10 +117,16 @@ async function setFullscreen(ctx, evt, value) {
 async function toggleFullscreen(ctx, evt) {
   const w = winFromEvt(evt) || ctx.win;
   if (!w) return { ok: false };
-  try { w.setFullScreen(!w.isFullScreen()); } catch {}
-  try { return { ok: true, value: !!w.isFullScreen() }; } catch {}
-  return { ok: true, value: false };
+  try {
+    let cur = false;
+    try { cur = !!(w.isFullScreen && w.isFullScreen()); } catch {}
+    const next = await __applyFullscreen(w, !cur);
+    return { ok: true, value: !!next };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
 }
+
 
 /**
  * Get fullscreen state.
@@ -289,16 +348,17 @@ async function hideWindow(ctx, evt) {
 async function showWindow(ctx, evt) {
   const w = winFromEvt(evt) || ctx.win;
   if (!w) return { ok: false };
-  try { 
-    w.show(); 
+  try {
+    // Do not force fullscreen on/off here — callers (like the Qt player bridge) decide.
+    try { if (w.isMinimized && w.isMinimized()) w.restore(); } catch {}
+    w.show();
     w.focus();
-    // Normalize to windowed (do not force fullscreen)
-    try { w.setFullScreen(false); } catch {}
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
 }
+
 
 module.exports = {
   setFullscreen,
