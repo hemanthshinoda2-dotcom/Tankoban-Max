@@ -435,7 +435,8 @@
   function _applyEnlargeSpan(range) {
     if (!range) { _clearEnlargeSpan(); return; }
     // OPT1: skip DOM teardown+rebuild if enlarge span already wraps the same range
-    if (_enlargeSpan && _enlargeSpan.parentNode) {
+    // FIX-TTS-B5 #13: Also verify span is still in the live DOM (not orphaned by reflow)
+    if (_enlargeSpan && _enlargeSpan.isConnected) {
       try {
         var txt = _enlargeSpan.textContent || '';
         var rangeText = range.toString() || '';
@@ -458,6 +459,8 @@
 
   function _clearEnlargeSpan() {
     if (!_enlargeSpan) return;
+    // FIX-TTS-B5 #13: If span was orphaned by DOM mutation, skip unwrap
+    if (!_enlargeSpan.isConnected) { _enlargeSpan = null; return; }
     try {
       var parent = _enlargeSpan.parentNode;
       if (parent) {
@@ -541,6 +544,21 @@
     if (_cssHl.word) { try { _cssHl.word.clear(); } catch {} }
     if (_cssHl.sentence) { try { _cssHl.sentence.clear(); } catch {} }
     _clearEnlargeSpan(); // FIX-TTS08: also remove enlarge span
+    // FIX-TTS-B5 #13: Sweep any orphaned tts-enlarge spans left by DOM mutations
+    try {
+      var eng = _getViewEngine();
+      if (eng && eng.doc) {
+        var orphans = eng.doc.querySelectorAll('[data-tts-tmp]');
+        for (var i = 0; i < orphans.length; i++) {
+          var sp = orphans[i];
+          var par = sp.parentNode;
+          if (par) {
+            while (sp.firstChild) par.insertBefore(sp.firstChild, sp);
+            par.removeChild(sp);
+          }
+        }
+      }
+    } catch {}
   }
 
   // FIX-TTS-RESCROLL: Re-enabled auto-scroll via scrollToAnchorCentered.
@@ -700,6 +718,14 @@
       state.engine.speakGapless(item.text);
     } else {
       state.engine.speak(item.text);
+    }
+
+    // FIX-TTS-B5 #8: Pre-buffer next block's audio element for near-zero transition gap
+    if (typeof state.engine.prepareNext === 'function') {
+      var nextForPrep = _queue.items[queueIdx + 1];
+      if (nextForPrep && nextForPrep.text) {
+        try { state.engine.prepareNext(nextForPrep.text); } catch {}
+      }
     }
   }
 

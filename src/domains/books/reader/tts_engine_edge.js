@@ -87,6 +87,43 @@
     // FIX-TTS-B3 #6: Track preload keys that exhausted all retries
     var _preloadFailed = new Set();
 
+    // FIX-TTS-B5 #8: Pre-buffered second audio element for gapless block transitions
+    var _prepAudio = null;
+    var _prepCacheKey = null;
+
+    function _clearPrepared() {
+      if (!_prepAudio) return;
+      try { _prepAudio.pause(); } catch {}
+      try { _prepAudio.removeAttribute('src'); } catch {}
+      if (_prepAudio._blobUrl) { try { URL.revokeObjectURL(_prepAudio._blobUrl); } catch {} }
+      _prepAudio = null;
+      _prepCacheKey = null;
+    }
+
+    function prepareNext(text) {
+      var t = String(text || '').trim();
+      if (!t) return;
+      var key = _lruKey(t);
+      if (_prepCacheKey === key && _prepAudio) return;
+      _clearPrepared();
+      var cached = _lruCache.has(key) ? _lruCache.get(key) : null;
+      if (!cached) return;
+      var audio = new Audio();
+      audio.preload = 'auto';
+      audio.volume = state.volume;
+      if (cached.audioUrl) {
+        audio.src = String(cached.audioUrl);
+      } else if (cached.blob) {
+        audio._blobUrl = URL.createObjectURL(cached.blob);
+        audio.src = audio._blobUrl;
+      } else {
+        return;
+      }
+      try { audio.load(); } catch {}
+      _prepAudio = audio;
+      _prepCacheKey = key;
+    }
+
     function clearPreloadCache() {
       _lruCache.forEach(function (entry) {
         if (entry && entry.blobUrl) {
@@ -95,6 +132,7 @@
       });
       _lruCache.clear();
       _preloadFailed.clear();
+      _clearPrepared();
     }
 
     // FIX-TTS05: Background preload — synthesize and cache without playing
@@ -278,6 +316,7 @@
     function setVolume(vol) {
       state.volume = Math.max(0, Math.min(1, Number(vol) || 1.0));
       if (state.audio) state.audio.volume = state.volume;
+      if (_prepAudio) _prepAudio.volume = state.volume; // FIX-TTS-B5 #8
     }
 
     function setPitch(pitch) {
@@ -412,6 +451,13 @@
         var nw = _normWord(word);
         if (nw && normTxt) {
           var idx2 = normTxt.indexOf(nw, normPos);
+          // FIX-TTS-B5 #9: Fallback — if forward search fails, look back slightly
+          // to recover from boundary text mismatches at high speed
+          if (idx2 < 0 && normPos > 0) {
+            idx2 = normTxt.indexOf(nw, Math.max(0, normPos - nw.length * 2));
+          }
+          // Cap max forward jump to prevent matching a distant repeated word
+          if (idx2 >= 0 && idx2 > normPos + 200) idx2 = -1;
           if (idx2 >= 0) {
             var startOrig = normMap[idx2] != null ? normMap[idx2] : lastCharIndex;
             var endNorm = idx2 + nw.length - 1;
@@ -670,6 +716,7 @@
     }
 
     // FIX-TTS05: Gapless re-speak — keep current audio playing until new audio is ready
+    // FIX-TTS-B5 #8: Use pre-buffered audio element when available for near-zero gap
     async function speakGapless(text) {
       var t = String(text || '').trim();
       if (!t) return;
@@ -681,8 +728,58 @@
       state.abortCtrl = new AbortController();
       var signal = state.abortCtrl.signal;
 
-      // Check LRU cache
       var cacheKey = _lruKey(t);
+
+      // FIX-TTS-B5 #8: If next block was pre-buffered and ready, use it directly
+      if (_prepAudio && _prepCacheKey === cacheKey && _prepAudio.readyState >= 2) {
+        var pAudio = _prepAudio;
+        var pBlobUrl = pAudio._blobUrl || null;
+        _prepAudio = null;
+        _prepCacheKey = null;
+        var pCached = _lruGet(cacheKey);
+        _revokeBlobUrl();
+        if (state.audio) { try { state.audio.pause(); state.audio.removeAttribute('src'); } catch {} }
+        state.audio = pAudio;
+        if (pBlobUrl) state.blobUrl = pBlobUrl;
+        state.playing = true;
+        state.paused = false;
+        pAudio.onended = function () {
+          if (newReqId !== state.requestId) return;
+          state.playing = false;
+          state.paused = false;
+          _synthErrorCount = 0;
+          diag('edge_play_ok', '');
+          if (typeof state.onEnd === 'function') state.onEnd();
+        };
+        pAudio.onerror = function () {
+          if (newReqId !== state.requestId) return;
+          state.playing = false;
+          var reason = pAudio.error ? String(pAudio.error.message || pAudio.error.code || 'unknown') : 'unknown';
+          diag('edge_play_fail', reason);
+          if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: reason });
+        };
+        fireBoundaries(newReqId, pCached ? pCached.boundaries : [], t);
+        try {
+          var pp = pAudio.play();
+          if (pp && typeof pp.catch === 'function') {
+            pp.catch(function (err) {
+              if (newReqId !== state.requestId) return;
+              state.playing = false;
+              diag('edge_play_fail', String(err && err.message ? err.message : err));
+              if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
+            });
+          }
+        } catch (err) {
+          state.playing = false;
+          diag('edge_play_fail', String(err && err.message ? err.message : err));
+          if (typeof state.onError === 'function') state.onError({ error: 'edge_play_fail', stage: 'edge_play', reason: String(err && err.message ? err.message : err) });
+        }
+        diag('edge_preload_hit', 'prepared');
+        return;
+      }
+      _clearPrepared();
+
+      // Check LRU cache
       var cached = _lruGet(cacheKey);
       if (cached) {
         diag('edge_preload_hit', '');
@@ -768,6 +865,7 @@
 
     function cancel() {
       _bdStop(); // FIX-TTS08: stop boundary poller
+      _clearPrepared(); // FIX-TTS-B5 #8
       state._resumeSeekMs = null;
       state.resumeCharIndex = -1;
       if (state.abortCtrl) {
@@ -825,6 +923,7 @@
       resume: resume,
       cancel: cancel,
       preload: preload,
+      prepareNext: prepareNext, // FIX-TTS-B5 #8
       clearPreloadCache: clearPreloadCache,
       isSpeaking: isSpeaking,
       isPaused: isPaused,

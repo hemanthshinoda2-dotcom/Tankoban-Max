@@ -58,13 +58,13 @@ Make failures visible to the user instead of silently stopping.
 ## Batch 5 — Audio Quality
 Smoother playback and more accurate word tracking.
 
-- [ ] **#8 MEDIUM — No gapless crossfade between blocks**
+- [x] **#8 MEDIUM — No gapless crossfade between blocks**
   `tts_engine_edge.js` — Block transitions have 50-200ms micro-silences. Old audio stops, new audio starts with no overlap or fade.
 
-- [ ] **#9 MEDIUM — Word highlight drifts at high speed**
+- [x] **#9 MEDIUM — Word highlight drifts at high speed**
   `tts_engine_edge.js:323-425` — Text normalization strips punctuation aggressively. `indexOf` matching can hit wrong word occurrence. At 2-3x speed, highlight lags 1-2 words behind audio.
 
-- [ ] **#13 MEDIUM — Enlarge span persists after DOM mutation**
+- [x] **#13 MEDIUM — Enlarge span persists after DOM mutation**
   `tts_core.js:432-454` — Enlarge `<span>` wrapping a word can detach from DOM on page reflow. Cleanup fails silently, leaving visual artifact.
 
 ---
