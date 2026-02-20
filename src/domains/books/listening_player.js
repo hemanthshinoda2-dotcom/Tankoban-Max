@@ -21,6 +21,11 @@
 
   var _pausedAtMs = 0;
   var _autoRewindEnabled = false;
+  // FIX-TTS-B6 #11: Cache active segment index to avoid full DOM rebuild on every word
+  var _cardActiveIdx = -1;
+  var _cardSegCount = 0;
+  // FIX-TTS-B6 #20: Cache voice list count to skip rebuild when unchanged
+  var _voiceCacheCount = -1;
   var AUTO_REWIND_MS = 5000;
   var AUTO_REWIND_AFTER_PAUSE_MS = 20000;
 
@@ -309,35 +314,56 @@ function updateCard(info) {
           inner.innerHTML = '<div class="lp-seg is-active">' + escHtml(t) + '</div>';
         }
         inner.style.transform = 'translateY(0px)';
+        _cardActiveIdx = -1;
+        _cardSegCount = 0;
       } else {
         var activeIdx = win.activeIdx;
-        var html2 = '';
-        for (var i = 0; i < win.segments.length; i++) {
-          var seg = win.segments[i];
-          var txt = String(seg.text || '');
-          var cls = 'lp-seg';
-          if (seg.idx === activeIdx) cls += ' is-active';
-          else if (Math.abs(seg.idx - activeIdx) === 1) cls += ' is-near';
 
-          if (seg.idx === activeIdx) {
-            // Apply word highlight inside the active segment if available.
-            var wS = info.wordStart;
-            var wE = info.wordEnd;
-            if (txt && wS >= 0 && wE > wS && wE <= txt.length) {
-              html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">'
-                + escHtml(txt.slice(0, wS))
-                + '<mark class="lp-word-active">' + escHtml(txt.slice(wS, wE)) + '</mark>'
-                + escHtml(txt.slice(wE))
-                + '</div>';
+        // FIX-TTS-B6 #11: If same block, only update word highlight in the active segment
+        // instead of rebuilding all 7 segment divs (avoids innerHTML 10-20x/sec)
+        var needFullRebuild = (activeIdx !== _cardActiveIdx || win.segments.length !== _cardSegCount);
+
+        if (!needFullRebuild) {
+          var activeDivEl = inner.querySelector('.lp-seg.is-active');
+          if (activeDivEl) {
+            var txt0 = String(info.text || '');
+            var wSI = info.wordStart;
+            var wEI = info.wordEnd;
+            if (txt0 && wSI >= 0 && wEI > wSI && wEI <= txt0.length) {
+              activeDivEl.innerHTML = escHtml(txt0.slice(0, wSI))
+                + '<mark class="lp-word-active">' + escHtml(txt0.slice(wSI, wEI)) + '</mark>'
+                + escHtml(txt0.slice(wEI));
+            }
+          }
+        } else {
+          _cardActiveIdx = activeIdx;
+          _cardSegCount = win.segments.length;
+          var html2 = '';
+          for (var i = 0; i < win.segments.length; i++) {
+            var seg = win.segments[i];
+            var txt = String(seg.text || '');
+            var cls = 'lp-seg';
+            if (seg.idx === activeIdx) cls += ' is-active';
+            else if (Math.abs(seg.idx - activeIdx) === 1) cls += ' is-near';
+
+            if (seg.idx === activeIdx) {
+              var wS = info.wordStart;
+              var wE = info.wordEnd;
+              if (txt && wS >= 0 && wE > wS && wE <= txt.length) {
+                html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">'
+                  + escHtml(txt.slice(0, wS))
+                  + '<mark class="lp-word-active">' + escHtml(txt.slice(wS, wE)) + '</mark>'
+                  + escHtml(txt.slice(wE))
+                  + '</div>';
+              } else {
+                html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">' + escHtml(txt) + '</div>';
+              }
             } else {
               html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">' + escHtml(txt) + '</div>';
             }
-          } else {
-            html2 += '<div class="' + cls + '" data-idx="' + String(seg.idx) + '">' + escHtml(txt) + '</div>';
           }
+          inner.innerHTML = html2;
         }
-
-        inner.innerHTML = html2;
 
         // FIX-LP-SCROLL: Auto-scroll to keep the narrated word visible in the
         // 4:3 prose stage. Targets the <mark> word highlight when present (so
@@ -450,6 +476,12 @@ function updateCard(info) {
     if (!tts || typeof tts.getVoices !== 'function') return;
     var voices = [];
     try { voices = tts.getVoices(); } catch {}
+    // FIX-TTS-B6 #20: Skip rebuild if voice count unchanged (voices don't change mid-session)
+    if (_voiceCacheCount === voices.length && sel.options.length > 0) {
+      if (_settings.ttsVoice) sel.value = _settings.ttsVoice;
+      return;
+    }
+    _voiceCacheCount = voices.length;
     var enVoices = voices.filter(function (v) { return /^en[-_]/i.test(v.lang || ''); });
     sel.innerHTML = '';
     if (!enVoices.length) {

@@ -72,10 +72,10 @@ Smoother playback and more accurate word tracking.
 ## Batch 6 — Player UI Performance
 Reduce jank and improve responsiveness.
 
-- [ ] **#11 MEDIUM — Segment window DOM rebuilt on every word**
+- [x] **#11 MEDIUM — Segment window DOM rebuilt on every word**
   `listening_player.js:287-372` — `updateCard()` rebuilds entire `innerHTML` on every word boundary (10-20x/sec). Each rebuild triggers layout calculations. Causes scroll jank on slower devices.
 
-- [ ] **#20 LOW — Voice list rebuilt on every TTS init**
+- [x] **#20 LOW — Voice list rebuilt on every TTS init**
   `listening_player.js:446-494` — Filters and groups 50+ voices each time player opens. Should cache.
 
 ---
