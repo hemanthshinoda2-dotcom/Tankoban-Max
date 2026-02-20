@@ -569,23 +569,28 @@
 
     // Walk through all blocks using foliate's existing next() mechanism.
     // First, start from the beginning.
-    var ssml = _fol.tts.start();
-    var idx = 0;
-    while (ssml) {
-      var parsed = parseSSML(ssml);
-      // Snapshot the mark→Range map for this block
-      var ranges = null;
-      if (typeof _fol.tts.snapshotRanges === 'function') {
-        ranges = _fol.tts.snapshotRanges();
+    // FIX-TTS-B4 #12: Wrap in try/catch — keep partial queue on error
+    try {
+      var ssml = _fol.tts.start();
+      var idx = 0;
+      while (ssml) {
+        var parsed = parseSSML(ssml);
+        // Snapshot the mark→Range map for this block
+        var ranges = null;
+        if (typeof _fol.tts.snapshotRanges === 'function') {
+          ranges = _fol.tts.snapshotRanges();
+        }
+        _queue.items.push({
+          ssml: ssml,
+          text: parsed.plainText,
+          marks: parsed.marks,
+          ranges: ranges, // Map of mark name → Range for word highlighting
+        });
+        idx++;
+        ssml = _fol.tts.next();
       }
-      _queue.items.push({
-        ssml: ssml,
-        text: parsed.plainText,
-        marks: parsed.marks,
-        ranges: ranges, // Map of mark name → Range for word highlighting
-      });
-      idx++;
-      ssml = _fol.tts.next();
+    } catch (err) {
+      state.lastError = normalizeErr(err, 'queue_generation_error');
     }
     _queue.length = _queue.items.length;
   }
@@ -840,6 +845,8 @@
       _consecutiveErrors++;
       if (_consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         _consecutiveErrors = 0;
+        // FIX-TTS-B4 #7: Tag the error so UI can show feedback
+        state.lastError = normalizeErr(err, 'max_errors_reached');
         stop();
         return;
       }
@@ -1399,7 +1406,8 @@
   }
 
   var TTS_RATE_MIN = 0.5;
-  var TTS_RATE_MAX = 3.0;
+  // FIX-TTS-B4 #2: Edge TTS silently caps at 2.0x — match the real limit
+  var TTS_RATE_MAX = 2.0;
 
   // TTS-QOL4: removed _respeakCurrentBlock() — rate change applies to next block,
   // avoids restarting the current sentence from the beginning.

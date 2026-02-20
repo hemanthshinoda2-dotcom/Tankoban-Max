@@ -44,13 +44,13 @@ Prevents audio gaps and stalls during playback.
 ## Batch 4 — Error Feedback & Recovery
 Make failures visible to the user instead of silently stopping.
 
-- [ ] **#7 MEDIUM — No feedback when max consecutive errors reached**
+- [x] **#7 MEDIUM — No feedback when max consecutive errors reached**
   `tts_core.js:838-841` — After several synthesis failures, TTS silently stops. No message or indicator. User thinks it just stopped for no reason.
 
-- [ ] **#12 MEDIUM — Queue generation has no error handling**
+- [x] **#12 MEDIUM — Queue generation has no error handling**
   `tts_core.js:560-588` — If `_fol.tts.next()` throws during queue build, queue is partially filled with no indication. Playback may skip content.
 
-- [ ] **#2 CRITICAL — Rate 3.0x requested but silently capped to 2.0x**
+- [x] **#2 CRITICAL — Rate 3.0x requested but silently capped to 2.0x**
   `tts_core.js:1399` — Speed slider goes to 3.0 but Edge TTS maxes at 2.0. User sees 3.0x in UI but hears 2.0x. No warning.
 
 ---

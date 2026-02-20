@@ -823,6 +823,13 @@ function updateCard(info) {
       if (info) updateCard(info);
       var diagEl = qs('lpTtsDiag');
       if (diagEl && !diagEl.classList.contains('hidden')) updateDiag();
+      // FIX-TTS-B4 #7: Notify user when TTS stopped due to repeated errors
+      if (status === 'idle' && info && info.lastError) {
+        var code = info.lastError.error || info.lastError.code || '';
+        if (code === 'max_errors_reached') {
+          toast('Listening stopped \u2014 too many errors. Try again or switch voice.');
+        }
+      }
     };
     tts.onProgress = function (info) {
       updateCard(info);
