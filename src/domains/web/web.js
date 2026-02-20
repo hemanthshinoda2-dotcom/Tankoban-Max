@@ -1091,10 +1091,12 @@
     el.dlPanel.classList.remove('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'false'); } catch (e) {}
     renderDownloadsPanel();
-    // Hide native WebContentsView so it doesn't cover the panel
+    // Shrink native WebContentsView to leave room for the downloads panel on the right
     var tab = getActiveTab();
     if (tab && tab.mainTabId) {
-      api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: { x: 0, y: 0, width: 0, height: 0 } }).catch(function () {});
+      var bounds = getContainerBounds();
+      bounds.width = Math.max(0, bounds.width - 384);
+      api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: bounds }).catch(function () {});
     }
   }
 

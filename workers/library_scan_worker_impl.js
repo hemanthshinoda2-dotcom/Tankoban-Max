@@ -162,21 +162,24 @@ async function buildLibraryIndex(seriesFolders) {
 }
 
 // BUILD 88 FIX 1.3: buildLibraryIndex is now async
-try {
-  const folders = Array.isArray(workerData?.seriesFolders) ? workerData.seriesFolders : [];
-  const idx = await buildLibraryIndex(folders);
+// FIX-SESSION6: wrap in async IIFE — top-level await is illegal in CJS require()
+(async function () {
+  try {
+    const folders = Array.isArray(workerData?.seriesFolders) ? workerData.seriesFolders : [];
+    const idx = await buildLibraryIndex(folders);
 
-  const indexPath = String(workerData?.indexPath || '');
-  if (indexPath) {
-    try {
-      fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-  // TRACE:PERSIST_WRITE fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
-      fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
-    } catch {}
+    const indexPath = String(workerData?.indexPath || '');
+    if (indexPath) {
+      try {
+        fs.mkdirSync(path.dirname(indexPath), { recursive: true });
+    // TRACE:PERSIST_WRITE fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
+        fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
+      } catch {}
+    }
+
+    parentPort.postMessage({ type: 'done', idx });
+  } catch (err) {
+    // Keep message shape stable; main.js treats errors as scan failure.
+    parentPort.postMessage({ type: 'done', idx: { series: [], books: [] }, error: String(err?.message || err) });
   }
-
-  parentPort.postMessage({ type: 'done', idx });
-} catch (err) {
-  // Keep message shape stable; main.js treats errors as scan failure.
-  parentPort.postMessage({ type: 'done', idx: { series: [], books: [] }, error: String(err?.message || err) });
-}
+})();

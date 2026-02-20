@@ -608,7 +608,7 @@ Hot search tokens:
       var p = null;
       if (isActive) {
         if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
-        else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
+        else if (d.totalBytes > 0 && d.receivedBytes != null) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
       }
       var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
       var sub = isActive ? (pctTxt || 'Downloading...') : (isBad ? 'Failed' : 'Saved');

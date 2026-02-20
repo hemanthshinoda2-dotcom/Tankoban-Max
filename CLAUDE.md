@@ -54,6 +54,9 @@ Other: archives/, clipboard/, comic/, export/, files/, library/, player_core/, p
 - EPUB content lives in iframes. Events don't bubble. Use `view.addEventListener('load', ...)` to bind into iframe docs
 - `ensureEls()` caches DOM refs; invalidated on reader close. Detached nodes → `getComputedStyle` returns `""`
 
+## Scope Rule (MANDATORY)
+Only work on ONE task per session unless Hemanth explicitly says otherwise. Do not bundle multiple fixes or features into a single session.
+
 ## Diff Rules (MANDATORY)
 Every changed line must be required by the task. When in doubt, change less.
 - NEVER: change `var`→`let`/`const`, `function`→arrow, concat→template, `==`→`===`

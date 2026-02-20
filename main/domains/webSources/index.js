@@ -328,6 +328,7 @@ function setupDownloadHandler(ctx) {
           pageUrl: pageUrl,
           downloadUrl: downloadUrl,
           totalBytes: totalBytes,
+          receivedBytes: 0,
         });
         cfgStart.updatedAt = Date.now();
         capDownloads(cfgStart);
@@ -381,7 +382,7 @@ function setupDownloadHandler(ctx) {
             filename: filename,
             destination: route.destination,
             library: route.library,
-            state: st,
+            state: (st === 'interrupted') ? 'interrupted' : 'downloading',
             receivedBytes: received,
             totalBytes: total,
             progress: pct,
