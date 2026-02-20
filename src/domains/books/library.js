@@ -2846,7 +2846,20 @@ function getBookProgress(bookId) {
     for (var k = 0; k < items.length; k++) {
       items[k].addEventListener('click', function () {
         var dest = this.getAttribute('data-dl-dest');
-        if (dest && api && api.shell && api.shell.revealPath) {
+        if (!dest || !api) return;
+        if (api.books && api.books.bookFromPath) {
+          api.books.bookFromPath(dest).then(function (res) {
+            if (res && res.ok && res.book && res.book.path) {
+              try { openBook(res.book); } catch (err) {}
+            } else if (api.shell && api.shell.revealPath) {
+              try { api.shell.revealPath(dest); } catch (err) {}
+            }
+          }).catch(function () {
+            if (api.shell && api.shell.revealPath) {
+              try { api.shell.revealPath(dest); } catch (err) {}
+            }
+          });
+        } else if (api.shell && api.shell.revealPath) {
           try { api.shell.revealPath(dest); } catch (err) {}
         }
       });

@@ -624,11 +624,23 @@ Hot search tokens:
     for (var k = 0; k < items.length; k++) {
       items[k].addEventListener('click', function () {
         var dest = this.getAttribute('data-dl-dest');
-        if (dest) {
-          var _api = window.Tanko && window.Tanko.api;
-          if (_api && _api.shell && _api.shell.revealPath) {
-            try { _api.shell.revealPath(dest); } catch (err) {}
-          }
+        if (!dest) return;
+        var _api = window.Tanko && window.Tanko.api;
+        if (!_api) return;
+        if (_api.library && _api.library.bookFromPath) {
+          _api.library.bookFromPath(dest).then(function (res) {
+            if (res && res.ok && res.book && res.book.path) {
+              try { window.openBook(res.book); } catch (err) {}
+            } else if (_api.shell && _api.shell.revealPath) {
+              try { _api.shell.revealPath(dest); } catch (err) {}
+            }
+          }).catch(function () {
+            if (_api.shell && _api.shell.revealPath) {
+              try { _api.shell.revealPath(dest); } catch (err) {}
+            }
+          });
+        } else if (_api.shell && _api.shell.revealPath) {
+          try { _api.shell.revealPath(dest); } catch (err) {}
         }
       });
     }

@@ -20,6 +20,20 @@ const { seriesIdForFolder, bookIdForPath } = require('./shared/ids');
 
 
 
+function listCbzFilesDirect(dir, ignoreCfg) {
+  var out = [];
+  var entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    if (!e.isFile()) continue;
+    if (!/\.(cbz|cbr)$/i.test(e.name)) continue;
+    const full = path.join(dir, e.name);
+    if (shouldIgnorePath(full, e.name, false, ignoreCfg)) continue;
+    out.push(full);
+  }
+  return out;
+}
+
 function listCbzFilesRecursive(rootDir, ignoreCfg) {
   const out = [];
   const stack = [rootDir];
@@ -101,6 +115,43 @@ async function buildLibraryIndex(seriesFolders) {
         currentSeries: name,
       });
     } catch {}
+  }
+
+  // FIX-SESSION6: scan root folders for loose .cbz/.cbr files not inside a subfolder
+  var rootFolders = Array.isArray(workerData.rootFolders) ? workerData.rootFolders : [];
+  var knownPaths = new Set(books.map(function (b) { return b.path; }));
+  for (const root of rootFolders) {
+    var looseFiles = listCbzFilesDirect(root, ignoreCfg);
+    var looseBooks = [];
+    for (const fp of looseFiles) {
+      if (knownPaths.has(fp)) continue;
+      const st = statSafe(fp);
+      if (!st) continue;
+      const id = bookIdForPath(fp, st);
+      const title = path.basename(fp).replace(/\.(cbz|cbr)$/i, '');
+      const sid = seriesIdForFolder(root + '/__uncategorized');
+      const b = {
+        id,
+        title,
+        seriesId: sid,
+        series: 'Uncategorized',
+        path: fp,
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+      };
+      books.push(b);
+      looseBooks.push(b);
+      knownPaths.add(fp);
+    }
+    if (looseBooks.length) {
+      series.push({
+        id: seriesIdForFolder(root + '/__uncategorized'),
+        name: 'Uncategorized',
+        path: root,
+        count: looseBooks.length,
+        newestMtimeMs: looseBooks.reduce(function (m, x) { return Math.max(m, x.mtimeMs || 0); }, 0),
+      });
+    }
   }
 
   // Stable ordering

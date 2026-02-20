@@ -345,6 +345,7 @@ function setupDownloadHandler(ctx) {
           filename: filename,
           destination: route.destination,
           library: route.library,
+          state: 'downloading',
           pageUrl: pageUrl,
           downloadUrl: downloadUrl,
           totalBytes: totalBytes,

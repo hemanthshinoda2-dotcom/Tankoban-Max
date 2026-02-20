@@ -312,6 +312,7 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
   const w = new Worker(workerURL, {
     workerData: {
       seriesFolders: folders,
+      rootFolders: Array.isArray(cfg.rootFolders) ? cfg.rootFolders : [],
       indexPath,
       ignore: {
         dirNames: DEFAULT_SCAN_IGNORE_DIRNAMES,
