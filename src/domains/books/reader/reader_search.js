@@ -5,6 +5,45 @@
   var RS = window.booksReaderState;
   var bus = window.booksReaderBus;
 
+  // PATCH4: Search history + scope toggle + progress indicator (Readest-ish)
+  var HISTORY_KEY = 'brSearchHistory:v1';
+  function loadHistory() {
+    try {
+      var raw = localStorage.getItem(HISTORY_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.slice(0, 30) : [];
+    } catch (e) { return []; }
+  }
+  function saveHistory(arr) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify((arr || []).slice(0, 30))); } catch (e) {}
+  }
+  function rememberQuery(q) {
+    q = String(q || '').trim();
+    if (!q) return;
+    var h = loadHistory();
+    var low = q.toLowerCase();
+    h = h.filter(function (x) { return String(x || '').toLowerCase() !== low; });
+    h.unshift(q);
+    saveHistory(h);
+  }
+  function getScope() {
+    var state = RS.state;
+    if (!state.searchScope) state.searchScope = 'book';
+    return state.searchScope === 'section' ? 'section' : 'book';
+  }
+  function setScope(scope) {
+    var state = RS.state;
+    state.searchScope = (scope === 'section') ? 'section' : 'book';
+    try { localStorage.setItem('brSearchScope:v1', state.searchScope); } catch (e) {}
+  }
+  function loadScope() {
+    try {
+      var s = localStorage.getItem('brSearchScope:v1');
+      if (s === 'section' || s === 'book') RS.state.searchScope = s;
+    } catch (e) {}
+  }
+
+
   function ensureSearchResultsUi() {
     var els = RS.ensureEls();
     if (!els.overlaySearch) return { root: null, list: null };
@@ -30,6 +69,86 @@
     var body = els.overlaySearch.querySelector('.br-overlay-body');
     if (!body) return { root: null, list: null };
 
+    // PATCH4: extra controls (scope + history + progress)
+    loadScope();
+    var controls = body.querySelector('.br-search-controls2');
+    if (!controls) {
+      controls = document.createElement('div');
+      controls.className = 'br-search-controls2';
+      controls.innerHTML = '' +
+        '<div class="br-search-scope">' +
+          '<button type="button" class="br-scope-btn" data-scope="book">Book</button>' +
+          '<button type="button" class="br-scope-btn" data-scope="section">Section</button>' +
+        '</div>' +
+        '<div class="br-search-history">' +
+          '<select class="br-search-history-select" title="Recent searches"></select>' +
+        '</div>' +
+        '<div class="br-search-actions">' +
+          '<button type="button" class="br-search-clear" title="Clear">Clear</button>' +
+        '</div>' +
+        '<div class="br-search-progress" aria-live="polite"></div>';
+      body.insertBefore(controls, body.firstChild);
+    }
+    // Ensure style for the new controls
+    if (!document.getElementById('brSearchControlsStyle')) {
+      var st2 = document.createElement('style');
+      st2.id = 'brSearchControlsStyle';
+      st2.textContent = [
+        '#brOverlaySearch .br-search-controls2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;}',
+        '#brOverlaySearch .br-search-scope{display:flex;gap:6px;}',
+        '#brOverlaySearch .br-scope-btn{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
+        '#brOverlaySearch .br-scope-btn.is-active{outline:2px solid rgba(255,255,255,0.20);}',
+        '#brOverlaySearch .br-search-history-select{max-width:240px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);color:inherit;font-size:12px;}',
+        '#brOverlaySearch .br-search-clear{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
+        '#brOverlaySearch .br-search-progress{margin-left:auto;opacity:0.8;font-size:12px;min-height:16px;}',
+      ].join('
+');
+      document.head.appendChild(st2);
+    }
+    // Wire controls
+    var scopeBtns = controls.querySelectorAll('.br-scope-btn');
+    for (var sb = 0; sb < scopeBtns.length; sb++) {
+      (function (btn) {
+        btn.classList.toggle('is-active', btn.dataset.scope === getScope());
+        btn.addEventListener('click', function () {
+          setScope(btn.dataset.scope);
+          for (var sb2 = 0; sb2 < scopeBtns.length; sb2++) scopeBtns[sb2].classList.toggle('is-active', scopeBtns[sb2].dataset.scope === getScope());
+          // Re-run search in the new scope if query exists
+          var q2 = (els.utilSearchInput && els.utilSearchInput.value) ? String(els.utilSearchInput.value).trim() : '';
+          if (q2) { try { bus.emit('search:run', q2); } catch (e) {} }
+        });
+      })(scopeBtns[sb]);
+    }
+    var histSel = controls.querySelector('.br-search-history-select');
+    if (histSel) {
+      var h = loadHistory();
+      var cur = (els.utilSearchInput && els.utilSearchInput.value) ? String(els.utilSearchInput.value).trim() : '';
+      var opt0 = document.createElement('option');
+      opt0.value = '';
+      opt0.textContent = h.length ? 'Recent searches…' : 'No recent searches';
+      histSel.innerHTML = '';
+      histSel.appendChild(opt0);
+      for (var hi = 0; hi < h.length; hi++) {
+        var opt = document.createElement('option');
+        opt.value = String(h[hi] || '');
+        opt.textContent = String(h[hi] || '');
+        if (cur && opt.value === cur) opt.selected = true;
+        histSel.appendChild(opt);
+      }
+      histSel.onchange = function () {
+        var v = String(histSel.value || '').trim();
+        if (!v) return;
+        if (els.utilSearchInput) els.utilSearchInput.value = v;
+        try { bus.emit('search:run', v); } catch (e) {}
+        histSel.value = '';
+      };
+    }
+    var clearBtn = controls.querySelector('.br-search-clear');
+    if (clearBtn && !clearBtn._wired) {
+      clearBtn._wired = true;
+      clearBtn.addEventListener('click', function () { bus.emit('search:clear'); });
+    }
+
     var root = body.querySelector('.br-search-results');
     if (!root) {
       root = document.createElement('div');
@@ -37,6 +156,19 @@
       body.appendChild(root);
     }
     return { root: root };
+  }
+
+  function setProgressText(text) {
+    try {
+      var els = RS.ensureEls();
+      if (!els.overlaySearch) return;
+      var body = els.overlaySearch.querySelector('.br-overlay-body');
+      if (!body) return;
+      var controls = body.querySelector('.br-search-controls2');
+      if (!controls) return;
+      var p = controls.querySelector('.br-search-progress');
+      if (p) p.textContent = String(text || '');
+    } catch (e) {}
   }
 
   function fmtExcerpt(excerpt) {
@@ -135,6 +267,7 @@
     }
     updateSearchUI();
     renderResultsList();
+    setProgressText('');
     await RS.saveProgress();
     bus.emit('nav:progress-sync');
   }
@@ -151,6 +284,7 @@
     }
     updateSearchUI();
     renderResultsList();
+    setProgressText('');
     var els = RS.ensureEls();
     if (els.utilSearchInput) els.utilSearchInput.value = '';
   }
@@ -203,11 +337,14 @@
 
     if (count > 0) {
       RS.setStatus(count + ' match' + (count !== 1 ? 'es' : ''));
+      setProgressText(count + ' match' + (count !== 1 ? 'es' : ''));
     } else {
       RS.setStatus('No matches');
+      setProgressText('No matches');
     }
     updateSearchUI();
     renderResultsList();
+    setProgressText('');
   }
 
   // ── searchPrev ───────────────────────────────────────────────
@@ -220,6 +357,7 @@
     }
     updateSearchUI();
     renderResultsList();
+    setProgressText('');
     await RS.saveProgress();
     bus.emit('nav:progress-sync');
   }
@@ -234,6 +372,7 @@
     }
     updateSearchUI();
     renderResultsList();
+    setProgressText('');
     await RS.saveProgress();
     bus.emit('nav:progress-sync');
   }

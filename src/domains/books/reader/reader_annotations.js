@@ -5,6 +5,43 @@
   var RS = window.booksReaderState;
   var bus = window.booksReaderBus;
 
+  // PATCH6: annotation filters + export
+  function getAnnotFilter() {
+    var s = RS.state;
+    if (!s.annotFilter) {
+      try { s.annotFilter = localStorage.getItem('brAnnotFilter:v1') || 'all'; } catch (e) { s.annotFilter = 'all'; }
+    }
+    var f = String(s.annotFilter || 'all');
+    return (f === 'highlights' || f === 'notes') ? f : 'all';
+  }
+  function setAnnotFilter(f) {
+    var s = RS.state;
+    s.annotFilter = (f === 'highlights' || f === 'notes') ? f : 'all';
+    try { localStorage.setItem('brAnnotFilter:v1', s.annotFilter); } catch (e) {}
+  }
+  function buildAnnotExportMarkdown(list) {
+    var b = RS.state.book;
+    var title = (b && (b.title || b.name)) ? String(b.title || b.name) : 'Annotations';
+    var out = [];
+    out.push('# ' + title);
+    out.push('');
+    for (var i = 0; i < list.length; i++) {
+      var a = list[i];
+      var t = String(a.text || '').trim();
+      var n = String(a.note || '').trim();
+      var lab = String(a.chapterLabel || a.label || '').trim();
+      var when = a.ts ? new Date(Number(a.ts)).toISOString().replace('T', ' ').slice(0, 16) : '';
+      out.push('## ' + (lab || ('Highlight ' + (i + 1))));
+      if (when) out.push('*' + when + '*');
+      out.push('');
+      if (t) out.push('> ' + t.replace(/\n/g, '\n> '));
+      if (n) { out.push(''); out.push(n); }
+      out.push('');
+    }
+    return out.join('\n');
+  }
+
+
   // BUILD_OVERHAUL: annotations require EPUB-compatible engine APIs
   function annotationsSupported() {
     var state = RS.state;
@@ -32,7 +69,7 @@
     if (!annotationsSupported()) return;
     if (!state.engine || !Array.isArray(state.annotations)) return;
     for (var i = 0; i < state.annotations.length; i++) {
-      var ann = state.annotations[i];
+      var ann = anns[i];
       if (!ann || !ann.cfi) continue;
       try {
         if (typeof state.engine.setAnnotationMeta === 'function') {
@@ -315,9 +352,29 @@
       return;
     }
 
+    // PATCH6: toolbar (filters + export)
+    var filter = getAnnotFilter();
+    var toolbar = document.createElement('div');
+    toolbar.className = 'br-annot-toolbar';
+    toolbar.innerHTML = '' +
+      '<div class="br-annot-filters">' +
+        '<button type="button" class="br-annot-filter" data-filter="all">All</button>' +
+        '<button type="button" class="br-annot-filter" data-filter="highlights">Highlights</button>' +
+        '<button type="button" class="br-annot-filter" data-filter="notes">Notes</button>' +
+      '</div>' +
+      '<button type="button" class="br-annot-export">Export</button>';
+    // Build filtered list
+    var anns = Array.isArray(state.annotations) ? state.annotations.slice() : [];
+    if (filter === 'notes') {
+      anns = anns.filter(function (a) { return a && String(a.note || '').trim().length > 0; });
+    } else if (filter === 'highlights') {
+      anns = anns.filter(function (a) { return a && String(a.note || '').trim().length === 0; });
+    }
+    // Render
     var html = '';
-    for (var i = 0; i < state.annotations.length; i++) {
-      var ann = state.annotations[i];
+    html += toolbar.outerHTML;
+    for (var i = 0; i < anns.length; i++) {
+      var ann = anns[i];
       var textPreview = RS.escHtml(String(ann.text || '').substring(0, 80));
       if (String(ann.text || '').length > 80) textPreview += '\u2026';
       var notePreview = ann.note ? '<div class="booksAnnotItemNote">' + RS.escHtml(String(ann.note).substring(0, 60)) + '</div>' : '';
@@ -333,6 +390,47 @@
         + '</div>';
     }
     els.annotList.innerHTML = html;
+
+    // PATCH6: wire toolbar
+    var tbar = els.annotList.querySelector('.br-annot-toolbar');
+    if (tbar) {
+      var fbtns = tbar.querySelectorAll('.br-annot-filter');
+      for (var fb = 0; fb < fbtns.length; fb++) {
+        (function (btn) {
+          btn.classList.toggle('is-active', btn.dataset.filter === filter);
+          btn.addEventListener('click', function () {
+            setAnnotFilter(btn.dataset.filter);
+            renderAnnotationList();
+          });
+        })(fbtns[fb]);
+      }
+      var exp = tbar.querySelector('.br-annot-export');
+      if (exp) {
+        exp.addEventListener('click', function () {
+          try {
+            var md = buildAnnotExportMarkdown(anns);
+            if (Tanko.api && Tanko.api.clipboard && Tanko.api.clipboard.copyText) {
+              Tanko.api.clipboard.copyText(md).then(function () { RS.showToast('Copied'); }).catch(function () { RS.showToast('Copy failed'); });
+            } else {
+              // Fallback: prompt
+              window.prompt('Copy annotations', md);
+            }
+          } catch (e) { RS.showToast('Export failed'); }
+        });
+      }
+      if (!document.getElementById('brAnnotToolbarStyle')) {
+        var st = document.createElement('style');
+        st.id = 'brAnnotToolbarStyle';
+        st.textContent = [
+          '.br-annot-toolbar{display:flex;align-items:center;gap:10px;margin:6px 0 10px 0;}',
+          '.br-annot-filters{display:flex;gap:6px;}',
+          '.br-annot-filter{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
+          '.br-annot-filter.is-active{outline:2px solid rgba(255,255,255,0.20);}',
+          '.br-annot-export{margin-left:auto;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
+        ].join('\n');
+        document.head.appendChild(st);
+      }
+    }
 
     // Wire click-to-navigate
     var items = els.annotList.querySelectorAll('.booksAnnotItem');

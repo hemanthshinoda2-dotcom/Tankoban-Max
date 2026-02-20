@@ -349,10 +349,15 @@
       const s = (settings && typeof settings === 'object') ? settings : {};
       // Font size applied directly on body — NOT via --USER__fontSize which triggers
       // ReadiumCSS zoom on body and breaks foliate-js paginator column calculations.
+      // PATCH8: In *scrolled* flow, we can safely use ReadiumCSS user font size var as well,
+      // and apply to html+body to beat aggressive publisher CSS.
       const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
+      const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
       const userOverrides = fontSize !== 100
-        ? 'body { font-size: ' + fontSize + '% !important; }'
-        : '';
+        ? (isScrolled
+          ? (':root{--USER__fontSize:' + fontSize + '% !important;}\nhtml,body{font-size:' + fontSize + '% !important;}\nhtml{scroll-behavior:auto !important;scroll-snap-type:none !important;}\nbody{scroll-behavior:auto !important;}\n:root{overscroll-behavior:contain;}')
+          : ('body { font-size: ' + fontSize + '% !important; }'))
+        : (isScrolled ? ':root{--USER__fontSize:100% !important;}' : '');
       // BUILD_JUSTIFY: prevent last-line stretch when text-align is justify
       const justifyFix = (s.textAlign === 'justify')
         ? '\np::after{content:"";display:inline-block;width:100%;visibility:hidden;}'
@@ -514,15 +519,82 @@
 
       if (state.format === 'epub') {
         try {
+          // PATCH7_SCROLL: preserve scroll position in scrolled flow when typography changes
+          const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
+          // PATCH8_SCROLL: ensure wheel forwarding is installed in scrolled flow
+          if (isScrolled) installWheelBridgeIfNeeded();
+          let beforeScrollY = null;
+          try {
+            const renderer = state.view && state.view.renderer;
+            const el = renderer && renderer.element;
+            if (isScrolled && el && el.contentWindow) beforeScrollY = Number(el.contentWindow.scrollY || 0);
+            if (isScrolled && beforeScrollY == null && renderer && typeof renderer.getContents === 'function') {
+              const cs = renderer.getContents();
+              const c0 = cs && cs[0];
+              if (c0 && c0.doc && c0.doc.defaultView) beforeScrollY = Number(c0.doc.defaultView.scrollY || 0);
+            }
+          } catch {}
+
           const styles = buildEpubStyles(s);
           state.view.renderer && state.view.renderer.setStyles && state.view.renderer.setStyles(styles);
           // RCSS_INTEGRATION: apply ReadiumCSS flags to iframe :root style attribute
           applyReadiumCSSFlags(s);
+
+          // PATCH7_FONTSIZE: force typography directly on each content document body.
+          // Some EPUBs and certain flow modes override stylesheet font-size; inline body styles win.
+          try {
+            const renderer = state.view && state.view.renderer;
+            const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
+            const lineHeight = clamp(Number(s.lineHeight || 1.5), 1.0, 2.0);
+            if (renderer && typeof renderer.getContents === 'function') {
+              for (const c of renderer.getContents()) {
+                if (!c || !c.doc) continue;
+                const doc = c.doc;
+                if (doc && doc.body && doc.body.style) {
+                  doc.body.style.setProperty('font-size', fontSize + '%', 'important');
+                  doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                }
+              }
+            }
+
+            // PATCH9_FONTSIZE: also apply directly to renderer.element document (some renderers don't expose getContents)
+            try {
+              const el = renderer && renderer.element;
+              const doc = el && (el.contentDocument || (el.contentWindow && el.contentWindow.document));
+              if (doc) {
+                if (doc.documentElement && doc.documentElement.style) {
+                  doc.documentElement.style.setProperty('font-size', fontSize + '%', 'important');
+                }
+                if (doc.body && doc.body.style) {
+                  doc.body.style.setProperty('font-size', fontSize + '%', 'important');
+                  doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                }
+              }
+            } catch {}
+
+          } catch {}
+
           // Map user margin to paginator gap (paginator handles margins, not ReadiumCSS)
           const margin = clamp(Number(s.margin || 1), 0.5, 2);
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
             state.view.renderer.setAttribute('gap', Math.round(margin * 7) + '%');
           }
+
+          // PATCH7_SCROLL: restore scroll position after settings apply in scrolled flow
+          try {
+            const renderer = state.view && state.view.renderer;
+            const el = renderer && renderer.element;
+            if (isScrolled && beforeScrollY != null && el && el.contentWindow) {
+              el.contentWindow.scrollTo({ top: beforeScrollY, behavior: 'auto' });
+            } else if (isScrolled && beforeScrollY != null && renderer && typeof renderer.getContents === 'function') {
+              for (const c of renderer.getContents()) {
+                if (c && c.doc && c.doc.defaultView) {
+                  c.doc.defaultView.scrollTo({ top: beforeScrollY, behavior: 'auto' });
+                  break;
+                }
+              }
+            }
+          } catch {}
         } catch {}
       }
 
@@ -1195,6 +1267,95 @@
     function prevSection() {
       if (!state.view || !state.view.renderer) return;
       return state.view.renderer.prevSection();
+    }
+
+    // PATCH8_SCROLL: wheel/trackpad forwarding in scrolled flow so scrolling feels consistent
+    // even when the pointer is over margins/HUD containers. Also normalizes deltaMode.
+    let _wheelBridgeInstalled = false;
+    let _wheelPendingY = 0;
+    let _wheelRaf = 0;
+    let _wheelVelY = 0;
+    let _wheelAnimating = false;
+
+    function installWheelBridgeIfNeeded() {
+      if (_wheelBridgeInstalled) return;
+      try {
+        const els = window.booksReaderState && window.booksReaderState.ensureEls ? window.booksReaderState.ensureEls() : null;
+        const host = els && els.readerView ? els.readerView : null;
+        const renderer = state.view && state.view.renderer;
+        const iframe = renderer && renderer.element ? renderer.element : null;
+        if (!host || !iframe) return;
+
+        const normalizeDelta = (e) => {
+          let dy = e.deltaY || 0;
+          const mode = Number(e.deltaMode || 0);
+          if (mode === 1) dy *= 16; // lines -> px-ish
+          else if (mode === 2) dy *= (host.clientHeight || window.innerHeight || 800) * 0.9; // pages
+          // tame extreme wheel spikes (some mice)
+          if (dy > 220) dy = 220;
+          if (dy < -220) dy = -220;
+          return dy;
+        };
+
+        const onWheel = (e) => {
+          // Let browser zoom gestures work normally
+          if (e.ctrlKey) return;
+          // Ignore if an overlay is open and wants the wheel
+          const t = e.target;
+          if (t && t.closest && t.closest('.br-overlay, .br-settings, .br-modal, [data-overlay]')) return;
+
+          const win = iframe.contentWindow;
+          if (!win) return;
+
+          e.preventDefault();
+          // PATCH9_SCROLL: kinetic scrolling in scrolled flow.
+          // Trackpads produce many tiny deltas; wheels produce fewer large deltas.
+          // We accumulate velocity and decay it over animation frames to feel less "steppy".
+          _wheelPendingY += normalizeDelta(e);
+
+          // Clamp per-event contribution to avoid insane spikes from some devices.
+          const add = Math.max(-240, Math.min(240, _wheelPendingY));
+          _wheelPendingY = 0;
+          _wheelVelY += add;
+
+          // Clamp velocity so it doesn't run away.
+          _wheelVelY = Math.max(-900, Math.min(900, _wheelVelY));
+
+          if (_wheelAnimating) return;
+          _wheelAnimating = true;
+
+          const tick = () => {
+            try {
+              // Apply current velocity
+              const y = _wheelVelY;
+              win.scrollBy({ top: y, left: 0, behavior: 'auto' });
+
+              // Decay (friction). Slightly stronger decay for large velocities.
+              const decay = (Math.abs(_wheelVelY) > 300) ? 0.78 : 0.85;
+              _wheelVelY = _wheelVelY * decay;
+
+              if (Math.abs(_wheelVelY) < 0.6) {
+                _wheelVelY = 0;
+                _wheelAnimating = false;
+                _wheelRaf = 0;
+                return;
+              }
+              _wheelRaf = win.requestAnimationFrame(tick);
+            } catch {
+              _wheelVelY = 0;
+              _wheelAnimating = false;
+              _wheelRaf = 0;
+            }
+          };
+
+          _wheelRaf = win.requestAnimationFrame(tick);
+        };
+
+        host.addEventListener('wheel', onWheel, { passive: false, capture: true });
+        // PATCH9_SCROLL: also capture wheel inside the iframe itself
+        try { win.addEventListener('wheel', onWheel, { passive: false, capture: true }); } catch {}
+        _wheelBridgeInstalled = true;
+      } catch {}
     }
 
     // FIX_HUD: programmatic scroll for arrow keys in scrolled mode

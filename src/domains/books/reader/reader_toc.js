@@ -5,6 +5,34 @@
   var RS = window.booksReaderState;
   var bus = window.booksReaderBus;
 
+  // PATCH5: TOC recents + quick jump helpers
+  function tocRecentKey() {
+    var b = RS.state.book;
+    var id = b && b.id ? String(b.id) : 'unknown';
+    return 'brTocRecent:v1:' + id;
+  }
+  function loadTocRecents() {
+    try {
+      var raw = localStorage.getItem(tocRecentKey());
+      var arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.slice(0, 8) : [];
+    } catch (e) { return []; }
+  }
+  function saveTocRecents(arr) {
+    try { localStorage.setItem(tocRecentKey(), JSON.stringify((arr || []).slice(0, 8))); } catch (e) {}
+  }
+  function pushTocRecent(label, href) {
+    label = String(label || '').trim();
+    href = String(href || '').trim();
+    if (!href) return;
+    var rec = loadTocRecents();
+    var hrefNorm = normalizeTocHref(href);
+    rec = rec.filter(function (x) { return normalizeTocHref(x && x.href) !== hrefNorm; });
+    rec.unshift({ label: label || 'Chapter', href: href });
+    saveTocRecents(rec);
+  }
+
+
   // ── normalizeTocHref ──────────────────────────────────────────
   function normalizeTocHref(href) {
     var h = String(href || '');
@@ -38,6 +66,53 @@
     }
     var q = String(query || '').toLowerCase().trim();
     var readState = RS.state.chapterReadState || {};
+    // PATCH5: header bar (Current + Recents)
+    if (!q) {
+      var header = document.createElement('div');
+      header.className = 'br-toc-headerbar';
+      header.innerHTML = '' +
+        '<button type="button" class="br-toc-jump-current">Current</button>' +
+        '<div class="br-toc-recents" aria-label="Recent chapters"></div>';
+      els.tocList.appendChild(header);
+      var curBtn = header.querySelector('.br-toc-jump-current');
+      if (curBtn) {
+        curBtn.addEventListener('click', function () {
+          var active = els.tocList.querySelector('.volNavItem.active');
+          if (active) { try { active.scrollIntoView({ block: 'center', behavior: 'smooth' }); active.focus(); } catch (e) {} }
+        });
+      }
+      var recWrap = header.querySelector('.br-toc-recents');
+      if (recWrap) {
+        var rec = loadTocRecents();
+        if (!rec.length) {
+          recWrap.innerHTML = '<span class="br-toc-recents-empty">No recent</span>';
+        } else {
+          recWrap.innerHTML = '';
+          for (var r = 0; r < rec.length; r++) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'br-toc-recent-chip';
+            chip.title = String(rec[r].label || '');
+            chip.textContent = String(rec[r].label || '').substring(0, 20);
+            chip.addEventListener('click', (function (href) { return function () { navigateToTocItem(href, -1); }; })(rec[r].href));
+            recWrap.appendChild(chip);
+          }
+        }
+      }
+      // One-time styles
+      if (!document.getElementById('brTocHeaderStyle')) {
+        var st = document.createElement('style');
+        st.id = 'brTocHeaderStyle';
+        st.textContent = [
+          '.br-toc-headerbar{display:flex;gap:10px;align-items:center;margin:6px 6px 10px 6px;}',
+          '.br-toc-jump-current{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
+          '.br-toc-recents{display:flex;gap:6px;flex-wrap:wrap;}',
+          '.br-toc-recent-chip{padding:5px 9px;border-radius:999px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.14);cursor:pointer;font-size:11px;opacity:0.95;}',
+          '.br-toc-recents-empty{opacity:0.6;font-size:12px;}',
+        ].join('\n');
+        document.head.appendChild(st);
+      }
+    }
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
       var label = String(item.label || item.title || 'Chapter ' + (i + 1));
@@ -108,6 +183,8 @@
     // Update subtitle
     var chapterLabel = '';
     if (detail.tocItem) chapterLabel = String(detail.tocItem.label || detail.tocItem.title || '');
+    // PATCH5: track recents
+    try { if (chapterLabel && detail.tocItem && detail.tocItem.href) pushTocRecent(chapterLabel, detail.tocItem.href); } catch (e0) {}
     if (els.subtitle) els.subtitle.textContent = chapterLabel || '\u2014';
 
     // Highlight active TOC item
