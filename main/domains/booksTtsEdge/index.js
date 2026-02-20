@@ -12,6 +12,11 @@ const { pathToFileURL } = require('url');
 
 let _audioCacheDir = null;
 
+// FIX-TTS-B3 #22: Throttled disk cache eviction — 500 MB cap
+const _evictMaxBytes = 500 * 1024 * 1024;
+let _evictWriteCount = 0;
+const _evictWriteThreshold = 50;
+
 function getAudioCacheDir(ctx) {
   if (_audioCacheDir) return _audioCacheDir;
   try {
@@ -59,6 +64,43 @@ function audioCacheSet(cacheDir, key, audioBuf, boundaries, mime) {
     const metaPath = path.join(cacheDir, key + '.meta.json');
     fs.writeFileSync(mp3Path, Buffer.isBuffer(audioBuf) ? audioBuf : Buffer.from(audioBuf || ''));
     fs.writeFileSync(metaPath, JSON.stringify({ boundaries: boundaries || [], mime: mime || 'audio/mpeg' }));
+  } catch {}
+}
+
+// FIX-TTS-B3 #22: Evict oldest cache files when total size exceeds cap
+function _evictIfNeeded(cacheDir, maxBytes) {
+  try {
+    const files = fs.readdirSync(cacheDir);
+    const mp3Files = files.filter(function (f) { return f.endsWith('.mp3'); });
+    if (!mp3Files.length) return;
+
+    const entries = [];
+    let totalSize = 0;
+    for (let i = 0; i < mp3Files.length; i++) {
+      const mp3Name = mp3Files[i];
+      const mp3Path = path.join(cacheDir, mp3Name);
+      const metaName = mp3Name.replace(/\.mp3$/, '.meta.json');
+      const metaPath = path.join(cacheDir, metaName);
+      try {
+        const mp3Stat = fs.statSync(mp3Path);
+        let metaSize = 0;
+        try { metaSize = fs.statSync(metaPath).size; } catch {}
+        totalSize += mp3Stat.size + metaSize;
+        entries.push({ mp3Path: mp3Path, metaPath: metaPath, size: mp3Stat.size + metaSize, mtimeMs: mp3Stat.mtimeMs });
+      } catch {}
+    }
+
+    if (totalSize <= maxBytes) return;
+
+    entries.sort(function (a, b) { return a.mtimeMs - b.mtimeMs; });
+
+    let idx = 0;
+    while (totalSize > maxBytes && idx < entries.length) {
+      try { fs.unlinkSync(entries[idx].mp3Path); } catch {}
+      try { fs.unlinkSync(entries[idx].metaPath); } catch {}
+      totalSize -= entries[idx].size;
+      idx++;
+    }
   } catch {}
 }
 
@@ -340,6 +382,12 @@ async function synth(ctx, _evt, payload) {
         if (text) {
           const key = audioCacheKey(text, voice, rate, pitch);
           audioCacheSet(cacheDir, key, result.audioBuf ? result.audioBuf : Buffer.from(String(result.audioBase64 || ''), 'base64'), result.boundaries, result.mime || 'audio/mpeg');
+          // FIX-TTS-B3 #22: Throttled disk cache eviction
+          _evictWriteCount++;
+          if (_evictWriteCount >= _evictWriteThreshold) {
+            _evictWriteCount = 0;
+            _evictIfNeeded(cacheDir, _evictMaxBytes);
+          }
         }
       } catch {}
     }

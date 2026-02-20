@@ -1406,6 +1406,10 @@
   function setRate(r) {
     state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(r) || 1.0));
     if (state.engine) state.engine.setRate(state.rate);
+    // FIX-TTS-B3 #14: Pre-fetch upcoming blocks at the new rate
+    if (state.status === PLAYING && _queue.index >= 0) {
+      _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
+    }
   }
 
   // TTS-QOL4: Volume control — passes through to engine's HTMLAudioElement.volume
@@ -1422,6 +1426,10 @@
     if (state.engine && typeof state.engine.setPitch === 'function') {
       state.engine.setPitch(state.pitch);
     }
+    // FIX-TTS-B3 #14: Pre-fetch upcoming blocks at the new pitch
+    if (state.status === PLAYING && _queue.index >= 0) {
+      _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
+    }
   }
 
   // TTS-QOL4: removed _respeakCurrentBlock() — preset change applies to next block
@@ -1434,6 +1442,10 @@
     state.pitch = Math.max(0.5, Math.min(2.0, Number(p.pitch) || 1.0));
     if (state.engine && typeof state.engine.setPitch === 'function') {
       state.engine.setPitch(state.pitch);
+    }
+    // FIX-TTS-B3 #14: Pre-fetch upcoming blocks at the new rate/pitch
+    if (state.status === PLAYING && _queue.index >= 0) {
+      _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
     }
   }
 

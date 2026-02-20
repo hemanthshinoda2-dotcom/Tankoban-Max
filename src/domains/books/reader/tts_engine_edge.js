@@ -84,6 +84,9 @@
       _lruCache.set(key, entry);
     }
 
+    // FIX-TTS-B3 #6: Track preload keys that exhausted all retries
+    var _preloadFailed = new Set();
+
     function clearPreloadCache() {
       _lruCache.forEach(function (entry) {
         if (entry && entry.blobUrl) {
@@ -91,34 +94,58 @@
         }
       });
       _lruCache.clear();
+      _preloadFailed.clear();
     }
 
     // FIX-TTS05: Background preload — synthesize and cache without playing
+    // FIX-TTS-B3 #6: Retry up to 3 attempts with backoff; log final failures
     async function preload(text) {
       var t = String(text || '').trim();
       if (!t) return;
       var key = _lruKey(t);
-      if (_lruCache.has(key)) return; // Already cached
-      try {
-        var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
-        if (!api || typeof api.synth !== 'function') return;
-        var res = await api.synth({
-          text: t,
-          voice: state.voiceName,
-          rate: state.rate,
-          pitch: state.pitch,
-          returnBase64: false,
-        });
-        if (!res || !res.ok) return;
-        if (res.audioUrl) {
-          _lruSet(key, { audioUrl: String(res.audioUrl), boundaries: res.boundaries || [] });
-          return;
+      if (_lruCache.has(key)) return;
+      if (_preloadFailed.has(key)) return;
+      var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
+      if (!api || typeof api.synth !== 'function') return;
+      var reqAtStart = state.requestId;
+      var delays = [0, 500, 1000];
+      for (var attempt = 0; attempt < delays.length; attempt++) {
+        if (attempt > 0) {
+          if (state.requestId !== reqAtStart && reqAtStart !== '') return;
+          await new Promise(function (resolve) { setTimeout(resolve, delays[attempt]); });
+          if (state.requestId !== reqAtStart && reqAtStart !== '') return;
+          if (_lruCache.has(key)) return;
         }
-        if (!res.audioBase64) return;
-        var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
-        if (!blob) return;
-        _lruSet(key, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
-      } catch {}
+        try {
+          var res = await api.synth({
+            text: t,
+            voice: state.voiceName,
+            rate: state.rate,
+            pitch: state.pitch,
+            returnBase64: false,
+          });
+          if (res && res.ok) {
+            if (res.audioUrl) {
+              _lruSet(key, { audioUrl: String(res.audioUrl), boundaries: res.boundaries || [] });
+              _preloadFailed.delete(key);
+              return;
+            }
+            if (res.audioBase64) {
+              var blob = base64ToBlob(res.audioBase64, 'audio/mpeg');
+              if (blob) {
+                _lruSet(key, { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
+                _preloadFailed.delete(key);
+                return;
+              }
+            }
+          }
+        } catch (err) {
+          if (attempt === delays.length - 1) {
+            diag('preload_fail', 'len=' + t.length + ' err=' + String(err && err.message ? err.message : err));
+            _preloadFailed.add(key);
+          }
+        }
+      }
     }
 
     // FIX-TTS06: Track synth failures — reset main-process WS after repeated errors

@@ -30,13 +30,13 @@ Prevents battery drain during long listening sessions.
 ## Batch 3 — Preload & Cache Resilience
 Prevents audio gaps and stalls during playback.
 
-- [ ] **#6 HIGH — Preload failures silent, no retry**
+- [x] **#6 HIGH — Preload failures silent, no retry**
   `tts_engine_edge.js:97-122` — When `preload()` fails (network drop, WebSocket closed), error is swallowed. No retry. When TTS reaches that block, it stalls 1-5 seconds synthesizing on demand. User hears a gap.
 
-- [ ] **#14 MEDIUM — Cache invalidated on rate/pitch change**
+- [x] **#14 MEDIUM — Cache invalidated on rate/pitch change**
   `tts_engine_edge.js` — LRU cache key includes voice+rate+pitch+text. Changing speed flushes the entire 50-block cache. Every block must be re-synthesized.
 
-- [ ] **#22 LOW — Disk cache grows unbounded**
+- [x] **#22 LOW — Disk cache grows unbounded**
   `main/domains/booksTtsEdge/index.js` — No automatic eviction by age or disk size. Only manual clear via UI.
 
 ---
