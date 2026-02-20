@@ -1096,3 +1096,20 @@
   window.addEventListener('keydown', hudNoteActivityOnKeydown, true);
   window.addEventListener('blur', hudCancelAutoHide, true);
 
+  // FIX-HUD-FRAMELESS: Show HUD when mouse nears the bottom or top edge of the screen.
+  // In frameless windows, the user expects the HUD to appear on mouse proximity to edges.
+  var _hudEdgeCooldown = false;
+  window.addEventListener('pointermove', function (e) {
+    if (!document.body.classList.contains('inPlayer')) return;
+    if (!appState.hudHidden) return;
+    if (_hudEdgeCooldown) return;
+    var y = e.clientY;
+    var h = window.innerHeight;
+    // Trigger when mouse is within 60px of top or bottom edge
+    if (y > h - 60 || y < 60) {
+      _hudEdgeCooldown = true;
+      toggleHud(false);
+      setTimeout(function () { _hudEdgeCooldown = false; }, 600);
+    }
+  }, { passive: true });
+

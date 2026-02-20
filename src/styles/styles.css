@@ -2413,6 +2413,9 @@ body.hudHidden.hudFreeze .playerFooter{
 
 /* Hide app header while reading */
 body.inPlayer .topbar{ display:none !important; }
+/* FIX-HUD-FRAMELESS: clear drag region in player mode — prevents stale hit-test
+   from the topbar's -webkit-app-region:drag eating mouse events in frameless windows */
+body.inPlayer{ -webkit-app-region: no-drag; }
 
 
 /* Thumbnails */
