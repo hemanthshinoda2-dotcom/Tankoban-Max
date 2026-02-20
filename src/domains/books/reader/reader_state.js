@@ -11,7 +11,7 @@
     fontSize: 100,            // percentage 75-250 (ReadiumCSS --USER__fontSize)
     fontFamily: 'publisher',  // publisher|oldStyleTf|modernTf|sansTf|humanistTf|monospaceTf|AccessibleDfA|IAWriterDuospace
     lineHeight: 1.5,          // 1.0-2.0 (ReadiumCSS --USER__lineHeight)
-    margin: 1,                // pageMargins factor 0.5-2.0 (ReadiumCSS --USER__pageMargins)
+    margin: 1,                // pageMargins factor 0-2.0 (controls side padding + page gap)
     flowMode: 'paginated',
     columnMode: 'auto',
     textAlign: '',            // ''|left|right|justify (ReadiumCSS --USER__textAlign)

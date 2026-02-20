@@ -362,7 +362,15 @@
       const justifyFix = (s.textAlign === 'justify')
         ? '\np::after{content:"";display:inline-block;width:100%;visibility:hidden;}'
         : '';
-      return rcss.before + '\n' + rcss.dflt + '\n' + rcss.after + '\n' + userOverrides + justifyFix;
+      // FIX_EPUB_MARGIN: ReadiumCSS scroll-on defaults clamp the body to a max line length
+      // with auto margins, which forces text into a centered column.
+      // In Tankoban, the margin slider should control side padding (and allow full-width).
+      const marginFactor = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 2);
+      const sidePad = Math.round(marginFactor * 24);
+      const layoutOverrides = '\n/* TANKOBAN_FULLWIDTH */\n' +
+        'html,body{max-width:none !important;}\n' +
+        'body{margin:0 !important;padding-left:' + sidePad + 'px !important;padding-right:' + sidePad + 'px !important;max-width:none !important;}\n';
+      return rcss.before + '\n' + rcss.dflt + '\n' + rcss.after + '\n' + userOverrides + layoutOverrides + justifyFix;
     }
 
     // RCSS_INTEGRATION: legacy fallback (original buildEpubStyles for when ReadiumCSS fails to load)
@@ -370,7 +378,7 @@
       const s = (settings && typeof settings === 'object') ? settings : {};
       const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
       const lineHeight = clamp(Number(s.lineHeight || 1.5), 1.0, 2.0);
-      const margin = clamp(Number(s.margin || 1), 0.5, 2);
+      const margin = clamp(Number(s.margin || 1), 0, 2);
       const theme = String(s.theme || 'light');
       const fontFamily = String(s.fontFamily || 'publisher');
       const isDark = theme === 'dark' || theme === 'contrast1' || theme === 'contrast2' || theme === 'contrast4';
@@ -553,6 +561,13 @@
                 if (doc && doc.body && doc.body.style) {
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                  // FIX_EPUB_MARGIN_INLINE: keep margin slider effective even when publisher CSS fights injected styles
+                  const mf = clamp(Number(s.margin || 1), 0, 2);
+                  const pad = Math.round(mf * 24);
+                  doc.body.style.setProperty('max-width', 'none', 'important');
+                  doc.body.style.setProperty('margin', '0', 'important');
+                  doc.body.style.setProperty('padding-left', pad + 'px', 'important');
+                  doc.body.style.setProperty('padding-right', pad + 'px', 'important');
                 }
               }
             }
@@ -568,6 +583,13 @@
                 if (doc.body && doc.body.style) {
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                  // FIX_EPUB_MARGIN_INLINE2
+                  const mf2 = clamp(Number(s.margin || 1), 0, 2);
+                  const pad2 = Math.round(mf2 * 24);
+                  doc.body.style.setProperty('max-width', 'none', 'important');
+                  doc.body.style.setProperty('margin', '0', 'important');
+                  doc.body.style.setProperty('padding-left', pad2 + 'px', 'important');
+                  doc.body.style.setProperty('padding-right', pad2 + 'px', 'important');
                 }
               }
             } catch {}
@@ -575,7 +597,7 @@
           } catch {}
 
           // Map user margin to paginator gap (paginator handles margins, not ReadiumCSS)
-          const margin = clamp(Number(s.margin || 1), 0.5, 2);
+          const margin = clamp(Number(s.margin || 1), 0, 2);
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
             state.view.renderer.setAttribute('gap', Math.round(margin * 7) + '%');
           }

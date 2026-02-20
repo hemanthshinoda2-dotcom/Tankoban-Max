@@ -242,7 +242,7 @@
     // Margin slider (BUILD_READIUMCSS: factor 0.5-2.0)
     els.marginSlider && els.marginSlider.addEventListener('input', function () {
       var v = Number(els.marginSlider.value || 1);
-      state.settings.margin = Math.max(0.5, Math.min(2.0, Math.round(v * 4) / 4));
+      state.settings.margin = Math.max(0, Math.min(2.0, Math.round(v * 4) / 4));
       if (els.marginValue) els.marginValue.textContent = state.settings.margin.toFixed(2);
       applySettings();
       RS.persistSettings().catch(function () {});
