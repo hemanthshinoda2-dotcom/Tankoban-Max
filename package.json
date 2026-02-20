@@ -201,6 +201,7 @@
         ]
     },
     "dependencies": {
+        "@ghostery/adblocker-electron": "^2.14.1",
         "@shoelace-style/shoelace": "^2.20.1",
         "epubjs": "^0.3.93",
         "lucide": "^0.566.0",
