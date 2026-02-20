@@ -1006,11 +1006,16 @@ function getBookProgress(bookId) {
     toast('Root folder removed');
   }
 
-  async function removeSeriesFolderAction(seriesPath) {
+  async function removeSeriesFolderAction(seriesPath, showId) {
     if (!seriesPath) return;
-    const ok = window.confirm('Remove this explicit series folder from Books library? Files on disk are not deleted.');
+    var ok = window.confirm('Remove this series from Books library?\nFiles on disk are not deleted.\nUse "Restore hidden" in the sidebar to bring it back.');
     if (!ok) return;
-    const res = await api.books.removeSeriesFolder(seriesPath);
+    if (showId) {
+      if (!state.ui.hiddenShowIds) state.ui.hiddenShowIds = new Set();
+      state.ui.hiddenShowIds.add(String(showId));
+      scheduleSaveUi();
+    }
+    var res = await api.books.removeSeriesFolder(seriesPath);
     if (res && res.state) applySnapshot(res.state);
     await loadProgress();
     renderAll();
@@ -1102,7 +1107,7 @@ function getBookProgress(bookId) {
         }},
         { separator: true },
         { label: 'Remove series folder', danger: true, disabled: !removableSeriesPath, onClick: async () => {
-          if (removableSeriesPath) await removeSeriesFolderAction(removableSeriesPath);
+          if (removableSeriesPath) await removeSeriesFolderAction(removableSeriesPath, show.id);
         }},
       ],
     });
@@ -1233,6 +1238,18 @@ function getBookProgress(bookId) {
             api.clipboard.copyText(book.path).then(function () { toast('Path copied'); }).catch(function () {});
           }
         }},
+        { separator: true },
+        { label: 'Remove from library\u2026', danger: true, onClick: async function () {
+          var ok = window.confirm('Remove from library?\n\nThis removes it from the library. It does not delete files from disk.');
+          if (!ok) return;
+          var res = show.removableSeriesPath
+            ? await api.books.removeSeriesFolder(show.removableSeriesPath)
+            : await api.books.removeFile(book.path);
+          if (res && res.state) applySnapshot(res.state);
+          await loadProgress();
+          renderAll();
+          toast('Removed from library');
+        }},
       ],
     });
   }
@@ -1358,7 +1375,7 @@ function getBookProgress(bookId) {
       removeBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        removeSeriesFolderAction(removableSeriesPath).catch(() => {});
+        removeSeriesFolderAction(removableSeriesPath, show.id).catch(() => {});
       });
     }
     card.appendChild(removeBtn);
