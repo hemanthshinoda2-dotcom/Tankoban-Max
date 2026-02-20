@@ -320,6 +320,9 @@ body:not(.inPlayer).libDrawerOpen .drawerBackdrop{
   letter-spacing: .2px;
 }
 
+/* Tighten content area – push Continue shelf flush to topbar */
+.libContent{ padding-top: 0 !important; }
+
 /* Continue shelf */
 .continuePanel{
   height: auto !important;
