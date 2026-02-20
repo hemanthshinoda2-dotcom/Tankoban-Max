@@ -67,6 +67,9 @@
     progressFraction: 0,
     progressDragFraction: 0,
     shortcuts: Object.assign({}, DEFAULT_SHORTCUTS),
+    // When true, reader progress is not persisted to reading progress (used by listening mode).
+    suspendProgressSave: false,
+    suspendProgressSaveReason: '',
     // BUILD_ANNOT
     annotations: [],
     annotEditId: null,
@@ -361,6 +364,7 @@
 
   // ── Progress save ──────────────────────────────────────────────
   async function saveProgress() {
+    if (state.suspendProgressSave) return;
     if (!state.open || !state.engine || !state.book) return;
     if (typeof state.engine.getLocator !== 'function') return;
 
@@ -398,6 +402,12 @@
     } catch (e) { /* swallow */ }
   }
 
+  // LISTEN_PATCH1: allow Listening mode to prevent writes into reading progress.
+  function setSuspendProgressSave(flag, reason) {
+    state.suspendProgressSave = !!flag;
+    state.suspendProgressSaveReason = flag ? String(reason || 'listening_mode') : '';
+  }
+
   // ── Export via window ──────────────────────────────────────────
   window.booksReaderState = {
     state: state,
@@ -431,5 +441,6 @@
     // Progress
     saveProgress: saveProgress,
     saveShortcuts: saveShortcuts,
+    setSuspendProgressSave: setSuspendProgressSave,
   };
 })();

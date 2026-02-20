@@ -44,6 +44,10 @@
         code: '',
         detail: '',
       },
+      // Resume hint from TTS core (character index inside the next spoken text).
+      resumeCharIndex: -1,
+      // Internal: seek target in milliseconds (computed from boundary offsets).
+      _resumeSeekMs: null,
     };
 
     // FIX-TTS05: LRU audio cache — keyed by "voice|rate|pitch|text"
@@ -257,6 +261,11 @@
       state.voiceName = String(voiceURI || 'en-US-AriaNeural');
     }
 
+    function setResumeHint(charIndex) {
+      var v = (typeof charIndex === 'number' && isFinite(charIndex)) ? Math.max(0, Math.floor(charIndex)) : -1;
+      state.resumeCharIndex = v;
+    }
+
     // FIX-TTS08: Boundary scheduling state — survives pause/resume cycles.
     // Stores pre-computed boundary entries and a polling timer that checks
     // audio.currentTime to fire them at the right moment, even after pauses.
@@ -387,13 +396,41 @@
           charLength: charLength,
         });
       }
+
+      // Sort by offset to schedule
+      entries.sort(function (a, b) { return a.offsetMs - b.offsetMs; });
+
+      // Optional resume: skip earlier boundaries and compute a seek target.
+      state._resumeSeekMs = null;
+      var nextIdx = 0;
+      var resumeChar = (typeof state.resumeCharIndex === 'number' && isFinite(state.resumeCharIndex)) ? Math.max(0, Math.floor(state.resumeCharIndex)) : -1;
+      if (resumeChar >= 0 && entries.length) {
+        var ridx = -1;
+        for (var j = 0; j < entries.length; j++) {
+          var e = entries[j];
+          if (resumeChar <= (e.charIndex + e.charLength - 1)) { ridx = j; break; }
+        }
+        if (ridx < 0) ridx = entries.length - 1;
+        nextIdx = ridx;
+        state._resumeSeekMs = Math.max(0, entries[ridx].offsetMs || 0);
+      }
+
       _bd.entries = entries;
-      _bd.nextIdx = 0;
+      _bd.nextIdx = nextIdx;
       _bd.reqId = reqId;
       // Start polling
       if (entries.length) {
         _bd.rafId = setTimeout(_bdPoll, 16);
       }
+    }
+
+    function _applyResumeSeekIfAny(myReq, audio) {
+      if (myReq !== state.requestId) return;
+      if (!audio) return;
+      if (typeof state._resumeSeekMs !== 'number' || !isFinite(state._resumeSeekMs) || state._resumeSeekMs == null) return;
+      var seekMs = Math.max(0, state._resumeSeekMs);
+      state._resumeSeekMs = null;
+      try { audio.currentTime = seekMs / 1000; } catch {}
     }
 
     function _playBlob(myReq, blob, boundaries, text) {
@@ -408,6 +445,10 @@
       _revokeBlobUrl();
       state.blobUrl = URL.createObjectURL(blob);
       audio.src = state.blobUrl;
+
+      audio.onloadedmetadata = function () {
+        _applyResumeSeekIfAny(myReq, audio);
+      };
 
       audio.onended = function () {
         if (myReq !== state.requestId) return;
@@ -458,6 +499,10 @@
       _revokeBlobUrl();
 
       audio.src = String(srcUrl || '');
+
+      audio.onloadedmetadata = function () {
+        _applyResumeSeekIfAny(myReq, audio);
+      };
 
       audio.onended = function () {
         if (myReq !== state.requestId) return;
@@ -672,6 +717,8 @@
 
     function cancel() {
       _bdStop(); // FIX-TTS08: stop boundary poller
+      state._resumeSeekMs = null;
+      state.resumeCharIndex = -1;
       if (state.abortCtrl) {
         try { state.abortCtrl.abort(); } catch {}
         state.abortCtrl = null;
@@ -719,6 +766,7 @@
       setRate: setRate,
       setVolume: setVolume, // TTS-QOL4
       setVoice: setVoice,
+      setResumeHint: setResumeHint,
       setPitch: setPitch,
       speak: speak,
       speakGapless: speakGapless,

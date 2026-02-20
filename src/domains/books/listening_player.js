@@ -357,32 +357,26 @@ function updateCard(info) {
 
   // ── Progress persistence (LISTEN_P4) ────────────────────────────────────────
   function saveProgress(info, immediate) {
-    if (!_book || (!_book.id && !_book.path)) return;
+    if (!_book || !_book.id) return;
+    var primaryId = String(_book.id || '');
+    var fallbackId = String(_book.path || '');
     var entry = {
       blockIdx:   info ? info.blockIdx   : (_lastSavedBlockIdx >= 0 ? _lastSavedBlockIdx : 0),
       blockCount: info ? info.blockCount : 0,
       title:  _book.title  || '',
       format: _book.format || '',
     };
-
-    function progressKeys() {
-      var keys = [];
-      if (_book && _book.id) keys.push(String(_book.id));
-      if (_book && _book.path) keys.push(String(_book.path));
-      // De-dupe
-      return Array.from(new Set(keys));
-    }
-
     if (immediate) {
       if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
       try {
         var api = window.Tanko && window.Tanko.api;
         if (api && typeof api.saveBooksTtsProgress === 'function') {
           // FIX-LISTEN-CONT: return promise so closePlayer can await before re-render
-          var keys = progressKeys();
-          return Promise.all(keys.map(function (k) {
-            return api.saveBooksTtsProgress(k, entry).catch(function () {});
-          }));
+          var p = api.saveBooksTtsProgress(primaryId, entry).catch(function () {});
+          if (fallbackId && fallbackId !== primaryId) {
+            try { api.saveBooksTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
+          }
+          return p;
         }
       } catch {}
     } else {
@@ -392,10 +386,10 @@ function updateCard(info) {
         try {
           var api = window.Tanko && window.Tanko.api;
           if (api && typeof api.saveBooksTtsProgress === 'function') {
-            var keys = progressKeys();
-            keys.forEach(function (k) {
-              api.saveBooksTtsProgress(k, entry).catch(function () {});
-            });
+            api.saveBooksTtsProgress(primaryId, entry).catch(function () {});
+            if (fallbackId && fallbackId !== primaryId) {
+              try { api.saveBooksTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
+            }
           }
         } catch {}
       }, 2000);
@@ -946,6 +940,17 @@ function updateCard(info) {
     showOverlay(true);
     _applyCardFont(_settings.ttsFont);
 
+    // LISTEN_PATCH1: prevent listening from writing into reading progress.
+    try {
+      var RSx = window.booksReaderState;
+      if (RSx && typeof RSx.setSuspendProgressSave === 'function') {
+        RSx.setSuspendProgressSave(true, 'listening_mode');
+      } else if (RSx && RSx.state) {
+        RSx.state.suspendProgressSave = true;
+        RSx.state.suspendProgressSaveReason = 'listening_mode';
+      }
+    } catch {}
+
     // STRIP-LISTEN-MODE: skip re-opening if reader already has this book
     var ctl = window.booksReaderController;
     var RS = window.booksReaderState;
@@ -994,11 +999,18 @@ function updateCard(info) {
           if (eng && typeof eng.showResumeHighlight === 'function') {
             eng.showResumeHighlight(blockInfo.blockRange || blockInfo.range);
           }
-          // Save reader progress at the new position so it persists
-          if (RS && typeof RS.saveProgress === 'function') {
-            try { RS.saveProgress(); } catch {}
-          }
         }
+      }
+    } catch {}
+
+    // LISTEN_PATCH1: resume normal reader progress persistence.
+    try {
+      var RSr = window.booksReaderState;
+      if (RSr && typeof RSr.setSuspendProgressSave === 'function') {
+        RSr.setSuspendProgressSave(false);
+      } else if (RSr && RSr.state) {
+        RSr.state.suspendProgressSave = false;
+        RSr.state.suspendProgressSaveReason = '';
       }
     } catch {}
     _lastSavedBlockIdx = -1;
