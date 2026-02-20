@@ -378,7 +378,7 @@
       const s = (settings && typeof settings === 'object') ? settings : {};
       const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
       const lineHeight = clamp(Number(s.lineHeight || 1.5), 1.0, 2.0);
-      const margin = clamp(Number(s.margin || 1), 0, 2);
+      const margin = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
       const theme = String(s.theme || 'light');
       const fontFamily = String(s.fontFamily || 'publisher');
       const isDark = theme === 'dark' || theme === 'contrast1' || theme === 'contrast2' || theme === 'contrast4';
@@ -562,7 +562,7 @@
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
                   // FIX_EPUB_MARGIN_INLINE: keep margin slider effective even when publisher CSS fights injected styles
-                  const mf = clamp(Number(s.margin || 1), 0, 2);
+                  const mf = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad = Math.round(mf * 24);
                   doc.body.style.setProperty('max-width', 'none', 'important');
                   doc.body.style.setProperty('margin', '0', 'important');
@@ -584,7 +584,7 @@
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
                   // FIX_EPUB_MARGIN_INLINE2
-                  const mf2 = clamp(Number(s.margin || 1), 0, 2);
+                  const mf2 = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad2 = Math.round(mf2 * 24);
                   doc.body.style.setProperty('max-width', 'none', 'important');
                   doc.body.style.setProperty('margin', '0', 'important');
@@ -597,7 +597,7 @@
           } catch {}
 
           // Map user margin to paginator gap + max-inline-size (paginator handles margins, not ReadiumCSS)
-          const margin = clamp(Number(s.margin || 1), 0, 4);
+          const margin = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
             state.view.renderer.setAttribute('gap', Math.round(margin * 7) + '%');
             // FIX-MARGIN-FULLWIDTH: remove the default 720px column cap so text can expand fully;
