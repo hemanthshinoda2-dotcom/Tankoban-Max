@@ -365,7 +365,7 @@
       // FIX_EPUB_MARGIN: ReadiumCSS scroll-on defaults clamp the body to a max line length
       // with auto margins, which forces text into a centered column.
       // In Tankoban, the margin slider should control side padding (and allow full-width).
-      const marginFactor = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 2);
+      const marginFactor = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
       const sidePad = Math.round(marginFactor * 24);
       const layoutOverrides = '\n/* TANKOBAN_FULLWIDTH */\n' +
         'html,body{max-width:none !important;}\n' +
