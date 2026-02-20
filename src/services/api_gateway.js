@@ -274,6 +274,15 @@
     },
 
     // ========================================
+    // booksDisplayNames.* (RENAME-BOOK)
+    // ========================================
+    booksDisplayNames: {
+      getAll: (...a) => ea.booksDisplayNames?.getAll ? ea.booksDisplayNames.getAll(...a) : undefined,
+      save: (...a) => ea.booksDisplayNames?.save ? ea.booksDisplayNames.save(...a) : undefined,
+      clear: (...a) => ea.booksDisplayNames?.clear ? ea.booksDisplayNames.clear(...a) : undefined,
+    },
+
+    // ========================================
     // booksSettings.*
     // ========================================
     booksSettings: {
