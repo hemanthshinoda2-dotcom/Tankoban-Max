@@ -63,7 +63,6 @@
     items.push({ type: 'mode', label: 'Switch to Comics', hint: 'Mode', action: function () { try { window.setMode('comics'); } catch (e) {} } });
     items.push({ type: 'mode', label: 'Switch to Books', hint: 'Mode', action: function () { try { window.setMode('books'); } catch (e) {} } });
     items.push({ type: 'mode', label: 'Switch to Videos', hint: 'Mode', action: function () { try { window.setMode('videos'); } catch (e) {} } });
-    items.push({ type: 'mode', label: 'Switch to Web', hint: 'Mode', action: function () { try { window.setMode('web'); } catch (e) {} } });
 
     // Quick actions
     items.push({ type: 'action', label: 'Toggle Fullscreen', hint: 'F11', action: function () { try { api.window.toggleFullscreen(); } catch (e) {} } });

@@ -231,7 +231,6 @@
     const comicsBtn = document.getElementById('modeComicsBtn');
     const booksBtn = document.getElementById('modeBooksBtn');
     const videosBtn = document.getElementById('modeVideosBtn');
-    const webBtn = document.getElementById('modeWebBtn');
 
     videosBtn?.addEventListener('click', async (e) => {
       try {
@@ -257,15 +256,6 @@
       } catch {}
       await ensureBooksModulesLoaded();
       if (typeof window.setMode === 'function') window.setMode('books');
-    });
-
-    webBtn?.addEventListener('click', async (e) => {
-      try {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-      } catch {}
-      await ensureWebModulesLoaded();
-      if (typeof window.setMode === 'function') window.setMode('web');
     });
   }
 

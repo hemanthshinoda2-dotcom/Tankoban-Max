@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books', 'web']);
+  const MODES = new Set(['comics', 'videos', 'books']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -27,11 +27,9 @@
     const comics = qs('modeComicsBtn');
     const videos = qs('modeVideosBtn');
     const books = qs('modeBooksBtn');
-    const web = qs('modeWebBtn');
     if (comics) comics.classList.toggle('active', m === 'comics');
     if (videos) videos.classList.toggle('active', m === 'videos');
     if (books) books.classList.toggle('active', m === 'books');
-    if (web) web.classList.toggle('active', m === 'web');
   }
 
   function applyFallbackViewState(mode) {
@@ -39,38 +37,31 @@
     const isComics = m === 'comics';
     const isVideos = m === 'videos';
     const isBooks = m === 'books';
-    const isWeb = m === 'web';
 
     const libraryView = qs('libraryView');
     const playerView = qs('playerView');
     const videoLibraryView = qs('videoLibraryView');
     const videoPlayerView = qs('videoPlayerView');
     const booksLibraryView = qs('booksLibraryView');
-    const webLibraryView = qs('webLibraryView');
 
     if (libraryView) libraryView.classList.toggle('hidden', !isComics);
     if (playerView) playerView.classList.add('hidden');
     if (videoLibraryView) videoLibraryView.classList.toggle('hidden', !isVideos);
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
-    if (webLibraryView) webLibraryView.classList.toggle('hidden', !isWeb);
-    // BUILD_WEB_HOME: always hide browser overlay on mode switch
-    const webBrowserView = qs('webBrowserView');
+    // Hide browser overlay and WebContentsViews on mode switch
+    var webBrowserView = qs('webBrowserView');
     if (webBrowserView) webBrowserView.classList.add('hidden');
-    // FIX-WEB-MODE: hide main-process WebContentsViews when leaving web mode
-    if (!isWeb) {
-      try {
-        const _api = window.Tanko && window.Tanko.api;
-        if (_api && _api.webTabs && typeof _api.webTabs.hideAll === 'function') {
-          _api.webTabs.hideAll();
-        }
-      } catch (e) {}
-    }
+    try {
+      var _api = window.Tanko && window.Tanko.api;
+      if (_api && _api.webTabs && typeof _api.webTabs.hideAll === 'function') {
+        _api.webTabs.hideAll();
+      }
+    } catch (e) {}
 
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
-    document.body.classList.toggle('inWebMode', isWeb);
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
 
@@ -88,9 +79,6 @@
     }
     if (mode === 'books' && typeof d.ensureBooksModulesLoaded === 'function') {
       await d.ensureBooksModulesLoaded();
-    }
-    if (mode === 'web' && typeof d.ensureWebModulesLoaded === 'function') {
-      await d.ensureWebModulesLoaded();
     }
   }
 
