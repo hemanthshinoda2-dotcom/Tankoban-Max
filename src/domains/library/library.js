@@ -477,6 +477,78 @@ Hot search tokens:
     }
   }
 
+  // ---- Web Sources in Comics sidebar ----
+  var _comicsSources = [];
+
+  function renderComicsSources() {
+    var wrap = el.comicsSourcesList;
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    for (var i = 0; i < _comicsSources.length; i++) {
+      var s = _comicsSources[i];
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'folderItem';
+      btn.dataset.sourceId = s.id;
+      btn.innerHTML = '<span class="folderIcon"><span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span></span>'
+        + '<span class="folderLabel">' + escapeHtml(s.name) + '</span>';
+      btn.addEventListener('click', (function (source) {
+        return function () {
+          var d = (window.Tanko && window.Tanko.deferred) || {};
+          if (typeof d.ensureWebModulesLoaded === 'function') {
+            d.ensureWebModulesLoaded().then(function () {
+              if (window.Tanko.web && typeof window.Tanko.web.openBrowser === 'function') {
+                window.Tanko.web.openBrowser(source);
+              }
+            });
+          }
+        };
+      })(s));
+      wrap.appendChild(btn);
+    }
+  }
+
+  function loadComicsSources() {
+    var _api = window.Tanko && window.Tanko.api;
+    if (!_api || !_api.webSources) return;
+    _api.webSources.get().then(function (res) {
+      if (res && res.ok && Array.isArray(res.sources)) {
+        _comicsSources = res.sources;
+        renderComicsSources();
+      }
+    }).catch(function () {});
+  }
+
+  // Load sources on init + listen for changes
+  try { loadComicsSources(); } catch (e) {}
+  try {
+    var _csApi = window.Tanko && window.Tanko.api;
+    if (_csApi && _csApi.webSources && typeof _csApi.webSources.onUpdated === 'function') {
+      _csApi.webSources.onUpdated(loadComicsSources);
+    }
+  } catch (e) {}
+
+  // Collapsible header toggle
+  if (el.comicsSourcesHeader && el.comicsSourcesItems) {
+    el.comicsSourcesHeader.addEventListener('click', function () {
+      var hidden = el.comicsSourcesItems.classList.toggle('hidden');
+      el.comicsSourcesHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Sources';
+    });
+  }
+
+  // Add source button → open the shared add-source dialog
+  if (el.comicsAddSourceBtn) {
+    el.comicsAddSourceBtn.addEventListener('click', function () {
+      var d = (window.Tanko && window.Tanko.deferred) || {};
+      if (typeof d.ensureWebModulesLoaded === 'function') {
+        d.ensureWebModulesLoaded().then(function () {
+          var overlay = document.getElementById('webAddSourceOverlay');
+          if (overlay) overlay.classList.remove('hidden');
+        });
+      }
+    });
+  }
+
   function renderSeriesGrid() {
     el.seriesGrid.innerHTML = '';
     const focusRoot = appState.ui.folderFocusRoot;

@@ -159,6 +159,12 @@ Hot search tokens:
     hiddenSeriesList: $('#hiddenSeriesList'),
     clearIgnoredBtn: $('#clearIgnoredBtn'),
 
+    // Web sources in Comics sidebar
+    comicsSourcesList: $('#comicsSourcesList'),
+    comicsAddSourceBtn: $('#comicsAddSourceBtn'),
+    comicsSourcesItems: $('#comicsSourcesItems'),
+    comicsSourcesHeader: $('#comicsSourcesHeader'),
+
     continueRow: $('#continueRow'),
     continueEmpty: $('#continueEmpty'),
     hideFinishedToggle: $('#hideFinishedToggle'),

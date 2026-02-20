@@ -257,6 +257,7 @@ body:not(.inPlayer) .view{ gap:0; }
 .navItems{ display:flex; flex-direction:column; gap:6px; }
 .navSep{ height:1px; background: var(--lib-border); margin: 10px 0; }
 .navMuted{ color: var(--muted); font-size: 11px; padding: 2px 2px; }
+.navHeaderCollapsible{ cursor:pointer; user-select:none; }
 
 .libContent{
   padding: var(--lib-pad);

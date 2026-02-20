@@ -49,6 +49,12 @@
     epTableHead: qs('booksEpTableHead') || qs('booksVolTableHead'),
     episodesGrid: qs('booksEpisodesGrid') || qs('booksVolumesList'),
     episodesEmpty: qs('booksEpisodesEmpty') || qs('booksVolumesEmpty'),
+
+    // Web sources in Books sidebar
+    booksSourcesList: qs('booksSourcesList'),
+    booksAddSourceBtn: qs('booksAddSourceBtn'),
+    booksSourcesItems: qs('booksSourcesItems'),
+    booksSourcesHeader: qs('booksSourcesHeader'),
   };
 
   const state = {
@@ -2684,6 +2690,82 @@ function getBookProgress(bookId) {
           resetToHome();
         }
       },
+    });
+  }
+
+  // ---- Web Sources in Books sidebar ----
+  var _booksSources = [];
+
+  function renderBooksSources() {
+    var wrap = el.booksSourcesList;
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    for (var i = 0; i < _booksSources.length; i++) {
+      var s = _booksSources[i];
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'folderItem';
+      btn.dataset.sourceId = s.id;
+      var dot = document.createElement('span');
+      dot.className = 'folderIcon';
+      dot.innerHTML = '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>';
+      var label = document.createElement('span');
+      label.className = 'folderLabel';
+      label.textContent = s.name;
+      btn.appendChild(dot);
+      btn.appendChild(label);
+      btn.addEventListener('click', (function (source) {
+        return function () {
+          var d = (window.Tanko && window.Tanko.deferred) || {};
+          if (typeof d.ensureWebModulesLoaded === 'function') {
+            d.ensureWebModulesLoaded().then(function () {
+              if (window.Tanko.web && typeof window.Tanko.web.openBrowser === 'function') {
+                window.Tanko.web.openBrowser(source);
+              }
+            });
+          }
+        };
+      })(s));
+      wrap.appendChild(btn);
+    }
+  }
+
+  function loadBooksSources() {
+    if (!api || !api.webSources) return;
+    api.webSources.get().then(function (res) {
+      if (res && res.ok && Array.isArray(res.sources)) {
+        _booksSources = res.sources;
+        renderBooksSources();
+      }
+    }).catch(function () {});
+  }
+
+  // Load sources on init + listen for changes
+  try { loadBooksSources(); } catch (e) {}
+  try {
+    if (api && api.webSources && typeof api.webSources.onUpdated === 'function') {
+      api.webSources.onUpdated(loadBooksSources);
+    }
+  } catch (e) {}
+
+  // Collapsible header toggle
+  if (el.booksSourcesHeader && el.booksSourcesItems) {
+    el.booksSourcesHeader.addEventListener('click', function () {
+      var hidden = el.booksSourcesItems.classList.toggle('hidden');
+      el.booksSourcesHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Sources';
+    });
+  }
+
+  // Add source button → open the shared add-source dialog
+  if (el.booksAddSourceBtn) {
+    el.booksAddSourceBtn.addEventListener('click', function () {
+      var d = (window.Tanko && window.Tanko.deferred) || {};
+      if (typeof d.ensureWebModulesLoaded === 'function') {
+        d.ensureWebModulesLoaded().then(function () {
+          var overlay = document.getElementById('webAddSourceOverlay');
+          if (overlay) overlay.classList.remove('hidden');
+        });
+      }
     });
   }
 

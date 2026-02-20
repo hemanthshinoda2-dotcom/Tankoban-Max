@@ -599,6 +599,22 @@
 
   // ---- BUILD_WEB_HOME: Browser view open/close ----
 
+  var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView' };
+
+  function _hideCurrentLibraryView() {
+    var router = window.Tanko && window.Tanko.modeRouter;
+    var mode = router ? router.getMode() : 'comics';
+    var v = document.getElementById(_libraryViewMap[mode] || 'libraryView');
+    if (v) v.classList.add('hidden');
+  }
+
+  function _showCurrentLibraryView() {
+    var router = window.Tanko && window.Tanko.modeRouter;
+    var mode = router ? router.getMode() : 'comics';
+    var v = document.getElementById(_libraryViewMap[mode] || 'libraryView');
+    if (v) v.classList.remove('hidden');
+  }
+
   function openBrowser(source) {
     // Check if a tab for this source already exists
     var existing = null;
@@ -612,8 +628,7 @@
     }
 
     state.browserOpen = true;
-    if (el.homeView) el.homeView.classList.add('hidden');
-    if (el.webLibraryView) el.webLibraryView.classList.add('hidden');
+    _hideCurrentLibraryView();
     if (el.browserView) el.browserView.classList.remove('hidden');
     if (el.browserTitle) el.browserTitle.textContent = source.name || '';
     renderSources();
@@ -631,8 +646,7 @@
 
     activateTab(tabId);
     state.browserOpen = true;
-    if (el.homeView) el.homeView.classList.add('hidden');
-    if (el.webLibraryView) el.webLibraryView.classList.add('hidden');
+    _hideCurrentLibraryView();
     if (el.browserView) el.browserView.classList.remove('hidden');
     if (el.browserTitle) el.browserTitle.textContent = tab.sourceName || '';
     renderSources();
@@ -652,8 +666,7 @@
 
     state.browserOpen = false;
     if (el.browserView) el.browserView.classList.add('hidden');
-    if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
-    if (el.homeView) el.homeView.classList.remove('hidden');
+    _showCurrentLibraryView();
     if (el.browserTitle) el.browserTitle.textContent = '';
     if (el.urlDisplay) el.urlDisplay.textContent = '';
     renderSources();
@@ -1459,7 +1472,7 @@
   // ---- Keyboard shortcuts ----
 
   function handleKeyDown(e) {
-    if (!isWebModeActive()) return;
+    if (!state.browserOpen) return;
 
     // Escape should always close overlays first
     if (e.key === 'Escape') {
@@ -1949,36 +1962,10 @@
     console.warn('[BUILD_WCV] bindUI failed', e);
   }
 
-  // FIX-WEB-MODE: register mode handler for lifecycle
+  // Expose openBrowser globally so Comics/Books sidebars can call it
   try {
-    var tanko = window.Tanko || {};
-    if (tanko.modeRouter && typeof tanko.modeRouter.registerModeHandler === 'function') {
-      tanko.modeRouter.registerModeHandler('web', {
-        setMode: function (mode, opts) {
-          // Entering web mode: restore browser if tabs were open
-          if (state.browserOpen && state.tabs.length > 0) {
-            if (el.homeView) el.homeView.classList.add('hidden');
-            if (el.webLibraryView) el.webLibraryView.classList.add('hidden');
-            if (el.browserView) el.browserView.classList.remove('hidden');
-            var tab = getActiveTab();
-            if (tab && tab.mainTabId) {
-              api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
-            }
-            setTimeout(reportBoundsForActiveTab, 50);
-          }
-        },
-        refresh: function () {
-          loadSources();
-          loadDestinations();
-        },
-        back: function () {
-          if (state.browserOpen) {
-            closeBrowser();
-            return true;
-          }
-        }
-      });
-    }
+    window.Tanko = window.Tanko || {};
+    window.Tanko.web = { openBrowser: openBrowser };
   } catch (e) {}
 
 })();

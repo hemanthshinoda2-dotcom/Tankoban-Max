@@ -118,6 +118,16 @@ COMMON ANCHORS
                 <sl-button id="openSettingsBtn" class="navBtn" title="Settings">Settings</sl-button>
               </div>
             </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader navHeaderCollapsible" id="comicsSourcesHeader">&#9662; Sources</div>
+              <div class="navItems" id="comicsSourcesItems">
+                <div id="comicsSourcesList" class="folderTree" role="list" aria-label="Download sources"></div>
+                <sl-button id="comicsAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+              </div>
+            </div>
           </aside>
 
           <div class="libContent">
@@ -267,6 +277,16 @@ COMMON ANCHORS
                 <sl-button id="booksRestoreHiddenBtn" class="navBtn" title="Restore hidden series" disabled aria-disabled="true">Restore hidden</sl-button>
                 <sl-button id="booksOpenFileBtn" class="navBtn" title="Open book file">Open file...</sl-button>
                 <sl-button id="booksRefreshBtn" class="navBtn" title="Refresh books library">Refresh</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader navHeaderCollapsible" id="booksSourcesHeader">&#9662; Sources</div>
+              <div class="navItems" id="booksSourcesItems">
+                <div id="booksSourcesList" class="folderTree" role="list" aria-label="Download sources"></div>
+                <sl-button id="booksAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
               </div>
             </div>
           </aside>
@@ -1437,27 +1457,28 @@ COMMON ANCHORS
           </div>
         </div>
 
-        <!-- Add source dialog -->
-        <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
-          <div class="settingsCard">
-            <div class="settingsTop">
-              <div id="webAddTitle" class="settingsTitle">Add Download Source</div>
-              <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
-            </div>
-            <div class="settingsGroup">
-              <label class="settingsLabel" for="webSourceName">Site name</label>
-              <input id="webSourceName" type="text" class="search" placeholder="e.g. MyBookSite" autocomplete="off" />
-            </div>
-            <div class="settingsGroup">
-              <label class="settingsLabel" for="webSourceUrl">URL</label>
-              <input id="webSourceUrl" type="url" class="search" placeholder="https://example.com" autocomplete="off" />
-            </div>
-            <div class="settingsActions">
-              <button id="webSourceSaveBtn" class="btn">Add Source</button>
-            </div>
+      </section>
+
+      <!-- Add source dialog (shared by Comics/Books/Web sidebars) -->
+      <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
+        <div class="settingsCard">
+          <div class="settingsTop">
+            <div id="webAddTitle" class="settingsTitle">Add Download Source</div>
+            <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webSourceName">Site name</label>
+            <input id="webSourceName" type="text" class="search" placeholder="e.g. MyBookSite" autocomplete="off" />
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webSourceUrl">URL</label>
+            <input id="webSourceUrl" type="url" class="search" placeholder="https://example.com" autocomplete="off" />
+          </div>
+          <div class="settingsActions">
+            <button id="webSourceSaveBtn" class="btn">Add Source</button>
           </div>
         </div>
-      </section>
+      </div>
 
       <!-- BUILD_WEB_HOME: Web browser view (overlay, hidden by default) -->
       <div id="webBrowserView" class="webBrowserView hidden">
