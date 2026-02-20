@@ -711,12 +711,6 @@ function getThumbWarmupMode(){
   }
 
   // Continue controls
-  el.hideFinishedToggle?.addEventListener('change', () => {
-    appState.ui.hideFinished = !!el.hideFinishedToggle.checked;
-    try { localStorage.setItem('hideFinished', appState.ui.hideFinished ? '1' : '0'); } catch {}
-    renderContinue();
-  });
-
   el.clearContinueBtn?.addEventListener('click', async () => {
     const isVideo = isVideoTopBarMode();
     const msg = isVideo

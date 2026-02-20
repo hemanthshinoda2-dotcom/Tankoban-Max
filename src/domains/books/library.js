@@ -28,7 +28,6 @@
     refreshBtn: qs('booksRefreshBtn'),
     foldersList: qs('booksFoldersList') || qs('booksFoldersTree'),
 
-    hideFinishedToggle: qs('booksHideFinishedToggle'),
     continuePanel: qs('booksContinuePanel') || qs('booksContinueRow'),
     continueList: qs('booksContinueList'),
     continueEmpty: qs('booksContinueEmpty'),
@@ -1427,8 +1426,6 @@ function getBookProgress(bookId) {
     row.classList.remove('videoList', 'videoContinueRow');
     row.classList.add('continueRow', 'continueYacRow');
 
-    if (el.hideFinishedToggle) el.hideFinishedToggle.checked = !!state.ui.hideFinishedShows;
-
     const items = getContinueItems().slice(0, 10);
     row.classList.toggle('hidden', !items.length);
     el.continueEmpty.classList.toggle('hidden', !!items.length);
@@ -2664,13 +2661,6 @@ function getBookProgress(bookId) {
       e.preventDefault();
       e.stopPropagation();
       try { await api.books.cancelScan(); toast('Refresh canceled'); } catch {}
-    });
-
-    el.hideFinishedToggle && el.hideFinishedToggle.addEventListener('change', () => {
-      state.ui.hideFinishedShows = !!el.hideFinishedToggle.checked;
-      renderContinue();
-      if (state.ui.booksSubView === 'home') renderHome();
-      scheduleSaveUi();
     });
 
     el.showBackBtn && el.showBackBtn.addEventListener('click', () => {

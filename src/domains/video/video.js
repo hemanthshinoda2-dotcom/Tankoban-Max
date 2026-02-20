@@ -96,8 +96,6 @@ videoProgress IPC calls
     videoContinueList: qs('videoContinueList'),
 
     videoContinueEmpty: qs('videoContinueEmpty'),
-    videoHideWatchedToggle: qs('videoHideWatchedToggle'),
-
     // Episode list controls (Build 3.4)
     videoEpSearch: qs('videoEpSearch'),
     clearVideoEpSearch: qs('clearVideoEpSearch'),
@@ -3612,8 +3610,6 @@ function getContinueVideos() {
     // Build 20: Continue Watching uses a horizontal shelf of tiles.
     row.classList.remove('videoList', 'videoContinueRow');
     row.classList.add('continueRow', 'continueYacRow');
-
-    if (el.videoHideWatchedToggle) el.videoHideWatchedToggle.checked = !!state.hideWatchedShows;
 
     const items = getContinueVideos().slice(0, 10);
     row.classList.toggle('hidden', !items.length);
@@ -9174,12 +9170,6 @@ function bindKeyboard(){
 
     el.videoShowBackBtn?.addEventListener('click', () => {
       goVideoHome();
-    });
-
-    el.videoHideWatchedToggle?.addEventListener('change', () => {
-      state.hideWatchedShows = !!el.videoHideWatchedToggle.checked;
-      renderContinue();
-      persistVideoUiState();
     });
 
     el.videoScanCancel?.addEventListener('click', () => {

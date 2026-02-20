@@ -173,7 +173,6 @@ Hot search tokens:
 
     continueRow: $('#continueRow'),
     continueEmpty: $('#continueEmpty'),
-    hideFinishedToggle: $('#hideFinishedToggle'),
     clearContinueBtn: $('#clearContinueBtn'),
     libraryScanPill: $('#libraryScanPill'),
     libraryScanText: $('#libraryScanText'),

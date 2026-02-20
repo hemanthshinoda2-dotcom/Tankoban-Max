@@ -135,7 +135,7 @@ Hot search tokens:
     el.continueRow.innerHTML = '';
     const bm = bookMap();
     const hideFinished = !!appState.ui.hideFinished;
-    if (el.hideFinishedToggle) el.hideFinishedToggle.checked = hideFinished;
+
 
     if (el.libraryScanPill) {
       const on = !!appState.ui.libraryScanning;

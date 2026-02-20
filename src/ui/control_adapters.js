@@ -4,9 +4,6 @@
 
   const CONTROL_IDS = new Set([
     'globalSearch',
-    'hideFinishedToggle',
-    'booksHideFinishedToggle',
-    'videoHideWatchedToggle',
   ]);
 
   function isTarget(el) {
