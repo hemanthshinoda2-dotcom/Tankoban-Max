@@ -296,7 +296,18 @@ function updateCard(info) {
       if (!win || !win.segments || !win.segments.length) {
         // If the engine can't provide a window yet, render just the current text.
         var t = String(info.text || '');
-        inner.innerHTML = '<div class="lp-seg is-active">' + escHtml(t) + '</div>';
+        // Keep word highlight even in fallback mode so prose still tracks.
+        var wS0 = info.wordStart;
+        var wE0 = info.wordEnd;
+        if (t && wS0 >= 0 && wE0 > wS0 && wE0 <= t.length) {
+          inner.innerHTML = '<div class="lp-seg is-active">'
+            + escHtml(t.slice(0, wS0))
+            + '<mark class="lp-word-active">' + escHtml(t.slice(wS0, wE0)) + '</mark>'
+            + escHtml(t.slice(wE0))
+            + '</div>';
+        } else {
+          inner.innerHTML = '<div class="lp-seg is-active">' + escHtml(t) + '</div>';
+        }
         inner.style.transform = 'translateY(0px)';
       } else {
         var activeIdx = win.activeIdx;

@@ -48,6 +48,9 @@
     format: '',
     ttsHlStyle: 'highlight',
     ttsHlColor: 'grey',
+    ttsHlGranularity: 'both', // 'both' | 'block' | 'word'
+    lastLocator: null,
+    onDocumentEnd: null,
     ttsEnlargeScale: 1.35, // FIX-TTS08: configurable enlarge factor (1.1–2.0)
 
     _pauseStartedAt: 0,
@@ -150,6 +153,23 @@
     }
   }
 
+  var _locatorRefreshTimer = 0;
+  function _scheduleRefreshLocator() {
+    try {
+      if (_locatorRefreshTimer) return;
+      _locatorRefreshTimer = setTimeout(async function () {
+        _locatorRefreshTimer = 0;
+        try {
+          var eng = _getViewEngine();
+          if (eng && typeof eng.getLocator === 'function') {
+            var loc = await eng.getLocator();
+            state.lastLocator = (loc && typeof loc === 'object') ? { ...loc } : null;
+          }
+        } catch {}
+      }, 50);
+    } catch {}
+  }
+
   function snippetInfo() {
     return {
       status: state.status,
@@ -158,6 +178,8 @@
       wordEnd: state.wordEnd,
       blockIdx: state.blockIdx,
       blockCount: _queue.length,
+      locator: state.lastLocator ? { ...state.lastLocator } : null,
+      highlightGranularity: state.ttsHlGranularity || 'both',
       segIdx: state.format === 'txt' ? _txt.segIdx : state.blockIdx,
       segCount: state.format === 'txt' ? _txt.segments.length : _queue.length,
       rate: state.rate,
@@ -483,9 +505,20 @@
   // FIX-TTS05: Highlight callback passed to view.initTTS() — handles both sentence and word
   function highlightRange(range) {
     if (!range) return;
+
+    var gran = state.ttsHlGranularity || 'both';
+
     // Word highlight
-    highlightWord(range);
+    if (gran !== 'block') {
+      highlightWord(range);
+    } else {
+      // Block-only: clear any active word highlight/enlarge span
+      try { if (_cssHl.word) _cssHl.word.clear(); } catch {}
+      try { _clearEnlargeSpan(); } catch {}
+    }
+
     // Sentence highlight: detect parent block, highlight when block changes
+    if (gran !== 'word') {
     var blockEl = _findBlockParent(range.startContainer);
     if (blockEl) {
       try {
@@ -494,6 +527,7 @@
         blockRange.selectNodeContents(blockEl);
         highlightSentence(blockRange);
       } catch {}
+    }
     }
     // FIX-TTS07: scroll via shared helper
     _scrollToRange(range);
@@ -623,6 +657,7 @@
     state.wordStart = -1;
     state.wordEnd = -1;
     state.blockIdx = queueIdx;
+    _scheduleRefreshLocator();
 
     // Highlight sentence for this block
     if (item.ranges && item.ranges.size > 0) {
@@ -707,7 +742,11 @@
   function handleAllBlocksDone() {
     if (typeof state.onNeedAdvance === 'function') {
       state.onNeedAdvance().then(async function (advanced) {
-        if (!advanced || state.status !== PLAYING) { stop(); return; }
+        if (!advanced || state.status !== PLAYING) {
+          try { if (!advanced && typeof state.onDocumentEnd === 'function') state.onDocumentEnd(snippetInfo()); } catch {}
+          stop();
+          return;
+        }
         // FIX-LISTEN-STAB3: After section advance, the old _fol.tts is stale (bound to
         // the previous section's document). Must re-init foliate TTS for the new section
         // before generating queue. Without this, next() returns null → empty queue → stop.
@@ -721,6 +760,7 @@
         }
       }).catch(function () { stop(); });
     } else {
+      try { if (typeof state.onDocumentEnd === 'function') state.onDocumentEnd(snippetInfo()); } catch {}
       stop();
     }
   }
@@ -1087,6 +1127,7 @@
     }
     _queue.index = -1;
     state.blockIdx = -1;
+    _scheduleRefreshLocator();
     state.currentText = '';
     state.wordStart = -1;
     state.wordEnd = -1;
@@ -1126,6 +1167,7 @@
         _queue.index = targetIdx;
         state.currentText = item.text;
         state.blockIdx = targetIdx;
+    _scheduleRefreshLocator();
         state.wordStart = -1;
         state.wordEnd = -1;
         // Highlight sentence for new position
@@ -1173,6 +1215,7 @@
       _queue.index = idx2;
       state.currentText = item.text;
       state.blockIdx = idx2;
+    _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       if (item.ranges && item.ranges.size > 0) {
@@ -1229,6 +1272,7 @@
         _queue.index = targetIdx;
         state.currentText = item.text;
         state.blockIdx = targetIdx;
+    _scheduleRefreshLocator();
         state.wordStart = -1;
         state.wordEnd = -1;
         fireProgress();
@@ -1409,7 +1453,25 @@
   }
 
   // FIX-TTS08: Set the enlarge scale factor (1.1–2.5)
-  function setEnlargeScale(scale) {
+  
+  function setHighlightGranularity(mode) {
+    var m = String(mode || '').toLowerCase();
+    if (m !== 'both' && m !== 'block' && m !== 'word') return;
+    state.ttsHlGranularity = m;
+    // Re-apply current highlight mode by forcing a progress refresh
+    try { fireProgress(); } catch {}
+  }
+
+  function getHighlightGranularity() {
+    return state.ttsHlGranularity || 'both';
+  }
+
+  // Compatibility aliases used by listening_player.js
+  function setWordHighlightStyle(style) { setHighlightStyle(style); }
+  function getWordHighlightStyle() { return state.ttsHlStyle; }
+  function setWordHighlightColor(color) { setHighlightColor(color); }
+  function getWordHighlightColor() { return state.ttsHlColor; }
+function setEnlargeScale(scale) {
     var s = Math.max(1.1, Math.min(2.5, Number(scale) || 1.35));
     state.ttsEnlargeScale = s;
     _updateCssHighlightColors(); // Rebuilds the .tts-enlarge CSS class
@@ -1520,6 +1582,7 @@
     var seg = _txt.segments[_txt.segIdx];
     state.currentText = seg.text;
     state.blockIdx = seg.blockIdx;
+    _scheduleRefreshLocator();
     state.wordStart = -1;
     state.wordEnd = -1;
     if (_txt.activeEl) {
@@ -1561,6 +1624,7 @@
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
+    _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1590,6 +1654,7 @@
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
+    _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1623,6 +1688,7 @@
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
+    _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1741,9 +1807,15 @@
     setHighlightStyle: setHighlightStyle,
     setHighlightColor: setHighlightColor,
     getHighlightStyles: function () { return ['highlight', 'underline', 'squiggly', 'strikethrough', 'enlarge']; },
-    getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
-    getHighlightStyle: function () { return state.ttsHlStyle; },
+    getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },    getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },
+    setHighlightGranularity: setHighlightGranularity,
+    getHighlightGranularity: getHighlightGranularity,
+    setWordHighlightStyle: setWordHighlightStyle,
+    getWordHighlightStyle: getWordHighlightStyle,
+    setWordHighlightColor: setWordHighlightColor,
+    getWordHighlightColor: getWordHighlightColor,
+    getSegmentWindow: getSegmentWindow,
     setEnlargeScale: setEnlargeScale,
     getEnlargeScale: function () { return state.ttsEnlargeScale; },
     getLastBlockInfo: getLastBlockInfo, // TTS-RESUME-HL
@@ -1752,5 +1824,6 @@
     _regenerateQueue: _generateQueue,
     set onStateChange(fn) { state.onStateChange = typeof fn === 'function' ? fn : null; },
     set onProgress(fn) { state.onProgress = typeof fn === 'function' ? fn : null; },
+    set onDocumentEnd(fn) { state.onDocumentEnd = typeof fn === 'function' ? fn : null; },
   };
 })();
