@@ -519,15 +519,15 @@
 
     // Sentence highlight: detect parent block, highlight when block changes
     if (gran !== 'word') {
-    var blockEl = _findBlockParent(range.startContainer);
-    if (blockEl) {
-      try {
-        var doc = blockEl.ownerDocument || document;
-        var blockRange = doc.createRange();
-        blockRange.selectNodeContents(blockEl);
-        highlightSentence(blockRange);
-      } catch {}
-    }
+      var blockEl = _findBlockParent(range.startContainer);
+      if (blockEl) {
+        try {
+          var doc = blockEl.ownerDocument || document;
+          var blockRange = doc.createRange();
+          blockRange.selectNodeContents(blockEl);
+          highlightSentence(blockRange);
+        } catch {}
+      }
     }
     // FIX-TTS07: scroll via shared helper
     _scrollToRange(range);
@@ -1127,7 +1127,7 @@
     }
     _queue.index = -1;
     state.blockIdx = -1;
-    _scheduleRefreshLocator();
+    if (_locatorRefreshTimer) { clearTimeout(_locatorRefreshTimer); _locatorRefreshTimer = 0; }
     state.currentText = '';
     state.wordStart = -1;
     state.wordEnd = -1;
@@ -1167,7 +1167,7 @@
         _queue.index = targetIdx;
         state.currentText = item.text;
         state.blockIdx = targetIdx;
-    _scheduleRefreshLocator();
+        _scheduleRefreshLocator();
         state.wordStart = -1;
         state.wordEnd = -1;
         // Highlight sentence for new position
@@ -1215,7 +1215,7 @@
       _queue.index = idx2;
       state.currentText = item.text;
       state.blockIdx = idx2;
-    _scheduleRefreshLocator();
+      _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       if (item.ranges && item.ranges.size > 0) {
@@ -1272,7 +1272,7 @@
         _queue.index = targetIdx;
         state.currentText = item.text;
         state.blockIdx = targetIdx;
-    _scheduleRefreshLocator();
+        _scheduleRefreshLocator();
         state.wordStart = -1;
         state.wordEnd = -1;
         fireProgress();
@@ -1452,8 +1452,6 @@
     _updateCssHighlightColors();
   }
 
-  // FIX-TTS08: Set the enlarge scale factor (1.1–2.5)
-  
   function setHighlightGranularity(mode) {
     var m = String(mode || '').toLowerCase();
     if (m !== 'both' && m !== 'block' && m !== 'word') return;
@@ -1471,7 +1469,8 @@
   function getWordHighlightStyle() { return state.ttsHlStyle; }
   function setWordHighlightColor(color) { setHighlightColor(color); }
   function getWordHighlightColor() { return state.ttsHlColor; }
-function setEnlargeScale(scale) {
+  // FIX-TTS08: Set the enlarge scale factor (1.1–2.5)
+  function setEnlargeScale(scale) {
     var s = Math.max(1.1, Math.min(2.5, Number(scale) || 1.35));
     state.ttsEnlargeScale = s;
     _updateCssHighlightColors(); // Rebuilds the .tts-enlarge CSS class
@@ -1480,7 +1479,6 @@ function setEnlargeScale(scale) {
   function setVoice(voiceId) {
     state.voiceId = String(voiceId || '');
     if (state.engine) state.engine.setVoice(state.voiceId);
-    _respeakCurrentBlock();
     fire();
   }
 
@@ -1624,7 +1622,7 @@ function setEnlargeScale(scale) {
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
-    _scheduleRefreshLocator();
+      _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1654,7 +1652,7 @@ function setEnlargeScale(scale) {
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
-    _scheduleRefreshLocator();
+      _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1688,7 +1686,7 @@ function setEnlargeScale(scale) {
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
-    _scheduleRefreshLocator();
+      _scheduleRefreshLocator();
       state.wordStart = -1;
       state.wordEnd = -1;
       fireProgress();
@@ -1807,7 +1805,8 @@ function setEnlargeScale(scale) {
     setHighlightStyle: setHighlightStyle,
     setHighlightColor: setHighlightColor,
     getHighlightStyles: function () { return ['highlight', 'underline', 'squiggly', 'strikethrough', 'enlarge']; },
-    getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },    getHighlightStyle: function () { return state.ttsHlStyle; },
+    getHighlightColors: function () { return Object.keys(TTS_HL_COLORS); },
+    getHighlightStyle: function () { return state.ttsHlStyle; },
     getHighlightColor: function () { return state.ttsHlColor; },
     setHighlightGranularity: setHighlightGranularity,
     getHighlightGranularity: getHighlightGranularity,

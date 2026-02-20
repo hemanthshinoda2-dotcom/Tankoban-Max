@@ -829,7 +829,9 @@ function updateCard(info) {
       var diagEl = qs('lpTtsDiag');
       if (diagEl && !diagEl.classList.contains('hidden')) updateDiag();
     };
-    tts.onDocumentEnd = function () {};
+    tts.onDocumentEnd = function (info) {
+      saveProgress(info, true);
+    };
   }
 
   function unwireTts() {
@@ -837,6 +839,7 @@ function updateCard(info) {
     if (!tts) return;
     tts.onStateChange = null;
     tts.onProgress = null;
+    tts.onDocumentEnd = null;
   }
 
   function _buildTtsInitOpts() {
