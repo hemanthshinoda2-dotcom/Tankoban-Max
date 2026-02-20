@@ -374,6 +374,15 @@ const api = {
   },
 
   // ========================================
+  // booksDisplayNames.* (RENAME-BOOK)
+  // ========================================
+  booksDisplayNames: {
+    getAll: () => ipcRenderer.invoke(CHANNEL.BOOKS_DISPLAY_NAMES_GET_ALL),
+    save: (bookId, name) => ipcRenderer.invoke(CHANNEL.BOOKS_DISPLAY_NAMES_SAVE, bookId, name),
+    clear: (bookId) => ipcRenderer.invoke(CHANNEL.BOOKS_DISPLAY_NAMES_CLEAR, bookId),
+  },
+
+  // ========================================
   // booksSettings.*
   // ========================================
   booksSettings: {

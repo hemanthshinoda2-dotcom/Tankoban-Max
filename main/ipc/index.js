@@ -54,6 +54,7 @@ const videoProgress = require('../domains/videoProgress');
 const booksSettings = require('../domains/booksSettings');
 const booksBookmarks = require('../domains/booksBookmarks');
 const booksAnnotations = require('../domains/booksAnnotations'); // BUILD_ANNOT
+const booksDisplayNames = require('../domains/booksDisplayNames'); // RENAME-BOOK
 const videoSettings = require('../domains/videoSettings');
 const booksUi = require('../domains/booksUi');
 const videoUi = require('../domains/videoUi');
@@ -1174,6 +1175,7 @@ try {
     require('./register/series_settings'),
     require('./register/books_bookmarks'),
     require('./register/books_annotations'), // BUILD_ANNOT
+    require('./register/books_display_names'), // RENAME-BOOK
     require('./register/health_check'),
     require('./register/web_sources'), // BUILD_WEB
     require('./register/web_tabs'), // BUILD_WCV
@@ -1184,7 +1186,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','health_check','web_sources','web_tabs'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','health_check','web_sources','web_tabs'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -1209,6 +1211,7 @@ for (let i = 0; i < registerModules.length; i++) {
     booksSettings,
     booksBookmarks,
     booksAnnotations, // BUILD_ANNOT
+    booksDisplayNames, // RENAME-BOOK
     videoSettings,
     booksUi,
     videoUi,

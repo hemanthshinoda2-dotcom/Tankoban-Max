@@ -83,6 +83,8 @@
     progressAll: {},
     // LISTEN_P5: listening progress map (booksTtsProgress)
     ttsProgressAll: {},
+    // RENAME-BOOK: custom display names keyed by bookId
+    displayNames: {},
 
     ui: {
       selectedRootId: null,
@@ -215,6 +217,30 @@
     return !!(api.shell && typeof api.shell.revealPath === 'function');
   }
 
+  // RENAME-BOOK: display name helpers
+  function effectiveTitle(book) {
+    var dn = book && state.displayNames[book.id];
+    return dn || (book && book.title) || pathBase((book && book.path) || '') || 'Untitled';
+  }
+
+  async function renameBook(book) {
+    if (!book || !book.id) return;
+    var current = effectiveTitle(book);
+    var newName = window.prompt('Rename book:', current);
+    if (newName === null) return;
+    newName = newName.trim();
+    var original = book.title || pathBase(book.path || '') || 'Untitled';
+    if (newName && newName !== original) {
+      state.displayNames[book.id] = newName;
+      if (api.booksDisplayNames) api.booksDisplayNames.save(book.id, newName);
+    } else if (!newName || newName === original) {
+      delete state.displayNames[book.id];
+      if (api.booksDisplayNames) api.booksDisplayNames.clear(book.id);
+    }
+    if (state.ui.booksSubView === 'show') renderShowView();
+    renderContinue();
+  }
+
   function placeholderThumb(label, a, b) {
     const key = `${label}|${a}|${b}`;
     if (fallbackMem.has(key)) return fallbackMem.get(key);
@@ -227,7 +253,7 @@
 
   function fallbackForBook(book) {
     const fmt = String(book && book.format || '').toLowerCase();
-    const title = String(book && book.title || '?');
+    const title = String(effectiveTitle(book) || '?');
     if (fmt === 'epub') return placeholderThumb(title, '#35557d', '#6c3d2f');
     if (fmt === 'pdf') return placeholderThumb(title, '#5a3f71', '#2f4e6d');
     return placeholderThumb(title, '#4e5e4a', '#6f4f33');
@@ -1230,6 +1256,8 @@ function getBookProgress(bookId) {
         { label: 'Mark as finished', onClick: function () { markBookFinished(book.id); } },
         { label: 'Clear from Continue Reading', onClick: function () { clearContinueShow(show.id, book.id); } },
         { separator: true },
+        { label: 'Rename\u2026', onClick: function () { renameBook(book); } },
+        { separator: true },
         { label: 'Reveal in Explorer', disabled: !(canReveal() && book.path), onClick: function () {
           if (book.path) api.shell.revealPath(book.path);
         }},
@@ -1299,8 +1327,8 @@ function getBookProgress(bookId) {
     titleWrap.className = 'contTitleWrap';
     const title = document.createElement('div');
     title.className = 'contTileTitle u-clamp2';
-    title.title = book.title || show.name || '';
-    title.textContent = book.title || show.name || 'Untitled';
+    title.title = effectiveTitle(book) || show.name || '';
+    title.textContent = effectiveTitle(book) || show.name || 'Untitled';
     titleWrap.appendChild(title);
     tile.appendChild(titleWrap);
 
@@ -1862,7 +1890,7 @@ function getBookProgress(bookId) {
     titleCell.className = 'cell title';
     const titleMain = document.createElement('div');
     titleMain.className = 'videoEpTitleMain';
-    titleMain.textContent = String(book.title || pathBase(book.path || '') || 'Untitled');
+    titleMain.textContent = effectiveTitle(book);
     titleCell.appendChild(titleMain);
 
     const fileBase = pathBase(book.path || '');
@@ -1936,6 +1964,8 @@ function getBookProgress(bookId) {
             onClick: () => (isFinished ? markBookInProgress(book.id) : markBookFinished(book.id)) },
           { label: 'Clear progress', disabled: !hasProgress, onClick: () => clearBookProgress(book.id) },
           { separator: true },
+          { label: 'Rename\u2026', onClick: function() { renameBook(book); } },
+          { separator: true },
           { label: 'Reveal in Explorer', disabled: !(canReveal() && book.path), onClick: async () => {
             if (book.path) await api.shell.revealPath(book.path);
           }},
@@ -1988,7 +2018,7 @@ function getBookProgress(bookId) {
     container.classList.remove('hidden');
     container.innerHTML = `<div class="booksFolderContinueInner">` +
       `<span class="booksFolderContinueLabel">${label}</span>` +
-      `<span class="booksFolderContinueTitle">${escHtml(best.title || pathBase(best.path || ''))}</span>` +
+      `<span class="booksFolderContinueTitle">${escHtml(effectiveTitle(best))}</span>` +
       `<div class="booksFolderContinueBar"><div class="booksFolderContinueFill" style="width:${pct}%"></div></div>` +
       `<span class="booksFolderContinueHint">${pct}%</span>` +
       `<button class="iconBtn booksFolderContinueBtn" title="${label}">&#9654;</button>` +
@@ -2268,7 +2298,10 @@ function getBookProgress(bookId) {
     state.viewBeforeReader = (state.ui.booksSubView === 'show') ? 'show' : 'home';
 
     try {
-      await ctl.open(b);
+      // RENAME-BOOK: overlay display name for reader title bar
+      var bookForReader = b;
+      if (state.displayNames[b.id]) { bookForReader = Object.assign({}, b); bookForReader.title = state.displayNames[b.id]; }
+      await ctl.open(bookForReader);
       state.readerOpen = true;
       renderViews();
       return true;
@@ -2310,7 +2343,10 @@ function getBookProgress(bookId) {
     state.viewBeforeReader = (state.ui.booksSubView === 'show') ? 'show' : 'home';
 
     try {
-      await ctl.open(b);
+      // RENAME-BOOK: overlay display name for reader title bar
+      var bookForReader = b;
+      if (state.displayNames[b.id]) { bookForReader = Object.assign({}, b); bookForReader.title = state.displayNames[b.id]; }
+      await ctl.open(bookForReader);
       state.readerOpen = true;
       renderViews();
       return true;
@@ -2448,7 +2484,7 @@ function getBookProgress(bookId) {
 
     for (const b of state.derived.books || []) {
       let score = 0;
-      const titleNorm = String(b.title || '').toLowerCase();
+      const titleNorm = effectiveTitle(b).toLowerCase();
       const seriesNorm = String(b.series || '').toLowerCase();
       const fileNorm = pathBase(b.path || '').toLowerCase();
       const pathNorm = String(b.path || '').toLowerCase();
@@ -2457,7 +2493,7 @@ function getBookProgress(bookId) {
       if (fileNorm.includes(q)) score += 80;
       if (pathNorm.includes(q)) score += 30;
       for (const t of tokens) { if (titleNorm.includes(t)) score += 10; }
-      if (score > 0) scored.push({ type: 'book', item: b, score, name: b.title || '' });
+      if (score > 0) scored.push({ type: 'book', item: b, score, name: effectiveTitle(b) });
     }
 
     scored.sort((a, b) => (b.score - a.score) || naturalCompare(a.name, b.name));
@@ -2485,7 +2521,7 @@ function getBookProgress(bookId) {
           row.innerHTML = `<div class="resType">S</div><div class="resText"><div class="resMain">${escHtml(it.name || 'Series')}</div><div class="resSub">${Number(it.bookCount || 0)} volumes</div></div>`;
           state.globalSearchItems.push({ type: 'show', showId: String(it.id || '') });
         } else {
-          row.innerHTML = `<div class="resType">V</div><div class="resText"><div class="resMain">${escHtml(it.title || 'Volume')}</div><div class="resSub">${escHtml(it.series || '')}</div></div>`;
+          row.innerHTML = `<div class="resType">V</div><div class="resText"><div class="resMain">${escHtml(effectiveTitle(it))}</div><div class="resSub">${escHtml(it.series || '')}</div></div>`;
           state.globalSearchItems.push({ type: 'book', bookId: String(it.id || '') });
         }
 
@@ -2676,6 +2712,8 @@ function getBookProgress(bookId) {
     state.ui.selectedBookId = null;
     state.ui.showFolderRel = '';
     await loadProgress();
+    // RENAME-BOOK: load custom display names
+    try { state.displayNames = (await api.booksDisplayNames.getAll()) || {}; } catch(_e) { state.displayNames = {}; }
     await refreshState();
     renderAll();
   }

@@ -252,6 +252,19 @@ const CHANNEL = {
   BOOKS_ANNOTATIONS_CLEAR: 'booksAnnotations:clear',
 
   // ========================================
+  // Books Display Names (RENAME-BOOK)
+  // ========================================
+
+  /** Get all custom display names. Returns: { [bookId]: displayName } */
+  BOOKS_DISPLAY_NAMES_GET_ALL: 'booksDisplayNames:getAll',
+
+  /** Save a custom display name for a book. Returns: { ok: boolean } */
+  BOOKS_DISPLAY_NAMES_SAVE: 'booksDisplayNames:save',
+
+  /** Clear a custom display name for a book. Returns: { ok: boolean } */
+  BOOKS_DISPLAY_NAMES_CLEAR: 'booksDisplayNames:clear',
+
+  // ========================================
   // Books UI State
   // ========================================
 
