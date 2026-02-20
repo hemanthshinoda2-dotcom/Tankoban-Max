@@ -283,17 +283,22 @@
       _bd.reqId = '';
     }
 
+    // FIX-TTS-B1: pause/resume boundary polling without clearing entries
+    function _bdPause() {
+      if (_bd.rafId) { clearTimeout(_bd.rafId); _bd.rafId = null; }
+    }
+
+    function _bdResume() {
+      if (!_bd.rafId && _bd.nextIdx < _bd.entries.length && _bd.reqId === state.requestId) {
+        _bd.rafId = setTimeout(_bdPoll, 16);
+      }
+    }
+
     function _bdPoll() {
       _bd.rafId = null;
       if (_bd.reqId !== state.requestId) return;
       if (!state.playing) return;
-      if (state.paused) {
-        // FIX-LISTEN-STAB: re-check reqId before rescheduling to avoid timer leak on cancel-while-paused
-        if (_bd.reqId === state.requestId) {
-          _bd.rafId = setTimeout(_bdPoll, 100);
-        }
-        return;
-      }
+      if (state.paused) return; // FIX-TTS-B1: don't reschedule while paused — _bdResume() restarts on resume
       var audio = state.audio;
       if (!audio) return;
       var currentMs = (audio.currentTime || 0) * 1000;
@@ -692,25 +697,44 @@
       if (!state.audio || !state.playing || state.paused) return;
       state.audio.pause();
       state.paused = true;
+      _bdPause(); // FIX-TTS-B1: stop boundary polling on pause
     }
 
+    // FIX-TTS-B1: Optimistic paused=false (required by tts_core.js synchronous isPaused check)
+    // with 5s timeout safety net for the rare case where audio.play() promise never settles.
     function resume() {
       if (!state.audio || !state.paused) return;
-      // FIX-PAUSE: Only clear paused flag if audio.play() succeeds.
-      // Previously, paused was set false even on failure → state corruption.
       try {
         var playPromise = state.audio.play();
         if (playPromise && typeof playPromise.then === 'function') {
-          state.paused = false; // optimistic — corrected in catch if it fails
-          playPromise.catch(function (err) {
-            state.paused = true; // play() rejected — still paused
-            diag('edge_resume_fail', String(err && err.message ? err.message : err));
+          var settled = false;
+          state.paused = false;
+          _bdResume();
+          var safetyTimer = setTimeout(function () {
+            if (!settled) {
+              settled = true;
+              state.paused = true;
+              _bdPause();
+              diag('edge_resume_timeout', 'play_promise_stuck');
+            }
+          }, 5000);
+          playPromise.then(function () {
+            settled = true;
+            clearTimeout(safetyTimer);
+          }).catch(function (err) {
+            if (!settled) {
+              settled = true;
+              clearTimeout(safetyTimer);
+              state.paused = true;
+              _bdPause();
+              diag('edge_resume_fail', String(err && err.message ? err.message : err));
+            }
           });
         } else {
           state.paused = false;
+          _bdResume();
         }
       } catch (err) {
-        // synchronous throw — stay paused
         diag('edge_resume_fail', String(err && err.message ? err.message : err));
       }
     }

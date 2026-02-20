@@ -8,10 +8,10 @@ Grouped into fix batches by area and dependency.
 ## Batch 1 — Play/Pause Reliability
 Core playback state machine fixes. Should be done first since everything else depends on reliable play/pause.
 
-- [ ] **#1 CRITICAL — Resume play() failure leaves engine stuck**
+- [x] **#1 CRITICAL — Resume play() failure leaves engine stuck**
   `tts_engine_edge.js:697-716` — If `audio.play()` rejects, the engine optimistically set `paused = false` before the promise resolved. If promise never settles (rare), engine thinks it's playing but isn't. Resume attempts silently rejected. User must stop and restart.
 
-- [ ] **#3 HIGH — Boundary polling timer leaks when paused**
+- [x] **#3 HIGH — Boundary polling timer leaks when paused**
   `tts_engine_edge.js:286-317` — `_bdPoll()` fires every 100ms while paused, checking if it should resume. If user pauses and leaves app open for hours, CPU keeps waking. Only stops on `cancel()` or next `speak()`.
 
 ---
