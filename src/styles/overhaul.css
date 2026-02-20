@@ -323,10 +323,10 @@ body:not(.inPlayer).libDrawerOpen .drawerBackdrop{
 /* Continue shelf */
 .continuePanel{
   height: auto !important;
-  padding: 10px 12px !important;
+  padding: 0 12px 10px !important;
 }
 
-.continueHead{ margin: 8px 10px 10px !important; }
+.continueHead{ margin: 0 10px 10px !important; }
 
 /* Build 10 (UI): Comics Continue Reading thumbnails match the larger tile sizing. */
 #continueRow.continueYacRow{

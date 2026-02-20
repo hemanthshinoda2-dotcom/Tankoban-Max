@@ -704,7 +704,7 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 /* Continue Reading (Build 2) */
 .continuePanel{
   height: 430px;
-  margin-top: 20px;
+  margin-top: 0;
   padding: 0;
   display:flex;
   flex-direction:column;
