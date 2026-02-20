@@ -66,5 +66,12 @@ Every changed line must be required by the task. When in doubt, change less.
 Commit and push after every fix. Tag commits (e.g. `FIX-TTS03:`).
 Vendor patches → document in `THIRD_PARTY_NOTICES.md`.
 
+## Testing (MANDATORY)
+After making changes, you MUST test by launching the app for Hemanth to verify:
+1. Run `unset ELECTRON_RUN_AS_NODE && npm start 2>&1` as a **background task** (captures all output to a log file)
+2. Tell Hemanth what to check in the app and wait for their feedback
+3. After Hemanth closes the app, read the log file to check for errors or warnings
+Never skip this step. Never assume changes work without Hemanth visually confirming.
+
 ## Commands
 `npm start` — dev | `npm run dist` — build | `npm run smoke` — checks
