@@ -223,10 +223,51 @@
     return dn || (book && book.title) || pathBase((book && book.path) || '') || 'Untitled';
   }
 
+  function showRenamePrompt(currentName) {
+    return new Promise(function (resolve) {
+      var backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:#2a2a2e;border:1px solid #555;border-radius:8px;padding:20px;min-width:340px;max-width:480px;color:#eee;font-family:inherit;';
+      var lbl = document.createElement('div');
+      lbl.textContent = 'Rename book:';
+      lbl.style.cssText = 'margin-bottom:10px;font-size:14px;';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = currentName;
+      inp.style.cssText = 'width:100%;box-sizing:border-box;padding:8px;border-radius:4px;border:1px solid #666;background:#1a1a1d;color:#eee;font-size:14px;outline:none;';
+      var btns = document.createElement('div');
+      btns.style.cssText = 'margin-top:14px;display:flex;justify-content:flex-end;gap:8px;';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = 'padding:6px 16px;border-radius:4px;border:1px solid #666;background:transparent;color:#ccc;cursor:pointer;';
+      var okBtn = document.createElement('button');
+      okBtn.textContent = 'OK';
+      okBtn.style.cssText = 'padding:6px 16px;border-radius:4px;border:none;background:#4a8fe7;color:#fff;cursor:pointer;';
+      btns.appendChild(cancelBtn);
+      btns.appendChild(okBtn);
+      box.appendChild(lbl);
+      box.appendChild(inp);
+      box.appendChild(btns);
+      backdrop.appendChild(box);
+      document.body.appendChild(backdrop);
+      inp.focus();
+      inp.select();
+      function finish(val) { document.body.removeChild(backdrop); resolve(val); }
+      okBtn.onclick = function () { finish(inp.value); };
+      cancelBtn.onclick = function () { finish(null); };
+      backdrop.addEventListener('mousedown', function (e) { if (e.target === backdrop) finish(null); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') finish(inp.value);
+        if (e.key === 'Escape') finish(null);
+      });
+    });
+  }
+
   async function renameBook(book) {
     if (!book || !book.id) return;
     var current = effectiveTitle(book);
-    var newName = window.prompt('Rename book:', current);
+    var newName = await showRenamePrompt(current);
     if (newName === null) return;
     newName = newName.trim();
     var original = book.title || pathBase(book.path || '') || 'Untitled';
