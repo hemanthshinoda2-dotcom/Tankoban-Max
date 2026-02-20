@@ -156,7 +156,8 @@ body{
 ------------------*/
 
 .topbar{
-  position: relative;
+  position: fixed;
+  top: 0; left: 0; right: 0;
   height: var(--lib-topbar-h);
   padding: 6px 12px;
   background: rgba(10,12,20,.52) !important;
