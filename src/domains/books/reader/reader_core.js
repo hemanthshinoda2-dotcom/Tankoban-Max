@@ -451,7 +451,7 @@
 
     // Back / close buttons
     els.backBtn && els.backBtn.addEventListener('click', function () { close().catch(function () {}); });
-    els.closeBtn && els.closeBtn.addEventListener('click', function () { close().catch(function () {}); });
+    els.closeBtn && els.closeBtn.addEventListener('click', function () { try { Tanko.api.window.close(); } catch (e) {} });
 
     // Error banner actions
     els.errorRetry && els.errorRetry.addEventListener('click', function () {
