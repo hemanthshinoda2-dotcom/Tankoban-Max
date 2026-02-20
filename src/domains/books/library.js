@@ -2714,7 +2714,23 @@ function getBookProgress(bookId) {
       btn.dataset.sourceId = s.id;
       var dot = document.createElement('span');
       dot.className = 'folderIcon';
-      dot.innerHTML = '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>';
+      var faviconUrl = '';
+      try { faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(new URL(s.url).hostname) + '&sz=32'; } catch (e) {}
+      if (faviconUrl) {
+        var fImg = document.createElement('img');
+        fImg.className = 'folderFavicon';
+        fImg.alt = '';
+        fImg.src = faviconUrl;
+        fImg.onerror = function () {
+          var fallback = document.createElement('span');
+          fallback.className = 'webSourceDot';
+          fallback.style.background = s.color || '#888';
+          fImg.replaceWith(fallback);
+        };
+        dot.appendChild(fImg);
+      } else {
+        dot.innerHTML = '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>';
+      }
       var label = document.createElement('span');
       label.className = 'folderLabel';
       label.textContent = s.name;

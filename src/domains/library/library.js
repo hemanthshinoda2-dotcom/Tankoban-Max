@@ -490,8 +490,32 @@ Hot search tokens:
       btn.type = 'button';
       btn.className = 'folderItem';
       btn.dataset.sourceId = s.id;
-      btn.innerHTML = '<span class="folderIcon"><span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span></span>'
-        + '<span class="folderLabel">' + escapeHtml(s.name) + '</span>';
+
+      var iconSpan = document.createElement('span');
+      iconSpan.className = 'folderIcon';
+      var faviconUrl = '';
+      try { faviconUrl = 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(new URL(s.url).hostname) + '&sz=32'; } catch (e) {}
+      if (faviconUrl) {
+        var img = document.createElement('img');
+        img.className = 'folderFavicon';
+        img.alt = '';
+        img.src = faviconUrl;
+        img.onerror = function () {
+          var dot = document.createElement('span');
+          dot.className = 'webSourceDot';
+          dot.style.background = s.color || '#888';
+          img.replaceWith(dot);
+        };
+        iconSpan.appendChild(img);
+      } else {
+        iconSpan.innerHTML = '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>';
+      }
+      var label = document.createElement('span');
+      label.className = 'folderLabel';
+      label.textContent = s.name;
+      btn.appendChild(iconSpan);
+      btn.appendChild(label);
+
       btn.addEventListener('click', (function (source) {
         return function () {
           var d = (window.Tanko && window.Tanko.deferred) || {};

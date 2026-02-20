@@ -570,7 +570,8 @@ body:not(.inPlayer) .search{
 .folderItem:active{ transform: translateY(1px); }
 .folderItem.active{ background: rgba(var(--accent-rgb),.12); border-color: rgba(var(--accent-rgb),.25); }
 
-.folderIcon{ width: 14px; text-align:center; opacity:.90; flex: 0 0 auto; }
+.folderIcon{ width: 16px; text-align:center; opacity:.90; flex: 0 0 auto; }
+.folderFavicon{ width:16px; height:16px; object-fit:contain; display:block; }
 .folderLabel{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex: 1 1 auto; }
 .folderCount{ color: var(--muted); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
 .folderChild{ margin-left: 14px; }
