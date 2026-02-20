@@ -1427,6 +1427,10 @@ COMMON ANCHORS
               <div class="navHeader">Downloads</div>
               <div class="navItems">
                 <div id="webDownloadStatus" class="muted tiny">No active downloads</div>
+                <div id="webDownloadProgressRow" class="webSidebarDlRow hidden" aria-hidden="true">
+                  <div id="webDownloadProgress" class="webSidebarDlProgress"><div id="webDownloadProgressFill" class="webSidebarDlProgressFill"></div></div>
+                  <div id="webDownloadProgressPct" class="webSidebarDlPct">0%</div>
+                </div>
               </div>
             </div>
 
@@ -1528,7 +1532,10 @@ COMMON ANCHORS
           </div>
         </div>
         <div class="webUrlBar">
-          <div id="webUrlDisplay" class="webUrlDisplay muted tiny" aria-live="polite"></div>
+          <div class="webOmni" role="group" aria-label="Address bar">
+            <span id="webOmniIcon" class="webOmniIcon" aria-hidden="true"></span>
+            <input id="webUrlDisplay" class="webUrlDisplay" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Address" />
+          </div>
           <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading&hellip;</div>
           <button id="webDlBtn" class="iconBtn webDlBtn" title="Downloads" aria-label="Downloads">&#11123;<span id="webDlBadge" class="webDlBadge hidden" aria-hidden="true"></span></button>
         </div>

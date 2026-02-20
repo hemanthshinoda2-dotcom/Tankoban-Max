@@ -39,6 +39,7 @@
     navReload: qs('webNavReload'),
     navHome: qs('webNavHome'),
     urlDisplay: qs('webUrlDisplay'),
+    omniIcon: qs('webOmniIcon'),
     viewContainer: qs('webViewContainer'),
     loadBar: qs('webLoadBar'),
     dlPill: qs('webDlPill'),
@@ -58,6 +59,9 @@
     sourcesList: qs('webSourcesList'),
     addSourceBtn: qs('webAddSourceBtn'),
     downloadStatus: qs('webDownloadStatus'),
+    sidebarDlRow: qs('webDownloadProgressRow'),
+    sidebarDlFill: qs('webDownloadProgressFill'),
+    sidebarDlPct: qs('webDownloadProgressPct'),
     destBooks: qs('webDestBooks'),
     destComics: qs('webDestComics'),
     // Add source dialog
@@ -84,6 +88,7 @@
     nextTabId: 1,
     downloading: 0,
     lastDownloadName: '',
+    lastDownloadProgress: null,
     downloads: [],      // { id, filename, destination?, library?, state, startedAt, finishedAt?, error? }
     dlPanelOpen: false,
     dlBarDismissed: false,
@@ -150,6 +155,39 @@
     } catch (e) {
       return '';
     }
+  }
+
+  // Chrome-like omnibox: accept URL or search query
+  function resolveOmniInputToUrl(input) {
+    var raw = String(input || '').trim();
+    if (!raw) return '';
+
+    // If it's already a URL with scheme
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw;
+
+    // Looks like a domain (no spaces, has a dot)
+    if (raw.indexOf(' ') === -1 && raw.indexOf('.') !== -1) {
+      return 'https://' + raw;
+    }
+
+    // Otherwise treat as search
+    return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
+  }
+
+  function setOmniIconForUrl(url) {
+    if (!el.omniIcon) return;
+    var u = String(url || '').trim();
+    var icon = '';
+
+    var lockSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.5 7V5.2c0-1.4 1.1-2.6 2.5-2.6s2.5 1.2 2.5 2.6V7h.9c.9 0 1.6.7 1.6 1.6v4.1c0 .9-.7 1.6-1.6 1.6H4c-.9 0-1.6-.7-1.6-1.6V8.6C2.4 7.7 3.1 7 4 7h1.5zm1.2 0h2.6V5.2c0-.8-.6-1.4-1.3-1.4s-1.3.6-1.3 1.4V7z"/></svg>';
+    var globeSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm4.8 6H10.9a10.8 10.8 0 0 0-.8-3.1A5.3 5.3 0 0 1 12.8 7.5zM8 2.7c.8 1 1.5 2.8 1.7 4.8H6.3C6.5 5.5 7.2 3.7 8 2.7zM3.2 7.5A5.3 5.3 0 0 1 5.9 4.4a10.8 10.8 0 0 0-.8 3.1H3.2zm0 1.1h1.9c.1 1.1.4 2.2.8 3.1A5.3 5.3 0 0 1 3.2 8.6zM8 13.3c-.8-1-1.5-2.8-1.7-4.8h3.4c-.2 2-1 3.8-1.7 4.8zm2.1-1.6c.4-.9.7-2 .8-3.1h1.9a5.3 5.3 0 0 1-2.7 3.1z"/></svg>';
+    var searchSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.9 1.8a5.1 5.1 0 1 0 3.1 9.2l2.8 2.8a.7.7 0 0 0 1-1l-2.8-2.8a5.1 5.1 0 0 0-4.1-8.2zm0 1.4a3.7 3.7 0 1 1 0 7.4 3.7 3.7 0 0 1 0-7.4z"/></svg>';
+
+    if (!u) icon = searchSvg;
+    else if (u.indexOf('https://') === 0) icon = lockSvg;
+    else icon = globeSvg;
+
+    el.omniIcon.innerHTML = icon;
   }
 
   function getActiveTab() {
@@ -670,7 +708,11 @@
     if (el.browserView) el.browserView.classList.add('hidden');
     _showCurrentLibraryView();
     if (el.browserTitle) el.browserTitle.textContent = '';
-    if (el.urlDisplay) el.urlDisplay.textContent = '';
+    if (el.urlDisplay) {
+      if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = '';
+      else el.urlDisplay.textContent = '';
+    }
+    setOmniIconForUrl('');
     renderSources();
     renderSourcesGrid();
     renderContinue();
@@ -689,7 +731,10 @@
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
       var loadingClass = t.loading ? ' loading' : '';
+      var favSrc = getFaviconUrl(t.url || t.homeUrl || '');
+      var favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
+        favHtml +
         '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
         '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">×</button>' +
         '</div>';
@@ -807,6 +852,36 @@
     if (el.dlBadge) {
       el.dlBadge.classList.toggle('hidden', !(state.downloading > 0));
     }
+
+    // Sidebar progress bar (web home sidebar)
+    if (el.sidebarDlRow && el.sidebarDlFill && el.sidebarDlPct) {
+      if (state.downloading <= 0) {
+        el.sidebarDlRow.classList.add('hidden');
+        el.sidebarDlFill.style.width = '0%';
+        el.sidebarDlPct.textContent = '0%';
+      } else {
+        // Pick a representative active download
+        var p = null;
+        var bestAt = -1;
+        for (var i = 0; i < state.downloads.length; i++) {
+          var d = state.downloads[i];
+          if (!d || d.state !== 'progressing') continue;
+          var at = Number(d.startedAt || 0);
+          if (at >= bestAt) {
+            bestAt = at;
+            p = d.progress;
+          }
+        }
+        if (typeof p !== 'number' || !isFinite(p)) p = state.lastDownloadProgress;
+        if (typeof p !== 'number' || !isFinite(p)) p = 0;
+        if (p < 0) p = 0;
+        if (p > 1) p = 1;
+        var pct = Math.round(p * 100);
+        el.sidebarDlRow.classList.remove('hidden');
+        el.sidebarDlFill.style.width = pct + '%';
+        el.sidebarDlPct.textContent = pct + '%';
+      }
+    }
   }
 
   // ---- Downloads panel ----
@@ -881,6 +956,7 @@
       progress: d.progress != null ? Number(d.progress) : null,
       bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
     };
+    if (out.state === 'downloading' || out.state === 'in_progress') out.state = 'progressing';
     if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
     return out;
   }
@@ -888,7 +964,7 @@
   function recomputeDownloadingCount() {
     var c = 0;
     for (var i = 0; i < state.downloads.length; i++) {
-      if (state.downloads[i] && state.downloads[i].state === 'downloading') c++;
+      if (state.downloads[i] && state.downloads[i].state === 'progressing') c++;
     }
     state.downloading = c;
     syncDownloadIndicator();
@@ -917,7 +993,7 @@
       if (!d) continue;
       if (id && d.id === id) { found = d; break; }
       if (!id && dest && d.destination === dest) { found = d; break; }
-      if (!id && fn && d.filename === fn && d.state === 'downloading') { found = d; break; }
+      if (!id && fn && d.filename === fn && d.state === 'progressing') { found = d; break; }
     }
 
     if (!found) {
@@ -965,7 +1041,7 @@
       var d = list[i];
       if (!d) continue;
 
-      var isActive = d.state === 'downloading';
+      var isActive = d.state === 'progressing';
       var isOk = d.state === 'completed';
       var isBad = d.state === 'failed' || d.state === 'interrupted';
 
@@ -1031,7 +1107,7 @@
         if (!d) return;
         if (d.state === 'completed' && d.destination && api && api.shell && api.shell.revealPath) {
           try { api.shell.revealPath(d.destination); } catch (err) {}
-        } else if (d.state === 'downloading') {
+        } else if (d.state === 'progressing') {
           showToast('Download in progress');
         } else if (d.destination && api && api.shell && api.shell.revealPath) {
           try { api.shell.revealPath(d.destination); } catch (err2) {}
@@ -1050,7 +1126,7 @@
           for (var k = 0; k < state.downloads.length; k++) {
             if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
           }
-          if (!d || d.state === 'downloading') {
+          if (!d || d.state === 'progressing') {
             showToast('Can\'t remove an active download');
             return;
           }
@@ -1078,7 +1154,7 @@
     for (var i = 0; i < state.downloads.length; i++) {
       var d = state.downloads[i];
       if (!d) continue;
-      if (d.state === 'downloading') act.push(d);
+      if (d.state === 'progressing') act.push(d);
       else rest.push(d);
     }
     var list = act.concat(rest).slice(0, 8);
@@ -1247,6 +1323,18 @@
     renderSources();
   }
 
+  function switchTab(delta) {
+    if (!state.tabs.length) return;
+    var cur = -1;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === state.activeTabId) { cur = i; break; }
+    }
+    if (cur === -1) cur = 0;
+    var next = (cur + delta) % state.tabs.length;
+    if (next < 0) next = state.tabs.length - 1;
+    activateTab(state.tabs[next].id);
+  }
+
   // BUILD_WCV: closeTab uses IPC to destroy view
   function closeTab(tabId) {
     var idx = -1;
@@ -1320,9 +1408,15 @@
 
   function updateUrlDisplay() {
     if (!el.urlDisplay) return;
+    // Don't overwrite while the user is typing in the omnibox
+    try {
+      if (document.activeElement === el.urlDisplay) return;
+    } catch (e) {}
     var tab = getActiveTab();
-    if (!tab) { el.urlDisplay.textContent = ''; return; }
-    el.urlDisplay.textContent = tab.url || '';
+    var u = (tab && tab.url) ? tab.url : '';
+    if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = u;
+    else el.urlDisplay.textContent = u;
+    setOmniIconForUrl(u);
   }
 
   // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
@@ -1521,6 +1615,36 @@
     var lower = key.toLowerCase();
     var ctrl = !!(e.ctrlKey || e.metaKey);
 
+    // Chrome-like address bar focus
+    if ((ctrl && !e.shiftKey && lower === 'l') || (e.altKey && lower === 'd')) {
+      e.preventDefault();
+      try {
+        if (el.urlDisplay && el.urlDisplay.focus) {
+          el.urlDisplay.focus();
+          if (el.urlDisplay.select) el.urlDisplay.select();
+        }
+      } catch (err) {}
+      return;
+    }
+
+    // Chrome-like tab switching
+    if (ctrl && key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) switchTab(-1);
+      else switchTab(1);
+      return;
+    }
+
+    // Alt+Left/Right: back/forward
+    if (e.altKey && !ctrl && !e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      e.preventDefault();
+      var t0 = getActiveTab();
+      if (t0 && t0.mainTabId) {
+        api.webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
+      }
+      return;
+    }
+
     if (lower === 'k' && !ctrl && !e.altKey) {
       e.preventDefault();
       toggleTips();
@@ -1705,6 +1829,41 @@
       };
     }
 
+    // Chrome-ish omnibox behavior
+    if (el.urlDisplay) {
+      try { el.urlDisplay.setAttribute('placeholder', 'Search Google or type a URL'); } catch (e) {}
+
+      el.urlDisplay.addEventListener('focus', function () {
+        try { this.select(); } catch (e) {}
+      });
+
+      el.urlDisplay.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          var tab = getActiveTab();
+          if (!tab || !tab.mainTabId) return;
+          var resolved = resolveOmniInputToUrl(el.urlDisplay.value);
+          if (!resolved) return;
+          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: resolved }).catch(function () {});
+          try { el.urlDisplay.blur(); } catch (err) {}
+          showToast('Loading…');
+          e.preventDefault();
+          return;
+        }
+
+        if (e.key === 'Escape') {
+          // Revert to current tab URL
+          updateUrlDisplay();
+          try { el.urlDisplay.blur(); } catch (err2) {}
+          e.preventDefault();
+          return;
+        }
+      });
+
+      el.urlDisplay.addEventListener('blur', function () {
+        updateUrlDisplay();
+      });
+    }
+
     // MERIDIAN_SPLIT: split view toggle button
     var splitBtn = document.getElementById('webSplitBtn');
     if (splitBtn) {
@@ -1831,6 +1990,15 @@
           var d = normalizeDownload(data.downloads[i]);
           if (d) state.downloads.push(d);
         }
+        // Snapshot a representative progress value for the sidebar indicator
+        state.lastDownloadProgress = null;
+        for (var j = 0; j < state.downloads.length; j++) {
+          var dd = state.downloads[j];
+          if (dd && dd.state === 'progressing' && typeof dd.progress === 'number' && isFinite(dd.progress)) {
+            state.lastDownloadProgress = dd.progress;
+            break;
+          }
+        }
         recomputeDownloadingCount();
         renderDownloadsPanel();
         renderHomeDownloads();
@@ -1841,6 +2009,7 @@
       api.webSources.onDownloadStarted(function (info) {
         state.lastDownloadName = info && info.filename ? String(info.filename) : '';
         state.dlBarDismissed = false;
+        state.lastDownloadProgress = 0;
         upsertDownload(info);
         showToast('Downloading: ' + (info && info.filename ? info.filename : ''));
         showDlBar('Downloading: ' + (info && info.filename ? info.filename : ''), null);
@@ -1849,9 +2018,10 @@
 
     if (api.webSources.onDownloadProgress) {
       api.webSources.onDownloadProgress(function (info) {
-        upsertDownload(info);
         var fn = (info && info.filename) ? String(info.filename) : '';
         var p = (info && typeof info.progress === 'number') ? info.progress : null;
+        if (p != null && isFinite(p)) state.lastDownloadProgress = p;
+        upsertDownload(info);
         var pctStr = (p != null) ? (' ' + Math.round(p * 100) + '%') : '';
         showDlBar('Downloading: ' + fn + pctStr, p);
       });

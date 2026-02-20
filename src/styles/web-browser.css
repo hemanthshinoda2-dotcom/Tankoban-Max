@@ -87,11 +87,39 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 2px 12px;
+  padding: 6px 12px;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255,255,255,.06);
-  min-height: 22px;
+  min-height: 40px;
 }
+
+/* Chrome-ish omnibox */
+.webOmni{
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+}
+.webOmni:focus-within{
+  background: rgba(255,255,255,.08);
+  border-color: rgba(255,255,255,.16);
+}
+.webOmniIcon{
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: .75;
+  color: rgba(255,255,255,.85);
+}
+.webOmniIcon svg{ width: 14px; height: 14px; display:block; }
 
 /* ======================================== */
 /* Tab bar (inside browser view)            */
@@ -132,6 +160,28 @@
 
 .webTab:hover:not(.active) {
   background: rgba(255,255,255,.12);
+}
+
+.webTabFavicon{
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: rgba(255,255,255,.12);
+  display: block;
+}
+.webTabFaviconImg{
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: block;
+}
+.webTabFaviconFallback{
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: block;
+  background: rgba(255,255,255,.14);
 }
 
 .webTabLabel {
@@ -185,10 +235,17 @@
 
 .webUrlDisplay {
   flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: rgba(255,255,255,.92);
+  font-size: 12.5px;
+  padding: 0;
+}
+
+.webUrlDisplay::placeholder{
+  color: rgba(255,255,255,.45);
 }
 
 /* ======================================== */
@@ -313,6 +370,33 @@
   font-family: monospace;
   font-size: 11px;
   word-break: break-all;
+}
+
+/* Sidebar download progress (web home sidebar) */
+.webSidebarDlRow{
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.webSidebarDlProgress{
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.10);
+  overflow: hidden;
+}
+.webSidebarDlProgressFill{
+  height: 100%;
+  width: 0%;
+  background: rgba(255,255,255,.55);
+  transition: width .15s linear;
+}
+.webSidebarDlPct{
+  width: 40px;
+  text-align: right;
+  font-size: 11px;
+  opacity: .85;
 }
 
 

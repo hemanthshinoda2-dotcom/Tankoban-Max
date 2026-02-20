@@ -588,7 +588,7 @@ Hot search tokens:
       var d = _comicsDls[i];
       if (!d) continue;
       if (d.library !== 'comics') continue;
-      if (d.state === 'downloading') active.push(d);
+      if (d.state === 'progressing') active.push(d);
       else rest.push(d);
     }
     var list = active.concat(rest).slice(0, 5);
@@ -603,8 +603,8 @@ Hot search tokens:
     var html = '';
     for (var j = 0; j < list.length; j++) {
       var d = list[j];
-      var isActive = d.state === 'downloading';
-      var isBad = d.state === 'failed' || d.state === 'interrupted';
+      var isActive = d.state === 'progressing';
+      var isBad = d.state === 'interrupted' || d.state === 'cancelled';
       var p = null;
       if (isActive) {
         if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
