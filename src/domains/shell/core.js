@@ -2540,6 +2540,13 @@ function setReaderMode(next) {
     });
   }
 
+  function isTypingTarget(t) {
+    var eln = t && (t.tagName || '').toLowerCase();
+    if (!eln) return false;
+    if (eln === 'input' || eln === 'textarea' || eln === 'select') return true;
+    return !!t.isContentEditable;
+  }
+
   // Shared menu builder: use from sidebar rows and grid cards
   function openSeriesContextMenu(mouseEvent, series, rootHintPathOrNull) {
     // Don't steal native right-click from actual inputs.
