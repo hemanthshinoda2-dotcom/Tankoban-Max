@@ -223,6 +223,13 @@
     return dn || (book && book.title) || pathBase((book && book.path) || '') || 'Untitled';
   }
 
+  // RENAME-SERIES: series/folder display name helper
+  function effectiveShowName(show) {
+    var key = 'show:' + (show && show.id || '');
+    var dn = state.displayNames[key];
+    return dn || (show && show.name) || 'Series';
+  }
+
   function showRenamePrompt(currentName) {
     return new Promise(function (resolve) {
       var backdrop = document.createElement('div');
@@ -230,7 +237,7 @@
       var box = document.createElement('div');
       box.style.cssText = 'background:#2a2a2e;border:1px solid #555;border-radius:8px;padding:20px;min-width:340px;max-width:480px;color:#eee;font-family:inherit;';
       var lbl = document.createElement('div');
-      lbl.textContent = 'Rename book:';
+      lbl.textContent = 'Rename:';
       lbl.style.cssText = 'margin-bottom:10px;font-size:14px;';
       var inp = document.createElement('input');
       inp.type = 'text';
@@ -280,6 +287,25 @@
     }
     if (state.ui.booksSubView === 'show') renderShowView();
     renderContinue();
+  }
+
+  // RENAME-SERIES: rename a series/folder display name
+  async function renameShow(show) {
+    if (!show || !show.id) return;
+    var current = effectiveShowName(show);
+    var newName = await showRenamePrompt(current);
+    if (newName === null) return;
+    newName = newName.trim();
+    var original = show.name || 'Series';
+    var key = 'show:' + show.id;
+    if (newName && newName !== original) {
+      state.displayNames[key] = newName;
+      if (api.booksDisplayNames) api.booksDisplayNames.save(key, newName);
+    } else if (!newName || newName === original) {
+      delete state.displayNames[key];
+      if (api.booksDisplayNames) api.booksDisplayNames.clear(key);
+    }
+    renderAll();
   }
 
   function placeholderThumb(label, a, b) {
@@ -1157,6 +1183,7 @@ function getBookProgress(bookId) {
           for (const b of books) await clearBookProgress(b.id);
         }},
         { separator: true },
+        { label: 'Rename\u2026', onClick: function() { renameShow(show); } },
         { label: 'Hide series', onClick: () => {
           if (!state.ui.hiddenShowIds) state.ui.hiddenShowIds = new Set();
           state.ui.hiddenShowIds.add(String(show.id || ''));
@@ -1368,8 +1395,8 @@ function getBookProgress(bookId) {
     titleWrap.className = 'contTitleWrap';
     const title = document.createElement('div');
     title.className = 'contTileTitle u-clamp2';
-    title.title = effectiveTitle(book) || show.name || '';
-    title.textContent = effectiveTitle(book) || show.name || 'Untitled';
+    title.title = effectiveTitle(book) || effectiveShowName(show) || '';
+    title.textContent = effectiveTitle(book) || effectiveShowName(show) || 'Untitled';
     titleWrap.appendChild(title);
     tile.appendChild(titleWrap);
 
@@ -1467,7 +1494,7 @@ function getBookProgress(bookId) {
 
     const name = document.createElement('div');
     name.className = 'seriesName';
-    name.textContent = show.name || 'Series';
+    name.textContent = effectiveShowName(show);
 
     const pr = showProgressForShowId(show.id);
     const prBits = [];
@@ -1672,7 +1699,7 @@ function getBookProgress(bookId) {
 
         const slabel = document.createElement('span');
         slabel.className = 'folderLabel';
-        slabel.textContent = show.name || 'Series';
+        slabel.textContent = effectiveShowName(show);
 
         const scount = document.createElement('span');
         scount.className = 'folderCount';
@@ -2091,7 +2118,7 @@ function getBookProgress(bookId) {
     if (el.crumb) el.crumb.classList.remove('hidden');
     if (el.crumbText) {
       const folderBase = model.currentFolder ? relBase(model.currentFolder) : '';
-      el.crumbText.textContent = folderBase ? `${show.name || 'Series'} / ${folderBase}` : (show.name || 'Series');
+      el.crumbText.textContent = folderBase ? `${effectiveShowName(show)} / ${folderBase}` : effectiveShowName(show);
       const root = getRoot(show.rootId);
       const relForTitle = show.relPath ? (model.currentFolder ? `${show.relPath}/${model.currentFolder}` : show.relPath) : model.currentFolder;
       const titlePath = resolveRootRelPath(root && root.path, relForTitle);
@@ -2515,12 +2542,12 @@ function getBookProgress(bookId) {
 
     for (const show of state.derived.shows || []) {
       let score = 0;
-      const nameNorm = String(show.name || '').toLowerCase();
+      const nameNorm = effectiveShowName(show).toLowerCase();
       const pathNorm = String(show.path || '').toLowerCase();
       if (nameNorm.includes(q)) score += 140;
       if (pathNorm.includes(q)) score += 35;
       for (const t of tokens) { if (nameNorm.includes(t)) score += 12; }
-      if (score > 0) scored.push({ type: 'show', item: show, score, name: show.name || '' });
+      if (score > 0) scored.push({ type: 'show', item: show, score, name: effectiveShowName(show) });
     }
 
     for (const b of state.derived.books || []) {
@@ -2559,7 +2586,7 @@ function getBookProgress(bookId) {
         row.className = 'resItem';
         row.dataset.idx = String(rowIdx);
         if (type === 'show') {
-          row.innerHTML = `<div class="resType">S</div><div class="resText"><div class="resMain">${escHtml(it.name || 'Series')}</div><div class="resSub">${Number(it.bookCount || 0)} volumes</div></div>`;
+          row.innerHTML = `<div class="resType">S</div><div class="resText"><div class="resMain">${escHtml(effectiveShowName(it))}</div><div class="resSub">${Number(it.bookCount || 0)} volumes</div></div>`;
           state.globalSearchItems.push({ type: 'show', showId: String(it.id || '') });
         } else {
           row.innerHTML = `<div class="resType">V</div><div class="resText"><div class="resMain">${escHtml(effectiveTitle(it))}</div><div class="resSub">${escHtml(it.series || '')}</div></div>`;
