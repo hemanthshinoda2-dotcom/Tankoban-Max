@@ -83,10 +83,10 @@ Reduce jank and improve responsiveness.
 ## Batch 7 — Navigation & Sleep Timer
 Fix stuck states in chapter navigation and sleep mode.
 
-- [ ] **#10 MEDIUM — TOC navigation has no timeout fallback**
+- [x] **#10 MEDIUM — TOC navigation has no timeout fallback**
   `listening_player.js:799-810` — After chapter navigation, TTS waits indefinitely for `reader:relocated` event. If event never fires, TTS stays stopped forever.
 
-- [ ] **#15 LOW — Sleep timer countdown updates only every 10 seconds**
+- [x] **#15 LOW — Sleep timer countdown updates only every 10 seconds**
   User may think timer isn't working between updates.
 
 ---

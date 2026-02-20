@@ -785,8 +785,14 @@ function updateCard(info) {
     if (_sleepMode === 'chapter') { el.textContent = '(end of chapter)'; return; }
     var remaining = Math.max(0, _sleepEndMs - Date.now());
     if (remaining <= 0) { el.textContent = ''; return; }
-    var mins = Math.ceil(remaining / 60000);
-    el.textContent = mins + 'm left';
+    // FIX-TTS-B7 #15: Show seconds under 1 minute for responsive countdown feel
+    if (remaining < 60000) {
+      var secs = Math.ceil(remaining / 1000);
+      el.textContent = secs + 's left';
+    } else {
+      var mins = Math.ceil(remaining / 60000);
+      el.textContent = mins + 'm left';
+    }
   }
 
   function setSleepTimer(mode) {
@@ -807,7 +813,8 @@ function updateCard(info) {
         _clearSleepTimer();
       }
     }, 1000);
-    _sleepCountdownId = setInterval(_updateSleepCountdown, 10000);
+    // FIX-TTS-B7 #15: Update every 1s instead of 10s for responsive countdown
+    _sleepCountdownId = setInterval(_updateSleepCountdown, 1000);
     _updateSleepCountdown();
   }
 
@@ -838,7 +845,14 @@ function updateCard(info) {
     var emitted = false;
     if (bus) try { bus.emit('toc:navigate', href, idx); emitted = true; } catch {}
     if (!emitted) { _navigating = false; return; }
-    // PATCH2: resume handled by reader relocation event; no fixed timer
+    // PATCH2: resume handled by reader relocation event
+    // FIX-TTS-B7 #10: Timeout fallback — if relocated event never fires, resume after 5s
+    setTimeout(function () {
+      if (!_navigating || !_open) return;
+      _navigating = false;
+      var t = window.booksTTS;
+      if (t) try { t.play(); } catch {}
+    }, 5000);
   }
 
   // ── TTS wiring ──────────────────────────────────────────────────────────────
