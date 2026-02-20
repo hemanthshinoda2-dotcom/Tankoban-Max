@@ -93,7 +93,7 @@
 
       state.content.style.fontSize = `${Math.max(8, Math.min(45, fontSize))}px`;
       state.content.style.lineHeight = String(Math.max(1.0, Math.min(2.4, lineHeight)));
-      state.content.style.padding = `${Math.max(0, Math.min(80, margin))}px`;
+      state.content.style.padding = `${Math.max(0, Math.min(160, margin))}px`;
 
       // WAVE2: font family
       const fontFamily = String(s.fontFamily || 'serif');

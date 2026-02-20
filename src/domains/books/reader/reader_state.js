@@ -11,7 +11,7 @@
     fontSize: 100,            // percentage 75-250 (ReadiumCSS --USER__fontSize)
     fontFamily: 'publisher',  // publisher|oldStyleTf|modernTf|sansTf|humanistTf|monospaceTf|AccessibleDfA|IAWriterDuospace
     lineHeight: 1.5,          // 1.0-2.0 (ReadiumCSS --USER__lineHeight)
-    margin: 1,                // pageMargins factor 0-2.0 (controls side padding + page gap)
+    margin: 1,                // pageMargins factor 0-4.0 (controls side padding + page gap)
     flowMode: 'paginated',
     columnMode: 'auto',
     textAlign: '',            // ''|left|right|justify (ReadiumCSS --USER__textAlign)
@@ -341,8 +341,8 @@
         incoming.fontSize = Math.round((incoming.fontSize / 16) * 100);
       }
       // RCSS_INTEGRATION: migrate old pixel margin to factor
-      if (incoming.margin && incoming.margin > 2) {
-        incoming.margin = Math.max(0.5, Math.min(2.0, 0.5 + (incoming.margin / 80) * 1.5));
+      if (incoming.margin && incoming.margin > 4) {
+        incoming.margin = Math.max(0.5, Math.min(4.0, 0.5 + (incoming.margin / 80) * 1.5));
         incoming.margin = Math.round(incoming.margin * 4) / 4;
       }
       // RCSS_INTEGRATION: migrate old fontFamily identifiers

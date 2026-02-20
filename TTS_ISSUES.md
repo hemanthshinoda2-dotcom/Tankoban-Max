@@ -94,19 +94,19 @@ Fix stuck states in chapter navigation and sleep mode.
 ## Batch 8 — Keyboard & Accessibility
 Polish for keyboard users and screen readers.
 
-- [ ] **#16 LOW — Escape cascade can accidentally close player**
+- [x] **#16 LOW — Escape cascade can accidentally close player**
   First press closes TOC, second settings, third diag, fourth closes the player itself.
 
-- [ ] **#17 LOW — Missing keyboard shortcuts**
+- [x] **#17 LOW — Missing keyboard shortcuts**
   No shortcut for ±10s jump, cycle voices, or toggle settings. Only Space, arrows, C, Esc, M, S, +/- exist.
 
-- [ ] **#18 LOW — Color swatches inaccessible to screen readers**
+- [x] **#18 LOW — Color swatches inaccessible to screen readers**
   Highlight color buttons have no text label or aria-label.
 
-- [ ] **#19 LOW — No keyboard navigation in TOC list**
+- [x] **#19 LOW — No keyboard navigation in TOC list**
   Must tab through all items. No arrow key support.
 
-- [ ] **#21 LOW — No "copy diagnostics" button**
+- [x] **#21 LOW — No "copy diagnostics" button**
   Diagnostics panel has no easy way to share debug info.
 
 ---

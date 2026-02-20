@@ -604,7 +604,10 @@ function updateCard(info) {
         btn.className = 'ttsColorSwatch';
         btn.dataset.color = colors[j];
         btn.style.background = HL_SWATCHES[colors[j]] || '#888';
-        btn.title = colors[j].charAt(0).toUpperCase() + colors[j].slice(1);
+        var colorName = colors[j].charAt(0).toUpperCase() + colors[j].slice(1);
+        btn.title = colorName;
+        // FIX-TTS-B8 #18: Screen reader accessible label
+        btn.setAttribute('aria-label', colorName + ' highlight color');
         container.appendChild(btn);
       }
     }
@@ -1178,7 +1181,9 @@ function updateCard(info) {
         if (mega && !mega.classList.contains('hidden')) { mega.classList.add('hidden'); break; }
         var diag = qs('lpTtsDiag');
         if (diag && !diag.classList.contains('hidden')) { diag.classList.add('hidden'); break; }
-        closePlayer();
+        // FIX-TTS-B8 #16: Don't close player on Escape when no panel is open —
+        // pause TTS instead, so rapid Escape presses don't accidentally exit
+        if (tts && tts.getState() === 'playing') { tts.pause(); }
         break;
       // OPT1: additional keyboard shortcuts
       case 'm': case 'M':
@@ -1201,6 +1206,28 @@ function updateCard(info) {
       case '-':
         e.preventDefault(); e.stopPropagation();
         ttsAdjustSpeed(-0.1);
+        break;
+      // FIX-TTS-B8 #17: Additional shortcuts — ±10s jump, settings, diagnostics
+      case 'j': case 'J':
+        e.preventDefault(); e.stopPropagation();
+        ttsJump(-10000);
+        break;
+      case 'l': case 'L':
+        e.preventDefault(); e.stopPropagation();
+        ttsJump(10000);
+        break;
+      case 'v': case 'V':
+        e.preventDefault(); e.stopPropagation();
+        var megaV = qs('lpTtsMega');
+        if (megaV) megaV.classList.toggle('hidden');
+        break;
+      case 'd': case 'D':
+        e.preventDefault(); e.stopPropagation();
+        var diagD = qs('lpTtsDiag');
+        if (diagD) {
+          diagD.classList.toggle('hidden');
+          if (!diagD.classList.contains('hidden')) updateDiag();
+        }
         break;
     }
   }
@@ -1462,6 +1489,16 @@ function updateCard(info) {
       var diag = qs('lpTtsDiag');
       if (diag) diag.classList.add('hidden');
     });
+    // FIX-TTS-B8 #21: copy diagnostics to clipboard
+    var diagCopy = qs('lpTtsDiagCopy');
+    if (diagCopy) diagCopy.addEventListener('click', function () {
+      var body = qs('lpTtsDiagBody');
+      if (!body) return;
+      navigator.clipboard.writeText(body.textContent).then(function () {
+        diagCopy.title = 'Copied!';
+        setTimeout(function () { diagCopy.title = 'Copy diagnostics'; }, 1500);
+      });
+    });
 
     // QOL: auto rewind + sleep timer prefs
     try { _autoRewindEnabled = (localStorage.getItem('booksListenAutoRewind') === '1'); } catch {}
@@ -1538,6 +1575,24 @@ function updateCard(info) {
             if (tts) try { tts.play(); } catch {}
           }, 150);
         }
+      });
+    }
+
+    // FIX-TTS-B8 #19: Arrow key navigation in TOC list
+    var tocListEl = qs('lpTocList');
+    if (tocListEl) {
+      tocListEl.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+        ev.preventDefault();
+        var items = tocListEl.querySelectorAll('.lp-toc-item');
+        if (!items.length) return;
+        var cur = tocListEl.querySelector('.lp-toc-item:focus');
+        var idx = -1;
+        for (var ti = 0; ti < items.length; ti++) { if (items[ti] === cur) { idx = ti; break; } }
+        var next = ev.key === 'ArrowDown' ? idx + 1 : idx - 1;
+        if (next < 0) next = items.length - 1;
+        if (next >= items.length) next = 0;
+        items[next].focus();
       });
     }
 
