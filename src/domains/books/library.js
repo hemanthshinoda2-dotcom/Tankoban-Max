@@ -1837,14 +1837,14 @@ function getBookProgress(bookId) {
 
     if (selectedBook) {
       const pct = getBookPct(selectedBook, getBookProgress(selectedBook.id));
-      const bits = [selectedBook.title || 'Book'];
+      const bits = [effectiveTitle(selectedBook)];
       if (pct != null) bits.push(`${pct}%`);
       bits.push(String((selectedBook.format || '').toUpperCase() || '-'));
       el.epPreviewInfo.textContent = bits.join(' - ');
       el.epPreviewInfo.title = selectedBook.path || selectedBook.title || '';
     } else {
       const folderName = currentFolder ? relBase(currentFolder) : '';
-      const label = folderName ? `${show && show.name ? show.name : 'Collection'} / ${folderName}` : (show && show.name ? show.name : 'Collection');
+      const label = folderName ? `${effectiveShowName(show)} / ${folderName}` : effectiveShowName(show);
       el.epPreviewInfo.textContent = label;
       const root = show && show.rootId ? getRoot(show.rootId) : null;
       const fullFolderPath = show ? resolveRootRelPath(root && root.path, show.relPath ? (currentFolder ? `${show.relPath}/${currentFolder}` : show.relPath) : currentFolder) : '';
@@ -1964,7 +1964,8 @@ function getBookProgress(bookId) {
     const fileBase = pathBase(book.path || '');
     const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const stem = fileBase ? fileBase.replace(/\.[^/.]+$/, '') : '';
-    const showSub = !!(fileBase && norm(fileBase) && norm(fileBase) !== norm(titleMain.textContent) && norm(stem) !== norm(titleMain.textContent));
+    const hasCustomName = !!(state.displayNames[book.id]);
+    const showSub = !hasCustomName && !!(fileBase && norm(fileBase) && norm(fileBase) !== norm(titleMain.textContent) && norm(stem) !== norm(titleMain.textContent));
     if (showSub) {
       const titleSub = document.createElement('div');
       titleSub.className = 'videoEpTitleSub';
