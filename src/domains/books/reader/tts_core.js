@@ -54,6 +54,9 @@
     // FIX-TTS05: Thorium-style cancel flag — set BEFORE engine.cancel(), checked in all callbacks
     _cancelFlag: false,
 
+    // PATCH2: suppress auto-scroll briefly after user interaction
+    suppressAutoScrollUntil: 0,
+
     initDone: false,
     initPromise: null,
     _destroyed: false, // FIX-LISTEN-STAB3: set by destroy() to cancel pending init()
@@ -1515,7 +1518,9 @@
     }
     try {
       seg.element.classList.add('booksReaderTtsActive');
-      seg.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (!state.suppressAutoScrollUntil || Date.now() > state.suppressAutoScrollUntil) {
+        seg.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
     } catch {}
     _txt.activeEl = seg.element;
     fireProgress();
@@ -1697,6 +1702,7 @@
     resume: resume,
     stop: stop,
     destroy: destroy,
+    notifyUserInteraction: function (ms) { try { state.suppressAutoScrollUntil = Date.now() + (ms || 2500); } catch {} },
     setRate: setRate,
     setVolume: setVolume, // TTS-QOL4
     getVolume: function () { return state.volume; }, // TTS-QOL4

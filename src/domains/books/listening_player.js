@@ -11,6 +11,7 @@
 
   var _book = null;
   var _open = false;
+  var _interactionWired = false; // PATCH2
   var _ttsStarted = false;
   var _lastSavedBlockIdx = -1;
   var _saveTimer = null;
@@ -760,12 +761,7 @@ function updateCard(info) {
     var emitted = false;
     if (bus) try { bus.emit('toc:navigate', href, idx); emitted = true; } catch {}
     if (!emitted) { _navigating = false; return; }
-    setTimeout(function () {
-      if (!_navigating || !_open) return;
-      _navigating = false;
-      var tts2 = window.booksTTS;
-      if (tts2) try { tts2.play(); } catch {}
-    }, 5000);
+    // PATCH2: resume handled by reader relocation event; no fixed timer
   }
 
   // ── TTS wiring ──────────────────────────────────────────────────────────────
@@ -950,6 +946,21 @@ function updateCard(info) {
         RSx.state.suspendProgressSaveReason = 'listening_mode';
       }
     } catch {}
+
+    // PATCH2: user interaction should pause TTS auto-scroll briefly
+    if (!_interactionWired) {
+      _interactionWired = true;
+      var notify = function () {
+        try {
+          var tts = window.booksTTS;
+          if (tts && typeof tts.notifyUserInteraction === 'function') tts.notifyUserInteraction(2500);
+        } catch {}
+      };
+      window.addEventListener('wheel', notify, { passive: true, capture: true });
+      window.addEventListener('touchmove', notify, { passive: true, capture: true });
+      window.addEventListener('pointerdown', notify, { passive: true, capture: true });
+      document.addEventListener('selectionchange', notify, { capture: true });
+    }
 
     // STRIP-LISTEN-MODE: skip re-opening if reader already has this book
     var ctl = window.booksReaderController;
