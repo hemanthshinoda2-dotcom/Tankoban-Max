@@ -449,43 +449,7 @@
   margin-top: 6px;
   accent-color: var(--lp-accent, #4a90d9);
   cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  background: transparent;
-  padding: 0;
-}
-.lp-seek::-webkit-slider-track {
-  width: 100%;
-  height: 4px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 2px;
-  cursor: pointer;
-}
-.lp-seek::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--lp-accent, #4a90d9);
-  cursor: pointer;
-  margin-top: -6px;
-}
-.lp-seek::-moz-range-track {
-  width: 100%;
-  height: 4px;
-  background: rgba(255,255,255,0.1);
-  border-radius: 2px;
-  border: none;
-  cursor: pointer;
-}
-.lp-seek::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--lp-accent, #4a90d9);
-  border: none;
-  cursor: pointer;
+  pointer-events: auto;
 }
 .lp-inline-check {
   display: inline-flex;
