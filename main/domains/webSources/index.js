@@ -6,6 +6,7 @@ const fs = require('fs');
 const { app, session } = require('electron');
 
 const CONFIG_FILE = 'web_sources.json';
+const DOWNLOAD_HISTORY_FILE = 'web_download_history.json';
 
 const DEFAULT_SOURCES = [
   { id: 'annasarchive', name: "Anna's Archive", url: 'https://annas-archive.org', color: '#e74c3c', builtIn: true },
@@ -15,6 +16,43 @@ const DEFAULT_SOURCES = [
 ];
 
 var sourcesCache = null;
+
+// Persisted download history cache
+var downloadsCache = null; // { downloads: [], updatedAt }
+var activeDownloadItems = new Map(); // id -> DownloadItem
+var activeSpeed = new Map(); // id -> { lastAt, lastBytes, bytesPerSec }
+
+function readDownloads(ctx) {
+  var p = ctx.storage.dataPath(DOWNLOAD_HISTORY_FILE);
+  var data = ctx.storage.readJSON(p, null);
+  if (data && Array.isArray(data.downloads)) return data;
+  return { downloads: [], updatedAt: 0 };
+}
+
+function writeDownloads(ctx, data) {
+  var p = ctx.storage.dataPath(DOWNLOAD_HISTORY_FILE);
+  ctx.storage.writeJSON(p, data);
+}
+
+function ensureDownloadsCache(ctx) {
+  if (!downloadsCache) downloadsCache = readDownloads(ctx);
+  if (!Array.isArray(downloadsCache.downloads)) downloadsCache.downloads = [];
+  return downloadsCache;
+}
+
+function capDownloads(cfg) {
+  if (!cfg || !Array.isArray(cfg.downloads)) return;
+  if (cfg.downloads.length > 200) cfg.downloads.length = 200;
+}
+
+function emitDownloadsUpdated(ctx) {
+  try {
+    var ipc = require('../../../shared/ipc');
+    ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOADS_UPDATED, {
+      downloads: (ensureDownloadsCache(ctx).downloads || []),
+    });
+  } catch {}
+}
 
 function readConfig(ctx) {
   var p = ctx.storage.dataPath(CONFIG_FILE);
@@ -142,6 +180,43 @@ async function getDestinations(ctx) {
   return { ok: true, books: books, comics: comics };
 }
 
+// ---- Download history (persisted) ----
+
+async function getDownloadHistory(ctx) {
+  var cfg = ensureDownloadsCache(ctx);
+  return { ok: true, downloads: cfg.downloads || [] };
+}
+
+async function clearDownloadHistory(ctx) {
+  var cfg = ensureDownloadsCache(ctx);
+  // Keep active downloads. Clearing should not hide in-progress work.
+  cfg.downloads = (cfg.downloads || []).filter(function (d) { return d && d.state === 'downloading'; });
+  cfg.updatedAt = Date.now();
+  capDownloads(cfg);
+  writeDownloads(ctx, cfg);
+  emitDownloadsUpdated(ctx);
+  return { ok: true };
+}
+
+async function removeDownloadHistory(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  if (!id) return { ok: false, error: 'Missing id' };
+  var cfg = ensureDownloadsCache(ctx);
+  var before = (cfg.downloads || []).length;
+  cfg.downloads = (cfg.downloads || []).filter(function (d) {
+    if (!d) return false;
+    if (String(d.id) !== id) return true;
+    // Do not allow removing active downloads.
+    return d.state === 'downloading';
+  });
+  if ((cfg.downloads || []).length === before) return { ok: false, error: 'Not found' };
+  cfg.updatedAt = Date.now();
+  capDownloads(cfg);
+  writeDownloads(ctx, cfg);
+  emitDownloadsUpdated(ctx);
+  return { ok: true };
+}
+
 // ---- Download handler for webview partition ----
 
 var downloadHandlerBound = false;
@@ -154,9 +229,39 @@ function setupDownloadHandler(ctx) {
     var ses = session.fromPartition('persist:webmode');
     var ipc = require('../../../shared/ipc');
 
+    // Reconcile persisted history: any lingering "downloading" entries become interrupted.
+    try {
+      var cfgBoot = ensureDownloadsCache(ctx);
+      var changed = false;
+      for (var i = 0; i < (cfgBoot.downloads || []).length; i++) {
+        var d = cfgBoot.downloads[i];
+        if (d && d.state === 'downloading') {
+          d.state = 'interrupted';
+          d.error = d.error || 'Interrupted (app closed)';
+          d.finishedAt = d.finishedAt || Date.now();
+          changed = true;
+        }
+      }
+      if (changed) {
+        cfgBoot.updatedAt = Date.now();
+        capDownloads(cfgBoot);
+        writeDownloads(ctx, cfgBoot);
+        emitDownloadsUpdated(ctx);
+      }
+    } catch {}
+
     ses.on('will-download', function (_event, item, _webContents) {
       var filename = item.getFilename();
       var ext = path.extname(filename).toLowerCase();
+
+      var pageUrl = '';
+      var downloadUrl = '';
+      try { pageUrl = (_webContents && _webContents.getURL) ? String(_webContents.getURL() || '') : ''; } catch {}
+      try { downloadUrl = item.getURL ? String(item.getURL() || '') : ''; } catch {}
+
+      function newDlId() {
+        return 'wdl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      }
 
       // Only handle book/comic files
       if (BOOK_EXTS.indexOf(ext) === -1 && COMIC_EXTS.indexOf(ext) === -1) {
@@ -167,8 +272,33 @@ function setupDownloadHandler(ctx) {
       var route = routeDownloadSync(ctx, filename);
       if (!route.ok) {
         item.cancel();
+
+        // Persist the failure so it shows up in Downloads.
+        try {
+          var failId = newDlId();
+          var cfgFail = ensureDownloadsCache(ctx);
+          cfgFail.downloads.unshift({
+            id: failId,
+            filename: filename,
+            destination: '',
+            library: '',
+            state: 'failed',
+            startedAt: Date.now(),
+            finishedAt: Date.now(),
+            error: route.error,
+            pageUrl: pageUrl,
+            downloadUrl: downloadUrl,
+            totalBytes: 0,
+          });
+          cfgFail.updatedAt = Date.now();
+          capDownloads(cfgFail);
+          writeDownloads(ctx, cfgFail);
+          emitDownloadsUpdated(ctx);
+        } catch {}
+
         try {
           ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+            id: null,
             filename: filename,
             error: route.error,
           });
@@ -178,16 +308,110 @@ function setupDownloadHandler(ctx) {
 
       item.setSavePath(route.destination);
 
-      // BUILD_WEB_PARITY
+      var dlId = newDlId();
+      var startedAt = Date.now();
+      var totalBytes = 0;
+      try { totalBytes = item.getTotalBytes ? Number(item.getTotalBytes() || 0) : 0; } catch {}
+
+      // Persist a new history entry immediately.
       try {
-        ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+        var cfgStart = ensureDownloadsCache(ctx);
+        cfgStart.downloads.unshift({
+          id: dlId,
           filename: filename,
           destination: route.destination,
           library: route.library,
+          state: 'downloading',
+          startedAt: startedAt,
+          finishedAt: null,
+          error: '',
+          pageUrl: pageUrl,
+          downloadUrl: downloadUrl,
+          totalBytes: totalBytes,
+        });
+        cfgStart.updatedAt = Date.now();
+        capDownloads(cfgStart);
+        writeDownloads(ctx, cfgStart);
+        emitDownloadsUpdated(ctx);
+      } catch {}
+
+      activeDownloadItems.set(dlId, item);
+      activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
+
+      // BUILD_WEB_PARITY
+      try {
+        ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+          id: dlId,
+          filename: filename,
+          destination: route.destination,
+          library: route.library,
+          pageUrl: pageUrl,
+          downloadUrl: downloadUrl,
+          totalBytes: totalBytes,
         });
       } catch {}
 
+      item.on('updated', function (_e, stateStr) {
+        try {
+          var st = String(stateStr || '');
+          var received = 0;
+          var total = 0;
+          try { received = item.getReceivedBytes ? Number(item.getReceivedBytes() || 0) : 0; } catch {}
+          try { total = item.getTotalBytes ? Number(item.getTotalBytes() || 0) : 0; } catch {}
+
+          var pct = null;
+          if (total > 0) pct = Math.max(0, Math.min(1, received / total));
+
+          var sp = activeSpeed.get(dlId);
+          if (sp) {
+            var now = Date.now();
+            var dt = Math.max(1, now - sp.lastAt);
+            if (dt >= 500) {
+              var db = Math.max(0, received - sp.lastBytes);
+              sp.bytesPerSec = Math.round((db * 1000) / dt);
+              sp.lastAt = now;
+              sp.lastBytes = received;
+              activeSpeed.set(dlId, sp);
+            }
+          }
+
+          ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_PROGRESS, {
+            id: dlId,
+            filename: filename,
+            destination: route.destination,
+            library: route.library,
+            state: st,
+            receivedBytes: received,
+            totalBytes: total,
+            progress: pct,
+            bytesPerSec: (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0,
+          });
+        } catch {}
+      });
+
       item.on('done', function (_e, doneState) {
+        activeDownloadItems.delete(dlId);
+        activeSpeed.delete(dlId);
+
+        // Update persisted history entry.
+        try {
+          var cfgDone = ensureDownloadsCache(ctx);
+          var found = null;
+          for (var i = 0; i < (cfgDone.downloads || []).length; i++) {
+            var d = cfgDone.downloads[i];
+            if (d && String(d.id) === String(dlId)) { found = d; break; }
+          }
+          if (found) {
+            found.state = (doneState === 'completed') ? 'completed' : (doneState === 'interrupted' ? 'interrupted' : 'failed');
+            found.finishedAt = Date.now();
+            if (doneState !== 'completed') found.error = found.error || ('Download ' + doneState);
+          }
+          cfgDone.updatedAt = Date.now();
+          capDownloads(cfgDone);
+          writeDownloads(ctx, cfgDone);
+          emitDownloadsUpdated(ctx);
+        } catch {}
+
         if (doneState === 'completed') {
           // Trigger library rescan
           try {
@@ -195,15 +419,15 @@ function setupDownloadHandler(ctx) {
               var booksDomain = require('../books');
               booksDomain.scan(ctx, null, {}).catch(function () {});
             } else if (route.library === 'comics') {
-              // Comics scan is triggered via IPC inline in main/ipc/index.js
-              // We emit a library scan request indirectly
-              try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.LIBRARY_UPDATED, {}); } catch {}
+              var libraryDomain = require('../library');
+              libraryDomain.scan(ctx, null, {}).catch(function () {});
             }
           } catch {}
 
           try {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
               ok: true,
+              id: dlId,
               filename: filename,
               destination: route.destination,
               library: route.library,
@@ -212,6 +436,7 @@ function setupDownloadHandler(ctx) {
         } else {
           try {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+              id: dlId,
               filename: filename,
               error: 'Download ' + doneState,
             });
@@ -225,4 +450,15 @@ function setupDownloadHandler(ctx) {
   }
 }
 
-module.exports = { get, add, remove, update, routeDownload, getDestinations, setupDownloadHandler };
+module.exports = {
+  get,
+  add,
+  remove,
+  update,
+  routeDownload,
+  getDestinations,
+  getDownloadHistory,
+  clearDownloadHistory,
+  removeDownloadHistory,
+  setupDownloadHandler,
+};

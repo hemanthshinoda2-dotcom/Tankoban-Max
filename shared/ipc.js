@@ -666,6 +666,15 @@ const CHANNEL = {
   /** Get download destination folders for each library type. Returns: { ok, books?: string, comics?: string } */
   WEB_DOWNLOAD_DESTINATIONS: 'webDownload:destinations',
 
+  /** Get persisted download history. Returns: { ok, downloads: Array } */
+  WEB_DOWNLOAD_HISTORY_GET: 'webDownload:historyGet',
+
+  /** Clear persisted download history (keeps active downloads). Returns: { ok } */
+  WEB_DOWNLOAD_HISTORY_CLEAR: 'webDownload:historyClear',
+
+  /** Remove a single download history entry by id. Args: { id }. Returns: { ok } */
+  WEB_DOWNLOAD_HISTORY_REMOVE: 'webDownload:historyRemove',
+
   // ========================================
   // Web Tabs (BUILD_WCV)
   // ========================================
@@ -770,7 +779,9 @@ const EVENT = {
   /** Download completed. Payload: { filename, destination?, library?, error? } */
   // BUILD_WEB_PARITY
   WEB_DOWNLOAD_STARTED: 'webDownload:started',
+  WEB_DOWNLOAD_PROGRESS: 'webDownload:progress',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
+  WEB_DOWNLOADS_UPDATED: 'webDownload:listUpdated',
 
   // FIX-WEB-POPUP: popup requested (window.open / target=_blank)
   WEB_POPUP_OPEN: 'web:popupOpen',

@@ -29,15 +29,17 @@
   position: relative;
 }
 
-/* FIX-WEB-MODE + FIX-WIN-CTRL: drag on the toolbar itself, overlay disabled */
-.webBrowserToolbar {
-  -webkit-app-region: drag;
-}
+/* FIX-WEB-MODE: drag region so window can be moved from browser toolbar */
 .webToolbarDragRegion {
-  display: none;
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  -webkit-app-region: drag;
+  z-index: 0;
 }
 .webBrowserToolbar > *:not(.webToolbarDragRegion) {
   -webkit-app-region: no-drag;
+  position: relative;
+  z-index: 1;
 }
 
 .webBackBtn {
@@ -542,5 +544,133 @@
 }
 .webNavBtn.active{
   color: var(--vx-accent, #c7a76b);
+}
+
+/* BUILD_WEB_DL_UI: Chrome-like downloads list + home panel */
+.webHomeDownloadsPanel{
+  margin-top: 14px;
+}
+.webHomeDownloadsList{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.webDlItem{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.08);
+  transition: background .12s, border-color .12s, transform .06s;
+}
+.webDlItem:hover{
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.14);
+}
+.webDlItem:active{
+  transform: translateY(1px);
+}
+
+.webDlItem--compact{
+  padding: 8px 10px;
+}
+
+.webDlIcon{
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  overflow: hidden;
+  background: rgba(255,255,255,.10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.webDlFavicon{
+  width: 18px;
+  height: 18px;
+  image-rendering: auto;
+}
+.webDlFaviconFallback{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.28);
+}
+
+.webDlMeta{
+  min-width: 0;
+  flex: 1;
+}
+.webDlName{
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.webDlSub{
+  margin-top: 3px;
+  font-size: 11px;
+  opacity: .78;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.webDlProgressWrap{
+  margin-top: 7px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.webDlProgressBar{
+  height: 6px;
+  flex: 1;
+  background: rgba(255,255,255,.10);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.webDlProgressFill{
+  height: 100%;
+  width: 0%;
+  background: rgba(255,255,255,.60);
+}
+.webDlProgressText{
+  font-size: 11px;
+  opacity: .85;
+  min-width: 34px;
+  text-align: right;
+}
+
+.webDlRight{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.webDlState{
+  font-size: 11px;
+  opacity: .78;
+}
+.webDlState--bad{
+  opacity: .95;
+}
+.webDlRemove{
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  line-height: 26px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.12);
+  color: rgba(255,255,255,.90);
+}
+.webDlRemove:hover{
+  background: rgba(0,0,0,.20);
+  border-color: rgba(255,255,255,.18);
 }
 

@@ -8,6 +8,9 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_SOURCES_UPDATE, function (e, payload) { return d.update(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_ROUTE, function (e, payload) { return d.routeDownload(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_DESTINATIONS, function (e) { return d.getDestinations(ctx, e); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_HISTORY_GET, function (e) { return d.getDownloadHistory(ctx, e); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_HISTORY_CLEAR, function (e) { return d.clearDownloadHistory(ctx, e); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_HISTORY_REMOVE, function (e, payload) { return d.removeDownloadHistory(ctx, e, payload); });
 
   // Set up download handler for the webview partition
   d.setupDownloadHandler(ctx);

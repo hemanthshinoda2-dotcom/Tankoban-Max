@@ -25,6 +25,10 @@
     sourcesEmpty: qs('webSourcesEmpty'),
     continuePanel: qs('webContinuePanel'),
     continueEmpty: qs('webContinueEmpty'),
+    homeDownloadsPanel: qs('webHomeDownloadsPanel'),
+    homeDlList: qs('webHomeDownloadsList'),
+    homeDlEmpty: qs('webHomeDownloadsEmpty'),
+    homeDlClearBtn: qs('webHomeDownloadsClear'),
     // BUILD_WEB_HOME: Browser view elements
     browserView: qs('webBrowserView'),
     browserBackBtn: qs('webBrowserBackBtn'),
@@ -785,124 +789,278 @@
 
   // ---- Downloads panel ----
 
-  function makeDlId(filename, destination) {
-    return 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + String(filename || '') + '_' + String(destination || '');
+  function formatBytes(n) {
+    n = Number(n || 0);
+    if (!isFinite(n) || n <= 0) return '0 B';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
+    var dp = i <= 1 ? 0 : (i === 2 ? 1 : 2);
+    return n.toFixed(dp) + ' ' + u[i];
   }
 
-  function findDownloadMatch(info) {
-    var fn = info && info.filename ? String(info.filename) : '';
-    var dest = info && (info.destination || info.path) ? String(info.destination || info.path) : '';
-    for (var i = state.downloads.length - 1; i >= 0; i--) {
-      var d = state.downloads[i];
-      if (dest && d.destination && d.destination === dest) return d;
-      if (fn && d.filename === fn && d.state === 'downloading') return d;
+  function formatSpeed(bps) {
+    bps = Number(bps || 0);
+    if (!isFinite(bps) || bps <= 0) return '';
+    return formatBytes(bps) + '/s';
+  }
+
+  function formatEta(received, total, bps) {
+    received = Number(received || 0);
+    total = Number(total || 0);
+    bps = Number(bps || 0);
+    if (!isFinite(received) || !isFinite(total) || !isFinite(bps) || total <= 0 || bps <= 0) return '';
+    var s = Math.max(0, Math.round((total - received) / bps));
+    if (s <= 0) return '';
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    if (m >= 60) {
+      var h = Math.floor(m / 60);
+      var mm = m % 60;
+      return h + 'h ' + mm + 'm';
     }
-    return null;
+    if (m > 0) return m + 'm ' + r + 's';
+    return r + 's';
   }
 
-  function addDownloadStarted(info) {
-    var filename = info && info.filename ? String(info.filename) : 'Download';
-    var destination = info && (info.destination || info.path) ? String(info.destination || info.path) : '';
-    var library = info && info.library ? String(info.library) : '';
+  function hostFromUrl(u) {
+    u = String(u || '').trim();
+    if (!u) return '';
+    try {
+      if (u.indexOf('http') !== 0) u = 'https://' + u.replace(/^\/+/, '');
+      var x = new URL(u);
+      return x.hostname || '';
+    } catch (e) {
+      return '';
+    }
+  }
 
-    var entry = {
-      id: makeDlId(filename, destination),
-      filename: filename,
-      destination: destination,
-      library: library,
-      state: 'downloading',
-      startedAt: Date.now(),
-      finishedAt: null,
-      error: ''
+  function faviconFor(u) {
+    var h = hostFromUrl(u);
+    if (!h) return '';
+    return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=128';
+  }
+
+  function normalizeDownload(d) {
+    if (!d) return null;
+    var out = {
+      id: d.id != null ? String(d.id) : '',
+      filename: d.filename != null ? String(d.filename) : 'Download',
+      destination: d.destination != null ? String(d.destination) : '',
+      library: d.library != null ? String(d.library) : '',
+      state: d.state != null ? String(d.state) : 'completed',
+      startedAt: d.startedAt != null ? Number(d.startedAt) : null,
+      finishedAt: d.finishedAt != null ? Number(d.finishedAt) : null,
+      error: d.error != null ? String(d.error) : '',
+      pageUrl: d.pageUrl != null ? String(d.pageUrl) : '',
+      downloadUrl: d.downloadUrl != null ? String(d.downloadUrl) : '',
+      receivedBytes: d.receivedBytes != null ? Number(d.receivedBytes) : 0,
+      totalBytes: d.totalBytes != null ? Number(d.totalBytes) : 0,
+      progress: d.progress != null ? Number(d.progress) : null,
+      bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
     };
-
-    state.downloads.unshift(entry);
-    if (state.downloads.length > 40) state.downloads.length = 40;
-    renderDownloadsPanel();
+    if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    return out;
   }
 
-  function addDownloadCompleted(info) {
-    var match = findDownloadMatch(info);
-    var ok = !!(info && info.ok);
-    var filename = info && info.filename ? String(info.filename) : (match ? match.filename : 'Download');
-    var destination = info && (info.destination || info.path) ? String(info.destination || info.path) : (match ? match.destination : '');
-    var library = info && info.library ? String(info.library) : (match ? match.library : '');
-    var error = info && info.error ? String(info.error) : '';
-
-    if (!match) {
-      match = {
-        id: makeDlId(filename, destination),
-        filename: filename,
-        destination: destination,
-        library: library,
-        state: ok ? 'completed' : 'failed',
-        startedAt: Date.now(),
-        finishedAt: Date.now(),
-        error: error
-      };
-      state.downloads.unshift(match);
-    } else {
-      match.filename = filename;
-      match.destination = destination;
-      match.library = library;
-      match.state = ok ? 'completed' : 'failed';
-      match.finishedAt = Date.now();
-      match.error = error;
+  function recomputeDownloadingCount() {
+    var c = 0;
+    for (var i = 0; i < state.downloads.length; i++) {
+      if (state.downloads[i] && state.downloads[i].state === 'downloading') c++;
     }
-
-    renderDownloadsPanel();
+    state.downloading = c;
+    syncDownloadIndicator();
   }
 
-  function renderDownloadsPanel() {
-    if (!el.dlList || !el.dlEmpty) return;
+  var dlRenderTimer = null;
+  function scheduleDlRender() {
+    if (dlRenderTimer) return;
+    dlRenderTimer = setTimeout(function () {
+      dlRenderTimer = null;
+      renderDownloadsPanel();
+      renderHomeDownloads();
+    }, 120);
+  }
 
-    if (!state.downloads.length) {
-      el.dlList.innerHTML = '';
-      el.dlEmpty.classList.remove('hidden');
-      return;
-    }
+  function upsertDownload(info) {
+    if (!info) return;
+    var id = info.id != null ? String(info.id) : '';
+    var dest = info.destination || info.path || '';
+    dest = dest ? String(dest) : '';
+    var fn = info.filename != null ? String(info.filename) : '';
 
-    el.dlEmpty.classList.add('hidden');
-
-    var html = '';
+    var found = null;
     for (var i = 0; i < state.downloads.length; i++) {
       var d = state.downloads[i];
-      var stateTxt = d.state === 'downloading' ? 'Downloading\u2026' : (d.state === 'completed' ? 'Saved' : 'Failed');
+      if (!d) continue;
+      if (id && d.id === id) { found = d; break; }
+      if (!id && dest && d.destination === dest) { found = d; break; }
+      if (!id && fn && d.filename === fn && d.state === 'downloading') { found = d; break; }
+    }
+
+    if (!found) {
+      found = normalizeDownload(info);
+      state.downloads.unshift(found);
+    } else {
+      var n = normalizeDownload(Object.assign({}, found, info));
+      Object.assign(found, n);
+    }
+
+    if (state.downloads.length > 200) state.downloads.length = 200;
+    recomputeDownloadingCount();
+    scheduleDlRender();
+  }
+
+  function loadDownloadHistory() {
+    if (!api || !api.webSources || !api.webSources.getDownloadHistory) return;
+    api.webSources.getDownloadHistory().then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.downloads)) return;
+      state.downloads = [];
+      for (var i = 0; i < res.downloads.length; i++) {
+        var d = normalizeDownload(res.downloads[i]);
+        if (d) state.downloads.push(d);
+      }
+      recomputeDownloadingCount();
+      renderDownloadsPanel();
+      renderHomeDownloads();
+    }).catch(function () {});
+  }
+
+  function renderDownloadList(targetEl, emptyEl, list, opts) {
+    if (!targetEl || !emptyEl) return;
+    opts = opts || {};
+    list = list || [];
+
+    if (!list.length) {
+      targetEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+    emptyEl.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if (!d) continue;
+
+      var isActive = d.state === 'downloading';
+      var isOk = d.state === 'completed';
+      var isBad = d.state === 'failed' || d.state === 'interrupted';
+
+      var stateTxt = isActive ? 'Downloading' : (isOk ? 'Saved' : 'Failed');
+
       var sub = '';
-      if (d.state === 'downloading') {
-        sub = d.library ? ('\u2192 ' + d.library) : '';
-      } else if (d.state === 'completed') {
-        sub = d.library ? ('\u2192 ' + d.library) : '';
+      var libTag = d.library ? ('\u2192 ' + d.library) : '';
+      if (isActive) {
+        var left = (d.totalBytes > 0 && d.receivedBytes >= 0) ? (formatBytes(d.receivedBytes) + ' / ' + formatBytes(d.totalBytes)) : '';
+        var sp = formatSpeed(d.bytesPerSec);
+        var eta = formatEta(d.receivedBytes, d.totalBytes, d.bytesPerSec);
+        sub = libTag;
+        if (left) sub = (sub ? (sub + ' \u2022 ') : '') + left;
+        if (sp) sub = (sub ? (sub + ' \u2022 ') : '') + sp;
+        if (eta) sub = (sub ? (sub + ' \u2022 ') : '') + eta;
+      } else if (isOk) {
+        sub = libTag;
         if (d.destination) sub = (sub ? (sub + ' \u2022 ') : '') + shortPath(d.destination);
       } else {
         sub = d.error ? d.error : 'Download failed';
       }
 
+      var p = null;
+      if (isActive) {
+        if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
+        else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
+      }
+      var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
+      var iconUrl = faviconFor(d.pageUrl || d.downloadUrl);
+
       html += '' +
-        '<div class="webDlItem" data-dl-id="' + escapeHtml(d.id) + '">' +
+        '<div class="webDlItem' + (opts.compact ? ' webDlItem--compact' : '') + '" data-dl-id="' + escapeHtml(d.id) + '">' +
+          '<div class="webDlIcon">' +
+            (iconUrl ? ('<img class="webDlFavicon" src="' + escapeHtml(iconUrl) + '" alt=""/>') : '<div class="webDlFaviconFallback"></div>') +
+          '</div>' +
           '<div class="webDlMeta">' +
             '<div class="webDlName">' + escapeHtml(d.filename) + '</div>' +
             '<div class="webDlSub">' + escapeHtml(sub) + '</div>' +
+            (isActive ? ('<div class="webDlProgressWrap">' +
+              '<div class="webDlProgressBar"><div class="webDlProgressFill" style="width:' + escapeHtml(pctTxt || '0%') + '"></div></div>' +
+              '<div class="webDlProgressText">' + escapeHtml(pctTxt) + '</div>' +
+            '</div>') : '') +
           '</div>' +
-          '<div class="webDlState">' + escapeHtml(stateTxt) + '</div>' +
+          '<div class="webDlRight">' +
+            '<div class="webDlState' + (isBad ? ' webDlState--bad' : '') + '">' + escapeHtml(stateTxt) + '</div>' +
+            (opts.allowRemove ? ('<button class="iconBtn webDlRemove" title="Remove" aria-label="Remove" data-dl-remove="1">&times;</button>') : '') +
+          '</div>' +
         '</div>';
     }
-    el.dlList.innerHTML = html;
 
-    var items = el.dlList.querySelectorAll('.webDlItem');
+    targetEl.innerHTML = html;
+
+    var items = targetEl.querySelectorAll('.webDlItem');
     for (var j = 0; j < items.length; j++) {
-      items[j].onclick = function () {
+      items[j].onclick = function (e) {
+        var t = e && e.target;
+        if (t && t.getAttribute && t.getAttribute('data-dl-remove') === '1') return;
         var id = this.getAttribute('data-dl-id');
         var d = null;
         for (var k = 0; k < state.downloads.length; k++) {
-          if (state.downloads[k].id === id) { d = state.downloads[k]; break; }
+          if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
         }
         if (!d) return;
-        if (d.destination && api && api.shell && api.shell.revealPath) {
-          try { api.shell.revealPath(d.destination); } catch (e) {}
+        if (d.state === 'completed' && d.destination && api && api.shell && api.shell.revealPath) {
+          try { api.shell.revealPath(d.destination); } catch (err) {}
+        } else if (d.state === 'downloading') {
+          showToast('Download in progress');
+        } else if (d.destination && api && api.shell && api.shell.revealPath) {
+          try { api.shell.revealPath(d.destination); } catch (err2) {}
         }
       };
+
+      var rm = items[j].querySelector('.webDlRemove');
+      if (rm) {
+        rm.onclick = function (e) {
+          try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+          var p = this.parentElement;
+          while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
+          if (!p) return;
+          var id = p.getAttribute('data-dl-id');
+          var d = null;
+          for (var k = 0; k < state.downloads.length; k++) {
+            if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
+          }
+          if (!d || d.state === 'downloading') {
+            showToast('Can\'t remove an active download');
+            return;
+          }
+          if (api && api.webSources && api.webSources.removeDownloadHistory) {
+            api.webSources.removeDownloadHistory({ id: id }).then(function () {
+              state.downloads = state.downloads.filter(function (x) { return x && x.id !== id; });
+              recomputeDownloadingCount();
+              scheduleDlRender();
+            }).catch(function () {});
+          }
+        };
+      }
     }
+  }
+
+  function renderDownloadsPanel() {
+    if (!el.dlList || !el.dlEmpty) return;
+    renderDownloadList(el.dlList, el.dlEmpty, state.downloads, { allowRemove: true });
+  }
+
+  function renderHomeDownloads() {
+    if (!el.homeDlList || !el.homeDlEmpty) return;
+    var act = [];
+    var rest = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (d.state === 'downloading') act.push(d);
+      else rest.push(d);
+    }
+    var list = act.concat(rest).slice(0, 8);
+    renderDownloadList(el.homeDlList, el.homeDlEmpty, list, { compact: true, allowRemove: true });
   }
 
   function openDownloadsPanel() {
@@ -1603,43 +1761,72 @@
     }, true);
 
     // Download events
+    if (api.webSources.getDownloadHistory) {
+      loadDownloadHistory();
+    }
+
+    if (el.homeDlClearBtn && api.webSources.clearDownloadHistory) {
+      el.homeDlClearBtn.onclick = function () {
+        api.webSources.clearDownloadHistory().then(function () {
+          showToast('Downloads cleared');
+        }).catch(function () {});
+      };
+    }
+
+    if (api.webSources.onDownloadsUpdated) {
+      api.webSources.onDownloadsUpdated(function (data) {
+        if (!data || !Array.isArray(data.downloads)) return;
+        state.downloads = [];
+        for (var i = 0; i < data.downloads.length; i++) {
+          var d = normalizeDownload(data.downloads[i]);
+          if (d) state.downloads.push(d);
+        }
+        recomputeDownloadingCount();
+        renderDownloadsPanel();
+        renderHomeDownloads();
+      });
+    }
+
     if (api.webSources.onDownloadStarted) {
       api.webSources.onDownloadStarted(function (info) {
-        state.downloading = Math.max(0, state.downloading + 1);
         state.lastDownloadName = info && info.filename ? String(info.filename) : '';
-        syncDownloadIndicator();
-        addDownloadStarted(info);
+        upsertDownload(info);
         showToast('Downloading: ' + (info && info.filename ? info.filename : ''));
       });
     }
 
-    api.webSources.onDownloadCompleted(function (info) {
-      state.downloading = Math.max(0, state.downloading - 1);
-      syncDownloadIndicator();
+    if (api.webSources.onDownloadProgress) {
+      api.webSources.onDownloadProgress(function (info) {
+        upsertDownload(info);
+      });
+    }
 
-      addDownloadCompleted(info);
+    if (api.webSources.onDownloadCompleted) {
+      api.webSources.onDownloadCompleted(function (info) {
+        upsertDownload(info);
 
-      if (info && info.ok) {
-        var msg = 'Download saved';
-        if (info && info.library) msg += ' to ' + info.library;
-        showToast(msg);
-        if (el.downloadStatus) {
-          el.downloadStatus.textContent = 'Saved: ' + (info.filename || '') + (info.library ? (' \u2192 ' + info.library) : '');
+        if (info && info.ok) {
+          var msg = 'Download saved';
+          if (info && info.library) msg += ' to ' + info.library;
+          showToast(msg);
+          if (el.downloadStatus) {
+            el.downloadStatus.textContent = 'Saved: ' + (info.filename || '') + (info.library ? (' \u2192 ' + info.library) : '');
+          }
+        } else {
+          showToast('Download failed');
+          if (el.downloadStatus) {
+            el.downloadStatus.textContent = 'Download failed: ' + ((info && info.filename) ? info.filename : '');
+          }
         }
-      } else {
-        showToast('Download failed');
-        if (el.downloadStatus) {
-          el.downloadStatus.textContent = 'Download failed: ' + ((info && info.filename) ? info.filename : '');
-        }
-      }
 
-      if (state.downloading === 0) {
-        setTimeout(function () {
-          if (!el.downloadStatus) return;
-          if (state.downloading === 0) el.downloadStatus.textContent = 'No active downloads';
-        }, 2500);
-      }
-    });
+        if (state.downloading === 0) {
+          setTimeout(function () {
+            if (!el.downloadStatus) return;
+            if (state.downloading === 0) el.downloadStatus.textContent = 'No active downloads';
+          }, 2500);
+        }
+      });
+    }
 
     // BUILD_WCV: Popup → new tab (main-process handler now sends tabId instead of wcId)
     if (api.webSources.onPopupOpen) {
