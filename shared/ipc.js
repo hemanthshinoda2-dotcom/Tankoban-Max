@@ -265,6 +265,19 @@ const CHANNEL = {
   BOOKS_DISPLAY_NAMES_CLEAR: 'booksDisplayNames:clear',
 
   // ========================================
+  // Video Display Names (RENAME-VIDEO)
+  // ========================================
+
+  /** Get all custom video show display names. Returns: { [showId]: displayName } */
+  VIDEO_DISPLAY_NAMES_GET_ALL: 'videoDisplayNames:getAll',
+
+  /** Save a custom display name for a video show. Returns: { ok: boolean } */
+  VIDEO_DISPLAY_NAMES_SAVE: 'videoDisplayNames:save',
+
+  /** Clear a custom display name for a video show. Returns: { ok: boolean } */
+  VIDEO_DISPLAY_NAMES_CLEAR: 'videoDisplayNames:clear',
+
+  // ========================================
   // Books UI State
   // ========================================
 

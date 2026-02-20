@@ -383,6 +383,15 @@ const api = {
   },
 
   // ========================================
+  // videoDisplayNames.* (RENAME-VIDEO)
+  // ========================================
+  videoDisplayNames: {
+    getAll: () => ipcRenderer.invoke(CHANNEL.VIDEO_DISPLAY_NAMES_GET_ALL),
+    save: (showId, name) => ipcRenderer.invoke(CHANNEL.VIDEO_DISPLAY_NAMES_SAVE, showId, name),
+    clear: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_DISPLAY_NAMES_CLEAR, showId),
+  },
+
+  // ========================================
   // booksSettings.*
   // ========================================
   booksSettings: {

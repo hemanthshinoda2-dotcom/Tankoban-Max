@@ -226,6 +226,7 @@ videoProgress IPC calls
     shows: [],
     videos: [], // Build 3.2+: videos = episodes (kept for compatibility)
     progress: {},
+    videoDisplayNames: {},
 
     // Build 3.4: library-grade view controls
     hideWatchedShows: false,
@@ -2555,13 +2556,14 @@ function closeTracksPanel(){
               console.log('[video-load] Starting video library and player bootstrap');
 
               // Load library data + progress + settings + mpv capability checks in parallel
-              const [idxRes, progRes, vs, uiState, libmpvResult, mpvResult] = await Promise.all([
+              const [idxRes, progRes, vs, uiState, libmpvResult, mpvResult, dnRes] = await Promise.all([
                 Tanko.api.video.getState().catch(() => ({ idx: { roots: [], shows: [], episodes: [] } })),
                 Tanko.api.videoProgress.getAll().catch(() => ({})),
                 Tanko.api.videoSettings.get?.().catch(() => ({})),
                 Tanko.api.videoUi.getState?.().catch(() => ({})),
                 Promise.resolve({ ok: false, error: 'embedded_disabled' }),
                 Promise.resolve({ available: false, error: 'embedded_disabled' }),
+                Tanko.api.videoDisplayNames?.getAll?.().catch(() => ({})),
               ]);
 
               // Apply library index
@@ -2598,6 +2600,9 @@ function closeTracksPanel(){
                 const s = vs.settings && typeof vs.settings === 'object' ? vs.settings : vs;
                 applyVideoSettings(s);
               }
+
+              // Apply display names (RENAME-VIDEO)
+              state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
 
               // Apply libmpv availability
               state.libmpvAvailable = !!(libmpvResult && typeof libmpvResult === 'object' ? libmpvResult.ok : libmpvResult);
@@ -3407,7 +3412,7 @@ function ensureContinueEpisodesLoaded() {
 
       const slabel = document.createElement('span');
       slabel.className = 'folderLabel';
-      slabel.textContent = sh.name || basename(sh.path || '') || 'Show';
+      slabel.textContent = effectiveShowName(sh);
 
       const epCount = getShowEpisodeCount(sh);
       const scount = document.createElement('span');
@@ -3692,8 +3697,8 @@ function getContinueVideos() {
 
     const title = document.createElement('div');
     title.className = 'contTileTitle u-clamp2';
-    title.title = show.name || '';
-    title.textContent = show.name || 'Show';
+    title.title = effectiveShowName(show);
+    title.textContent = effectiveShowName(show);
 
     // Build 100v2 — UI parity: Video Continue Watching should match Comic Continue Reading.
     // Comics shows ONE concise label under the tile; Video file names are often noisy (fansub tags, codec info).
@@ -3853,6 +3858,78 @@ function getContinueVideos() {
 
     s = s.replace(/\s{2,}/g, ' ').trim();
     return s || raw;
+  }
+
+  // RENAME-VIDEO: return custom display name verbatim, or fall back to prettyShowName.
+  function effectiveShowName(show) {
+    const sid = show && show.id ? String(show.id) : '';
+    const dn = sid && state.videoDisplayNames[sid];
+    return dn || prettyShowName(show);
+  }
+
+  // RENAME-VIDEO: custom DOM prompt dialog (Electron has no window.prompt).
+  function showRenamePrompt(currentName) {
+    return new Promise(function (resolve) {
+      var backdrop = document.createElement('div');
+      backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:99999;display:flex;align-items:center;justify-content:center;';
+      var box = document.createElement('div');
+      box.style.cssText = 'background:#2a2a2e;border:1px solid #555;border-radius:8px;padding:20px;min-width:340px;max-width:480px;color:#eee;font-family:inherit;';
+      var lbl = document.createElement('div');
+      lbl.textContent = 'Rename:';
+      lbl.style.cssText = 'margin-bottom:10px;font-size:14px;';
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = currentName;
+      inp.style.cssText = 'width:100%;box-sizing:border-box;padding:8px;border-radius:4px;border:1px solid #666;background:#1a1a1d;color:#eee;font-size:14px;outline:none;';
+      var btns = document.createElement('div');
+      btns.style.cssText = 'margin-top:14px;display:flex;justify-content:flex-end;gap:8px;';
+      var cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.style.cssText = 'padding:6px 16px;border-radius:4px;border:1px solid #666;background:transparent;color:#ccc;cursor:pointer;';
+      var okBtn = document.createElement('button');
+      okBtn.textContent = 'OK';
+      okBtn.style.cssText = 'padding:6px 16px;border-radius:4px;border:none;background:#4a8fe7;color:#fff;cursor:pointer;';
+      btns.appendChild(cancelBtn);
+      btns.appendChild(okBtn);
+      box.appendChild(lbl);
+      box.appendChild(inp);
+      box.appendChild(btns);
+      backdrop.appendChild(box);
+      document.body.appendChild(backdrop);
+      inp.focus();
+      inp.select();
+      function finish(val) { document.body.removeChild(backdrop); resolve(val); }
+      okBtn.onclick = function () { finish(inp.value); };
+      cancelBtn.onclick = function () { finish(null); };
+      backdrop.addEventListener('mousedown', function (e) { if (e.target === backdrop) finish(null); });
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') finish(inp.value);
+        if (e.key === 'Escape') finish(null);
+      });
+    });
+  }
+
+  // RENAME-VIDEO: rename a show's display name.
+  async function renameShow(show) {
+    if (!show || !show.id) return;
+    const current = effectiveShowName(show);
+    const newName = await showRenamePrompt(current);
+    if (newName === null) return;
+    const trimmed = newName.trim();
+    const original = prettyShowName(show);
+    const sid = String(show.id);
+    if (trimmed && trimmed !== original) {
+      state.videoDisplayNames[sid] = trimmed;
+      if (Tanko.api.videoDisplayNames) Tanko.api.videoDisplayNames.save(sid, trimmed);
+    } else {
+      delete state.videoDisplayNames[sid];
+      if (Tanko.api.videoDisplayNames) Tanko.api.videoDisplayNames.clear(sid);
+    }
+    rebuildVideoSearchIndex();
+    renderVideoFolders();
+    if (state.videoSubView === 'home') renderVideoHome();
+    else if (state.videoSubView === 'show') renderVideoShowView();
+    renderContinue();
   }
 
   function rebuildVideoProgressSummaryCache() {
@@ -4703,6 +4780,10 @@ function getEpisodeById(epId){
           try { await Tanko.api.clipboard.copyText(show.path); toast('Copied'); } catch {}
         },
       },
+      {
+        label: 'Rename\u2026',
+        onClick: () => { renameShow(show); },
+      },
       { separator: true },
       {
         label: 'Set poster…',
@@ -4779,6 +4860,10 @@ function getEpisodeById(epId){
             toast('Path copied', 1200);
           }
         },
+      },
+      {
+        label: 'Rename\u2026',
+        onClick: () => { renameShow(show); },
       },
       { separator: true },
       {
@@ -5013,7 +5098,7 @@ function getEpisodeById(epId){
 
     const name = document.createElement('div');
     name.className = 'seriesName';
-    name.textContent = show?.name || 'Show';
+    name.textContent = effectiveShowName(show);
     const sid = String(show?.id || '');
     const epCount = Number(state.showEpisodeCount?.get?.(sid) || 0) || (state.episodesByShowId?.get?.(sid) || []).length;
     const pr = showProgressForShowId(sid);
@@ -5146,7 +5231,7 @@ function getEpisodeById(epId){
     // BUILD100v6: Preview pane should never be empty in show view.
     // Comic parity behavior: the show-level poster/thumbnail anchors the right pane.
     const show = state.selectedShowId ? state.shows.find(s => String(s.id) === String(state.selectedShowId)) : null;
-    const showLabel = show ? prettyShowName(show) : '—';
+    const showLabel = show ? effectiveShowName(show) : '—';
     const showSrc = show ? pickShowThumb(show) : EMPTY_IMG;
 
     const setShowPoster = () => {
@@ -5158,7 +5243,7 @@ function getEpisodeById(epId){
     if (!ep) {
       // No episode selected yet: show the show poster + show title (Comic folder-view parity).
       el.videoEpPreviewInfo.textContent = showLabel || '—';
-      el.videoEpPreviewInfo.title = show ? (show.displayPath || show.path || show.name || showLabel) : '';
+      el.videoEpPreviewInfo.title = show ? (show.displayPath || show.path || effectiveShowName(show)) : '';
       setShowPoster();
       return;
     }
@@ -5490,10 +5575,10 @@ function getEpisodeById(epId){
     // - Tooltip: full raw path for power-users
     if (el.videoCrumb) el.videoCrumb.classList.remove('hidden');
     if (el.videoCrumbText) {
-      const displayShow = prettyShowName(show);
+      const displayShow = effectiveShowName(show);
       const displayFolder = curFolder ? baseNameRel(curFolder) : '';
       el.videoCrumbText.textContent = displayFolder ? `${displayShow} / ${displayFolder}` : displayShow;
-      el.videoCrumbText.title = curFolder ? `${show.name || displayShow} / ${curFolder}` : (show.name || displayShow);
+      el.videoCrumbText.title = curFolder ? `${effectiveShowName(show)} / ${curFolder}` : effectiveShowName(show);
     }
 
     const q = '';
@@ -6042,7 +6127,7 @@ function epKey(ep) {
 function folderLabelFromEpisode(ep) {
   const showId = ep && ep.showId != null ? String(ep.showId) : null;
   const show = showId ? getShowById(showId) : null;
-  if (show && show.name) return String(show.name);
+  if (show) return effectiveShowName(show);
   if (show && show.path) return basename(show.path);
 
   const p = String((ep && ep.path) || '').replace(/\\/g, '/');
@@ -9289,7 +9374,7 @@ function bindKeyboard(){
     for (const s of shows) {
       const id = String(s?.id || '');
       if (!id) continue;
-      const entry = videoIndexEntry(id, s, [s?.name, '', '', s?.path]);
+      const entry = videoIndexEntry(id, s, [effectiveShowName(s), '', '', s?.path]);
       next.showById.set(id, entry);
       for (const t of entry.tokens) {
         videoIndexAdd(next.showTokenMap, t, id);
@@ -9301,7 +9386,7 @@ function bindKeyboard(){
       const id = String(ep?.id || '');
       if (!id) continue;
       const file = basename(String(ep?.path || ''));
-      const showName = String(getShowById(ep?.showId)?.name || '');
+      const showName = effectiveShowName(getShowById(ep?.showId));
       const entry = videoIndexEntry(id, ep, [showName, ep?.title, file, ep?.path]);
       next.episodeById.set(id, entry);
       for (const t of entry.tokens) {
@@ -9445,7 +9530,7 @@ function bindKeyboard(){
         const row = document.createElement('div');
         row.className = 'resItem';
         row.dataset.idx = String(idx);
-        row.innerHTML = `<div class="resType">S</div><div class="resTitle">${_videoEscHtml(s?.name || 'Show')}</div><div class="resSub">Show</div>`;
+        row.innerHTML = `<div class="resType">S</div><div class="resTitle">${_videoEscHtml(effectiveShowName(s))}</div><div class="resSub">Show</div>`;
         row.addEventListener('mouseenter', () => videoSetGlobalSearchSelection(idx));
         row.addEventListener('click', (e) => {
           e.preventDefault();
@@ -9468,7 +9553,7 @@ function bindKeyboard(){
     if (episodes.length) {
       const g = addGroup('Matching episodes');
       for (const ep of episodes) {
-        const showName = String(getShowById(ep?.showId)?.name || '');
+        const showName = effectiveShowName(getShowById(ep?.showId));
         const title = String(ep?.title || basename(String(ep?.path || '')) || 'Episode');
         const sub = showName ? showName : 'Episode';
         const row = document.createElement('div');

@@ -283,6 +283,15 @@
     },
 
     // ========================================
+    // videoDisplayNames.* (RENAME-VIDEO)
+    // ========================================
+    videoDisplayNames: {
+      getAll: (...a) => ea.videoDisplayNames?.getAll ? ea.videoDisplayNames.getAll(...a) : undefined,
+      save: (...a) => ea.videoDisplayNames?.save ? ea.videoDisplayNames.save(...a) : undefined,
+      clear: (...a) => ea.videoDisplayNames?.clear ? ea.videoDisplayNames.clear(...a) : undefined,
+    },
+
+    // ========================================
     // booksSettings.*
     // ========================================
     booksSettings: {
