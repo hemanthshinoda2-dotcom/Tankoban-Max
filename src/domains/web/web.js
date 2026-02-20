@@ -1103,8 +1103,8 @@
     state.dlPanelOpen = false;
     el.dlPanel.classList.add('hidden');
     try { el.dlPanel.setAttribute('aria-hidden', 'true'); } catch (e) {}
-    // Restore native WebContentsView bounds
-    reportBoundsForActiveTab();
+    // Restore native WebContentsView bounds (only if browser is still open)
+    if (state.browserOpen) reportBoundsForActiveTab();
   }
 
   function toggleDownloadsPanel() {

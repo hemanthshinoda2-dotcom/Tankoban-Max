@@ -549,6 +549,141 @@ Hot search tokens:
     });
   }
 
+  // ---- Downloads in Comics sidebar ----
+  var _comicsDls = [];
+  var _comicsDlTimer = null;
+
+  function renderComicsDownloads() {
+    var wrap = el.comicsDownloadsList;
+    var empty = el.comicsDownloadsEmpty;
+    if (!wrap || !empty) return;
+
+    var active = [];
+    var rest = [];
+    for (var i = 0; i < _comicsDls.length; i++) {
+      var d = _comicsDls[i];
+      if (!d) continue;
+      if (d.library !== 'comics') continue;
+      if (d.state === 'downloading') active.push(d);
+      else rest.push(d);
+    }
+    var list = active.concat(rest).slice(0, 5);
+
+    if (!list.length) {
+      wrap.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < list.length; j++) {
+      var d = list[j];
+      var isActive = d.state === 'downloading';
+      var isBad = d.state === 'failed' || d.state === 'interrupted';
+      var p = null;
+      if (isActive) {
+        if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
+        else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
+      }
+      var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
+      var sub = isActive ? (pctTxt || 'Downloading...') : (isBad ? 'Failed' : 'Saved');
+      html += '<div class="sidebarDlItem' + (isActive ? ' sidebarDlItem--active' : '') + (isBad ? ' sidebarDlItem--bad' : '') + '" data-dl-dest="' + escapeHtml(d.destination || '') + '">'
+        + '<div class="sidebarDlName">' + escapeHtml(d.filename) + '</div>'
+        + '<div class="sidebarDlSub">' + escapeHtml(sub) + '</div>'
+        + (isActive ? '<div class="sidebarDlBar"><div class="sidebarDlFill" style="width:' + (pctTxt || '0%') + '"></div></div>' : '')
+        + '</div>';
+    }
+    wrap.innerHTML = html;
+
+    var items = wrap.querySelectorAll('.sidebarDlItem');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('click', function () {
+        var dest = this.getAttribute('data-dl-dest');
+        if (dest) {
+          var _api = window.Tanko && window.Tanko.api;
+          if (_api && _api.shell && _api.shell.revealPath) {
+            try { _api.shell.revealPath(dest); } catch (err) {}
+          }
+        }
+      });
+    }
+  }
+
+  function scheduleComicsDlRender() {
+    if (_comicsDlTimer) return;
+    _comicsDlTimer = setTimeout(function () {
+      _comicsDlTimer = null;
+      renderComicsDownloads();
+    }, 150);
+  }
+
+  function comicsDlUpsert(info) {
+    if (!info) return;
+    var id = info.id != null ? String(info.id) : '';
+    var found = null;
+    for (var i = 0; i < _comicsDls.length; i++) {
+      if (_comicsDls[i] && id && _comicsDls[i].id === id) { found = _comicsDls[i]; break; }
+    }
+    if (!found) {
+      found = {};
+      _comicsDls.unshift(found);
+    }
+    if (info.id != null) found.id = String(info.id);
+    if (info.filename != null) found.filename = String(info.filename);
+    if (info.destination != null) found.destination = String(info.destination);
+    if (info.library != null) found.library = String(info.library);
+    if (info.state != null) found.state = String(info.state);
+    if (info.progress != null) found.progress = Number(info.progress);
+    if (info.receivedBytes != null) found.receivedBytes = Number(info.receivedBytes);
+    if (info.totalBytes != null) found.totalBytes = Number(info.totalBytes);
+    if (info.error != null) found.error = String(info.error);
+    if (_comicsDls.length > 50) _comicsDls.length = 50;
+    scheduleComicsDlRender();
+  }
+
+  function loadComicsDownloads() {
+    var _api = window.Tanko && window.Tanko.api;
+    if (!_api || !_api.webSources || !_api.webSources.getDownloadHistory) return;
+    _api.webSources.getDownloadHistory().then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.downloads)) return;
+      _comicsDls = res.downloads;
+      renderComicsDownloads();
+    }).catch(function () {});
+  }
+
+  try { loadComicsDownloads(); } catch (e) {}
+
+  try {
+    var _dlApi = window.Tanko && window.Tanko.api;
+    if (_dlApi && _dlApi.webSources) {
+      if (typeof _dlApi.webSources.onDownloadStarted === 'function') {
+        _dlApi.webSources.onDownloadStarted(function (info) { comicsDlUpsert(info); });
+      }
+      if (typeof _dlApi.webSources.onDownloadProgress === 'function') {
+        _dlApi.webSources.onDownloadProgress(function (info) { comicsDlUpsert(info); });
+      }
+      if (typeof _dlApi.webSources.onDownloadCompleted === 'function') {
+        _dlApi.webSources.onDownloadCompleted(function (info) { comicsDlUpsert(info); });
+      }
+      if (typeof _dlApi.webSources.onDownloadsUpdated === 'function') {
+        _dlApi.webSources.onDownloadsUpdated(function (data) {
+          if (data && Array.isArray(data.downloads)) {
+            _comicsDls = data.downloads;
+            renderComicsDownloads();
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
+  if (el.comicsDownloadsHeader && el.comicsDownloadsItems) {
+    el.comicsDownloadsHeader.addEventListener('click', function () {
+      var hidden = el.comicsDownloadsItems.classList.toggle('hidden');
+      el.comicsDownloadsHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Downloads';
+    });
+  }
+
   function renderSeriesGrid() {
     el.seriesGrid.innerHTML = '';
     const focusRoot = appState.ui.folderFocusRoot;

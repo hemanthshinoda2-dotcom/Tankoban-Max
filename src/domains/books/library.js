@@ -55,6 +55,12 @@
     booksAddSourceBtn: qs('booksAddSourceBtn'),
     booksSourcesItems: qs('booksSourcesItems'),
     booksSourcesHeader: qs('booksSourcesHeader'),
+
+    // Downloads in Books sidebar
+    booksDownloadsList: qs('booksDownloadsList'),
+    booksDownloadsEmpty: qs('booksDownloadsEmpty'),
+    booksDownloadsItems: qs('booksDownloadsItems'),
+    booksDownloadsHeader: qs('booksDownloadsHeader'),
   };
 
   const state = {
@@ -2766,6 +2772,140 @@ function getBookProgress(bookId) {
           if (overlay) overlay.classList.remove('hidden');
         });
       }
+    });
+  }
+
+  // ---- Downloads in Books sidebar ----
+  var _booksDls = [];
+  var _booksDlTimer = null;
+
+  function _bkEsc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderBooksDownloads() {
+    var wrap = el.booksDownloadsList;
+    var empty = el.booksDownloadsEmpty;
+    if (!wrap || !empty) return;
+
+    var active = [];
+    var rest = [];
+    for (var i = 0; i < _booksDls.length; i++) {
+      var d = _booksDls[i];
+      if (!d) continue;
+      if (d.library !== 'books') continue;
+      if (d.state === 'downloading') active.push(d);
+      else rest.push(d);
+    }
+    var list = active.concat(rest).slice(0, 5);
+
+    if (!list.length) {
+      wrap.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < list.length; j++) {
+      var d = list[j];
+      var isActive = d.state === 'downloading';
+      var isBad = d.state === 'failed' || d.state === 'interrupted';
+      var p = null;
+      if (isActive) {
+        if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
+        else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
+      }
+      var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
+      var sub = isActive ? (pctTxt || 'Downloading...') : (isBad ? 'Failed' : 'Saved');
+      html += '<div class="sidebarDlItem' + (isActive ? ' sidebarDlItem--active' : '') + (isBad ? ' sidebarDlItem--bad' : '') + '" data-dl-dest="' + _bkEsc(d.destination || '') + '">'
+        + '<div class="sidebarDlName">' + _bkEsc(d.filename) + '</div>'
+        + '<div class="sidebarDlSub">' + _bkEsc(sub) + '</div>'
+        + (isActive ? '<div class="sidebarDlBar"><div class="sidebarDlFill" style="width:' + (pctTxt || '0%') + '"></div></div>' : '')
+        + '</div>';
+    }
+    wrap.innerHTML = html;
+
+    var items = wrap.querySelectorAll('.sidebarDlItem');
+    for (var k = 0; k < items.length; k++) {
+      items[k].addEventListener('click', function () {
+        var dest = this.getAttribute('data-dl-dest');
+        if (dest && api && api.shell && api.shell.revealPath) {
+          try { api.shell.revealPath(dest); } catch (err) {}
+        }
+      });
+    }
+  }
+
+  function scheduleBkDlRender() {
+    if (_booksDlTimer) return;
+    _booksDlTimer = setTimeout(function () {
+      _booksDlTimer = null;
+      renderBooksDownloads();
+    }, 150);
+  }
+
+  function booksDlUpsert(info) {
+    if (!info) return;
+    var id = info.id != null ? String(info.id) : '';
+    var found = null;
+    for (var i = 0; i < _booksDls.length; i++) {
+      if (_booksDls[i] && id && _booksDls[i].id === id) { found = _booksDls[i]; break; }
+    }
+    if (!found) {
+      found = {};
+      _booksDls.unshift(found);
+    }
+    if (info.id != null) found.id = String(info.id);
+    if (info.filename != null) found.filename = String(info.filename);
+    if (info.destination != null) found.destination = String(info.destination);
+    if (info.library != null) found.library = String(info.library);
+    if (info.state != null) found.state = String(info.state);
+    if (info.progress != null) found.progress = Number(info.progress);
+    if (info.receivedBytes != null) found.receivedBytes = Number(info.receivedBytes);
+    if (info.totalBytes != null) found.totalBytes = Number(info.totalBytes);
+    if (info.error != null) found.error = String(info.error);
+    if (_booksDls.length > 50) _booksDls.length = 50;
+    scheduleBkDlRender();
+  }
+
+  function loadBooksDownloads() {
+    if (!api || !api.webSources || !api.webSources.getDownloadHistory) return;
+    api.webSources.getDownloadHistory().then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.downloads)) return;
+      _booksDls = res.downloads;
+      renderBooksDownloads();
+    }).catch(function () {});
+  }
+
+  try { loadBooksDownloads(); } catch (e) {}
+
+  try {
+    if (api && api.webSources) {
+      if (typeof api.webSources.onDownloadStarted === 'function') {
+        api.webSources.onDownloadStarted(function (info) { booksDlUpsert(info); });
+      }
+      if (typeof api.webSources.onDownloadProgress === 'function') {
+        api.webSources.onDownloadProgress(function (info) { booksDlUpsert(info); });
+      }
+      if (typeof api.webSources.onDownloadCompleted === 'function') {
+        api.webSources.onDownloadCompleted(function (info) { booksDlUpsert(info); });
+      }
+      if (typeof api.webSources.onDownloadsUpdated === 'function') {
+        api.webSources.onDownloadsUpdated(function (data) {
+          if (data && Array.isArray(data.downloads)) {
+            _booksDls = data.downloads;
+            renderBooksDownloads();
+          }
+        });
+      }
+    }
+  } catch (e) {}
+
+  if (el.booksDownloadsHeader && el.booksDownloadsItems) {
+    el.booksDownloadsHeader.addEventListener('click', function () {
+      var hidden = el.booksDownloadsItems.classList.toggle('hidden');
+      el.booksDownloadsHeader.textContent = (hidden ? '\u25B8 ' : '\u25BE ') + 'Downloads';
     });
   }
 

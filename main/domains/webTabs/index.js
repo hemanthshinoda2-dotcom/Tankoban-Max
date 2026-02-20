@@ -202,6 +202,7 @@ async function setBounds(ctx, _evt, payload) {
 
 async function hideAll(ctx) {
   var zero = { x: 0, y: 0, width: 0, height: 0 };
+  activeBounds = zero;
   tabs.forEach(function (entry) {
     try { entry.view.setBounds(zero); } catch (e) {}
     entry.bounds = zero;

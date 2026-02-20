@@ -165,6 +165,12 @@ Hot search tokens:
     comicsSourcesItems: $('#comicsSourcesItems'),
     comicsSourcesHeader: $('#comicsSourcesHeader'),
 
+    // Downloads in Comics sidebar
+    comicsDownloadsList: $('#comicsDownloadsList'),
+    comicsDownloadsEmpty: $('#comicsDownloadsEmpty'),
+    comicsDownloadsItems: $('#comicsDownloadsItems'),
+    comicsDownloadsHeader: $('#comicsDownloadsHeader'),
+
     continueRow: $('#continueRow'),
     continueEmpty: $('#continueEmpty'),
     hideFinishedToggle: $('#hideFinishedToggle'),
