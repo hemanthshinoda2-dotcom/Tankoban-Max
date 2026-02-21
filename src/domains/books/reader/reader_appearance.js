@@ -4,6 +4,77 @@
 
   var RS = window.booksReaderState;
   var bus = window.booksReaderBus;
+  var FONT_WEIGHT_STORAGE_KEY = 'books_fontWeight';
+  var INVERT_DARK_IMAGES_KEY = 'books_invertDarkImages';
+  var INVERT_DARK_IMAGES_STYLE_ID = 'books-reader-invert-dark-images-style';
+  // Prompt 2: exact theme list requested for automatic dark-theme image inversion.
+  var INVERT_DARK_IMAGE_THEMES = ['dark', 'contrast1', 'contrast2', 'contrast3', 'nord', 'gruvbox', 'solarized'];
+
+  function clampFontWeight(v) {
+    var n = Number(v);
+    if (!isFinite(n)) n = 400;
+    n = Math.round(n / 100) * 100;
+    if (n < 100) n = 100;
+    if (n > 900) n = 900;
+    return n;
+  }
+
+  function loadFontWeightSetting() {
+    var state = RS.state;
+    var fromStorage = null;
+    try {
+      var raw = localStorage.getItem(FONT_WEIGHT_STORAGE_KEY);
+      if (raw !== null && raw !== '') fromStorage = clampFontWeight(raw);
+    } catch (e) {}
+    var next = fromStorage != null ? fromStorage : clampFontWeight(state.settings && state.settings.fontWeight);
+    if (!state.settings) state.settings = {};
+    state.settings.fontWeight = next;
+    return next;
+  }
+
+  function persistFontWeightSetting(v) {
+    try { localStorage.setItem(FONT_WEIGHT_STORAGE_KEY, String(clampFontWeight(v))); } catch (e) {}
+  }
+
+  function ensureFontWeightControl() {
+    var els = RS.ensureEls();
+    var existingSlider = document.getElementById('booksReaderFontWeightSlider');
+    var existingValue = document.getElementById('booksReaderFontWeightValue');
+
+    if (!existingSlider || !existingValue) {
+      var fontSizeSlider = els.fontSizeSlider || document.getElementById('booksReaderFontSizeSlider');
+      var panelBody = fontSizeSlider && fontSizeSlider.closest
+        ? fontSizeSlider.closest('.br-overlay-body')
+        : null;
+      var fontSizeSection = fontSizeSlider && fontSizeSlider.closest
+        ? fontSizeSlider.closest('.br-settings-section')
+        : null;
+
+      if (panelBody && fontSizeSection && !document.getElementById('brSettingsFontWeightSection')) {
+        var section = document.createElement('div');
+        section.className = 'br-settings-section';
+        section.id = 'brSettingsFontWeightSection';
+        section.innerHTML =
+          '<div class="br-settings-label">Font weight</div>'
+          + '<div class="br-settings-slider-row">'
+          + '  <input id="booksReaderFontWeightSlider" class="br-settings-slider" type="range" min="100" max="900" step="100" value="400" />'
+          + '  <span id="booksReaderFontWeightValue" class="br-settings-value">400</span>'
+          + '</div>';
+
+        if (fontSizeSection.nextSibling) panelBody.insertBefore(section, fontSizeSection.nextSibling);
+        else panelBody.appendChild(section);
+      }
+
+      existingSlider = document.getElementById('booksReaderFontWeightSlider');
+      existingValue = document.getElementById('booksReaderFontWeightValue');
+    }
+
+    if (els) {
+      els.fontWeightSlider = existingSlider || null;
+      els.fontWeightValue = existingValue || null;
+    }
+    return { slider: existingSlider, value: existingValue };
+  }
 
   // ── Core appearance functions ────────────────────────────────────
 
@@ -27,11 +98,105 @@
     document.documentElement.style.setProperty('--overlayer-highlight-blend-mode', isDark ? 'lighten' : 'normal');
   }
 
+  function isInvertDarkImagesEnabled() {
+    try {
+      var raw = localStorage.getItem(INVERT_DARK_IMAGES_KEY);
+      if (raw == null) return true; // default: on
+      raw = String(raw).toLowerCase();
+      return !(raw === '0' || raw === 'false' || raw === 'off' || raw === 'no');
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function setInvertDarkImagesEnabled(enabled) {
+    try { localStorage.setItem(INVERT_DARK_IMAGES_KEY, enabled ? '1' : '0'); } catch (e) {}
+  }
+
+  function shouldInvertImagesForTheme(theme) {
+    var t = String(theme || 'light');
+    return isInvertDarkImagesEnabled() && INVERT_DARK_IMAGE_THEMES.indexOf(t) !== -1;
+  }
+
+  function collectReaderIframeDocs() {
+    var docs = [];
+    var seen = [];
+    function pushDoc(doc) {
+      if (!doc || !doc.documentElement) return;
+      if (seen.indexOf(doc) !== -1) return;
+      seen.push(doc);
+      docs.push(doc);
+    }
+    function pushIframeDocsFrom(root) {
+      if (!root || typeof root.querySelectorAll !== 'function') return;
+      var iframes = root.querySelectorAll('iframe');
+      for (var i = 0; i < iframes.length; i++) {
+        try {
+          var d = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document) || null;
+          pushDoc(d);
+        } catch (e) {}
+      }
+    }
+
+    var state = RS.state || {};
+    var renderer = null;
+    try {
+      if (state.engine && typeof state.engine.getFoliateRenderer === 'function') {
+        renderer = state.engine.getFoliateRenderer();
+      } else if (state.engine && state.engine.renderer) {
+        renderer = state.engine.renderer;
+      }
+    } catch (e) {}
+
+    try {
+      if (renderer && typeof renderer.getContents === 'function') {
+        var contents = renderer.getContents() || [];
+        for (var c = 0; c < contents.length; c++) {
+          var item = contents[c] || {};
+          pushDoc(item.document || item.doc || null);
+        }
+      }
+    } catch (e) {}
+
+    var els = state.els || {};
+    pushIframeDocsFrom(els.host || null);
+    pushIframeDocsFrom(els.readerView || null);
+    return docs;
+  }
+
+  function injectDarkImageInvertStyleIntoIframes(theme) {
+    var shouldInvert = shouldInvertImagesForTheme(theme);
+    var css = shouldInvert
+      ? 'img, svg, image { filter: invert(1) hue-rotate(180deg) !important; }'
+      : '';
+
+    var docs = collectReaderIframeDocs();
+    for (var i = 0; i < docs.length; i++) {
+      var doc = docs[i];
+      try {
+        var styleEl = doc.getElementById(INVERT_DARK_IMAGES_STYLE_ID);
+        if (!styleEl) {
+          styleEl = doc.createElement('style');
+          styleEl.id = INVERT_DARK_IMAGES_STYLE_ID;
+          styleEl.type = 'text/css';
+          var parent = doc.head || doc.documentElement || doc.body;
+          if (!parent) continue;
+          parent.appendChild(styleEl);
+        }
+        if (styleEl.textContent !== css) styleEl.textContent = css;
+      } catch (e) {}
+    }
+  }
+
   function applySettings() {
     var state = RS.state;
-    applyThemeAttribute(state.settings.theme);
-    if (!state.engine || typeof state.engine.applySettings !== 'function') return;
-    try { state.engine.applySettings(Object.assign({}, state.settings)); } catch (e) { /* swallow */ }
+    state.settings.fontWeight = loadFontWeightSetting();
+    var theme = state && state.settings ? state.settings.theme : 'light';
+    applyThemeAttribute(theme);
+    if (state.engine && typeof state.engine.applySettings === 'function') {
+      try { state.engine.applySettings(Object.assign({}, state.settings)); } catch (e) { /* swallow */ }
+    }
+    injectDarkImageInvertStyleIntoIframes(theme);
   }
 
   function normalizeMaxLineWidth(v) {
@@ -52,8 +217,11 @@
   function syncAaPanelUI() {
     var els = RS.ensureEls();
     var s = RS.state.settings;
+    ensureFontWeightControl();
     if (els.fontSizeSlider) { els.fontSizeSlider.value = String(s.fontSize || 100); }
     if (els.fontSizeValue) { els.fontSizeValue.textContent = String(s.fontSize || 100) + '%'; }
+    if (els.fontWeightSlider) { els.fontWeightSlider.value = String(clampFontWeight(s.fontWeight || 400)); }
+    if (els.fontWeightValue) { els.fontWeightValue.textContent = String(clampFontWeight(s.fontWeight || 400)); }
     if (els.fontFamily) { els.fontFamily.value = String(s.fontFamily || 'publisher'); }
     if (els.lineHeightSlider) { els.lineHeightSlider.value = String(s.lineHeight || 1.5); }
     if (els.lineHeightValue) { els.lineHeightValue.textContent = String(Number(s.lineHeight || 1.5).toFixed(1)); }
@@ -64,6 +232,7 @@
     if (els.maxLineWidthValue) { els.maxLineWidthValue.textContent = String(maxLineWidth) + 'px'; }
     if (els.columnToggle) { els.columnToggle.checked = (s.columnMode !== 'single'); }
     if (els.flowToggle) { els.flowToggle.checked = String(s.flowMode || 'paginated') === 'scrolled'; }
+    if (els.invertDarkImagesToggle) { els.invertDarkImagesToggle.checked = isInvertDarkImagesEnabled(); }
     // BUILD_READIUMCSS: new typography controls
     syncTextAlignChips(s.textAlign || '');
     if (els.letterSpacingSlider) { els.letterSpacingSlider.value = String(s.letterSpacing || 0); }
@@ -212,6 +381,7 @@
   // ── Lifecycle ────────────────────────────────────────────────────
 
   function onOpen() {
+    loadFontWeightSetting();
     syncMaxLineWidthFromLocalStorage();
     applySettings();
     syncAaPanelUI();
@@ -228,6 +398,8 @@
   function bind() {
     var els = RS.ensureEls();
     var state = RS.state;
+    ensureFontWeightControl();
+    state.settings.fontWeight = loadFontWeightSetting();
 
     // Theme chips
     var themeChips = document.querySelectorAll('.br-settings-chip[data-theme]');
@@ -251,6 +423,15 @@
       var v = Number(els.fontSizeSlider.value || 100);
       state.settings.fontSize = Math.max(75, Math.min(250, v));
       if (els.fontSizeValue) els.fontSizeValue.textContent = String(state.settings.fontSize) + '%';
+      applySettings();
+      RS.persistSettings().catch(function () {});
+    });
+
+    // Font weight slider (ReadiumCSS --USER__fontWeight)
+    els.fontWeightSlider && els.fontWeightSlider.addEventListener('input', function () {
+      state.settings.fontWeight = clampFontWeight(els.fontWeightSlider.value || 400);
+      if (els.fontWeightValue) els.fontWeightValue.textContent = String(state.settings.fontWeight);
+      persistFontWeightSetting(state.settings.fontWeight);
       applySettings();
       RS.persistSettings().catch(function () {});
     });
@@ -370,6 +551,25 @@
       });
     }
 
+    // Image inversion toggle for dark themes (localStorage-only preference)
+    if (els.invertDarkImagesToggle) {
+      els.invertDarkImagesToggle.addEventListener('change', function () {
+        setInvertDarkImagesEnabled(!!els.invertDarkImagesToggle.checked);
+        injectDarkImageInvertStyleIntoIframes(state.settings && state.settings.theme);
+      });
+    }
+
+    // Re-apply iframe image inversion style when EPUB/text iframes reload (page/chapter changes)
+    if (els.host && typeof els.host.addEventListener === 'function') {
+      els.host.addEventListener('load', function (ev) {
+        var t = ev && ev.target;
+        if (!t || String(t.tagName || '').toLowerCase() !== 'iframe') return;
+        setTimeout(function () {
+          injectDarkImageInvertStyleIntoIframes(state.settings && state.settings.theme);
+        }, 0);
+      }, true);
+    }
+
     // Flow button in footer
     els.flowBtn && els.flowBtn.addEventListener('click', function () { toggleFlowMode().catch(function () {}); });
     // Appearance button in toolbar — click is handled by reader_overlays.js via data-overlay attribute
@@ -381,6 +581,7 @@
       syncAaPanelUI();
       syncThemeFontUI();
       syncControlAvailability();
+      injectDarkImageInvertStyleIntoIframes(state.settings && state.settings.theme);
     });
 
     // Settings TTS voice select

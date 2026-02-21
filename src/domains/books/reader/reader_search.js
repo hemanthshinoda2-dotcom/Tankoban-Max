@@ -7,6 +7,8 @@
 
   // PATCH4: Search history + scope toggle + progress indicator (Readest-ish)
   var HISTORY_KEY = 'brSearchHistory:v1';
+  var SEARCH_MATCH_CASE_KEY = 'books_searchMatchCase';
+  var SEARCH_WHOLE_WORDS_KEY = 'books_searchWholeWords';
   function loadHistory() {
     try {
       var raw = localStorage.getItem(HISTORY_KEY);
@@ -43,6 +45,92 @@
     } catch (e) {}
   }
 
+  function readSearchBool(key, fallback) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (raw == null || raw === '') return !!fallback;
+      if (raw === '1' || raw === 'true') return true;
+      if (raw === '0' || raw === 'false') return false;
+    } catch (e) {}
+    return !!fallback;
+  }
+  function getSearchMatchOptions() {
+    var state = RS.state;
+    if (typeof state.searchMatchCase !== 'boolean') state.searchMatchCase = readSearchBool(SEARCH_MATCH_CASE_KEY, false);
+    if (typeof state.searchWholeWords !== 'boolean') state.searchWholeWords = readSearchBool(SEARCH_WHOLE_WORDS_KEY, false);
+    return { matchCase: !!state.searchMatchCase, wholeWords: !!state.searchWholeWords };
+  }
+  function setSearchMatchOptions(patch) {
+    var state = RS.state;
+    var cur = getSearchMatchOptions();
+    state.searchMatchCase = (patch && typeof patch.matchCase === 'boolean') ? patch.matchCase : cur.matchCase;
+    state.searchWholeWords = (patch && typeof patch.wholeWords === 'boolean') ? patch.wholeWords : cur.wholeWords;
+    try { localStorage.setItem(SEARCH_MATCH_CASE_KEY, state.searchMatchCase ? '1' : '0'); } catch (e) {}
+    try { localStorage.setItem(SEARCH_WHOLE_WORDS_KEY, state.searchWholeWords ? '1' : '0'); } catch (e) {}
+  }
+  function updateSearchMatchToggleUi() {
+    var els = RS.ensureEls();
+    var root = els.overlaySearch;
+    if (!root) return;
+    var opts = getSearchMatchOptions();
+    var mc = root.querySelector('.br-search-toggle[data-opt="matchCase"]');
+    var ww = root.querySelector('.br-search-toggle[data-opt="wholeWords"]');
+    if (mc) { mc.classList.toggle('is-active', !!opts.matchCase); mc.setAttribute('aria-pressed', opts.matchCase ? 'true' : 'false'); }
+    if (ww) { ww.classList.toggle('is-active', !!opts.wholeWords); ww.setAttribute('aria-pressed', opts.wholeWords ? 'true' : 'false'); }
+  }
+  function ensureSearchMatchOptionUi() {
+    var els = RS.ensureEls();
+    if (!els.overlaySearch || !els.utilSearchInput) return;
+
+    if (!document.getElementById('brSearchMatchOptionsStyle')) {
+      var st3 = document.createElement('style');
+      st3.id = 'brSearchMatchOptionsStyle';
+      st3.textContent = [
+        '#brOverlaySearch .br-search-row{display:flex;align-items:center;gap:8px;}',
+        '#brOverlaySearch .br-search-input{flex:1 1 auto;min-width:0;}',
+        '#brOverlaySearch .br-search-match-toggles{display:flex;gap:6px;align-items:center;}',
+        '#brOverlaySearch .br-search-toggle{min-width:30px;height:30px;padding:0 9px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.14);color:inherit;font-size:12px;font-weight:600;letter-spacing:0.2px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}',
+        '#brOverlaySearch .br-search-toggle:hover{background:rgba(255,255,255,0.06);}',
+        '#brOverlaySearch .br-search-toggle.is-active{background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.26);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12);}',
+      ].join('\n');
+      document.head.appendChild(st3);
+    }
+
+    var row = null;
+    try { row = els.utilSearchInput.closest ? els.utilSearchInput.closest('.br-search-row') : null; } catch (e) { row = null; }
+    if (!row) row = els.utilSearchInput.parentNode;
+    if (!row) return;
+
+    var wrap = row.querySelector('.br-search-match-toggles');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'br-search-match-toggles';
+      wrap.innerHTML = '' +
+        '<button type="button" class="br-search-toggle" data-opt="matchCase" title="Case-sensitive match" aria-label="Case-sensitive match">Aa</button>' +
+        '<button type="button" class="br-search-toggle" data-opt="wholeWords" title="Whole-word match" aria-label="Whole-word match">W</button>';
+      if (els.utilSearchBtn && els.utilSearchBtn.parentNode === row) row.insertBefore(wrap, els.utilSearchBtn);
+      else row.appendChild(wrap);
+    }
+
+    var btns = wrap.querySelectorAll('.br-search-toggle');
+    for (var i = 0; i < btns.length; i++) {
+      (function (btn) {
+        if (btn._wired) return;
+        btn._wired = true;
+        btn.addEventListener('click', function () {
+          var opts = getSearchMatchOptions();
+          if (btn.dataset.opt === 'matchCase') setSearchMatchOptions({ matchCase: !opts.matchCase });
+          if (btn.dataset.opt === 'wholeWords') setSearchMatchOptions({ wholeWords: !opts.wholeWords });
+          updateSearchMatchToggleUi();
+          var q = (els.utilSearchInput && els.utilSearchInput.value) ? String(els.utilSearchInput.value).trim() : '';
+          if (q) { try { bus.emit('search:run', q); } catch (e) {} }
+        });
+      })(btns[i]);
+    }
+
+    updateSearchMatchToggleUi();
+  }
+
 
   function ensureSearchResultsUi() {
     var els = RS.ensureEls();
@@ -68,6 +156,8 @@
 
     var body = els.overlaySearch.querySelector('.br-overlay-body');
     if (!body) return { root: null, list: null };
+
+    ensureSearchMatchOptionUi();
 
     // PATCH4: extra controls (scope + history + progress)
     loadScope();
@@ -101,8 +191,7 @@
         '#brOverlaySearch .br-search-history-select{max-width:240px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);color:inherit;font-size:12px;}',
         '#brOverlaySearch .br-search-clear{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
         '#brOverlaySearch .br-search-progress{margin-left:auto;opacity:0.8;font-size:12px;min-height:16px;}',
-      ].join('
-');
+      ].join('\n');
       document.head.appendChild(st2);
     }
     // Wire controls
@@ -322,7 +411,8 @@
 
     RS.setStatus('Searching...', true);
     var res = null;
-    try { res = await state.engine.search(q); } catch (e) { res = null; }
+    var matchOpts = getSearchMatchOptions();
+    try { res = await state.engine.search(q, matchOpts); } catch (e) { res = null; }
 
     var count = Number(res && res.count || 0);
     var hits = (res && Array.isArray(res.hits)) ? res.hits : [];
@@ -387,6 +477,8 @@
   function bind() {
     var els = RS.ensureEls();
 
+    ensureSearchMatchOptionUi();
+
     if (els.utilSearchBtn) {
       els.utilSearchBtn.addEventListener('click', function () { searchNow().catch(function () {}); });
     }
@@ -428,7 +520,7 @@
     bind: bind,
     resetSearchState: resetSearchState,
     clearSearch: clearSearch,
-    onOpen: function () { renderResultsList(); },
+    onOpen: function () { ensureSearchMatchOptionUi(); renderResultsList(); },
     onClose: resetSearchState,
   };
 })();

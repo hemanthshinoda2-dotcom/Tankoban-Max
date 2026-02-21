@@ -381,6 +381,7 @@
       const s = (settings && typeof settings === 'object') ? settings : {};
       const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
       const lineHeight = clamp(Number(s.lineHeight || 1.5), 1.0, 2.0);
+      const fontWeight = clamp(Number(s.fontWeight || 400), 100, 900);
       const margin = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
       const theme = String(s.theme || 'light');
       const fontFamily = String(s.fontFamily || 'publisher');
@@ -392,7 +393,7 @@
       if (fontFamily === 'sansTf' || fontFamily === 'humanistTf') ff = 'system-ui, -apple-system, sans-serif';
       else if (fontFamily === 'monospaceTf') ff = 'ui-monospace, "Cascadia Code", "Consolas", monospace';
       else ff = 'Georgia, "Times New Roman", serif';
-      return 'body { font-size: ' + fontSize + '% !important; line-height: ' + lineHeight + ' !important; '
+      return 'body { font-size: ' + fontSize + '% !important; line-height: ' + lineHeight + ' !important; font-weight: ' + fontWeight + ' !important; '
         + 'padding: 0 ' + (margin * 24) + 'px !important; color: ' + fg + ' !important; background: ' + bg + ' !important; '
         + 'font-family: ' + ff + ' !important; }';
     }
@@ -451,6 +452,11 @@
         const lineHeight = Number(s.lineHeight || 0);
         if (lineHeight && lineHeight !== 1.5) docEl.style.setProperty('--USER__lineHeight', String(lineHeight));
         else docEl.style.removeProperty('--USER__lineHeight');
+
+        // Font weight
+        const fontWeight = clamp(Number(s.fontWeight || 400), 100, 900);
+        if (fontWeight !== 400) docEl.style.setProperty('--USER__fontWeight', String(fontWeight));
+        else docEl.style.removeProperty('--USER__fontWeight');
 
         // Max line length (ReadiumCSS)
         const maxLineWidth = clamp(Number(s.maxLineWidth || 960), 400, 1600);
@@ -559,6 +565,7 @@
             const renderer = state.view && state.view.renderer;
             const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
             const lineHeight = clamp(Number(s.lineHeight || 1.5), 1.0, 2.0);
+            const fontWeight = clamp(Number(s.fontWeight || 400), 100, 900);
             if (renderer && typeof renderer.getContents === 'function') {
               for (const c of renderer.getContents()) {
                 if (!c || !c.doc) continue;
@@ -566,6 +573,7 @@
                 if (doc && doc.body && doc.body.style) {
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                  doc.body.style.setProperty('font-weight', String(fontWeight), 'important');
                   // FIX_EPUB_MARGIN_INLINE: keep margin slider effective even when publisher CSS fights injected styles
                   const mf = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad = Math.round(mf * 24);
@@ -590,6 +598,7 @@
                 if (doc.body && doc.body.style) {
                   doc.body.style.setProperty('font-size', fontSize + '%', 'important');
                   doc.body.style.setProperty('line-height', String(lineHeight), 'important');
+                  doc.body.style.setProperty('font-weight', String(fontWeight), 'important');
                   // FIX_EPUB_MARGIN_INLINE2
                   const mf2 = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad2 = Math.round(mf2 * 24);
@@ -1051,13 +1060,14 @@
     }
 
     // WAVE1: search collects hits + excerpts for results list
-    async function search(query) {
+    async function search(query, options) {
       state.searchHits = [];
       state.searchGroups = [];
       if (!state.view || typeof state.view.search !== 'function') return { ok: false, count: 0, hits: [], groups: [] };
 
       const q = String(query || '').trim();
       if (!q) return { ok: false, count: 0, hits: [], groups: [] };
+      const searchOpts = (options && typeof options === 'object') ? options : {};
 
       const flatHits = []; // [{cfi, excerpt, label}]
       const groups = [];   // [{label, subitems:[{cfi, excerpt}]}]
@@ -1070,7 +1080,7 @@
       };
 
       try {
-        for await (const res of state.view.search({ query: q })) {
+        for await (const res of state.view.search({ query: q, matchCase: !!searchOpts.matchCase, wholeWords: !!searchOpts.wholeWords })) {
           if (res === 'done') break;
 
           // Grouped results (Foliate returns sections with subitems)

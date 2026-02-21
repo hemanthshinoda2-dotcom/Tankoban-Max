@@ -182,6 +182,7 @@
       dictBack: qs('booksReaderDictBack'),
       ttsBar: qs('lpTtsBar'),
       flowToggle: qs('brSettingsFlowToggle'),
+      invertDarkImagesToggle: qs('brSettingsInvertDarkImagesToggle'),
       flowBtn: qs('booksReaderFlowBtn'), // FIX-TTS03: toolbar flow mode toggle
       shortcutsList: qs('brSettingsShortcuts'),
       // Annotation popup
