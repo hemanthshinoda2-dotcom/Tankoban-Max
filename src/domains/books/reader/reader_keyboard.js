@@ -145,8 +145,13 @@
 
       if (handleShortcutCapture(e)) return;
 
+      // Skip most global shortcuts while typing in inputs/selects/contenteditable.
+      // Keep Escape handling later for blur/close behavior.
+      var activeEl = document.activeElement;
+      var typingNow = !!(activeEl && isTypingElement(activeEl));
+
       // Ctrl+G: goto dialog
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+      if (!typingNow && (e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
         e.preventDefault();
         var Nav = window.booksReaderNav;
         if (Nav && Nav.isGotoOpen && Nav.isGotoOpen()) {
@@ -158,27 +163,26 @@
       }
 
       // Ctrl+F or /: open search overlay
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      if (!typingNow && (e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
         bus.emit('overlay:toggle', 'search');
         return;
       }
 
       // FIX_CHAP_NAV: Ctrl+Arrow: next/prev chapter
-      if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowRight') {
+      if (!typingNow && (e.ctrlKey || e.metaKey) && e.key === 'ArrowRight') {
         e.preventDefault();
         bus.emit('nav:next-chapter');
         return;
       }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft') {
+      if (!typingNow && (e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft') {
         e.preventDefault();
         bus.emit('nav:prev-chapter');
         return;
       }
 
       // Skip navigation shortcuts when typing in inputs
-      var activeEl = document.activeElement;
-      if (activeEl && isTypingElement(activeEl)) {
+      if (typingNow) {
         if (e.key === 'Escape') {
           e.preventDefault();
           activeEl.blur();
@@ -229,12 +233,22 @@
       // BUILD_HISTORY: Alt+Left/Right for navigation history (before bare arrow handling)
       if (e.altKey && e.key === 'ArrowLeft') {
         e.preventDefault();
-        if (state.engine && state.engine.historyCanGoBack()) state.engine.historyBack();
+        try {
+          if (state.engine && typeof state.engine.historyBack === 'function') {
+            var canBack = (typeof state.engine.historyCanGoBack === 'function') ? !!state.engine.historyCanGoBack() : true;
+            if (canBack) state.engine.historyBack();
+          }
+        } catch (err) {}
         return;
       }
       if (e.altKey && e.key === 'ArrowRight') {
         e.preventDefault();
-        if (state.engine && state.engine.historyCanGoForward()) state.engine.historyForward();
+        try {
+          if (state.engine && typeof state.engine.historyForward === 'function') {
+            var canFwd = (typeof state.engine.historyCanGoForward === 'function') ? !!state.engine.historyCanGoForward() : true;
+            if (canFwd) state.engine.historyForward();
+          }
+        } catch (err) {}
         return;
       }
 

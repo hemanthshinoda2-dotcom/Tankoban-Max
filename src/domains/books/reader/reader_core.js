@@ -819,7 +819,9 @@
       try {
         var preState = (typeof tts.getState === 'function') ? (tts.getState() || 'idle') : 'idle';
         if (preState === 'playing') { try { tts.pause(); } catch (e) {} return; }
-        if (isTtsPausedState(preState)) { try { tts.resume(); } catch (e) {} return; }
+        // FIX_TTS_STATE_VARIANTS: resume all paused variants to avoid duplicate init/play sessions.
+        var isPausedVariant = (preState === 'paused') || /-paused$/.test(String(preState || ''));
+        if (isPausedVariant) { try { tts.resume(); } catch (e) {} return; }
       } catch (e) {}
 
       // Ensure the narration engine is initialized against the active reader engine.

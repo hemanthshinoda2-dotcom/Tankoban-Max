@@ -451,10 +451,18 @@
 
     // FIX-READER-GAPS: history back/forward buttons
     els.histBackBtn && els.histBackBtn.addEventListener('click', function () {
-      if (state.engine && typeof state.engine.historyBack === 'function') state.engine.historyBack();
+      try {
+        if (!state.engine || typeof state.engine.historyBack !== 'function') return;
+        if (typeof state.engine.historyCanGoBack === 'function' && !state.engine.historyCanGoBack()) return;
+        state.engine.historyBack();
+      } catch (e) {}
     });
     els.histFwdBtn && els.histFwdBtn.addEventListener('click', function () {
-      if (state.engine && typeof state.engine.historyForward === 'function') state.engine.historyForward();
+      try {
+        if (!state.engine || typeof state.engine.historyForward !== 'function') return;
+        if (typeof state.engine.historyCanGoForward === 'function' && !state.engine.historyCanGoForward()) return;
+        state.engine.historyForward();
+      } catch (e) {}
     });
 
     // Chapter transition Continue button

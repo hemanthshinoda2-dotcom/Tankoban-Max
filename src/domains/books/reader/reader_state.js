@@ -168,6 +168,8 @@
       // Corner progress overlays (footer removed)
       cornerLeft: qs('booksReaderCornerLeft'),
       cornerRight: qs('booksReaderCornerRight'),
+      // FIX_NAV_SCRUB: progress scrub bar handle for nav + chapter markers
+      progress: qs('booksReaderScrub') || qsv('#booksReaderScrub') || qsv('.br-scrub'),
       // Chapter transition
       chapterTransition: qs('booksChapterTransition'),
       chapterTransCurrent: qs('booksChapterTransCurrent'),
