@@ -14,6 +14,18 @@ The restructuring is ordered by **impact and safety**. Every session leaves the 
 
 ---
 
+## Phases at a Glance
+
+| Phase | Sessions | What | Risk | Summary |
+|-------|----------|------|------|---------|
+| **1** | 1–4 | Zero-risk foundations | None | IPC validator, section markers in CSS + JS, CODEMAP.md |
+| **2** | 5–7 | CSS splits | Low | Extract video/comic-reader CSS + remove dead books stubs from `styles.css` (4,264 → ~1,450 lines) |
+| **3** | 8–11 | Safe JS extractions | Low | OPDS, web sources, video search, ZIP reader out of mega-files |
+| **4** | 12–15 | Medium-risk JS splits | Medium | Video panels, video continue, main/ipc, preload namespaces |
+| **5** | 16–18 | Tooling & polish | Low | IPC scaffold tool, dead code detectors, smoke integration |
+
+---
+
 ## Phase 1: Zero-Risk Foundations (Sessions 1–4)
 
 These add validation tools, markers, and documentation. No code changes. No risk.
@@ -81,39 +93,63 @@ Create a persistent navigation document that AI can consult at the start of ever
 
 CSS splits are the safest file splits because CSS has no closures, no variable scoping, and the only concern is cascade order. Each split creates a new `.css` file and adds a `<link>` tag in `index.html` at the correct position.
 
+**Important correction:** The original Session 7 planned to extract "Comic Library CSS" (lines 272–1530). Research revealed this is **shared library infrastructure** — topbar, sidebar, folder tree, continue shelf, volume table, scrollbars, search, and overlays are all used by Comics, Books, AND Video. Extracting them would break two modes. Session 7 is revised to remove dead books stubs instead.
+
 ### Session 5 — Extract Video Player CSS from styles.css
 
-**Extract:** Lines ~2774–3640 (~866 lines) — everything scoped to video mode (`.video-*`, `body.inVideoMode`, video player chrome, video HUD, video panels, video continue shelf)
+**Extract (~940 lines):**
+- Lines ~1103–1131: Video folder "continue watching" preview widget (`.videoFolderContinue*`)
+- Lines ~1192–1305: Video episode table column grids + cell styling (`#videoEpTableHead`, `#videoEpisodesGrid`, `#videoEpisodesWrap .cell.*`, `.videoEpProgress*`)
+- Lines ~2774–3628: Main video player chrome — library rows, player shell, HUD (minimal + legacy), scrub, context menu, tracks panel, continue panels, playlist, volume/speed panels, OSD (`.videoList`, `.videoRow*`, `.videoPlayerShell`, `.videoHud*`, `.videoCtxMenu`, `.videoVolumeOSD`, etc.)
+
+**Keep in `styles.css`:** Lines 9–110 (global `body.inVideoPlayer`/`body.videoFullscreen` layout switches — foundational). Lines 1187–1190 (`#videoEpisodesWrap.previewHidden` — shared pattern, tiny). Lines ~2050–2062 (`.scrubChapterMark` — shared with Books reader).
 
 **Create:** `src/styles/video-player.css`
-**Modify:** `src/index.html` — add `<link>` tag after `video-library-match.css`
+**Modify:** `src/index.html` — add `<link>` tag after `video-library-match.css`, before `books-reader.css`
 **Modify:** `src/styles/styles.css` — remove extracted lines, leave `/* Extracted to video-player.css */` comment
 
-**Test:** Launch app → switch to Video mode → verify library, player, HUD, fullscreen all look correct.
+**Test:** Launch app → Video mode → verify: library grid, player HUD, scrub, volume/speed panels, context menu, fullscreen, continue shelf, playlist panel.
 
 ---
 
 ### Session 6 — Extract Comic Reader CSS from styles.css
 
-**Extract:** Lines ~1531–2770 (~1,240 lines) — comic reader/player UI (HUD bar, scrub bar, quick settings, mega settings, loading overlay, context menu, end-of-volume, loupe, image FX)
+**Extract (~1,230 lines):**
+- Lines ~1531–2110: Player bar, stage, click zones, manual scroller, corner prefs, footer, quick settings, speed slider, scrub bar (`.playerBar`, `.stageWrap`, `.clickZones`, `.playerFooter`, `.scrubWrap`, `.scrub*`, etc.)
+- Lines ~2127–2170: Context menu (`.contextMenu`, `.contextMenuItem*`)
+- Lines ~2172–2389: End-of-volume overlay + mega settings (`.endOverlay`, `.megaSettingsOverlay`, `@keyframes megaIn`)
+- Lines ~2391–2523: HUD visibility, player-mode body rules, icon overrides (`body.hudHidden`, `body.inPlayer`)
+- Lines ~2525–2620: Loading overlay, spinner, warmup bar, debug overlay (`.loadingOverlay`, `.spinner`, `@keyframes spin`)
+- Lines ~2622–2772: Mode menu, auto-flip, goto/FX cards, loupe (`.modeMenu`, `.loupeHud`, `.fxCard`)
+
+**Keep in `styles.css`:** Lines 2109–2125 (`.hint` + `.toast` — shared with Books and Web modes).
 
 **Create:** `src/styles/comic-reader.css`
-**Modify:** `src/index.html`, `src/styles/styles.css`
+**Modify:** `src/index.html` — add `<link>` tag after `overhaul.css`, before `video-library-match.css`
+**Modify:** `src/styles/styles.css` — remove extracted lines, leave `/* Extracted to comic-reader.css */` comment
 
-**Test:** Launch app → open a comic → verify HUD, scrub, settings, all overlays look correct.
+**Test:** Launch app → open a comic → verify HUD bar, scrub, quick settings, mega settings, speed slider, end-of-volume overlay, loading spinner, loupe, context menu, fullscreen, click zones.
 
 ---
 
-### Session 7 — Extract Comic Library CSS from styles.css
+### Session 7 — Remove Obsolete Books Stubs from styles.css
 
-**Extract:** Lines ~272–1530 (~1,260 lines) — topbar, mode switch, sidebar, folder tree, series grid, tiles, continue shelf, inside-series view, volume navigator, library settings, hidden series overlay
+Lines ~3630–4264 (~634 lines) contain old books reader styles that are **duplicated in `books-reader.css`** with updated values. Since `books-reader.css` loads after `styles.css` in the cascade, the `styles.css` versions are dead code.
 
-**Create:** `src/styles/comic-library.css`
-**Modify:** `src/index.html`, `src/styles/styles.css`
+**Verified duplicates (styles.css value → books-reader.css override):**
+- `.booksReaderDictPopup`: `width:320px, z-index:50` → `width:380px, z-index:70`
+- `.booksReaderTtsBar`: both files define it, `books-reader.css` wins
+- `.booksAnnotPopup`: both files, `books-reader.css` wins
+- `.booksGotoOverlay`: both files, `books-reader.css` wins
+- `.booksReaderTtsSentence/Word`: both files, `books-reader.css` wins
 
-After this, `styles.css` shrinks from 4,264 → ~900 lines (just globals, resets, body chrome, and remaining stubs).
+**Remove from `styles.css`:** All books reader rules in lines ~3630–4264 (dictionary, TTS bar, TTS diagnostics, goto dialog, annotations, error banner, status row, reader themes, TTS highlighting, sleep timer, folder continue widget, history buttons, chapter markers).
 
-**Test:** Launch app → verify comics library grid, sidebar, series view, tiles, continue shelf all look correct.
+**Before deleting each rule:** grep-verify it exists in `books-reader.css`. If a rule is ONLY in `styles.css`, move it to `books-reader.css` instead of deleting.
+
+After all three sessions, `styles.css` shrinks from 4,264 → ~1,450 lines (shared library infrastructure: globals, CSS variables, base layout, scrollbars, topbar, sidebar, folder tree, search, continue shelf, series grid, volume table, library overlays, toast).
+
+**Test:** Launch app → Books mode → open a book → verify: dictionary popup, TTS bar, TTS diagnostics, goto dialog, annotations, error handling, theme switching, sleep timer.
 
 ---
 
@@ -252,6 +288,7 @@ The preload is 1,139 lines of one flat object. Since it uses CommonJS, split int
 
 | File | Lines | Why not |
 |------|-------|---------|
+| `styles.css` shared library core (after Phase 2) | ~1,450 | Lines 1–1530 are **shared infrastructure** (topbar, sidebar, folder tree, continue shelf, volume table, search, scrollbars, overlays) used by Comics, Books, AND Video. Extracting by domain would duplicate shared CSS or break other modes. |
 | `shell/core.js` (after ZIP extraction) | ~2,565 | Everything shares `el`, `appState`, and closure vars. A bridge object would be as complex as the file itself. Section markers are sufficient. |
 | `books-reader.css` | 2,732 | Already domain-scoped. Under the "urgent" threshold. Section markers from Session 2 are enough. |
 | `video.js` (after 4 extractions) | ~6,000 | The remaining core (library rendering, player adapter, player UI bindings) is deeply intertwined. Further splits would need 20+ bridge variables. Not worth it. |
@@ -263,7 +300,7 @@ The preload is 1,139 lines of one flat object. Since it uses CommonJS, split int
 
 | File | Before | After | Reduction |
 |------|--------|-------|-----------|
-| `styles.css` | 4,264 | ~900 | **-79%** |
+| `styles.css` | 4,264 | ~1,450 | **-66%** |
 | `video/video.js` | 9,649 | ~6,000 | **-38%** |
 | `books/library.js` | 4,037 | ~2,870 | **-29%** |
 | `main/ipc/index.js` | 1,238 | ~150 | **-88%** |
