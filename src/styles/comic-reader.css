@@ -1,0 +1,1107 @@
+/* =========================================================
+   comic-reader.css — Comic reader HUD, stage, controls, overlays
+   Extracted from styles.css (Phase 2, Session 6)
+   ========================================================= */
+
+
+/* --- Player bar (top HUD) --- */
+
+/* Player */
+.playerBar{
+  position: relative;
+  display:flex;
+  align-items:center;
+  width: 100%;
+  padding: 10px 14px 16px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  transition: opacity .18s ease, transform .18s ease;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+.playerBar::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  /* Build 7 — softer YouTube-style fade (no boxed panel) */
+  background: linear-gradient(to bottom,
+    rgba(0,0,0,.72) 0%,
+    rgba(0,0,0,.40) 40%,
+    rgba(0,0,0,0) 100%);
+  pointer-events:none;
+}
+.playerBar .ytHudRow{
+  position: relative;
+  z-index: 1;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  width: 100%;
+}
+.playerBar .ytTopLeft{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  min-width: 0;
+}
+.playerBar button{ pointer-events:auto; }
+
+/* Build 7 — Player icon button polish (YouTube-like) */
+body.inPlayer .iconBtn.ytIcon{
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: rgba(255,255,255,.94);
+  border-radius: 999px;
+  font-size: 16px;
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+  transition: background .12s ease, transform .12s ease, opacity .12s ease;
+}
+body.inPlayer .iconBtn.ytIcon:hover{ background: rgba(255,255,255,.12); }
+body.inPlayer .iconBtn.ytIcon:active{ background: rgba(255,255,255,.18); transform: scale(.98); }
+body.inPlayer .iconBtn.ytIcon:focus-visible{
+  outline: 2px solid rgba(255,255,255,.75);
+  outline-offset: 2px;
+}
+body.inPlayer #playBtn.ytIcon{
+  width: 42px;
+  height: 42px;
+  font-size: 18px;
+}
+
+/* Build 19: larger bottom-row controls (easier to hit) */
+body.inPlayer .playerFooter .iconBtn.ytIcon{
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+}
+body.inPlayer .playerFooter #playBtn.ytIcon{
+  width: 54px;
+  height: 54px;
+  font-size: 22px;
+}
+
+.playerMeta{ flex:1; min-width: 0; }
+.nowTitle{
+  font-weight: 900;
+  font-size: 14px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  color: rgba(255,255,255,.95);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+.nowSub{
+  font-size:12px;
+  margin-top:2px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  color: rgba(255,255,255,.78);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+.playerControls{ display:flex; gap:10px; flex-wrap:wrap; }
+
+
+/* --- Stage, click zones, manual scroller --- */
+
+.stageWrap{
+  position:relative;
+  border:1px solid var(--border);
+  border-radius:16px;
+  overflow:hidden;
+  background:#000;
+}
+#stage{
+  width:100%;
+  height:auto;
+  display:block;
+  background:#000;
+}
+.clickZones{
+  position:absolute; inset:0; display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.zone{ cursor:pointer; }
+/* Build 32: manual scroller overlay (visual only) */
+.manualScroller{
+  position:absolute;
+  top: 12px;
+  bottom: 12px;
+  right: 10px;
+  width: 12px;
+  z-index: 30;
+  display:none;
+  pointer-events: none;
+}
+.manualScrollerTrack{
+  position:absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-radius: 999px;
+  background: transparent;
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+/* FIND_THIS:LONG_STRIP_CORNER_PREFS_STYLE (Tankoban Build 17)
+   BUILD 7: UI-only transplant from Build 23.
+   Why this exists: Build 23 hides the quick settings row for a cleaner HUD and
+   uses a tiny floating "Prefs" pill to open the Mega Settings overlay.
+*/
+.cornerPrefsBtn{
+  position:absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 60;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.45);
+  color: rgba(255,255,255,.92);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  backdrop-filter: blur(10px);
+}
+body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
+.cornerPrefsBtn:hover{ background: rgba(0,0,0,.58); }
+.cornerPrefsBtn:active{ background: rgba(0,0,0,.68); transform: scale(.98); }
+.cornerPrefsBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.manualScrollerTrack::after{
+  content:"";
+  position:absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.14);
+}
+.manualScrollerThumb{
+  position:absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 30%;
+  width: 7px;
+  height: 54px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.28);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.18);
+  pointer-events: auto;
+  cursor: ns-resize;
+}
+
+/* Build 33: subtle feedback while dragging */
+.manualScroller.dragging .manualScrollerThumb{
+  background: rgba(255,255,255,.42);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.22);
+}
+
+/* Build 25: click-zone flash feedback (subtle acknowledgement + busy variant) */
+@keyframes zoneFlash {
+  0% { background-color: rgba(255,255,255,0); }
+  35% { background-color: rgba(255,255,255,.08); }
+  100% { background-color: rgba(255,255,255,0); }
+}
+.zone.zoneFlash{
+  animation: zoneFlash 90ms ease-out;
+}
+
+@keyframes zoneFlashBlocked {
+  0% { background-color: rgba(255,120,120,0); }
+  35% { background-color: rgba(255,120,120,.10); }
+  100% { background-color: rgba(255,120,120,0); }
+}
+.zone.zoneFlashBlocked{
+  animation: zoneFlashBlocked 90ms ease-out;
+}
+
+
+/* --- Player footer (bottom HUD) --- */
+
+.playerFooter{
+  position: relative;
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  transition: opacity .18s ease, transform .18s ease;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+.playerFooter::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  /* Build 7 — softer YouTube-style fade (no boxed panel) */
+  background: linear-gradient(to top,
+    rgba(0,0,0,.82) 0%,
+    rgba(0,0,0,.46) 42%,
+    rgba(0,0,0,0) 100%);
+  pointer-events:none;
+}
+.playerFooter .ytScrubRow,
+.playerFooter .ytControlsRow{
+  position: relative;
+  z-index: 1;
+}
+
+/* Build 8: quick settings row */
+.playerFooter .ytQuickRow{
+  position: relative;
+  z-index: 1;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap: 8px;
+  margin-top: -4px;
+  pointer-events: none;
+}
+.playerFooter .ytQuickRow button{ pointer-events:auto; }
+.playerFooter .ytQuickRow .ytQuickIcon{
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+}
+
+/* Build 38D: make speed prominent (always-visible text button) */
+.playerFooter .ytQuickRow .ytQuickSpeed{
+  width: auto;
+  min-width: 220px;
+  max-width: 62vw;
+  padding: 0 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Build 35: Auto/Manual mode toggle + disabled speed in Manual Scroll */
+.playerFooter .ytQuickRow #quickSpeedBtn:disabled{
+  opacity: .35;
+  cursor: default;
+}
+.playerFooter .ytQuickRow .ytQuickMode{
+  width: auto;
+  min-width: 74px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+/* Build 15: slightly larger quick icons for readability */
+.playerFooter .ytQuickSep{
+  width: 1px;
+  height: 18px;
+  background: rgba(255,255,255,.20);
+  border-radius: 999px;
+}
+
+
+/* --- Speed slider overlay --- */
+
+/* Build 19: scroll speed slider */
+.speedSliderOverlay{
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: auto;
+}
+.speedSliderCard{
+  position: absolute;
+  transform: translate(-50%, -100%);
+  min-width: 220px;
+  padding: 10px 12px 12px;
+  border-radius: 14px;
+  background: rgba(var(--surface-rgb),.88);
+  border: 1px solid rgba(255,255,255,.24);
+  box-shadow: 0 18px 42px rgba(0,0,0,.45);
+  backdrop-filter: blur(10px);
+}
+.speedSliderTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.speedSliderValue{
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(229,231,235,.95);
+}
+.speedSliderTrack{
+  position: relative;
+  width: 240px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.18);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+.speedSliderFill{
+  position:absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 4px;
+  width: 0%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.78);
+}
+.speedSliderThumb{
+  position:absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(229,231,235,.95);
+  box-shadow: 0 10px 22px rgba(0,0,0,.35);
+}
+
+
+/* --- Footer controls row --- */
+
+.playerFooter .ytControlsRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+}
+.ytLeftControls,
+.ytRightControls{ display:flex; align-items:center; gap:10px; }
+.ytPageText{
+  font-size: 11px;
+  font-weight: 900;
+  color: rgba(255,255,255,.92);
+  text-shadow: 0 2px 10px rgba(0,0,0,.55);
+}
+
+.playerFooter button,
+.playerFooter #scrub{ pointer-events:auto; }
+.hudExtras{ display:none; }
+.kv{ display:flex; gap:8px; align-items:center; }
+.k{ font-size:12px; color:var(--muted); }
+.v{ font-size:12px; }
+.spacer{ flex:1; }
+.miniControls{ display:flex; gap:8px; }
+.chip{
+  appearance:none; cursor:pointer;
+  position: relative; /* INTENT: anchor active checkmark without changing chip layout */
+  border:1px solid rgba(255,255,255,.25);
+  background: rgba(var(--surface-rgb),.55);
+  color:var(--text);
+  padding:6px 10px;
+  border-radius:999px;
+  font-weight:800;
+  font-size:12px;
+}
+.chip.active{ border-color: rgba(var(--accent-rgb),.55); background: rgba(var(--accent-rgb),.14); }
+.chip.active::after,
+.chip[aria-pressed="true"]::after{
+  content:'✓';
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  pointer-events:none;
+}
+
+
+/* --- Scrub bar --- */
+
+.scrubWrap{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top: 0;
+}
+
+/* Build 35: quick actions on the scrub bar (minimal symbols). */
+.playerFooter .scrubActions{
+  pointer-events: auto;
+  display:flex;
+  align-items:center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.playerFooter .scrubActionBtn{
+  pointer-events: auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.28);
+  color: rgba(255,255,255,.92);
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 900;
+  display:grid;
+  place-items:center;
+  cursor: pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  backdrop-filter: blur(10px);
+}
+.playerFooter .scrubActionBtn:hover{ background: rgba(0,0,0,.45); }
+.playerFooter .scrubActionBtn:active{ background: rgba(0,0,0,.58); transform: scale(.98); }
+.playerFooter .scrubActionBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+
+/* Build 5: Two-Page (Scroll) row gap control (only visible in that mode). */
+.playerFooter .twoPageScrollRowGapWrap{
+  pointer-events: auto;
+  display:flex;
+  align-items:center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.playerFooter .twoPageScrollRowGapInput{
+  width: 60px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(var(--surface-rgb),.35);
+  color: rgba(255,255,255,.92);
+  font-size: 12px;
+  font-weight: 800;
+}
+.playerFooter .twoPageScrollRowGapInput:focus{ outline: none; }
+.scrubLabel{ display:none; }
+.scrub{
+  position:relative;
+  height: 18px;
+  flex:1;
+  border-radius: 999px;
+  background: transparent;
+  border: 0;
+  cursor:pointer;
+  user-select:none;
+}
+/* Build 28: premium hitbox — keep visuals thin, but make the scrub area easier to grab. */
+.scrub::before{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  top:-10px;
+  bottom:-10px;
+  border-radius:999px;
+  background: transparent;
+}
+.scrubTrack{
+  position:absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  border-radius:999px;
+  background: rgba(255,255,255,.22);
+  transition: height .14s ease;
+}
+.scrubFill{
+  position:absolute;
+  left:0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 3px;
+  width: 0%;
+  border-radius: 999px;
+  background: rgba(255,255,255,.78);
+  transition: height .14s ease;
+}
+
+/* Build 85: Chapter markers on the timeline (only when chapters exist). */
+.scrubChapters{
+  position:absolute;
+  left:0; right:0;
+  top:0; bottom:0;
+  pointer-events:none; /* Container doesn't capture clicks */
+  opacity:1; /* BUILD 89: Full opacity for bright red markers */
+  z-index: 10; /* BUILD 89: Above track and fill */
+}
+.scrubChapterMark{
+  position:absolute;
+  top:0; bottom:0;
+  width:2px; /* BUILD 89: Wider for visibility */
+  background: #FFFFFF; /* BUILD 89: Bright red for visibility */
+  z-index: 9999; /* BUILD 89: High z-index to ensure visibility */
+  pointer-events: auto; /* BUILD 89: Ensure clickable */
+}
+.videoScrub--minimal .scrubChapterMark{
+  background: #FFFFFF; /* BUILD 89: Bright red override */
+  width: 2px; /* BUILD 89: Wider for visibility */
+  z-index: 9999; /* BUILD 89: High z-index */
+}
+
+.scrubThumb{
+  position:absolute;
+  top:50%;
+  left:0%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(229,231,235,.95);
+  box-shadow: 0 8px 18px rgba(0,0,0,.28);
+  opacity: 0;
+  transition: opacity .12s ease;
+}
+.scrubBubble{
+  position:absolute;
+  top: -34px;
+  left: 0%;
+  transform: translateX(-50%);
+  background: rgba(var(--surface-rgb),.86);
+  border:1px solid rgba(255,255,255,.26);
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: rgba(229,231,235,.95);
+  white-space:nowrap;
+  opacity: 0;
+  transition: opacity .12s ease;
+  pointer-events:none;
+  box-shadow: 0 10px 22px rgba(0,0,0,.35);
+}
+.scrub:hover .scrubBubble,
+.scrub:active .scrubBubble,
+.scrub.dragging .scrubBubble{ opacity: 1; }
+
+.scrub:hover .scrubTrack,
+.scrub:active .scrubTrack,
+.scrub:hover .scrubFill,
+.scrub:active .scrubFill,
+.scrub.dragging .scrubTrack,
+.scrub.dragging .scrubFill{ height: 6px; }
+
+.scrub:hover .scrubThumb,
+.scrub:active .scrubThumb,
+.scrub.dragging .scrubThumb{ opacity: 1; }
+
+
+/* --- End-of-volume overlay --- */
+
+/* End-of-volume overlay */
+.endOverlay{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: rgba(0,0,0,.55);
+  z-index: 30;
+}
+.endOverlay.hidden{ display:none; }
+.endCard{
+  width: min(520px, calc(100vw - 32px));
+  background: rgba(var(--surface-rgb),.92);
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 18px;
+  padding: 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+}
+.endTitle{ font-weight: 800; font-size: 18px; margin-bottom: 6px; }
+.endSub{ margin-bottom: 14px; }
+.endActions{ display:flex; gap:10px; flex-wrap:wrap; }
+.endHint{ margin-top: 10px; }
+
+
+/* --- Mega Settings --- */
+
+/* Mega Settings (Build 6A) */
+.megaSettingsOverlay{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  padding: 12px 14px 78px;
+  /* Slightly stronger dim to match YouTube popover feel */
+  background: rgba(0,0,0,.28);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s ease;
+  z-index:45;
+}
+
+.megaSettingsOverlay.floater{
+  align-items:flex-start;
+  justify-content:flex-start;
+  padding: 0;
+}
+.megaSettingsOverlay.floater .megaSettingsPanel{
+  position:absolute;
+  left: var(--megaX, 12px);
+  top: var(--megaY, 12px);
+}
+
+.megaSettingsOverlay.open{
+  opacity: 1;
+  pointer-events: auto;
+}
+.megaSettingsPanel{
+  width: min(340px, calc(100vw - 28px));
+  background: rgba(var(--surface-rgb),.94);
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px;
+  overflow:hidden;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+  transform: translateY(8px) scale(.985);
+  transition: transform .14s ease, opacity .14s ease;
+  opacity: .98;
+}
+.megaSettingsOverlay.open .megaSettingsPanel{ transform: translateY(0) scale(1); opacity: 1; }
+.megaPanel{ padding: 10px; }
+.megaTitle{
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(229,231,235,.92);
+  padding: 6px 8px 8px;
+}
+.megaRow{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 8px;
+  border-radius: 12px;
+  cursor:pointer;
+  text-align:left;
+}
+.megaRow:hover{ background: rgba(255,255,255,.08); }
+.megaRow:active{ background: rgba(255,255,255,.12); }
+.megaRow:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaLeft{ font-weight: 800; font-size: 13px; }
+.megaRight{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color: rgba(229,231,235,.78);
+  font-size: 13px;
+}
+.megaValue{
+  max-width: 160px;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.megaChevron{
+  opacity:.9;
+  font-size: 12px;
+  line-height: 1;
+}
+.megaFoot{ padding: 10px 8px 6px; }
+
+.megaSubTop{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding: 4px 4px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.14);
+}
+/* FIND_THIS:BUILD18_MEGA_TEXT_BUTTONS (Tankoban Build 18)
+   BUILD 7: Build 23 uses text buttons ("Back", "Open") instead of arrow glyphs.
+   This is purely cosmetic; the Mega Settings behavior is unchanged.
+*/
+.megaBackBtn{ width:auto; min-width: 56px; height: 30px; padding: 0 10px; display:flex; align-items:center; justify-content:center; }
+.megaSubTitle{
+  font-weight: 900;
+  font-size: 13px;
+  color: rgba(229,231,235,.92);
+}
+.megaSubList{
+  display:flex;
+  flex-direction:column;
+  gap: 2px;
+  padding: 0 2px 4px;
+}
+.megaOption{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 10px;
+  border-radius: 12px;
+  cursor:pointer;
+  text-align:left;
+}
+.megaOption:hover{ background: rgba(255,255,255,.08); }
+.megaOption:active{ background: rgba(255,255,255,.12); }
+
+.megaOption:disabled{
+  opacity: .55;
+  cursor: default;
+}
+.megaOption:disabled:hover{ background: transparent; }
+
+.megaSubLabel{
+  margin: 8px 10px 2px;
+  font-size: 11px;
+  opacity: .75;
+  letter-spacing: .02em;
+  pointer-events: none;
+}
+
+.megaOption:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaCheck{
+  color: rgba(var(--accent-rgb),.95);
+  font-weight: 900;
+}
+.megaOptionRight{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color: rgba(229,231,235,.78);
+  font-size: 13px;
+}
+
+/* BUILD28_ROTATE_CROP: slider rows inside Mega submenu */
+.megaControlRow{
+  margin: 8px 8px 0;
+  padding: 10px 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.megaControlTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size: 12px;
+}
+
+.megaControlValue{
+  opacity: .8;
+  font-variant-numeric: tabular-nums;
+}
+
+.megaRange{
+  width: 100%;
+}
+
+/* Submenu swap polish (display none remains; fade/slide on show only) */
+.megaMainPanel:not(.hidden){ animation: megaIn .12s ease; }
+.megaSubPanel:not(.hidden){ animation: megaIn .12s ease; }
+@keyframes megaIn{
+  from{ opacity: .75; transform: translateY(4px); }
+  to{ opacity: 1; transform: translateY(0); }
+}
+
+
+/* --- HUD hide & player body rules --- */
+
+/* HUD hide */
+body.hudHidden .playerBar,
+body.hudHidden .playerFooter,
+/* FIND_THIS:BUILD19_PREFS_HUD_HIDE (Tankoban Build 19) */
+body.hudHidden .cornerPrefsBtn{
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events:none;
+  /* Build 26: tiny hide delay reduces boundary flicker during hovery interactions */
+  transition-delay: 120ms;
+}
+
+/* Build 26: freeze HUD auto-hide during interaction states (scrub/overlays).
+   Uses the existing body.hudHidden system — this simply overrides visibility while frozen. */
+body.hudHidden.hudFreeze .playerBar,
+body.hudHidden.hudFreeze .playerFooter{
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0ms;
+  pointer-events: none;
+}
+
+
+/* Hide app header while reading */
+body.inPlayer .topbar{ display:none !important; }
+/* FIX-HUD-FRAMELESS: clear drag region in player mode — prevents stale hit-test
+   from the topbar's -webkit-app-region:drag eating mouse events in frameless windows */
+body.inPlayer{ -webkit-app-region: no-drag; }
+
+
+/* True edge-to-edge player */
+body.inPlayer{ overflow:hidden; }
+body.inPlayer main{ padding:0 !important; max-width:none !important; margin:0 !important; }
+body.inPlayer #playerView{ height:100vh; gap:0 !important; grid-template-rows: auto 1fr auto; }
+body.inPlayer .stageWrap{ border:0 !important; border-radius:0 !important; height:100%; }
+body.inPlayer #stage{ width:100vw !important; height:100% !important; }
+
+body.inPlayer .stageWrap{ min-height:0; }
+
+body.inPlayer .stageWrap{ background:#000 !important; }
+
+
+/* Player: stage always full screen, HUD overlays (does NOT shrink pages) */
+body.inPlayer #playerView{
+  position: fixed !important;
+  inset: 0 !important;
+  height: 100vh !important;
+  width: 100vw !important;
+  display: block !important;
+}
+body.inPlayer .stageWrap{
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+  min-height: 0 !important;
+}
+body.inPlayer #stage{
+  width: 100% !important;
+  height: 100% !important;
+  display:block;
+}
+body.inPlayer .clickZones{
+  position:absolute !important;
+  inset:0 !important;
+}
+body.inPlayer .manualScroller{
+  display:block;
+}
+body.inPlayer .playerBar{
+  position:absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 20 !important;
+  backdrop-filter: none;
+}
+body.inPlayer .playerFooter{
+  position:absolute !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 20 !important;
+  backdrop-filter: none;
+}
+
+/* Player-mode icon buttons (YouTube-ish) */
+body.inPlayer .iconBtn{
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0,0,0,.38);
+}
+body.inPlayer .iconBtn:hover{ background: rgba(0,0,0,.52); }
+body.inPlayer .ytPlay{ width: 38px; height: 38px; }
+
+
+/* --- Warmup bar & debug overlay --- */
+
+/* -----------------------------
+   Thumbnail warm-up bar
+------------------------------*/
+.warmupBar{
+  position: fixed;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 55;
+  background: rgba(0,0,0,0.85);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: auto;
+}
+.warmupText{
+  font-size: 12px;
+  color: rgba(255,255,255,0.90);
+}
+
+/* -----------------------------
+   Debug overlay (default-off)
+   Must never affect viewport measurements.
+------------------------------*/
+.debugOverlay{
+  position: fixed;
+  left: 10px;
+  top: 10px;
+  z-index: 999;
+  max-width: min(520px, calc(100vw - 20px));
+  background: rgba(0,0,0,0.70);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255,255,255,0.92);
+  pointer-events: none;
+  white-space: pre;
+}
+
+
+/* --- Mode menu & auto-flip countdown --- */
+
+/* Build 43B: control mode menu (YouTube-resolution style) */
+.modeMenu{
+  position:fixed;
+  z-index: 90;
+  min-width: 168px;
+  background: rgba(var(--surface-rgb),.94);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.55);
+  backdrop-filter: blur(10px);
+}
+.modeMenuItem{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  border:0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor:pointer;
+  letter-spacing: .2px;
+}
+.modeMenuItem:hover{
+  background: rgba(255,255,255,.08);
+}
+.modeMenuItem.active{
+  background: rgba(255,255,255,.14);
+}
+
+
+  /* BUILD16C_AUTOFIP_COUNTDOWN: top-left timer for Auto Flip */
+  .autoFlipCountdown{
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 60;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: .4px;
+    background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.14);
+    color: rgba(255,255,255,.92);
+    pointer-events: none;
+  }
+
+
+/* --- Goto, FX, and Loupe --- */
+
+/* BUILD 19H_LOUPE + overlays (Build 19H)
+   INTENT: Minimal, non-invasive HUD and small dialog sizing using existing overlay tokens. */
+
+.gotoCard{
+  width: min(420px, calc(100vw - 32px));
+}
+
+.fxCard{
+  width: min(520px, calc(100vw - 32px));
+}
+
+.fxRow{
+  display:flex;
+  align-items:center;
+  gap:0px;
+}
+
+.fxRange{
+  flex:1;
+}
+
+.fxVal{
+  width:54px;
+  text-align:right;
+}
+
+.fxChecks{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.fxCheck{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  user-select:none;
+}
+
+.loupeHud{
+  position:absolute;
+  right: 14px;
+  bottom: 86px; /* stays above footer scrub UI */
+  width: 220px;
+  height: 220px;
+  border-radius: 14px;
+  overflow:hidden;
+  border: 1px solid rgba(255,255,255,.22);
+  box-shadow: 0 10px 26px rgba(0,0,0,.45);
+  background: rgba(0,0,0,.55);
+  z-index: 28; /* below settings overlays, above canvas */
+  pointer-events:none; /* INTENT: must not affect click zones */
+}
+
+.loupeHud.hidden{ display:none; }
+
+#loupeCanvas{
+  width: 100%;
+  height: 100%;
+  display:block;
+}
+
+/* BUILD 20_LOUPE_ZOOM_OVERLAY (Build 20)
+   INTENT: Small, consistent modal sizing; reuse existing row styling (fxRow/fxRange). */
+.loupeCard{
+  width: min(460px, calc(100vw - 32px));
+}
+
+/* BUILD 20B_LOUPE_SIZE_APPLY (Build 20B)
+   INTENT: Size the loupe HUD via a CSS variable so JS can adjust it without touching click zones.
+   This rule is appended to override the earlier fixed 220px sizing. */
+.loupeHud{
+  width: min(var(--loupeSize, 220px), calc(100vw - 28px));
+  height: min(var(--loupeSize, 220px), calc(100vh - 140px));
+}
