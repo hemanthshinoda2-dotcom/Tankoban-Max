@@ -32,8 +32,10 @@
   // This IIFE only sets onStateChange to bridge TTS events into the reader bus.
   (function bindReaderTtsState() {
     var tts = window.booksTTS;
+    console.log('[TTS-BAR] bindReaderTtsState: tts=' + !!tts);
     if (tts) {
       tts.onStateChange = function (status) {
+        console.log('[TTS-BAR] onStateChange: ' + status);
         try { bus.emit('reader:tts-state', status); } catch (e) {}
       };
     }
@@ -566,6 +568,7 @@
     bus.on('reader:fullscreen', function () { toggleReaderFullscreen().catch(function () {}); });
     bus.on('reader:relocated', function () { onReadingAction(); }); // TASK2
     bus.on('reader:tts-state', function (status) {
+      console.log('[TTS-BAR] bus reader:tts-state → ' + status);
       if (status === 'playing') scheduleHudAutoHide();
       try {
         var bar = document.getElementById('lpTtsBar');
@@ -573,6 +576,7 @@
           var show = (status === 'playing' || status === 'paused');
           bar.classList.toggle('hidden', !show);
           bar.style.display = show ? '' : 'none';
+          console.log('[TTS-BAR] bar show=' + show);
         }
       } catch (e) {}
     });

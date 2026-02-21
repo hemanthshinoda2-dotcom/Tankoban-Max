@@ -1234,6 +1234,7 @@ function updateCard(info) {
 
   // ── Bind DOM events ─────────────────────────────────────────────────────────
   function bind() {
+    console.log('[TTS-BAR] listening_player.js bind() called');
     window.addEventListener('books-reader-opened', function () {
       if (!_open) return;
       showOverlay(true);
@@ -1261,6 +1262,7 @@ function updateCard(info) {
     if (backBtn) backBtn.addEventListener('click', closePlayer);
 
     // ── TTS bar buttons ──
+    console.log('[TTS-BAR] wiring transport buttons');
     var ppBtn = qs('lpTtsPlayPause');
     if (ppBtn) ppBtn.addEventListener('click', function () { ttsToggle(); });
 
@@ -1301,11 +1303,14 @@ function updateCard(info) {
 
     // ── Mega settings panel ──
     var settingsBtn = qs('lpTtsSettingsBtn');
+    console.log('[TTS-BAR] bind settingsBtn=' + !!settingsBtn);
     if (settingsBtn) settingsBtn.addEventListener('click', function () {
       var mega = qs('lpTtsMega');
       if (!mega) return;
       mega.classList.toggle('hidden');
+      console.log('[TTS-BAR] settings click → mega hidden=' + mega.classList.contains('hidden'));
       if (!mega.classList.contains('hidden')) {
+        console.log('[TTS-BAR] populating voices + highlights');
         populateVoices();
         populateHlControls();
         syncSpeed();

@@ -5,11 +5,16 @@ Do what I say and only what I say. Nothing more, nothing less.
 
 ## Workflow — Non-Negotiable
 
-### 1. Commit and push after EVERY change
-Every single edit, no matter how small, gets its own commit and push immediately. No batching. No "I'll commit later." Edit → commit → push. Every time.
+### 1. NEVER commit or push without live testing first
+No change is done until we actively test it together. Before ANY commit or push:
+1. Add `console.log` diagnostic lines to the changed code paths
+2. Launch the app (`unset ELECTRON_RUN_AS_NODE && npm start`)
+3. Watch the console output while the user clicks through and tests in the live app
+4. Only after the logs confirm correct behavior → commit and push
+A commit without live-tested confirmation is a broken commit. No exceptions.
 
-### 2. Launch the app and let the user verify with live logging
-After every fix (before committing), add `console.log` diagnostic lines to the changed code paths, then launch the app (`unset ELECTRON_RUN_AS_NODE && npm start`). Watch the console output while the user clicks through and tests. Only commit and push after confirming the logs show correct behavior. If something looks wrong in the logs, fix it before committing.
+### 2. Commit and push after EVERY verified change
+After live testing confirms the fix works, commit and push immediately. No batching. No "I'll commit later." Verify → commit → push. Every time.
 
 ### 3. Review your own edits for regressions
 Before committing, re-read the diff. Ask yourself: "Did I break something else?" If you changed CSS, check that you didn't make something invisible. If you changed JS, check that you didn't remove a needed event listener. Think like a code reviewer, not just a code writer.

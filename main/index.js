@@ -364,6 +364,13 @@ function createWindow(opts = {}) {
     } catch {}
   }
 
+  // DEBUG: pipe renderer [TTS-BAR] logs to main process stdout
+  w.webContents.on('console-message', (_ev, level, message, line, sourceId) => {
+    if (message && message.indexOf('[TTS-BAR]') !== -1) {
+      console.log(message);
+    }
+  });
+
   w.on('focus', () => { win = w; });
   w.on('closed', () => {
     try { windows.delete(w); } catch {}
