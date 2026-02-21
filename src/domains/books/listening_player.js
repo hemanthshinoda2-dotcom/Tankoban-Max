@@ -215,8 +215,18 @@
   }
 
   function qs(id) {
-    try { return document.getElementById(id); } catch { return null; }
+    try {
+      var overlay = document.getElementById('booksListenPlayerOverlay');
+      if (overlay && typeof overlay.querySelector === 'function') {
+        var found = overlay.querySelector('#' + String(id));
+        if (found) return found;
+      }
+      return document.getElementById(id);
+    } catch {
+      return null;
+    }
   }
+
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 

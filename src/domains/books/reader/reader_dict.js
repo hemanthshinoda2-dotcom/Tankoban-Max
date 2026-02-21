@@ -302,7 +302,10 @@
           }
         } catch (e) {}
         if (tts && txt) {
-          try { if (typeof tts.init === 'function') tts.init({ format: String((st.book && st.book.format) || 'epub').toLowerCase(), getHost: function(){ return st.host || null; }, getViewEngine: function(){ return st.engine || null; }, onNeedAdvance: function(){ var eng = st.engine || null; if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false); return eng.advanceSection(1).then(function(){ return true; }).catch(function(){ return false; }); } }).then(function(){ try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {} try { tts.playFromSelection(txt); } catch (e) {} }); } catch (e) {}
+          try {
+            try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
+            if (typeof tts.init === 'function') tts.init({ format: String((st.book && st.book.format) || 'epub').toLowerCase(), getHost: function(){ return st.host || null; }, getViewEngine: function(){ return st.engine || null; }, onNeedAdvance: function(){ var eng = st.engine || null; if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false); return eng.advanceSection(1).then(function(){ return true; }).catch(function(){ return false; }); } }).then(function(){ try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {} try { tts.playFromSelection(txt); } catch (e) {} });
+          } catch (e) {}
         }
       } catch (e) {}
       _hideSelMenu();

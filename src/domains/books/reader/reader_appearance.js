@@ -12,6 +12,12 @@
     var nextTheme = String(theme || 'light');
     if (els.readerView) els.readerView.setAttribute('data-reader-theme', nextTheme);
     if (els.host) els.host.setAttribute('data-reader-theme', nextTheme);
+    try {
+      var readingArea = (els.readerView && typeof els.readerView.querySelector === 'function')
+        ? els.readerView.querySelector('.br-reading-area')
+        : null;
+      if (readingArea) readingArea.setAttribute('data-reader-theme', nextTheme);
+    } catch (e) {}
     // LISTEN_THEME: apply same theme to Listening player overlay
     var lp = document.getElementById('booksListenPlayerOverlay');
     if (lp) lp.setAttribute('data-reader-theme', nextTheme);

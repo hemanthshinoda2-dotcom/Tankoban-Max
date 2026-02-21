@@ -514,8 +514,17 @@
       var st = RS.state;
       if (!st || !st.book) return;
 
-      // Ensure the narration engine is initialized against the active reader engine.
+      // Pause/resume active playback without re-initializing (avoids duplicate sessions).
       try {
+        var preState = (typeof tts.getState === 'function') ? (tts.getState() || 'idle') : 'idle';
+        if (preState === 'playing') { try { tts.pause(); } catch (e) {} return; }
+        if (preState === 'paused') { try { tts.resume(); } catch (e) {} return; }
+      } catch (e) {}
+
+      // Ensure the narration engine is initialized against the active reader engine.
+      // Stop any existing playback BEFORE init(), since init() can rebuild engine refs.
+      try {
+        try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
         tts.init({
           format: String((st.book && st.book.format) || 'epub').toLowerCase(),
           getHost: function () { return st.host || null; },
@@ -531,14 +540,6 @@
           try { var _v = parseFloat(localStorage.getItem('booksListen.Volume')); if (_v >= 0 && _v <= 1) tts.setVolume(_v); } catch (e) {}
           try { var _vc = localStorage.getItem('books_lp_tts_voice'); if (_vc) tts.setVoice(_vc); } catch (e) {}
           var s = (typeof tts.getState === 'function') ? (tts.getState() || 'idle') : 'idle';
-          if (s === 'playing') {
-            try { tts.pause(); } catch (e) {}
-            return;
-          }
-          if (s === 'paused') {
-            try { tts.resume(); } catch (e) {}
-            return;
-          }
           // If there is a selection, start from selection. Otherwise start from current position.
           try {
             if (typeof tts.playFromSelection === 'function') {
