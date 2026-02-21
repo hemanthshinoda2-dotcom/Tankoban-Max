@@ -704,34 +704,6 @@ function updateCard(info) {
     }
     // Color swatches
     _populateColorSwatches('lpTtsHlColors', tts, 'getHighlightColor');
-    // Word tracking checkbox
-    var wt = qs('lpTtsWordTracking');
-    if (wt) {
-      var gran = typeof tts.getHighlightGranularity === 'function' ? tts.getHighlightGranularity() : 'sentence';
-      wt.checked = (gran === 'word');
-    }
-    // Word hl row visibility
-    var wordHlRow = qs('lpWordHlRow');
-    var wordGran = typeof tts.getHighlightGranularity === 'function' ? tts.getHighlightGranularity() : 'sentence';
-    if (wordHlRow) wordHlRow.style.display = (wordGran === 'word') ? '' : 'none';
-    // Word style selector
-    var wStyleSel = qs('lpTtsWordHlStyle');
-    if (wStyleSel) {
-      var wStyles = typeof tts.getHighlightStyles === 'function' ? tts.getHighlightStyles() : [];
-      var wLabels = { highlight: 'Highlight', underline: 'Underline', squiggly: 'Squiggly', strikethrough: 'Strikethrough', enlarge: 'Enlarge' };
-      if (wStyleSel.options.length === 0) {
-        for (var wi = 0; wi < wStyles.length; wi++) {
-          var wo = document.createElement('option');
-          wo.value = wStyles[wi];
-          wo.textContent = wLabels[wStyles[wi]] || wStyles[wi];
-          wStyleSel.appendChild(wo);
-        }
-      }
-      var curWStyle = typeof tts.getWordHighlightStyle === 'function' ? tts.getWordHighlightStyle() : 'highlight';
-      wStyleSel.value = curWStyle;
-    }
-    // Word color swatches
-    _populateColorSwatches('lpTtsWordHlColors', tts, 'getWordHighlightColor');
     // Enlarge row
     var curHlStyle = typeof tts.getHighlightStyle === 'function' ? tts.getHighlightStyle() : 'highlight';
     var enlargeRow = qs('lpEnlargeRow');
@@ -1566,17 +1538,6 @@ function updateCard(info) {
       syncSpeed();
     });
 
-    // LP-FONT: card font family selector
-    var fontSel = qs('lpTtsFont');
-    if (fontSel) {
-      fontSel.value = _settings.ttsFont || 'default';
-      fontSel.addEventListener('change', function () {
-        _settings.ttsFont = fontSel.value;
-        _applyCardFont(fontSel.value);
-        _lsSet('Font', fontSel.value);
-      });
-    }
-
     // Highlight style
     var hlStyleSel = qs('lpTtsHlStyle');
     if (hlStyleSel) hlStyleSel.addEventListener('change', function () {
@@ -1602,41 +1563,6 @@ function updateCard(info) {
       populateHlControls();
     });
 
-    // Word tracking checkbox
-    var wt = qs('lpTtsWordTracking');
-    if (wt) wt.addEventListener('change', function () {
-      var tts = window.booksTTS;
-      if (!tts || typeof tts.setHighlightGranularity !== 'function') return;
-      var val = wt.checked ? 'word' : 'sentence';
-      tts.setHighlightGranularity(val);
-      _settings.ttsHlGranularity = val;
-      _lsSet('HlGran', val);
-      populateHlControls();
-    });
-
-    // Word highlight style
-    var wStyleSel = qs('lpTtsWordHlStyle');
-    if (wStyleSel) wStyleSel.addEventListener('change', function () {
-      var tts = window.booksTTS;
-      if (!tts || typeof tts.setWordHighlightStyle !== 'function') return;
-      tts.setWordHighlightStyle(wStyleSel.value);
-      _settings.ttsWordHlStyle = wStyleSel.value;
-      _lsSet('WordStyle', wStyleSel.value);
-    });
-
-    // Word highlight color swatches
-    var whlColors = qs('lpTtsWordHlColors');
-    if (whlColors) whlColors.addEventListener('click', function (ev) {
-      var btn = ev.target.closest('.ttsColorSwatch');
-      if (!btn || !btn.dataset.color) return;
-      var tts = window.booksTTS;
-      if (!tts || typeof tts.setWordHighlightColor !== 'function') return;
-      tts.setWordHighlightColor(btn.dataset.color);
-      _settings.ttsWordHlColor = btn.dataset.color;
-      _lsSet('WordColor', btn.dataset.color);
-      populateHlControls();
-    });
-
     // Enlarge scale slider
     var scaleSlider = qs('lpTtsEnlargeScale');
     if (scaleSlider) scaleSlider.addEventListener('input', function () {
@@ -1649,9 +1575,7 @@ function updateCard(info) {
       if (valEl) valEl.textContent = val.toFixed(2) + 'x';
     });
 
-    // LISTEN_THEME: card size slider — scales both card width and text size
-    var cardSizeSlider = qs('lpCardSize');
-    var cardSizeVal = qs('lpCardSizeVal');
+    // Card size: apply stored value (UI removed, defaults preserved)
     var _savedCardW = 480;
     var _cardBaseW = 480;
     var _cardBaseFontRem = 1.15;
@@ -1664,22 +1588,6 @@ function updateCard(info) {
       shell.style.setProperty('--lp-card-font', fontRem + 'rem');
     }
     _applyCardSize(_savedCardW);
-    if (cardSizeSlider) {
-      cardSizeSlider.value = _savedCardW;
-      if (cardSizeVal) cardSizeVal.textContent = _savedCardW;
-      cardSizeSlider.addEventListener('input', function () {
-        var w = parseInt(cardSizeSlider.value, 10) || 480;
-        _applyCardSize(w);
-        if (cardSizeVal) cardSizeVal.textContent = w;
-        try { localStorage.setItem('booksListenCardWidth', String(w)); } catch {}
-      });
-    }
-
-    // OPT1: Sleep timer
-    var sleepSel = qs('lpSleepTimer');
-    if (sleepSel) sleepSel.addEventListener('change', function () {
-      setSleepTimer(sleepSel.value);
-    });
 
     // Read from selection
     var fromSel = qs('lpTtsFromSel');

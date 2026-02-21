@@ -1985,12 +1985,10 @@ body.inBooksReader .br-reader {
   justify-content: center;
   border-radius: 6px;
   cursor: pointer;
-  opacity: 0.7;
-  transition: opacity 120ms, background 120ms;
+  transition: background 120ms;
 }
 #lpTtsMegaClose:hover {
-  opacity: 1;
-  background: rgba(128,128,128,0.2);
+  background: rgba(var(--br-reader-accent-rgb), 0.16);
 }
 .booksReaderTtsMegaBody {
   display: flex;
@@ -2736,44 +2734,50 @@ body.inBooksReader .br-reader {
 [data-reader-theme="sepia"] .br-sidebar-tab:hover { background: rgba(120,90,40,0.06); }
 
 
-/* BUILD_READER_TTS_HUD_LIGHT_THEME_FIX */
+/* BUILD_READER_TTS_HUD_LIGHT_THEME_FIX — all 6 light themes */
 [data-reader-theme="light"] .booksReaderTtsBar,
+[data-reader-theme="sepia"] .booksReaderTtsBar,
 [data-reader-theme="paper"] .booksReaderTtsBar,
-[data-reader-theme="sepia"] .booksReaderTtsBar {
-  background: rgba(255, 255, 255, 0.94) !important;
+[data-reader-theme="contrast3"] .booksReaderTtsBar,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar,
+[data-reader-theme="solarized"] .booksReaderTtsBar {
+  background: rgba(var(--br-reader-surface-rgb), 0.94) !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12) !important;
 }
-[data-reader-theme="sepia"] .booksReaderTtsBar {
-  background: rgba(246, 238, 221, 0.96) !important;
-  border-color: rgba(120, 98, 62, 0.18) !important;
-}
 [data-reader-theme="light"] .booksReaderTtsBar .iconBtn,
+[data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn,
 [data-reader-theme="paper"] .booksReaderTtsBar .iconBtn,
-[data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn,
+[data-reader-theme="contrast3"] .booksReaderTtsBar .iconBtn,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar .iconBtn,
+[data-reader-theme="solarized"] .booksReaderTtsBar .iconBtn,
 [data-reader-theme="light"] .booksReaderTtsBar .booksReaderTtsRate,
+[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsRate,
 [data-reader-theme="paper"] .booksReaderTtsBar .booksReaderTtsRate,
-[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsRate,
+[data-reader-theme="contrast3"] .booksReaderTtsBar .booksReaderTtsRate,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar .booksReaderTtsRate,
+[data-reader-theme="solarized"] .booksReaderTtsBar .booksReaderTtsRate,
 [data-reader-theme="light"] .booksReaderTtsBar .booksReaderTtsProgressText,
+[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsProgressText,
 [data-reader-theme="paper"] .booksReaderTtsBar .booksReaderTtsProgressText,
-[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsProgressText,
+[data-reader-theme="contrast3"] .booksReaderTtsBar .booksReaderTtsProgressText,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar .booksReaderTtsProgressText,
+[data-reader-theme="solarized"] .booksReaderTtsBar .booksReaderTtsProgressText,
 [data-reader-theme="light"] .booksReaderTtsBar .lp-vol-icon,
+[data-reader-theme="sepia"] .booksReaderTtsBar .lp-vol-icon,
 [data-reader-theme="paper"] .booksReaderTtsBar .lp-vol-icon,
-[data-reader-theme="sepia"] .booksReaderTtsBar .lp-vol-icon {
-  color: #1f2630 !important;
-}
-[data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn,
-[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsRate,
-[data-reader-theme="sepia"] .booksReaderTtsBar .booksReaderTtsProgressText,
-[data-reader-theme="sepia"] .booksReaderTtsBar .lp-vol-icon {
-  color: #3e3425 !important;
+[data-reader-theme="contrast3"] .booksReaderTtsBar .lp-vol-icon,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar .lp-vol-icon,
+[data-reader-theme="solarized"] .booksReaderTtsBar .lp-vol-icon {
+  color: var(--br-reader-text) !important;
 }
 [data-reader-theme="light"] .booksReaderTtsBar .iconBtn:hover,
-[data-reader-theme="paper"] .booksReaderTtsBar .iconBtn:hover {
-  background: rgba(31, 38, 48, 0.08) !important;
-}
-[data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn:hover {
-  background: rgba(62, 52, 37, 0.10) !important;
+[data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn:hover,
+[data-reader-theme="paper"] .booksReaderTtsBar .iconBtn:hover,
+[data-reader-theme="contrast3"] .booksReaderTtsBar .iconBtn:hover,
+[data-reader-theme="gruvbox"] .booksReaderTtsBar .iconBtn:hover,
+[data-reader-theme="solarized"] .booksReaderTtsBar .iconBtn:hover {
+  background: rgba(0, 0, 0, 0.08) !important;
 }
 
 /* PROMPT2: Back to TTS Location floating chip (readest-style top-center) */
