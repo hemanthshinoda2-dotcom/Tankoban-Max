@@ -402,6 +402,20 @@ try {
   fail(`Renderer load order: verifier crashed: ${e.message}`);
 }
 
+  // ===== IPC sync validation =====
+  try {
+    const { check } = require('./ipc_sync_check');
+    const res = check({ appRoot: ROOT });
+    if (!res.ok) {
+      fail('IPC sync: undefined channel/event references detected');
+      for (const e of res.errors) console.error(`  IPC SYNC: ${e}`);
+    } else {
+      ok(`IPC sync: all channels and events consistent (${res.warnings.length} warnings)`);
+    }
+  } catch (e) {
+    fail(`IPC sync: checker crashed: ${e.message}`);
+  }
+
   // ===== Done =====
   if (process.exitCode) {
     console.error('Smoke check failed.');

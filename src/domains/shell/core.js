@@ -21,9 +21,27 @@ Hot search tokens:
 - EDIT_ZONE:ZIP_READER
 - function refreshLibrary
 - function scheduleRenderLibrary
+
+SECTION INDEX (search: ══════ SECTION:)
+  External Open Handlers
+  DOM Refs
+  Toast & Context Menu
+  Image Metrics & Scaling
+  Global Constants & Mode Defs
+  Control Mode & UI Sync
+  Control Mode Setters
+  Mega Settings Panel
+  Reader Settings Defaults & Persistence
+  Reader Cache & Derived State
+  Library Rendering & Thumbnails
+  Series Context Menu
+  Library Refresh & Bootstrap
 */
 
   const $ = (sel) => document.querySelector(sel);
+
+
+// ══════ SECTION: External Open Handlers ══════
 
   // BUILD26_OPENWITH_DND (Build 26)
   // INTENT: Allow OS "Open with Tankoban" + drag/drop open without redesigning the reader/library.
@@ -116,6 +134,9 @@ Hot search tokens:
     e.stopPropagation();
     enqueueExternalOpen([f.path], 'drop');
   });
+
+
+// ══════ SECTION: DOM Refs ══════
 
   // EDIT_ZONE:LIBRARY_SHELL
   // Build 1 — Library shell + density foundation (YAC-style). Keep library behavior identical.
@@ -494,6 +515,9 @@ scheduleToastBottomOffsetSync();
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
+
+// ══════ SECTION: Toast & Context Menu ══════
+
   // -----------------------------
   // Build 45A: Reusable Library context menu
   // -----------------------------
@@ -582,6 +606,9 @@ scheduleToastBottomOffsetSync();
     if (el.contextMenu && el.contextMenu.contains(e.target)) return;
     hideContextMenu();
   }, true);
+
+
+// ══════ SECTION: Image Metrics & Scaling ══════
 
   // Build 29: Weeb Central sizing parity (no-upscale + centered).
   // Canvas dimensions are in device pixels; ImageBitmap dimensions are source pixels.
@@ -956,6 +983,9 @@ scheduleToastBottomOffsetSync();
     const lvl = normalizeSpeedPresetId(id);
     setScrollSpeedLevel(lvl, { toast: true });
   }
+
+// ══════ SECTION: Global Constants & Mode Defs ══════
+
   // FIND_THIS:HOTSPOT_MODE_DEFS (Tankoban Build 2)
 
   // Build 35/43B: unified control mode UI + behavior (Manual / Auto)
@@ -1067,6 +1097,9 @@ scheduleToastBottomOffsetSync();
     }
   }
 
+
+// ══════ SECTION: Control Mode & UI Sync ══════
+
   function syncControlModeUi() {
     const mode = getControlMode();
     const label = getControlModeLabel(mode);
@@ -1159,6 +1192,9 @@ scheduleToastBottomOffsetSync();
     syncTwoPageScrollRowGapUi();
 
   }
+
+// ══════ SECTION: Control Mode Setters ══════
+
 
   // FIND_THIS:HOTSPOT_SET_CONTROLMODE (Tankoban Build 2)
   function setControlMode(nextMode, opts = {}) {
@@ -1700,6 +1736,9 @@ const modeTok = ++appState.tokens.mode;
   }
 
 
+
+// ══════ SECTION: Mega Settings Panel ══════
+
   function syncSettingsUi() {
     // Portrait width chips
     document.querySelectorAll('.chip[data-pw]').forEach(btn => {
@@ -1781,6 +1820,9 @@ async function toggleScrollMode() {
   playerToast('Infinite Scroll');
   scheduleProgressSave();
 }
+
+
+// ══════ SECTION: Reader Settings Defaults & Persistence ══════
 
   const DEFAULTS = {
     portraitWidthPct: 100,
@@ -2040,6 +2082,9 @@ async function clearSeriesSettings(seriesId) {
       folderFocusRoot: null,
     },
   };
+
+
+// ══════ SECTION: Reader Cache & Derived State ══════
 
   // Fast lookup (used by thumbnail lazy-loader and continue reading)
   let bookById = new Map();
@@ -2460,6 +2505,9 @@ function setReaderMode(next) {
   }
 
 
+// ══════ SECTION: Library Rendering & Thumbnails ══════
+
+
   // -----------------------------
   // Library (series + continue)
   // -----------------------------
@@ -2545,6 +2593,9 @@ function setReaderMode(next) {
     if (eln === 'input' || eln === 'textarea' || eln === 'select') return true;
     return !!t.isContentEditable;
   }
+
+// ══════ SECTION: Series Context Menu ══════
+
 
   // Shared menu builder: use from sidebar rows and grid cards
   function openSeriesContextMenu(mouseEvent, series, rootHintPathOrNull) {
@@ -2665,6 +2716,9 @@ if (!window.__tankoInitialBootStarted) {
 
 
 // Phase 7: Single renderer state namespace (read-only references; no behavior impact)
+
+// ══════ SECTION: Library Refresh & Bootstrap ══════
+
 try {
   window.Tanko = window.Tanko || {};
   window.Tanko.state = window.Tanko.state || {};

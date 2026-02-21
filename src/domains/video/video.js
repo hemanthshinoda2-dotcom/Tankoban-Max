@@ -14,6 +14,29 @@ COMMON ANCHORS
 - AI_ANCHOR: Progress save/resume lifecycle (poll + final save on exit)
 - AI_ANCHOR: Audio/subtitle preference persistence + application
 - AI_ANCHOR: Play/pause center flash and HUD overlays
+
+SECTION INDEX (search: ══════ SECTION:)
+  Imports & DOM Refs
+  Constants & State
+  Progress & Caching Helpers
+  Utility Helpers
+  Episode Metadata & Hydration
+  Show Poster Operations
+  Context Menu & Panels
+  Tracks & Delay Management
+  Player State & Settings
+  Video Mode Switching
+  Library Home View
+  Show View Rendering
+  Progress Summary & Caching
+  Player Launch & Playback
+  Show & Episode Card Creation
+  Player Instance Management
+  Playback Control Logic
+  Volume Management
+  Player Input Bindings
+  Keyboard Input Handlers
+  Global Search & Index
 */
 
 /*
@@ -28,6 +51,9 @@ videoProgress IPC calls
 
 // Tankoban Plus Build 3.3 — Video library navigation (show grid + show view) + existing player adapter
 // INTENT: Keep comic reader untouched; improve video playback feel and introduce a player adapter layer for mpv.
+
+
+// ══════ SECTION: Imports & DOM Refs ══════
 
 (function(){
   // AI_SPLIT: helpers extracted to ./video_utils.js (loaded before this file via index.html)
@@ -200,6 +226,9 @@ videoProgress IPC calls
     videoLibTipsClose: qs('videoLibTipsClose'),
   };
 
+// ══════ SECTION: Constants & State ══════
+
+
   let __modeButtonsBound = false;
   function bindModeButtons(){
     if (__modeButtonsBound) return;
@@ -369,6 +398,9 @@ videoProgress IPC calls
 
   };
 
+// ══════ SECTION: Progress & Caching Helpers ══════
+
+
   // BUILD 104c: Alias-aware progress lookup (rename/move resilience).
   // Progress keys are episode IDs; when a file is renamed/moved, its ID changes.
   // Episodes may include aliasIds[] pointing to prior IDs.
@@ -529,6 +561,9 @@ videoProgress IPC calls
     refreshMountedPosters(sid);
   }
 
+// ══════ SECTION: Utility Helpers ══════
+
+
 
   async function getShowPosterUrl(showId) {
     const sid = String(showId || '');
@@ -672,6 +707,9 @@ try {
 
   }
 
+
+
+// ══════ SECTION: Episode Metadata & Hydration ══════
 
 
 // Build 87: Chapter markers on the timeline with tooltips and click-to-seek.
@@ -1049,6 +1087,9 @@ async function refreshChaptersFromPlayer(){
     toast(text, timeoutMs);
   }
 
+// ══════ SECTION: Show Poster Operations ══════
+
+
   // Build 21: custom show posters (file picker + clipboard paste)
   async function fileToJpegDataUrl(file) {
     try {
@@ -1351,6 +1392,9 @@ saveNow(true); } catch {}
     document.body.classList.remove('mpvEngine');
         document.body.classList.remove('mpvDetached');
   }
+
+// ══════ SECTION: Context Menu & Panels ══════
+
 
   async function retryLastMpvFailure(){
     if (state._retrying) return;
@@ -1758,6 +1802,9 @@ let cachedCropMode = 'none';
 
 
   function fmtDelay(sec){
+
+// ══════ SECTION: Tracks & Delay Management ══════
+
     const v = Number(sec);
     const n = Number.isFinite(v) ? v : 0;
     const s = Math.round(n * 100) / 100;
@@ -2178,6 +2225,9 @@ function closeTracksPanel(){
     setDiagnosticsVisible(isHidden);
   }
 
+
+// ══════ SECTION: Player State & Settings ══════
+
   // Tankoban Plus Build 5.4B: apply preferred track languages when a new file is loaded (mpv only)
   async function applyPreferredTracksForVideo(videoId){
     if (!state.player) return;
@@ -2485,6 +2535,9 @@ function closeTracksPanel(){
 
   // Build 60: Shorter alias for single-click toggle
   const toggleHud = toggleHudVisibility;
+
+// ══════ SECTION: Video Mode Switching ══════
+
 
   function pctForVideoId(id) {
     const p = getProgressForVideoId(id);
@@ -2925,6 +2978,9 @@ function saveSetting(key, value){
     persistVideoUiState();
   }
 
+
+
+// ══════ SECTION: Library Home View ══════
 
 
 async function ensureShowEpisodesLoaded(showId){
@@ -3537,6 +3593,9 @@ function getContinueVideos() {
     out.sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     return out;
   }
+
+
+// ══════ SECTION: Show View Rendering ══════
 
   // BUILD105: Videos — Continue Watching tile size must match the Shows grid.
   // The shelf previously capped posters at 240px tall, which made Continue Watching look tiny
@@ -4174,6 +4233,9 @@ function getContinueVideos() {
     return rep && rep.thumbPath ? thumbUrl(rep.thumbPath) : EMPTY_IMG;
 
 
+
+// ══════ SECTION: Progress Summary & Caching ══════
+
   // ============================================================
   // Build 26: Auto-generate show posters for folders with no custom poster.
   // Source: a scanned episode thumbnail inside the show (seasons supported via episodes list).
@@ -4707,6 +4769,9 @@ function getEpisodeById(epId){
     if (res && res.state) applyVideoSnapshot(res.state);
     toast('Show removed');
   }
+
+
+// ══════ SECTION: Player Launch & Playback ══════
 
   function openShowContextMenu(e, show){
     const sid = show && show.id ? String(show.id) : '';
@@ -5289,6 +5354,9 @@ function getEpisodeById(epId){
     updateEpisodePreview(ep);
     persistVideoUiState();
   }
+
+// ══════ SECTION: Show & Episode Card Creation ══════
+
   function makeEpisodeRow(ep, idx){
     const row = document.createElement('div');
     row.className = 'volTrow' + ((idx % 2) ? ' alt' : '');
@@ -5921,6 +5989,9 @@ function getEpisodeById(epId){
     // Keep scope to the current (filtered) folder view for performance.
     scheduleEpisodeMetaHydration(files.slice(0, 120));
   }
+
+// ══════ SECTION: Player Instance Management ══════
+
 
   function toFileUrl(fp) {
     const raw = String(fp || '');
@@ -6605,6 +6676,9 @@ function vpShouldMarkFinishedNow(pos, dur, watchedSecApprox, maxPositionSec, end
   return (w / dur) >= 0.80;
 }
 
+// ══════ SECTION: Playback Control Logic ══════
+
+
 function startProgressPoll(){
   if (state._progressPollTimer) return;
   const interval = Number(state._progressPollIntervalMs);
@@ -7276,6 +7350,9 @@ function adjustVolume(delta){
   }
 
 
+
+// ══════ SECTION: Volume Management ══════
+
   function bindPlayerUi(){
     if (!state.player) return;
 
@@ -7916,6 +7993,9 @@ function adjustVolume(delta){
         scheduleSubmenuClose();
       }
     }, true);
+
+
+// ══════ SECTION: Player Input Bindings ══════
 
     // Build 57: PotPlayer-style reveal zone overlay behavior
     // Concept: bottom edge of video container summons controls; mouse over controls keeps them visible
@@ -8577,6 +8657,9 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
   }
 
   
+
+// ══════ SECTION: Keyboard Input Handlers ══════
+
 function bindKeyboard(){
     const parseTimeToSeconds = (raw) => {
       const s = String(raw || '').trim();
@@ -9321,6 +9404,9 @@ function bindKeyboard(){
     bindKeyboard();
   }
 
+
+
+// ══════ SECTION: Global Search & Index ══════
 
 
 

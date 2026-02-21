@@ -1,4 +1,26 @@
 // Tankoban Max - Books library renderer
+/*
+SECTION INDEX (search: ══════ SECTION:)
+  DOM Refs
+  State & Cache
+  Utility Helpers
+  Display Names & Progress
+  Show & Series Lookup
+  UI State Persistence
+  Derived Data Rebuilding
+  Selection & Folder Actions
+  Context Menus
+  Continue Reading UI
+  Home View & Sidebar
+  Book Row Rendering
+  Folder Continue Rendering
+  Show View Rendering
+  View Routing
+  Init, Bind & Event Hooks
+  Downloads UI
+  Sources & OPDS UI
+  Initialization & Events
+*/
 (function booksLibraryDomain() {
   'use strict';
 
@@ -63,6 +85,9 @@
     booksDownloadsHeader: qs('booksDownloadsHeader'),
   };
 
+// ══════ SECTION: DOM Refs ══════
+
+
   const state = {
     bound: false,
     initialized: false,
@@ -125,6 +150,9 @@
     globalSearchItems: [],
   };
 
+// ══════ SECTION: State & Cache ══════
+
+
   const thumbMem = new Map();
   const thumbInFlight = new Map();
   const thumbBookRef = new WeakMap();
@@ -177,6 +205,9 @@
   const parentRel = (rel) => { const x = normalizeRel(rel); const i = x.lastIndexOf('/'); return i < 0 ? '' : x.slice(0, i); };
   const relBase = (rel) => { const x = normalizeRel(rel); if (!x) return ''; const i = x.lastIndexOf('/'); return i < 0 ? x : x.slice(i + 1); };
   const pathBase = (p) => { const x = String(p || '').replace(/\\/g, '/').replace(/\/+$/, ''); if (!x) return ''; const i = x.lastIndexOf('/'); return i < 0 ? x : x.slice(i + 1); };
+
+// ══════ SECTION: Utility Helpers ══════
+
 
   const clamp = (n, a, b) => {
     const v = Number(n);
@@ -307,6 +338,9 @@
     }
     renderAll();
   }
+
+
+// ══════ SECTION: Display Names & Progress ══════
 
   function placeholderThumb(label, a, b) {
     const key = `${label}|${a}|${b}`;
@@ -581,6 +615,9 @@ function getBookProgress(bookId) {
     return null;
   }
 
+
+// ══════ SECTION: Show & Series Lookup ══════
+
   function getShowById(showId) {
     return state.derived.showsById.get(String(showId || '')) || null;
   }
@@ -668,6 +705,9 @@ function getBookProgress(bookId) {
     toast('Marked as in-progress');
   }
 
+
+// ══════ SECTION: UI State Persistence ══════
+
   function scheduleSaveUi() {
     if (state.uiSaveTimer) clearTimeout(state.uiSaveTimer);
     state.uiSaveTimer = setTimeout(() => {
@@ -737,6 +777,9 @@ function getBookProgress(bookId) {
     }
     rebuildShowProgressSummary();
   }
+
+// ══════ SECTION: Derived Data Rebuilding ══════
+
   function rebuildDerived() {
     const snap = state.snap || {};
     const books = Array.isArray(snap.books) ? snap.books.slice() : [];
@@ -1105,6 +1148,9 @@ function getBookProgress(bookId) {
     toast('Root folder removed');
   }
 
+// ══════ SECTION: Selection & Folder Actions ══════
+
+
   async function removeSeriesFolderAction(seriesPath, showId) {
     if (!seriesPath) return;
     var ok = window.confirm('Remove this series from Books library?\nFiles on disk are not deleted.\nUse "Restore hidden" in the sidebar to bring it back.');
@@ -1309,6 +1355,9 @@ function getBookProgress(bookId) {
     else renderHome();
   }
 
+
+// ══════ SECTION: Context Menus ══════
+
   function openContinueTileContextMenu(e, item) {
     e.preventDefault();
     e.stopPropagation();
@@ -1355,6 +1404,9 @@ function getBookProgress(bookId) {
       ],
     });
   }
+
+
+// ══════ SECTION: Continue Reading UI ══════
 
   function makeContinueTile(item) {
     const show = item && item.show;
@@ -1591,6 +1643,9 @@ function getBookProgress(bookId) {
     if (state.ui.selectedRootId) return String(state.ui.selectedRootId) === rid;
     return true;
   }
+
+
+// ══════ SECTION: Home View & Sidebar ══════
 
   function renderSidebar() {
     if (!el.foldersList) return;
@@ -1940,6 +1995,9 @@ function getBookProgress(bookId) {
     return row;
   }
 
+
+// ══════ SECTION: Book Row Rendering ══════
+
   function makeBookRow(book, altIdx, displayNum) {
     const row = document.createElement('div');
     row.className = `volTrow${(altIdx % 2) ? ' alt' : ''}`;
@@ -2054,6 +2112,9 @@ function getBookProgress(bookId) {
     return row;
   }
 
+
+// ══════ SECTION: Folder Continue Rendering ══════
+
   // R10: folder-level continue helper
   function renderFolderContinue() {
     const container = qs('booksFolderContinue');
@@ -2100,6 +2161,9 @@ function getBookProgress(bookId) {
     container.querySelector('.booksFolderContinueBtn')?.addEventListener('click', (ev) => { ev.stopPropagation(); openBook(bestRef).catch(() => {}); });
     container.addEventListener('click', () => openBook(bestRef).catch(() => {}));
   }
+
+
+// ══════ SECTION: Show View Rendering ══════
 
   function renderShowView() {
     const show = getShowById(state.ui.selectedShowId);
@@ -2216,6 +2280,9 @@ function getBookProgress(bookId) {
       finishShowView();
     }
   }
+
+
+// ══════ SECTION: View Routing ══════
 
   function renderViews() {
     if (!el.homeView || !el.showView) return;
@@ -2774,6 +2841,9 @@ function getBookProgress(bookId) {
     });
   }
 
+
+// ══════ SECTION: Init, Bind & Event Hooks ══════
+
   async function init() {
     if (state.initialized) return;
     state.initialized = true;
@@ -2939,6 +3009,9 @@ function getBookProgress(bookId) {
   // ---- Downloads in Books sidebar ----
   var _booksDls = [];
   var _booksDlTimer = null;
+
+
+// ══════ SECTION: Downloads UI ══════
 
   function _bkEsc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3180,6 +3253,9 @@ function getBookProgress(bookId) {
       addFeedBtnOverlay: document.getElementById('booksOpdsAddFeedTop'),
     };
   }
+
+
+// ══════ SECTION: Sources & OPDS UI ══════
 
   function ensureBooksOpdsUi() {
     if (_booksOpdsUi.inited) return _opdsGetUi();
@@ -4030,6 +4106,9 @@ function getBookProgress(bookId) {
     }
   } catch (e) {}
 
+
+
+// ══════ SECTION: Initialization & Events ══════
 
   init().catch((err) => {
     try { console.error('[books] init failed', err); } catch {}

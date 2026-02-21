@@ -17,6 +17,7 @@
         "doctor": "node tools/doctor.js",
         "map": "node tools/repo_map.js",
         "smoke": "node tools/smoke_check.js",
+        "ipc:check": "node tools/ipc_sync_check.js",
         "phase8:verify": "node tools/books_phase8_verify.js",
         "build:player": "cd player_qt && build_player.bat",
         "validate:player": "node tools/validate_player_artifacts.js",
