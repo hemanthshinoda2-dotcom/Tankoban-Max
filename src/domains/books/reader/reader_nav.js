@@ -118,9 +118,16 @@
         ? String(detailMaybe.pageItem.label)
         : (locator && locator.pageLabel != null ? String(locator.pageLabel) : '');
 
+      // Page indicator: use real layout page count (adjusts with font/spacing)
+      var sectionPages = (state.engine && typeof state.engine.getSectionPageInfo === 'function')
+        ? state.engine.getSectionPageInfo() : null;
+
       var leftText = chapterLabel;
-      if (pageLabel) {
-        // If it's already like "12/340" keep; otherwise prefix with "p." for clarity.
+      if (sectionPages && sectionPages.total > 0) {
+        var pageTag = sectionPages.current + '/' + sectionPages.total;
+        leftText = chapterLabel ? (chapterLabel + '  \u00b7  ' + pageTag) : pageTag;
+      } else if (pageLabel) {
+        // Fallback: embedded page label from EPUB metadata
         var looksLikeFraction = /\d+\s*\/\s*\d+/.test(pageLabel);
         leftText = chapterLabel ? (chapterLabel + '  ·  ' + (looksLikeFraction ? pageLabel : ('p.' + pageLabel))) : (looksLikeFraction ? pageLabel : ('p.' + pageLabel));
       }
@@ -149,6 +156,17 @@
         if (chapterFrac > prev) state.chapterReadState[secIdx] = chapterFrac;
         bus.emit('chapter:progress', secIdx, chapterFrac, secTotal);
       }
+    }
+
+    // Debounced auto-save on every relocate (catches TTS advances, scroll, etc.)
+    if (state.relocateSaveTimer) { clearTimeout(state.relocateSaveTimer); state.relocateSaveTimer = null; }
+    if (!state.suspendProgressSave) {
+      state.relocateSaveTimer = setTimeout(function () {
+        state.relocateSaveTimer = null;
+        if (state.open && !state.suspendProgressSave) {
+          try { RS.saveProgress(); } catch (e) {}
+        }
+      }, 2000);
     }
 
   }

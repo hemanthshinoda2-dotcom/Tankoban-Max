@@ -1255,6 +1255,20 @@
       };
     }
 
+    // Per-section page info (layout-dependent — changes with font size / line gap)
+    function getSectionPageInfo() {
+      if (!state.view || !state.view.renderer) return null;
+      const r = state.view.renderer;
+      if (r.scrolled) return null; // scroll mode has no discrete pages
+      const totalSlots = r.pages;
+      const currentSlot = r.page;
+      if (typeof totalSlots !== 'number' || typeof currentSlot !== 'number') return null;
+      if (totalSlots < 3) return null; // need at least 1 content page + 2 boundary slots
+      const contentPages = totalSlots - 2;
+      const currentPage = Math.max(1, Math.min(currentSlot, contentPages));
+      return { current: currentPage, total: contentPages };
+    }
+
     // BUILD_CHAP_TRANS: pause-at-boundary and advance APIs
     function setPauseBoundary(enabled) {
       if (!state.view || !state.view.renderer) return;
@@ -1294,6 +1308,7 @@
       setFitMode,
       setZoom,
       getPageHint,
+      getSectionPageInfo,
       setFlowMode,       // WAVE1
       setColumnMode,     // WAVE2
       onRelocateEvent,   // WAVE1

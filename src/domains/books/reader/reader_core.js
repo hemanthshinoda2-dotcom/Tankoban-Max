@@ -808,6 +808,22 @@
     els.minBtn && els.minBtn.addEventListener('click', function () { try { Tanko.api.window.minimize(); } catch (e) {} });
     els.closeBtn && els.closeBtn.addEventListener('click', function () { try { Tanko.api.window.close(); } catch (e) {} });
 
+    // Safety-net progress saves: catch window close, app quit, tab switch
+    window.addEventListener('beforeunload', function () {
+      var state = RS.state;
+      if (state.open && !state.suspendProgressSave) {
+        try { RS.saveProgress(); } catch (e) {}
+      }
+    });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        var state = RS.state;
+        if (state.open && !state.suspendProgressSave) {
+          try { RS.saveProgress(); } catch (e) {}
+        }
+      }
+    });
+
     // Error banner actions
     els.errorRetry && els.errorRetry.addEventListener('click', function () {
       var state = RS.state;
