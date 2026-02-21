@@ -80,6 +80,7 @@
           './domains/video/build14_state.js',
           './domains/video/video.js',
         ]);
+        await loadScriptOnce('./domains/video/video_search.js');
         window.__tankoVideoModulesLoaded = true;
 
         const elapsed = Math.round(perf.now() - activationStart);
