@@ -2800,3 +2800,201 @@ body.inBooksReader .br-reader {
   visibility: visible;
   pointer-events: auto;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Legacy stubs migrated from styles.css (Session 7)
+   ══════════════════════════════════════════════════════════ */
+
+/* Foliate view sizing */
+.booksReaderHost .booksFoliateView,
+.booksReaderHost foliate-view {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+}
+
+/* Focus-visible outlines for book reader elements */
+.booksReaderView .iconBtn:focus-visible,
+.booksReaderView select:focus-visible,
+.booksReaderView input:focus-visible,
+.booksReaderTtsBar .iconBtn:focus-visible,
+.booksReaderErrorBtn:focus-visible,
+.booksReaderDictCloseBtn:focus-visible {
+  outline: 2px solid rgba(100, 160, 255, 0.7);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+
+/* Reader host theme backgrounds */
+.booksReaderHost[data-reader-theme="light"] {
+  background: #ffffff;
+  color: #111111;
+}
+
+.booksReaderHost[data-reader-theme="sepia"] {
+  background: #f4ecdc;
+  color: #4d3d2c;
+}
+
+.booksReaderHost[data-reader-theme="dark"] {
+  background: #101216;
+  color: #e4e8ef;
+}
+
+/* Open error card */
+.booksReaderOpenError {
+  margin: 18px;
+  border: 1px solid var(--lib-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(var(--surface-rgb), 0.42);
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Plain-text document layout */
+.booksReaderTextDoc {
+  max-width: 960px;
+  margin: 0 auto;
+}
+.booksReaderTextDoc p {
+  margin: 0 0 0.9em;
+}
+
+/* EPUB stage */
+.booksReaderEpubStage {
+  width: 100%;
+  height: 100%;
+}
+
+/* PDF reader */
+.booksReaderPdfWrap {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 10px;
+  padding: 10px;
+}
+.booksReaderPdfStatus {
+  font-size: 11px;
+  color: var(--muted);
+}
+.booksReaderPdfCanvas {
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.3);
+  background: #ffffff;
+}
+
+/* Search hit count label */
+.booksReaderSearchCount {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 32px;
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+}
+.booksSearchHit {
+  background: #f9de64;
+  color: #111;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.booksSearchHitActive {
+  background: #7bc6ff;
+  color: #091018;
+}
+
+/* Hidden Aa panel stub (compatibility only) */
+.booksReaderAaPanel { display: none; }
+
+/* Dictionary definition list */
+.booksReaderDictBody .dictDef {
+  margin-bottom: 6px;
+}
+
+/* TTS play button active state */
+#booksReaderPlayBtn.ttsActive {
+  color: #5ba3ff;
+}
+
+@media (max-width: 980px) {
+  .booksReaderTtsBar {
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    transform: none;
+  }
+}
+
+/* TTS mini bar detail styles */
+.booksTtsMiniBtn { font-size: 12px; min-width: 24px; }
+.booksTtsMiniSnippet {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+.booksTtsMiniSleep {
+  font-size: 10px;
+  min-width: 32px;
+  text-align: center;
+  color: var(--muted);
+}
+.booksTtsMiniSleep:not(:empty) { color: #e8a838; }
+
+/* Scrub bubble visibility (for books scrub bar) */
+.scrubBubble.visible {
+  opacity: 1 !important;
+  transform: translateY(-4px) !important;
+}
+
+/* Link button utility */
+.linkBtn {
+  background: none;
+  border: none;
+  color: #4a90d9;
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+}
+
+/* Books folder-level continue helper */
+.booksFolderContinue { padding: 6px 12px; }
+.booksFolderContinue.hidden { display: none !important; }
+.booksFolderContinueInner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; background: var(--panel2); border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius); cursor: pointer; font-size: var(--lib-font);
+}
+.booksFolderContinueInner:hover { background: rgba(255,255,255,.04); }
+.booksFolderContinueLabel { color: var(--muted); white-space: nowrap; }
+.booksFolderContinueTitle { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.booksFolderContinueBar { width: 60px; height: 3px; background: rgba(255,255,255,.1); border-radius: 2px; flex-shrink: 0; }
+.booksFolderContinueFill { height: 100%; background: var(--accent); border-radius: 2px; }
+.booksFolderContinueHint { color: var(--muted); font-size: 10px; min-width: 28px; text-align: right; }
+.booksFolderContinueBtn { font-size: 11px; }
+
+/* Position history buttons */
+.booksHistBtn { font-size: 10px; opacity: 0.6; padding: 2px 4px; min-width: 20px; }
+.booksHistBtn:not(:disabled):hover { opacity: 1; }
+.booksHistBtn:disabled { opacity: 0.25; cursor: default; }
+
+/* Chapter marks override for book reader scrubber */
+#booksReaderScrub .scrubChapterMark { width: 1px; background: rgba(255,255,255,0.3); }
+#booksReaderScrub .scrubChapterMark:hover { background: rgba(255,255,255,0.6); }
+
+/* Annotation item swatch (legacy class name) */
+.booksAnnotItemSwatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 4px; vertical-align: middle;
+}
+
+/* Annotation item meta */
+.booksAnnotItemMeta { font-size: 10px; color: var(--muted,#888); }
