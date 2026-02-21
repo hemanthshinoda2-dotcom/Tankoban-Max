@@ -388,6 +388,7 @@
 
   function _applyTtsSetting(fnName, value) {
     var tts = window.booksTTS;
+    console.log('[TTS-BAR] _applyTtsSetting: fn=' + fnName + ', value=' + value + ', tts=' + !!tts + ', hasFn=' + !!(tts && tts[fnName]));
     if (!tts || !tts[fnName]) return;
     try {
       var ret = tts[fnName](value);
@@ -629,6 +630,7 @@ function updateCard(info) {
     if (!tts || typeof tts.getVoices !== 'function') return;
     var voices = [];
     try { voices = tts.getVoices(); } catch {}
+    console.log('[TTS-BAR] populateVoices: total=' + voices.length + ', cached=' + _voiceCacheCount);
     // FIX-TTS-B6 #20: Skip rebuild if voice count unchanged (voices don't change mid-session)
     if (_voiceCacheCount === voices.length && sel.options.length > 0) {
       if (_settings.ttsVoice) sel.value = _settings.ttsVoice;
@@ -1501,21 +1503,36 @@ function updateCard(info) {
       _refreshTtsBarAutoHide(true);
     });
     var megaClose = qs('lpTtsMegaClose');
-    if (megaClose) megaClose.addEventListener('click', function () {
+    if (megaClose) megaClose.addEventListener('click', function (e) {
+      e.stopPropagation();
       var mega = qs('lpTtsMega');
       if (mega) mega.classList.add('hidden');
+      _refreshTtsBarAutoHide(false);
+    });
+    // Click outside mega panel to close it
+    document.addEventListener('mousedown', function (e) {
+      var mega = qs('lpTtsMega');
+      if (!mega || mega.classList.contains('hidden')) return;
+      // Don't close if clicking inside the mega panel or the settings button
+      if (mega.contains(e.target)) return;
+      var sBtn = qs('lpTtsSettingsBtn');
+      if (sBtn && sBtn.contains(e.target)) return;
+      mega.classList.add('hidden');
       _refreshTtsBarAutoHide(false);
     });
 
     // Voice picker
     var voiceSel = qs('lpTtsVoice');
+    console.log('[TTS-BAR] voiceSel element:', voiceSel ? 'found' : 'NULL');
     if (voiceSel) voiceSel.addEventListener('change', function () {
       var tts = window.booksTTS;
+      console.log('[TTS-BAR] voice change fired, tts=' + !!tts + ', value=' + voiceSel.value);
       if (!tts) return;
       var voiceId = voiceSel.value;
       _applyTtsSetting('setVoice', voiceId);
       _settings.ttsVoice = voiceId;
       _lsSet('Voice', voiceId);
+      console.log('[TTS-BAR] voice set to: ' + voiceId);
     });
 
     // Voice preview

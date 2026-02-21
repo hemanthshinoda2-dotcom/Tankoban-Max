@@ -351,15 +351,10 @@
       const s = (settings && typeof settings === 'object') ? settings : {};
       // Font size applied directly on body — NOT via --USER__fontSize which triggers
       // ReadiumCSS zoom on body and breaks foliate-js paginator column calculations.
-      // PATCH8: In *scrolled* flow, we can safely use ReadiumCSS user font size var as well,
-      // and apply to html+body to beat aggressive publisher CSS.
       const fontSize = clamp(Number(s.fontSize || 100), 75, 250);
-      const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
       const userOverrides = fontSize !== 100
-        ? (isScrolled
-          ? (':root{--USER__fontSize:' + fontSize + '% !important;}\nhtml,body{font-size:' + fontSize + '% !important;}\nhtml{scroll-behavior:auto !important;scroll-snap-type:none !important;}\nbody{scroll-behavior:auto !important;}')
-          : ('body { font-size: ' + fontSize + '% !important; }'))
-        : (isScrolled ? ':root{--USER__fontSize:100% !important;}' : '');
+        ? ('body { font-size: ' + fontSize + '% !important; }')
+        : '';
       // BUILD_JUSTIFY: prevent last-line stretch when text-align is justify
       const justifyFix = (s.textAlign === 'justify')
         ? '\np::after{content:"";display:inline-block;width:100%;visibility:hidden;}'
@@ -540,20 +535,6 @@
 
       if (state.format === 'epub' || state.format === 'mobi' || state.format === 'fb2') {
         try {
-          // PATCH7_SCROLL: preserve scroll position in scrolled flow when typography changes
-          const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
-          let beforeScrollY = null;
-          try {
-            const renderer = state.view && state.view.renderer;
-            const el = renderer && renderer.element;
-            if (isScrolled && el && el.contentWindow) beforeScrollY = Number(el.contentWindow.scrollY || 0);
-            if (isScrolled && beforeScrollY == null && renderer && typeof renderer.getContents === 'function') {
-              const cs = renderer.getContents();
-              const c0 = cs && cs[0];
-              if (c0 && c0.doc && c0.doc.defaultView) beforeScrollY = Number(c0.doc.defaultView.scrollY || 0);
-            }
-          } catch {}
-
           const styles = buildEpubStyles(s);
           state.view.renderer && state.view.renderer.setStyles && state.view.renderer.setStyles(styles);
           // RCSS_INTEGRATION: apply ReadiumCSS flags to iframe :root style attribute
@@ -626,21 +607,6 @@
             state.view.renderer.setAttribute('margin', '64px');
           }
 
-          // PATCH7_SCROLL: restore scroll position after settings apply in scrolled flow
-          try {
-            const renderer = state.view && state.view.renderer;
-            const el = renderer && renderer.element;
-            if (isScrolled && beforeScrollY != null && el && el.contentWindow) {
-              el.contentWindow.scrollTo({ top: beforeScrollY, behavior: 'auto' });
-            } else if (isScrolled && beforeScrollY != null && renderer && typeof renderer.getContents === 'function') {
-              for (const c of renderer.getContents()) {
-                if (c && c.doc && c.doc.defaultView) {
-                  c.doc.defaultView.scrollTo({ top: beforeScrollY, behavior: 'auto' });
-                  break;
-                }
-              }
-            }
-          } catch {}
         } catch {}
       }
 
@@ -741,19 +707,11 @@
       doc.addEventListener('touchstart', emitUserActivity, { passive: true });
       doc.addEventListener('click', (ev) => {
         emitUserActivity(ev);
-        // FIX-TTS06: Click-to-speak — single click during TTS playback jumps to clicked word
+        // Single left click: hide dictionary popup
         try {
-          var tts = window.booksTTS;
-          if (tts && typeof tts.getState === 'function') {
-            var ttsState = tts.getState();
-            if ((ttsState === 'playing' || ttsState === 'paused') && typeof tts.playFromNode === 'function') {
-              var range = doc.caretRangeFromPoint(ev.clientX, ev.clientY);
-              if (range && range.startContainer) {
-                tts.playFromNode(range.startContainer);
-              }
-            }
-          }
-        } catch (e) { /* click-to-seek failed silently */ }
+          var Dict = window.booksReaderDict;
+          if (Dict && typeof Dict.hideDictPopup === 'function') Dict.hideDictPopup();
+        } catch (e) {}
       });
       doc.addEventListener('selectionchange', rememberFromDoc);
       doc.addEventListener('mouseup', rememberFromDoc, { passive: true });
@@ -761,23 +719,28 @@
       doc.addEventListener('touchend', rememberFromDoc, { passive: true });
       doc.addEventListener('dblclick', (ev) => {
         emitUserActivity(ev);
-        const text = rememberSelectionText(doc, false) || recentSelectionText();
-        const word = normalizeLookupWord(text);
-        if (word) {
-          try {
-            const Dict = window.booksReaderDict;
-            if (Dict && typeof Dict.triggerDictLookupFromText === 'function') {
-              Dict.triggerDictLookupFromText(word, ev);
-              return;
+        // Double left click: redirect TTS to this word (no word selection, no dictionary)
+        try { doc.getSelection().removeAllRanges(); } catch (e) {}
+        try {
+          var tts = window.booksTTS;
+          if (tts && typeof tts.getState === 'function') {
+            var ttsState = tts.getState();
+            if (ttsState !== 'idle' && typeof tts.playFromNode === 'function') {
+              var range = doc.caretRangeFromPoint(ev.clientX, ev.clientY);
+              if (range && range.startContainer) {
+                tts.playFromNode(range.startContainer);
+              }
             }
-          } catch (e) { /* dict lookup failed silently */ }
-        }
-        if (!dispatchDictLookup(doc, ev) && typeof state.onDblClick === 'function') {
-          state.onDblClick(text, ev);
-        }
+          }
+        } catch (e) {}
       });
       doc.addEventListener('contextmenu', (ev) => {
         emitUserActivity(ev);
+        // Right-click away from text: hide dictionary
+        try {
+          var Dict0 = window.booksReaderDict;
+          if (Dict0 && typeof Dict0.hideDictPopup === 'function') Dict0.hideDictPopup();
+        } catch (e) {}
         // FIX_DICT_RCLICK: if no text selected, programmatically select word under cursor
         if (!selectionTextFromDoc(doc)) {
           selectWordAtPoint(doc, ev.clientX, ev.clientY);
@@ -939,12 +902,11 @@
 
       applySettings(o.settings || {});
 
-      // WAVE1: apply flow mode for EPUB
+      // WAVE1: apply flow mode for EPUB — always paginated (scroll mode removed)
       if (state.format === 'epub' || state.format === 'mobi' || state.format === 'fb2') {
-        const flowMode = (o.settings && o.settings.flowMode) || 'paginated';
         try {
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
-            state.view.renderer.setAttribute('flow', flowMode === 'scrolled' ? 'scrolled' : 'paginated');
+            state.view.renderer.setAttribute('flow', 'paginated');
           }
         } catch {}
       }
@@ -1140,13 +1102,12 @@
       } catch {}
     }
 
-    // WAVE1: set flow mode for EPUB (paginated or scrolled)
+    // WAVE1: set flow mode for EPUB — always paginated (scroll mode removed)
     function setFlowMode(mode) {
       if (state.format === 'pdf') return;
       if (!state.view || !state.view.renderer) return;
       try {
-        const flow = mode === 'scrolled' ? 'scrolled' : 'paginated';
-        state.view.renderer.setAttribute('flow', flow);
+        state.view.renderer.setAttribute('flow', 'paginated');
       } catch {}
     }
 
@@ -1316,15 +1277,7 @@
       return state.view.renderer.prevSection();
     }
 
-    // FIX-SCROLL: programmatic scroll targeting the paginator's shadow DOM container
-    function scrollContent(deltaY) {
-      try {
-        var renderer = state.view && state.view.renderer;
-        if (renderer && typeof renderer.scrollByDelta === 'function') {
-          renderer.scrollByDelta(deltaY);
-        }
-      } catch {}
-    }
+    // scrollContent removed — scroll mode no longer available
 
     return {
       open,
@@ -1353,7 +1306,7 @@
       onSectionBoundary,
       nextSection,
       prevSection,
-      scrollContent,
+      // scrollContent removed — scroll mode no longer available
       // BUILD_HIST
       historyBack,
       historyForward,

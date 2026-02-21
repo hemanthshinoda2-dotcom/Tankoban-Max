@@ -501,21 +501,6 @@
       els.dictBack.addEventListener('click', goBack);
     }
 
-    if (els.host) {
-      els.host.addEventListener('dblclick', triggerDictLookup);
-      els.host.addEventListener('contextmenu', function (e) { try { if (getSelectedWord()) { e.preventDefault(); e.stopPropagation(); _showSelMenu(e); } } catch (err) {} });
-    }
-
-    document.addEventListener('selectionchange', function () {
-      try {
-        clearTimeout(RS.state._selMenuTimer || 0);
-        RS.state._selMenuTimer = setTimeout(function () {
-          if (getSelectedWord()) _showSelMenu();
-          else _hideSelMenu();
-        }, 120);
-      } catch (e) {}
-    });
-
     document.addEventListener('mousedown', function (e) {
       if (_selMenu && _selMenu.style.display !== 'none' && !_selMenu.contains(e.target)) _hideSelMenu();
       try { if (e && e.button && e.button !== 0) return; } catch (err) {}
