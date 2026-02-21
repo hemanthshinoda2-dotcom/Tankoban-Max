@@ -9,6 +9,13 @@
   var IDLE = 'idle';
   var PLAYING = 'playing';
   var PAUSED = 'paused';
+  var STOP_PAUSED = 'stop-paused';
+  var BACKWARD_PAUSED = 'backward-paused';
+  var FORWARD_PAUSED = 'forward-paused';
+  var SETRATE_PAUSED = 'setrate-paused';
+  var SETVOICE_PAUSED = 'setvoice-paused';
+  var PAUSED_STATES = [PAUSED, STOP_PAUSED, BACKWARD_PAUSED, FORWARD_PAUSED, SETRATE_PAUSED, SETVOICE_PAUSED];
+  var ALL_TTS_STATES = [IDLE, PLAYING].concat(PAUSED_STATES);
 
   // TTS-F05
   var TTS_PRESETS = {
@@ -144,7 +151,62 @@
     return { error: String(fallbackCode || 'unknown'), reason: String(err) };
   }
 
+  function getState() {
+    var cur = String(state.status || IDLE);
+    return (ALL_TTS_STATES.indexOf(cur) >= 0) ? cur : IDLE;
+  }
+
+  function _isPausedState(status) {
+    return PAUSED_STATES.indexOf(String(status || '')) >= 0;
+  }
+
+  function _isTtsActiveState(status) {
+    var s = String(status || '');
+    return s === PLAYING || _isPausedState(s);
+  }
+
+  function _pausedStateForDirection(delta) {
+    return Number(delta) < 0 ? BACKWARD_PAUSED : FORWARD_PAUSED;
+  }
+
+  function _currentResumeIndex() {
+    if (state.format === 'txt') {
+      return (_txt.segIdx >= 0) ? _txt.segIdx : 0;
+    }
+    return (_queue.index >= 0) ? _queue.index : ((state.blockIdx >= 0) ? state.blockIdx : 0);
+  }
+
+  function _restartFromCurrentPosition() {
+    if (!state.engine) return;
+
+    state._cancelFlag = false;
+    state._pauseStartedAt = 0;
+    state.status = PLAYING;
+    acquireWakeLock();
+    fire();
+
+    if (state.format === 'txt') {
+      if (!_txt.segments || !_txt.segments.length) {
+        _txtExtractBlocks();
+      }
+      if (_txt.segIdx < 0 && _txt.segments.length) _txt.segIdx = 0;
+      _txtSpeakSegment();
+      return;
+    }
+
+    if (!_queue.length) {
+      play();
+      return;
+    }
+
+    var idx = _currentResumeIndex();
+    if (idx < 0) idx = 0;
+    if (idx >= _queue.length) idx = _queue.length - 1;
+    _speakQueueItem(idx);
+  }
+
   function fire() {
+    state.status = getState();
     if (typeof state.onStateChange === 'function') {
       try { state.onStateChange(state.status, snippetInfo()); } catch {}
     }
@@ -439,6 +501,16 @@
   // OPT1: RAF-throttle boundary updates to reduce layout thrashing
   var _pendingBoundary = null;
   var _boundaryRafId = null;
+
+  // TTS-THROTTLE: Coalesce rapid rate/voice changes during active playback.
+  // Prevents live engine reconfiguration glitches when dragging controls.
+  var TTS_RECONFIG_THROTTLE_MS = 3000;
+  var _ttsReconfigThrottle = {
+    timer: 0,
+    lastExecAt: 0,
+    pendingRate: false,
+    pendingVoice: false,
+  };
 
   // FIX-TTS08: Enlarge style — wrap current word range in a <span class="tts-enlarge">,
   // remove the previous one. This is the only style that mutates the DOM.
@@ -1092,7 +1164,7 @@
   async function play(startBlockIdx) {
     if (!state.engine) return;
 
-    if (state.status === PAUSED) {
+    if (_isPausedState(state.status)) {
       resume();
       return;
     }
@@ -1147,35 +1219,41 @@
     // This prevents handleBoundary/handleBlockEnd from firing during the cancel transition
     state._cancelFlag = true;
     state._pauseStartedAt = Date.now();
-    state.engine.pause();
-    state.status = PAUSED;
+
+    try { state.engine.pause(); } catch {}
+
+    var supportsTruePause = false;
+    try {
+      supportsTruePause = (typeof state.engine.isPaused === 'function') ? !!state.engine.isPaused() : false;
+    } catch {}
+
+    if (supportsTruePause) {
+      state.status = PAUSED;
+    } else {
+      // Pause fallback: cancel audio but keep queue/index so resume() can restart from current segment
+      try { state.engine.cancel(); } catch {}
+      _hardCancelAllEngines();
+      state.status = STOP_PAUSED;
+    }
+
     // NOTE: highlights are NOT cleared on pause — they persist (Step 7)
     releaseWakeLock();
     fire();
   }
 
   function resume() {
-    if (!state.engine || state.status !== PAUSED) return;
+    if (!state.engine || !_isPausedState(state.status)) return;
 
-    // FIX-TTS05: Clear cancel flag on resume
+    // Unified resume path for all paused variants: restart current segment from the saved queue position.
+    state._cancelFlag = true;
+    try { state.engine.cancel(); } catch {}
+    _hardCancelAllEngines();
     state._cancelFlag = false;
-    state._pauseStartedAt = 0;
-    state.engine.resume();
-    // FIX-PAUSE: Verify engine actually resumed — if audio.play() failed inside
-    // the engine, its paused flag stays true. Detect and force-correct.
-    if (typeof state.engine.isPaused === 'function' && state.engine.isPaused()) {
-      // Engine failed to resume — stay paused so UI stays consistent
-      state._cancelFlag = true;
-      state.status = PAUSED;
-      fire();
-      return;
-    }
-    state.status = PLAYING;
-    acquireWakeLock();
-    fire();
+    _restartFromCurrentPosition();
   }
 
   function stop() {
+    _clearReconfigThrottle();
     // FIX-TTS05: Set cancel flag before cancel
     state._cancelFlag = true;
     // OPT1: cancel pending RAF boundary flush
@@ -1210,7 +1288,7 @@
   // ── Navigation ───────────────────────────────────────────────
 
   function stepBlock(delta) {
-    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_isTtsActiveState(state.status)) return;
 
     // TXT legacy
     if (state.format === 'txt') {
@@ -1230,7 +1308,8 @@
 
     state._cancelFlag = false;
 
-    if (state.status === PAUSED) {
+    if (_isPausedState(state.status)) {
+      state.status = _pausedStateForDirection(delta);
       var item = _queue.items[targetIdx];
       if (item) {
         _queue.index = targetIdx;
@@ -1256,7 +1335,7 @@
   // TTS-QOL: Seek to an absolute segment index (0-based).
   // If autoplay is true, begins playback from that position (even if currently paused).
   function seekSegment(targetIdx, autoplay) {
-    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_isTtsActiveState(state.status)) return;
 
     // TXT legacy
     if (state.format === 'txt') {
@@ -1280,6 +1359,7 @@
     if (state.status === PLAYING) shouldPlay = true;
 
     if (!shouldPlay) {
+      if (_isPausedState(state.status) && state.status !== PAUSED) state.status = PAUSED;
       var item = _queue.items[idx2];
       if (!item) return;
       _queue.index = idx2;
@@ -1314,7 +1394,7 @@
 
 
   function jumpApproxMs(deltaMs) {
-    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_isTtsActiveState(state.status)) return;
 
     // TXT legacy
     if (state.format === 'txt') {
@@ -1337,7 +1417,8 @@
 
     state._cancelFlag = false;
 
-    if (state.status === PAUSED) {
+    if (_isPausedState(state.status)) {
+      state.status = _pausedStateForDirection(deltaMs);
       var item = _queue.items[targetIdx];
       if (item) {
         _queue.index = targetIdx;
@@ -1469,6 +1550,140 @@
     _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
   }
 
+function _clearReconfigThrottle() {
+  if (_ttsReconfigThrottle.timer) {
+    try { clearTimeout(_ttsReconfigThrottle.timer); } catch {}
+    _ttsReconfigThrottle.timer = 0;
+  }
+  _ttsReconfigThrottle.pendingRate = false;
+  _ttsReconfigThrottle.pendingVoice = false;
+}
+
+function _resolveVoiceEngineId(voiceId) {
+  var target = String(voiceId || '');
+  if (!target) return '';
+  var voices = [];
+  try { voices = getVoices(); } catch { voices = []; }
+  for (var i = 0; i < voices.length; i++) {
+    var v = voices[i];
+    if (!v) continue;
+    var vid = String(v.voiceURI || v.name || '');
+    if (vid === target) return String(v.engine || '');
+  }
+  return '';
+}
+
+function _capturePlaybackResumePoint() {
+  var charIndex = (typeof state.wordStart === 'number' && state.wordStart >= 0)
+    ? state.wordStart
+    : ((typeof state.wordEnd === 'number' && state.wordEnd >= 0) ? state.wordEnd : -1);
+
+  if (state.format === 'txt') {
+    if (!_txt.segments || !_txt.segments.length) return null;
+    var segIdx = (_txt.segIdx | 0);
+    if (segIdx < 0) segIdx = 0;
+    if (segIdx >= _txt.segments.length) segIdx = _txt.segments.length - 1;
+    return { format: 'txt', segIdx: segIdx, charIndex: charIndex };
+  }
+
+  if (!_queue.items || !_queue.length) return null;
+  var idx = (_queue.index | 0);
+  if (idx < 0) idx = 0;
+  if (idx >= _queue.length) idx = _queue.length - 1;
+  return { format: 'queue', idx: idx, charIndex: charIndex };
+}
+
+function _applyVoiceRateSelectionToEngine() {
+  if (!state.engine) return;
+  var targetEngineId = _resolveVoiceEngineId(state.voiceId);
+  if (targetEngineId && targetEngineId !== state.engineId) {
+    switchEngine(targetEngineId);
+  }
+  if (!state.engine) return;
+  try { if (typeof state.engine.setVoice === 'function' && state.voiceId) state.engine.setVoice(state.voiceId); } catch {}
+  try { if (typeof state.engine.setRate === 'function') state.engine.setRate(state.rate); } catch {}
+}
+
+function _restartPlaybackFromResumePoint(point) {
+  if (!point || !state.engine) return;
+  try {
+    if (typeof state.engine.setResumeHint === 'function' && point.charIndex >= 0) {
+      state.engine.setResumeHint(point.charIndex);
+    }
+  } catch {}
+
+  if (point.format === 'txt') {
+    _txt.segIdx = point.segIdx;
+    _txtSpeakSegment();
+    fire();
+    return;
+  }
+
+  _speakQueueItem(point.idx);
+  fire();
+}
+
+function _runThrottledRateVoiceChange() {
+  _ttsReconfigThrottle.timer = 0;
+  if (!_ttsReconfigThrottle.pendingRate && !_ttsReconfigThrottle.pendingVoice) return;
+
+  _ttsReconfigThrottle.lastExecAt = Date.now();
+  _ttsReconfigThrottle.pendingRate = false;
+  _ttsReconfigThrottle.pendingVoice = false;
+
+  if (!state.engine) {
+    fire();
+    return;
+  }
+
+  if (state.status !== PLAYING) {
+    _applyVoiceRateSelectionToEngine();
+    fire();
+    return;
+  }
+
+  var resumePoint = _capturePlaybackResumePoint();
+
+  state._cancelFlag = true;
+  try { state.engine.cancel(); } catch {}
+  _hardCancelAllEngines();
+  state._cancelFlag = false;
+
+  _applyVoiceRateSelectionToEngine();
+
+  if (state.status !== PLAYING) {
+    fire();
+    return;
+  }
+
+  _restartPlaybackFromResumePoint(resumePoint);
+
+  if (state.format !== 'txt' && _queue.index >= 0) {
+    _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
+  }
+}
+
+function _queueThrottledRateVoiceChange(kind) {
+  if (kind === 'rate') _ttsReconfigThrottle.pendingRate = true;
+  if (kind === 'voice') _ttsReconfigThrottle.pendingVoice = true;
+
+  var now = Date.now();
+  var dueAt = (_ttsReconfigThrottle.lastExecAt || 0) + TTS_RECONFIG_THROTTLE_MS;
+  var wait = Math.max(0, dueAt - now);
+
+  if (_ttsReconfigThrottle.timer) {
+    try { clearTimeout(_ttsReconfigThrottle.timer); } catch {}
+    _ttsReconfigThrottle.timer = 0;
+  }
+
+  if (wait <= 0) {
+    _runThrottledRateVoiceChange();
+    return;
+  }
+
+  _ttsReconfigThrottle.timer = setTimeout(_runThrottledRateVoiceChange, wait);
+}
+
   var TTS_RATE_MIN = 0.5;
   // FIX-TTS-B4 #2: Edge TTS silently caps at 2.0x — match the real limit
   var TTS_RATE_MAX = 2.0;
@@ -1477,7 +1692,17 @@
   // avoids restarting the current sentence from the beginning.
   function setRate(r) {
     state.rate = Math.max(TTS_RATE_MIN, Math.min(TTS_RATE_MAX, Number(r) || 1.0));
+
+    // TTS-THROTTLE: During active playback, avoid live engine rate changes.
+    // Save the new rate and perform a throttled stop-restart from current position.
+    if (state.status === PLAYING) {
+      _queueThrottledRateVoiceChange('rate');
+      fire();
+      return;
+    }
+
     if (state.engine) state.engine.setRate(state.rate);
+
     // FIX-TTS-B3 #14: Pre-fetch upcoming blocks at the new rate
     if (state.status === PLAYING && _queue.index >= 0) {
       _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
@@ -1565,7 +1790,16 @@
 
   function setVoice(voiceId) {
     state.voiceId = String(voiceId || '');
-    if (state.engine) state.engine.setVoice(state.voiceId);
+
+    // TTS-THROTTLE: Voice changes while speaking can glitch or duplicate audio.
+    // Coalesce rapid changes and restart from the current word/mark after switching.
+    if (state.status === PLAYING) {
+      _queueThrottledRateVoiceChange('voice');
+      fire();
+      return;
+    }
+
+    _applyVoiceRateSelectionToEngine();
     fire();
   }
 
@@ -1597,6 +1831,7 @@
   function destroy() {
     // FIX-LISTEN-STAB3: signal any pending init() to bail out
     state._destroyed = true;
+    _clearReconfigThrottle();
     try { stop(); } catch {}
     // FIX-TTS-B2: explicit wake lock release + listener cleanup
     releaseWakeLock();
@@ -1706,7 +1941,7 @@
   }
 
   function _txtStepSegment(delta) {
-    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_isTtsActiveState(state.status)) return;
     if (!_txt.segments.length) return;
     var target = _txt.segIdx + delta;
     target = Math.max(0, Math.min(_txt.segments.length - 1, target));
@@ -1716,7 +1951,8 @@
     _hardCancelAllEngines();
     state._cancelFlag = false;
     _txt.segIdx = target;
-    if (state.status === PAUSED) {
+    if (_isPausedState(state.status)) {
+      state.status = _pausedStateForDirection(delta);
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
@@ -1732,7 +1968,7 @@
   }
 
   function _txtSeekSegment(targetIdx, autoplay) {
-    if (state.status !== PLAYING && state.status !== PAUSED) return;
+    if (!_isTtsActiveState(state.status)) return;
     if (!_txt.segments.length) return;
     var idx = (targetIdx | 0);
     if (idx < 0) idx = 0;
@@ -1748,6 +1984,7 @@
     if (state.status === PLAYING) shouldPlay = true;
 
     if (!shouldPlay) {
+      if (_isPausedState(state.status) && state.status !== PAUSED) state.status = PAUSED;
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
@@ -1782,7 +2019,8 @@
     _hardCancelAllEngines();
     state._cancelFlag = false;
     _txt.segIdx = idx;
-    if (state.status === PAUSED) {
+    if (_isPausedState(state.status)) {
+      state.status = _pausedStateForDirection(deltaMs);
       var seg = _txt.segments[_txt.segIdx];
       state.currentText = seg.text;
       state.blockIdx = seg.blockIdx;
@@ -1894,7 +2132,7 @@
     playFromNode: playFromNode,
     jumpApproxMs: jumpApproxMs,
     getRateLimits: function () { return { min: TTS_RATE_MIN, max: TTS_RATE_MAX }; },
-    getState: function () { return state.status; },
+    getState: getState,
     getSnippet: function () { return snippetInfo(); },
     getRate: function () { return state.rate; },
     isAvailable: function () { return !!(state.engine && isEngineUsable(state.engineId)); },

@@ -36,6 +36,16 @@
   var _sleepCountdownId = null;
   var _preMuteVolume = -1; // OPT1: for mute toggle keyboard shortcut
 
+  // TTS bar auto-hide (Prompt 3)
+  var _ttsBarHideTimer = null;
+  var _ttsBarLastStatus = 'idle';
+  var _ttsBarHoverBar = false;
+  var _ttsBarHoverBottomZone = false;
+  var _ttsBarAutoHideUiWired = false;
+  var _ttsBarHasPlayed = false;
+  var TTS_BAR_AUTO_HIDE_MS = 5000;
+  var TTS_BAR_FADE_MS = 300;
+
 
   // ── SVG icons ───────────────────────────────────────────────────────────────
   var SVG_PLAY = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg>';
@@ -236,6 +246,129 @@
     if (el) el.classList.toggle('hidden', !show);
   }
 
+  function _ensureTtsBarAutoHideStyles() {
+    var bar = qs('lpTtsBar');
+    if (!bar) return null;
+    if (!bar.dataset.lpAutohideInit) {
+      bar.dataset.lpAutohideInit = '1';
+      bar.style.transition = 'opacity ' + TTS_BAR_FADE_MS + 'ms ease';
+      if (!bar.classList.contains('hidden')) {
+        bar.style.opacity = '1';
+        bar.style.pointerEvents = 'auto';
+      }
+    }
+    return bar;
+  }
+
+  function _clearTtsBarHideTimer() {
+    if (_ttsBarHideTimer) {
+      clearTimeout(_ttsBarHideTimer);
+      _ttsBarHideTimer = null;
+    }
+  }
+
+  function _isTtsMegaOpen() {
+    var mega = qs('lpTtsMega');
+    return !!(mega && !mega.classList.contains('hidden'));
+  }
+
+  function _isTtsBarAutoHideAllowed() {
+    if (!_open || !_ttsStarted) return false;
+    if (_isTtsMegaOpen()) return false;
+    if (_ttsBarHoverBar || _ttsBarHoverBottomZone) return false;
+    if (_ttsBarLastStatus === 'paused') return false;
+    return (_ttsBarLastStatus === 'playing' || _ttsBarLastStatus === 'section_transition');
+  }
+
+  function _setTtsBarVisible(visible, opts) {
+    var bar = _ensureTtsBarAutoHideStyles();
+    if (!bar) return;
+    var hard = !!(opts && opts.hard);
+    if (visible) {
+      bar.classList.remove('hidden');
+      bar.style.opacity = '1';
+      bar.style.pointerEvents = 'auto';
+      return;
+    }
+    if (hard) {
+      bar.style.opacity = '0';
+      bar.style.pointerEvents = 'none';
+      bar.classList.add('hidden');
+      return;
+    }
+    if (bar.classList.contains('hidden')) bar.classList.remove('hidden');
+    bar.style.opacity = '0';
+    bar.style.pointerEvents = 'none';
+  }
+
+  function _refreshTtsBarAutoHide(forceShow) {
+    if (!_open) {
+      _clearTtsBarHideTimer();
+      return;
+    }
+    if (forceShow) _setTtsBarVisible(true);
+    if (_isTtsMegaOpen() || _ttsBarLastStatus === 'paused' || _ttsBarHoverBar || _ttsBarHoverBottomZone) {
+      _clearTtsBarHideTimer();
+      _setTtsBarVisible(true);
+      return;
+    }
+    _clearTtsBarHideTimer();
+    if (!_isTtsBarAutoHideAllowed()) return;
+    _setTtsBarVisible(true);
+    _ttsBarHideTimer = setTimeout(function () {
+      _ttsBarHideTimer = null;
+      if (_isTtsBarAutoHideAllowed()) _setTtsBarVisible(false);
+    }, TTS_BAR_AUTO_HIDE_MS);
+  }
+
+  function _wireTtsBarAutoHideUi() {
+    if (_ttsBarAutoHideUiWired) return;
+    var bar = qs('lpTtsBar');
+    var overlay = qs('booksListenPlayerOverlay');
+    var readingArea = overlay ? overlay.querySelector('.br-reading-area') : document.querySelector('.br-reading-area');
+    if (!bar || !readingArea) return;
+    _ttsBarAutoHideUiWired = true;
+    _ensureTtsBarAutoHideStyles();
+
+    function onBarEnterOrMove() {
+      if (!_open || !_ttsStarted) return;
+      if (!_ttsBarHoverBar) _ttsBarHoverBar = true;
+      _refreshTtsBarAutoHide(true);
+    }
+    function onBarLeave() {
+      if (!_ttsBarHoverBar) return;
+      _ttsBarHoverBar = false;
+      _refreshTtsBarAutoHide(false);
+    }
+    function setBottomZoneHover(next) {
+      next = !!next;
+      if (_ttsBarHoverBottomZone === next) return;
+      _ttsBarHoverBottomZone = next;
+      _refreshTtsBarAutoHide(next);
+    }
+
+    bar.addEventListener('mousemove', onBarEnterOrMove);
+    bar.addEventListener('mouseenter', onBarEnterOrMove);
+    bar.addEventListener('mouseleave', onBarLeave);
+    bar.addEventListener('click', function (ev) {
+      if (!_open || !_ttsStarted) return;
+      var btn = ev.target && ev.target.closest ? ev.target.closest('button') : null;
+      if (!btn) return;
+      _refreshTtsBarAutoHide(true);
+    }, true);
+
+    readingArea.addEventListener('mousemove', function (ev) {
+      if (!_open || !_ttsStarted) return;
+      var rect = readingArea.getBoundingClientRect();
+      if (!rect || rect.height <= 0) return;
+      var y = ev.clientY;
+      var within = (y >= rect.top && y <= rect.bottom);
+      var inBottom = within && ((rect.bottom - y) <= 80);
+      setBottomZoneHover(inBottom);
+    });
+    readingArea.addEventListener('mouseleave', function () { setBottomZoneHover(false); });
+  }
+
   // ── Sync play/pause icon ────────────────────────────────────────────────────
   function syncPlayPause(status) {
     var btn = qs('lpTtsPlayPause');
@@ -251,6 +384,21 @@
     var rate = (tts && tts.getRate) ? tts.getRate() : 1.0;
     var el = qs('lpTtsSpeed');
     if (el) el.textContent = rate.toFixed(1) + '\u00d7';
+  }
+
+  function _applyTtsSetting(fnName, value) {
+    var tts = window.booksTTS;
+    if (!tts || !tts[fnName]) return;
+    try {
+      var ret = tts[fnName](value);
+      if (ret && typeof ret.then === 'function') {
+        ret.catch(function (err) {
+          try { console.warn('[listen] throttled TTS setting update failed:', fnName, err); } catch {}
+        });
+      }
+    } catch (err) {
+      try { console.warn('[listen] throttled TTS setting update failed:', fnName, err); } catch {}
+    }
   }
 
   // ── Engine badge ────────────────────────────────────────────────────────────
@@ -656,6 +804,7 @@ function updateCard(info) {
 
   // ── TTS actions ─────────────────────────────────────────────────────────────
   function ttsToggle() {
+    _refreshTtsBarAutoHide(true);
     var tts = window.booksTTS;
     if (!tts) return;
     var st = tts.getState();
@@ -671,23 +820,27 @@ function updateCard(info) {
   }
 
   function ttsStop() {
+    _clearTtsBarHideTimer();
     var tts = window.booksTTS;
     if (tts) tts.stop();
+    _setTtsBarVisible(false, { hard: true });
   }
 
   function ttsAdjustSpeed(delta) {
+    _refreshTtsBarAutoHide(true);
     var tts = window.booksTTS;
     if (!tts) return;
     var current = tts.getRate();
     var limits = (typeof tts.getRateLimits === 'function') ? tts.getRateLimits() : { min: 0.5, max: 3.0 };
     var next = Math.max(limits.min, Math.min(limits.max, Math.round((current + delta) * 10) / 10));
-    tts.setRate(next);
+    _applyTtsSetting('setRate', next);
     _settings.ttsRate = next;
     _lsSet('Rate', String(next));
     syncSpeed();
   }
 
   function ttsJump(deltaMs) {
+    _refreshTtsBarAutoHide(true);
     var tts = window.booksTTS;
     if (!tts) return;
     tts.jumpApproxMs(deltaMs);
@@ -870,6 +1023,8 @@ function updateCard(info) {
     tts.onStateChange = function (status, info) {
       if (status === 'paused') _pausedAtMs = Date.now();
       if (status === 'playing') _pausedAtMs = 0;
+      _ttsBarLastStatus = status || 'idle';
+      if (status === 'playing' || status === 'section_transition') _ttsBarHasPlayed = true;
 
       syncPlayPause(status);
       syncSpeed();
@@ -877,6 +1032,12 @@ function updateCard(info) {
       if (info) updateCard(info);
       var diagEl = qs('lpTtsDiag');
       if (diagEl && !diagEl.classList.contains('hidden')) updateDiag();
+      if (status === 'idle') {
+        _clearTtsBarHideTimer();
+        if (_ttsBarHasPlayed) _setTtsBarVisible(false, { hard: true });
+      } else {
+        _refreshTtsBarAutoHide(true);
+      }
       // FIX-TTS-B4 #7: Notify user when TTS stopped due to repeated errors
       if (status === 'idle' && info && info.lastError) {
         var code = info.lastError.error || info.lastError.code || '';
@@ -1021,6 +1182,8 @@ function updateCard(info) {
     if (_open) {
       try { var tts = window.booksTTS; if (tts) tts.stop(); } catch {}
       unwireTts();
+      _clearTtsBarHideTimer();
+      _setTtsBarVisible(false, { hard: true });
       showOverlay(false);
       _open = false;
       _ttsStarted = false;
@@ -1032,6 +1195,11 @@ function updateCard(info) {
 
     _open = true;
     _ttsStarted = false;
+    _ttsBarLastStatus = 'idle';
+    _ttsBarHasPlayed = false;
+    _ttsBarHoverBar = false;
+    _ttsBarHoverBottomZone = false;
+    _clearTtsBarHideTimer();
     _lastSavedBlockIdx = -1;
     _tocPanelOpen = false;
     _navigating = false;
@@ -1048,6 +1216,8 @@ function updateCard(info) {
     // Show TTS bar immediately
     var bar = qs('lpTtsBar');
     if (bar) bar.classList.remove('hidden');
+    _setTtsBarVisible(true, { hard: true });
+    _refreshTtsBarAutoHide(false);
 
     showOverlay(true);
     _applyCardFont(_settings.ttsFont);
@@ -1154,6 +1324,8 @@ function updateCard(info) {
     var diag = qs('lpTtsDiag');
     if (diag) diag.classList.add('hidden');
     // STRIP-LISTEN-MODE: just hide overlay — reader stays open underneath
+    _clearTtsBarHideTimer();
+    _setTtsBarVisible(false, { hard: true });
     showOverlay(false);
   }
 
@@ -1183,7 +1355,7 @@ function updateCard(info) {
         e.preventDefault(); e.stopPropagation();
         if (_tocPanelOpen) { showTocPanel(false); break; }
         var mega = qs('lpTtsMega');
-        if (mega && !mega.classList.contains('hidden')) { mega.classList.add('hidden'); break; }
+        if (mega && !mega.classList.contains('hidden')) { mega.classList.add('hidden'); _refreshTtsBarAutoHide(false); break; }
         var diag = qs('lpTtsDiag');
         if (diag && !diag.classList.contains('hidden')) { diag.classList.add('hidden'); break; }
         // FIX-TTS-B8 #16: Don't close player on Escape when no panel is open —
@@ -1224,7 +1396,7 @@ function updateCard(info) {
       case 'v': case 'V':
         e.preventDefault(); e.stopPropagation();
         var megaV = qs('lpTtsMega');
-        if (megaV) megaV.classList.toggle('hidden');
+        if (megaV) { megaV.classList.toggle('hidden'); _refreshTtsBarAutoHide(true); }
         break;
       case 'd': case 'D':
         e.preventDefault(); e.stopPropagation();
@@ -1240,6 +1412,7 @@ function updateCard(info) {
   // ── Bind DOM events ─────────────────────────────────────────────────────────
   function bind() {
     console.log('[TTS-BAR] listening_player.js bind() called');
+    _wireTtsBarAutoHideUi();
     window.addEventListener('books-reader-opened', function () {
       if (!_open) return;
       showOverlay(true);
@@ -1254,6 +1427,8 @@ function updateCard(info) {
         saveProgress(snap3, true);
       } catch {}
       _lastSavedBlockIdx = -1;
+      _clearTtsBarHideTimer();
+      _setTtsBarVisible(false, { hard: true });
       showOverlay(false);
       _open = false;
       _ttsStarted = false;
@@ -1323,11 +1498,13 @@ function updateCard(info) {
       }
       var diag = qs('lpTtsDiag');
       if (diag && !mega.classList.contains('hidden')) diag.classList.add('hidden');
+      _refreshTtsBarAutoHide(true);
     });
     var megaClose = qs('lpTtsMegaClose');
     if (megaClose) megaClose.addEventListener('click', function () {
       var mega = qs('lpTtsMega');
       if (mega) mega.classList.add('hidden');
+      _refreshTtsBarAutoHide(false);
     });
 
     // Voice picker
@@ -1336,7 +1513,7 @@ function updateCard(info) {
       var tts = window.booksTTS;
       if (!tts) return;
       var voiceId = voiceSel.value;
-      tts.setVoice(voiceId);
+      _applyTtsSetting('setVoice', voiceId);
       _settings.ttsVoice = voiceId;
       _lsSet('Voice', voiceId);
     });
@@ -1348,7 +1525,7 @@ function updateCard(info) {
       if (!tts) return;
       var voiceId = qs('lpTtsVoice') ? qs('lpTtsVoice').value : '';
       if (!voiceId) return;
-      tts.setVoice(voiceId);
+      _applyTtsSetting('setVoice', voiceId);
       _settings.ttsVoice = voiceId;
       _lsSet('Voice', voiceId);
       // Quick preview via engine probe (simplified - no separate engine instance)

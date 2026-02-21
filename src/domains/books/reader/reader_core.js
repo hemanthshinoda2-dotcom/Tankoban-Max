@@ -39,9 +39,254 @@
       tts.onStateChange = function (status) {
         console.log('[TTS-BAR] onStateChange: ' + status);
         try { bus.emit('reader:tts-state', status); } catch (e) {}
+        try { handleReaderTtsState(status); } catch (e2) {}
+      };
+      tts.onProgress = function (info) {
+        try { handleReaderTtsProgress(info); } catch (e3) {}
       };
     }
   })();
+
+
+  // ── Back to TTS Location floating button ──────────────────────
+
+  var ttsReturnUi = {
+    btn: null,
+    visible: false,
+    ttsLocator: null,
+    readerLocator: null,
+    lastTtsLocatorKey: '',
+    graceUntilMs: 0,
+    timer: 0,
+  };
+
+  function getTtsReturnBtn() {
+    if (ttsReturnUi.btn && document.body.contains(ttsReturnUi.btn)) return ttsReturnUi.btn;
+    ttsReturnUi.btn = document.getElementById('booksReaderReturnTts');
+    return ttsReturnUi.btn;
+  }
+
+  function clearTtsReturnTimer() {
+    if (!ttsReturnUi.timer) return;
+    try { clearTimeout(ttsReturnUi.timer); } catch (e) {}
+    ttsReturnUi.timer = 0;
+  }
+
+  function cloneLocator(loc) {
+    if (!loc || typeof loc !== 'object') return null;
+    var out = {};
+    if (loc.cfi != null) out.cfi = String(loc.cfi);
+    if (loc.href != null) out.href = String(loc.href);
+    if (Number.isFinite(Number(loc.fraction))) out.fraction = Number(loc.fraction);
+    return (out.cfi || out.href || Number.isFinite(out.fraction)) ? out : null;
+  }
+
+  function normalizeLocatorCandidate(input) {
+    var src = input && input.locator ? input.locator : input;
+    if (!src || typeof src !== 'object') return null;
+    var out = {};
+
+    if (src.cfi != null) out.cfi = String(src.cfi);
+    if (src.href != null) out.href = String(src.href);
+    if (Number.isFinite(Number(src.fraction))) out.fraction = Number(src.fraction);
+
+    if (src.current && typeof src.current === 'object') {
+      if (!out.cfi && src.current.cfi != null) out.cfi = String(src.current.cfi);
+      if (!out.href && src.current.href != null) out.href = String(src.current.href);
+    }
+
+    if (src.location && typeof src.location === 'object') {
+      if (!out.cfi && src.location.cfi != null) out.cfi = String(src.location.cfi);
+      if (!out.href && src.location.href != null) out.href = String(src.location.href);
+    }
+
+    return (out.cfi || out.href || Number.isFinite(out.fraction)) ? out : null;
+  }
+
+  function locatorKey(loc) {
+    var l = normalizeLocatorCandidate(loc);
+    if (!l) return '';
+    if (l.cfi) return 'cfi:' + l.cfi;
+    var frac = Number.isFinite(Number(l.fraction)) ? Math.round(Number(l.fraction) * 10000) / 10000 : NaN;
+    return 'href:' + String(l.href || '') + '|f:' + (Number.isFinite(frac) ? String(frac) : '');
+  }
+
+  function sameLocator(a, b) {
+    var la = normalizeLocatorCandidate(a);
+    var lb = normalizeLocatorCandidate(b);
+    if (!la || !lb) return false;
+
+    if (la.cfi && lb.cfi && la.cfi === lb.cfi) return true;
+
+    var hrefA = String(la.href || '');
+    var hrefB = String(lb.href || '');
+    if (hrefA && hrefB && hrefA !== hrefB) return false;
+
+    var fa = Number(la.fraction);
+    var fb = Number(lb.fraction);
+    var hasFa = Number.isFinite(fa);
+    var hasFb = Number.isFinite(fb);
+
+    if (hasFa && hasFb) return Math.abs(fa - fb) <= 0.0025;
+
+    if (hrefA && hrefB) return true;
+    return false;
+  }
+
+  function isReaderTtsActive() {
+    try {
+      var tts = window.booksTTS;
+      if (!tts || typeof tts.getState !== 'function') return false;
+      var s = String(tts.getState() || '');
+      return s === 'playing' || s === 'paused';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function setTtsReturnButtonVisible(show) {
+    var btn = getTtsReturnBtn();
+    if (!btn) return;
+    var on = !!show;
+    ttsReturnUi.visible = on;
+    btn.setAttribute('aria-hidden', on ? 'false' : 'true');
+    btn.classList.toggle('is-visible', on);
+  }
+
+  function resetTtsReturnUi(clearLocators) {
+    clearTtsReturnTimer();
+    ttsReturnUi.graceUntilMs = 0;
+    if (clearLocators) {
+      ttsReturnUi.ttsLocator = null;
+      ttsReturnUi.readerLocator = null;
+      ttsReturnUi.lastTtsLocatorKey = '';
+    }
+    setTtsReturnButtonVisible(false);
+  }
+
+  function scheduleEvaluateTtsReturn(delayMs) {
+    clearTtsReturnTimer();
+    var delay = Math.max(0, Number(delayMs) || 0);
+    ttsReturnUi.timer = setTimeout(function () {
+      ttsReturnUi.timer = 0;
+      evaluateTtsReturnButton();
+    }, delay);
+  }
+
+  function evaluateTtsReturnButton() {
+    if (!RS.state.open) {
+      setTtsReturnButtonVisible(false);
+      return;
+    }
+    if (!isReaderTtsActive()) {
+      setTtsReturnButtonVisible(false);
+      return;
+    }
+
+    var ttsLoc = normalizeLocatorCandidate(ttsReturnUi.ttsLocator);
+    if (!ttsLoc) {
+      setTtsReturnButtonVisible(false);
+      return;
+    }
+
+    var readerLoc = normalizeLocatorCandidate(ttsReturnUi.readerLocator);
+    if (!readerLoc) {
+      try {
+        var eng = RS.state.engine;
+        if (eng && typeof eng.getLocator === 'function') {
+          eng.getLocator().then(function (loc) {
+            ttsReturnUi.readerLocator = normalizeLocatorCandidate(loc);
+            evaluateTtsReturnButton();
+          }).catch(function () {});
+        }
+      } catch (e) {}
+      return;
+    }
+
+    if (sameLocator(readerLoc, ttsLoc)) {
+      setTtsReturnButtonVisible(false);
+      return;
+    }
+
+    var now = Date.now();
+    if (ttsReturnUi.graceUntilMs && now < ttsReturnUi.graceUntilMs) {
+      scheduleEvaluateTtsReturn(ttsReturnUi.graceUntilMs - now + 20);
+      return;
+    }
+
+    setTtsReturnButtonVisible(true);
+  }
+
+  function handleReaderTtsProgress(info) {
+    if (!RS.state.open) return;
+    var loc = normalizeLocatorCandidate(info && info.locator ? info.locator : null);
+    if (!loc) {
+      try {
+        var tts = window.booksTTS;
+        if (tts && typeof tts.getStateSnapshot === 'function') {
+          var snap = tts.getStateSnapshot();
+          loc = normalizeLocatorCandidate(snap && snap.locator ? snap.locator : null);
+        }
+      } catch (e) {}
+    }
+    if (!loc) return;
+
+    var nextKey = locatorKey(loc);
+    var changed = !!nextKey && nextKey !== ttsReturnUi.lastTtsLocatorKey;
+    ttsReturnUi.ttsLocator = cloneLocator(loc);
+
+    if (changed) {
+      ttsReturnUi.lastTtsLocatorKey = nextKey;
+      ttsReturnUi.graceUntilMs = Date.now() + 2000; // ignore TTS-initiated follow/relocate briefly
+    }
+
+    evaluateTtsReturnButton();
+  }
+
+  function handleReaderTtsState(status) {
+    var s = String(status || '');
+    if (s !== 'playing' && s !== 'paused') {
+      resetTtsReturnUi(true);
+      return;
+    }
+
+    try {
+      var tts = window.booksTTS;
+      if (tts && typeof tts.getStateSnapshot === 'function') {
+        var snap = tts.getStateSnapshot();
+        var loc = normalizeLocatorCandidate(snap && snap.locator ? snap.locator : null);
+        if (loc) {
+          ttsReturnUi.ttsLocator = cloneLocator(loc);
+          if (!ttsReturnUi.lastTtsLocatorKey) ttsReturnUi.lastTtsLocatorKey = locatorKey(loc);
+        }
+      }
+    } catch (e) {}
+
+    evaluateTtsReturnButton();
+  }
+
+  function handleReaderRelocated(detail) {
+    ttsReturnUi.readerLocator = normalizeLocatorCandidate(detail);
+    evaluateTtsReturnButton();
+  }
+
+  function handleBackToTtsLocationClick(ev) {
+    if (ev && typeof ev.preventDefault === 'function') ev.preventDefault();
+    if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+
+    var state = RS.state;
+    if (!state || !state.open || !state.engine || typeof state.engine.goTo !== 'function') return;
+
+    var target = cloneLocator(ttsReturnUi.ttsLocator);
+    if (!target) return;
+
+    setTtsReturnButtonVisible(false);
+    ttsReturnUi.graceUntilMs = Date.now() + 2000;
+
+    try {
+      Promise.resolve(state.engine.goTo(target)).catch(function () {});
+    } catch (e) {}
+  }
 
   // ── Show / hide reader view ──────────────────────────────────
 
@@ -245,6 +490,8 @@
       return false;
     }
 
+    resetTtsReturnUi(true);
+
     // Notify modules before cleanup
     for (var i = 0; i < modules.length; i++) {
       if (modules[i] && typeof modules[i].onClose === 'function') {
@@ -318,6 +565,7 @@
 
     await RS.loadSettings();
     await close({ save: false, silent: true });
+    resetTtsReturnUi(true);
 
     state.book = book;
     // Per-book view settings (font/theme/layout)
@@ -506,6 +754,12 @@
       close().catch(function () {});
     });
 
+    var ttsReturnBtn = getTtsReturnBtn();
+    if (ttsReturnBtn && !ttsReturnBtn.__booksReaderBound) {
+      ttsReturnBtn.addEventListener('click', function (ev) { handleBackToTtsLocationClick(ev); });
+      ttsReturnBtn.__booksReaderBound = true;
+    }
+
     // Fullscreen button
     els.fsBtn && els.fsBtn.addEventListener('click', function () { toggleReaderFullscreen().catch(function () {}); });
 
@@ -569,7 +823,7 @@
     // Bus events
     bus.on('reader:close', function () { close().catch(function () {}); });
     bus.on('reader:fullscreen', function () { toggleReaderFullscreen().catch(function () {}); });
-    bus.on('reader:relocated', function () { onReadingAction(); }); // TASK2
+    bus.on('reader:relocated', function (detail) { onReadingAction(); handleReaderRelocated(detail); }); // TASK2 + PROMPT2
     bus.on('reader:tts-state', function (status) {
       console.log('[TTS-BAR] bus reader:tts-state → ' + status);
       if (status === 'playing') scheduleHudAutoHide();
@@ -582,6 +836,9 @@
           console.log('[TTS-BAR] bar show=' + show);
         }
       } catch (e) {}
+    });
+    bus.on('tts:show-return', function () {
+      evaluateTtsReturnButton();
     });
     // FIX_HUD: hide toolbar when sidebar opens, restore when it closes
     bus.on('sidebar:toggled', function (isOpen) {

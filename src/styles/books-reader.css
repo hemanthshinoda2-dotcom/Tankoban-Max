@@ -2730,3 +2730,35 @@ body.inBooksReader .br-reader {
 [data-reader-theme="sepia"] .booksReaderTtsBar .iconBtn:hover {
   background: rgba(62, 52, 37, 0.10) !important;
 }
+
+/* PROMPT2: Back to TTS Location floating chip (readest-style top-center) */
+.br-reading-area > .booksReaderReturnTts {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  z-index: 50;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.22);
+  background: var(--br-reader-bg);
+  color: var(--br-reader-text);
+  border: 1px solid rgba(var(--br-reader-accent-rgb), 0.28);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+}
+.br-reading-area > .booksReaderReturnTts.hidden {
+  display: block !important; /* keep mounted so opacity fade can animate */
+}
+.br-reading-area > .booksReaderReturnTts.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 0.3s ease, visibility 0s linear 0s;
+}
+.br-reader.br-hud-hidden .br-reading-area > .booksReaderReturnTts.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
