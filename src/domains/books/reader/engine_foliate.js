@@ -369,9 +369,10 @@
       // In Tankoban, the margin slider should control side padding (and allow full-width).
       const marginFactor = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
       const sidePad = Math.round(marginFactor * 24);
-      const layoutOverrides = '\n/* TANKOBAN_FULLWIDTH */\n' +
-        'html,body{max-width:none !important;}\n' +
-        'body{margin:0 !important;padding-left:' + sidePad + 'px !important;padding-right:' + sidePad + 'px !important;max-width:none !important;}\n';
+      const maxLineWidth = clamp(Number(s.maxLineWidth || 960), 400, 1600);
+      const layoutOverrides = '\n/* TANKOBAN_MAX_LINE_WIDTH */\n' +
+        'html,body{width:auto !important;}\n' +
+        'body{margin:0 !important;margin-left:auto !important;margin-right:auto !important;padding-left:' + sidePad + 'px !important;padding-right:' + sidePad + 'px !important;max-width:' + maxLineWidth + 'px !important;box-sizing:border-box !important;}\n';
       return rcss.before + '\n' + rcss.dflt + '\n' + rcss.after + '\n' + userOverrides + layoutOverrides + justifyFix;
     }
 
@@ -450,6 +451,10 @@
         const lineHeight = Number(s.lineHeight || 0);
         if (lineHeight && lineHeight !== 1.5) docEl.style.setProperty('--USER__lineHeight', String(lineHeight));
         else docEl.style.removeProperty('--USER__lineHeight');
+
+        // Max line length (ReadiumCSS)
+        const maxLineWidth = clamp(Number(s.maxLineWidth || 960), 400, 1600);
+        docEl.style.setProperty('--USER__maxLineLength', maxLineWidth + 'px');
 
         // Page margins — handled via paginator 'gap' attribute (applySettings), NOT via
         // --USER__pageMargins which triggers ReadiumCSS body padding and conflicts with paginator.
@@ -564,8 +569,10 @@
                   // FIX_EPUB_MARGIN_INLINE: keep margin slider effective even when publisher CSS fights injected styles
                   const mf = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad = Math.round(mf * 24);
-                  doc.body.style.setProperty('max-width', 'none', 'important');
-                  doc.body.style.setProperty('margin', '0', 'important');
+                  const maxLineWidth = clamp(Number(s.maxLineWidth || 960), 400, 1600);
+                  doc.body.style.setProperty('max-width', maxLineWidth + 'px', 'important');
+                  doc.body.style.setProperty('box-sizing', 'border-box', 'important');
+                  doc.body.style.setProperty('margin', '0 auto', 'important');
                   doc.body.style.setProperty('padding-left', pad + 'px', 'important');
                   doc.body.style.setProperty('padding-right', pad + 'px', 'important');
                 }
@@ -586,8 +593,10 @@
                   // FIX_EPUB_MARGIN_INLINE2
                   const mf2 = clamp(Number((s.margin === 0) ? 0 : (s.margin || 1)), 0, 4);
                   const pad2 = Math.round(mf2 * 24);
-                  doc.body.style.setProperty('max-width', 'none', 'important');
-                  doc.body.style.setProperty('margin', '0', 'important');
+                  const maxLineWidth2 = clamp(Number(s.maxLineWidth || 960), 400, 1600);
+                  doc.body.style.setProperty('max-width', maxLineWidth2 + 'px', 'important');
+                  doc.body.style.setProperty('box-sizing', 'border-box', 'important');
+                  doc.body.style.setProperty('margin', '0 auto', 'important');
                   doc.body.style.setProperty('padding-left', pad2 + 'px', 'important');
                   doc.body.style.setProperty('padding-right', pad2 + 'px', 'important');
                 }

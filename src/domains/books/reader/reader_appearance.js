@@ -34,6 +34,21 @@
     try { state.engine.applySettings(Object.assign({}, state.settings)); } catch (e) { /* swallow */ }
   }
 
+  function normalizeMaxLineWidth(v) {
+    var n = Number(v);
+    if (!Number.isFinite(n)) n = 960;
+    n = Math.round(n / 50) * 50;
+    return Math.max(400, Math.min(1600, n));
+  }
+
+  function syncMaxLineWidthFromLocalStorage() {
+    try {
+      var raw = localStorage.getItem('books_maxLineWidth');
+      if (raw == null || raw === '') return;
+      RS.state.settings.maxLineWidth = normalizeMaxLineWidth(raw);
+    } catch (e) { /* swallow */ }
+  }
+
   function syncAaPanelUI() {
     var els = RS.ensureEls();
     var s = RS.state.settings;
@@ -44,6 +59,9 @@
     if (els.lineHeightValue) { els.lineHeightValue.textContent = String(Number(s.lineHeight || 1.5).toFixed(1)); }
     if (els.marginSlider) { els.marginSlider.value = String(s.margin || 1); }
     if (els.marginValue) { els.marginValue.textContent = Number(s.margin || 1).toFixed(2); }
+    var maxLineWidth = normalizeMaxLineWidth(s.maxLineWidth);
+    if (els.maxLineWidthSlider) { els.maxLineWidthSlider.value = String(maxLineWidth); }
+    if (els.maxLineWidthValue) { els.maxLineWidthValue.textContent = String(maxLineWidth) + 'px'; }
     if (els.columnToggle) { els.columnToggle.checked = (s.columnMode !== 'single'); }
     if (els.flowToggle) { els.flowToggle.checked = String(s.flowMode || 'paginated') === 'scrolled'; }
     // BUILD_READIUMCSS: new typography controls
@@ -194,6 +212,7 @@
   // ── Lifecycle ────────────────────────────────────────────────────
 
   function onOpen() {
+    syncMaxLineWidthFromLocalStorage();
     applySettings();
     syncAaPanelUI();
     syncThemeFontUI();
@@ -250,6 +269,16 @@
       var v = Number(els.marginSlider.value || 1);
       state.settings.margin = Math.max(0, Math.min(4.0, Math.round(v * 4) / 4));
       if (els.marginValue) els.marginValue.textContent = state.settings.margin.toFixed(2);
+      applySettings();
+      RS.persistSettings().catch(function () {});
+    });
+
+    // Max line width slider (400-1600px, step 50)
+    els.maxLineWidthSlider && els.maxLineWidthSlider.addEventListener('input', function () {
+      var v = normalizeMaxLineWidth(els.maxLineWidthSlider.value || 960);
+      state.settings.maxLineWidth = v;
+      if (els.maxLineWidthValue) els.maxLineWidthValue.textContent = String(v) + 'px';
+      try { localStorage.setItem('books_maxLineWidth', String(v)); } catch (e) { /* swallow */ }
       applySettings();
       RS.persistSettings().catch(function () {});
     });

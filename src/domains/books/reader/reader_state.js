@@ -12,6 +12,7 @@
     fontFamily: 'publisher',  // publisher|oldStyleTf|modernTf|sansTf|humanistTf|monospaceTf|AccessibleDfA|IAWriterDuospace
     lineHeight: 1.5,          // 1.0-2.0 (ReadiumCSS --USER__lineHeight)
     margin: 1,                // pageMargins factor 0-4.0 (controls side padding + page gap)
+    maxLineWidth: 960,        // max readable line width in px (ReadiumCSS --USER__maxLineLength)
     flowMode: 'paginated',
     columnMode: 'auto',
     textAlign: '',            // ''|left|right|justify (ReadiumCSS --USER__textAlign)
@@ -144,6 +145,8 @@
       lineHeightValue: qs('booksReaderLineHeightValue'),
       marginSlider: qs('booksReaderMarginSlider'),
       marginValue: qs('booksReaderMarginValue'),
+      maxLineWidthSlider: qs('booksReaderMaxLineWidthSlider'),
+      maxLineWidthValue: qs('booksReaderMaxLineWidthValue'),
       columnToggle: qs('booksReaderColumnToggle'),
       // RCSS_INTEGRATION: new typography controls
       letterSpacingSlider: qs('booksReaderLetterSpacingSlider'),
@@ -351,6 +354,17 @@
       if (incoming.fontFamily === 'serif') incoming.fontFamily = 'oldStyleTf';
       if (incoming.fontFamily === 'sans-serif') incoming.fontFamily = 'sansTf';
       if (incoming.fontFamily === 'monospace') incoming.fontFamily = 'monospaceTf';
+      // Max line width persisted in localStorage for quick UI restore across sessions/builds
+      try {
+        var _mlwRaw = localStorage.getItem('books_maxLineWidth');
+        if (_mlwRaw != null && _mlwRaw !== '') {
+          var _mlw = Number(_mlwRaw);
+          if (Number.isFinite(_mlw)) {
+            _mlw = Math.round(_mlw / 50) * 50;
+            incoming.maxLineWidth = Math.max(400, Math.min(1600, _mlw));
+          }
+        }
+      } catch (e) { /* swallow */ }
       state.settings = Object.assign({}, DEFAULT_SETTINGS, incoming);
     } catch (e) {
       state.settings = Object.assign({}, DEFAULT_SETTINGS);
@@ -375,6 +389,7 @@
       fontSize: s.fontSize,
       lineHeight: s.lineHeight,
       margin: s.margin,
+      maxLineWidth: s.maxLineWidth,
       columnMode: s.columnMode,
       flowMode: s.flowMode,
       letterSpacing: s.letterSpacing,
@@ -401,6 +416,13 @@
       if (parsed.hyphens !== undefined && parsed.bodyHyphens === undefined) parsed.bodyHyphens = parsed.hyphens;
       // Merge per-book over global settings
       state.settings = Object.assign({}, state.settings, parsed);
+      if (state.settings && state.settings.maxLineWidth != null) {
+        var _bw = Number(state.settings.maxLineWidth);
+        if (Number.isFinite(_bw)) {
+          _bw = Math.round(_bw / 50) * 50;
+          state.settings.maxLineWidth = Math.max(400, Math.min(1600, _bw));
+        }
+      }
     } catch (e) { /* swallow */ }
   }
 
