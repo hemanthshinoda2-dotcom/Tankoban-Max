@@ -54,6 +54,11 @@
     settings: Object.assign({}, DEFAULT_SETTINGS),
     saveTimer: null,
     relocateSaveTimer: null,
+    suspendProgressSave: false,
+    suspendProgressSaveReason: '',
+    pendingProgressSave: false,
+    progressSaveInFlight: false,
+    progressSaveReschedule: false,
     sidebarOpen: false,
     sidebarTab: 'toc',
     lastError: '',
@@ -459,32 +464,58 @@
   async function saveProgress() {
     if (!state.open || !state.engine || !state.book) return;
     if (typeof state.engine.getLocator !== 'function') return;
+    if (state.suspendProgressSave) { state.pendingProgressSave = true; return; }
+    if (state.progressSaveInFlight) { state.progressSaveReschedule = true; return; }
 
-    var locator = null;
-    try { locator = await state.engine.getLocator(); } catch (e) { /* swallow */ }
-    var pageHint = (state.engine && typeof state.engine.getPageHint === 'function') ? state.engine.getPageHint() : null;
+    state.progressSaveInFlight = true;
+    try {
+      var locator = null;
+      try { locator = await state.engine.getLocator(); } catch (e) { /* swallow */ }
+      var pageHint = (state.engine && typeof state.engine.getPageHint === 'function') ? state.engine.getPageHint() : null;
 
-    if (locator) {
-      locator.flowMode = String(state.settings.flowMode || 'paginated');
-      locator.chapterReadState = Object.assign({}, state.chapterReadState || {}); // BUILD_CHAP_PERSIST
-    }
+      if (locator) {
+        locator.flowMode = String(state.settings.flowMode || 'paginated');
+        locator.chapterReadState = Object.assign({}, state.chapterReadState || {}); // BUILD_CHAP_PERSIST
+      }
 
-    var payload = {
-      locator: locator || null,
-      format: state.book.format,
-      mediaType: 'book',
-      pageHint: pageHint || null,
-      bookMeta: {
-        title: state.book.title,
-        path: state.book.path,
+      var payload = {
+        locator: locator || null,
         format: state.book.format,
         mediaType: 'book',
-        series: state.book.series || '',
-        seriesId: state.book.seriesId || '',
-      },
-    };
+        pageHint: pageHint || null,
+        bookMeta: {
+          title: state.book.title,
+          path: state.book.path,
+          format: state.book.format,
+          mediaType: 'book',
+          series: state.book.series || '',
+          seriesId: state.book.seriesId || '',
+        },
+      };
 
-    try { await Tanko.api.booksProgress.save(state.book.id, payload); } catch (e) { /* swallow */ }
+      try { await Tanko.api.booksProgress.save(state.book.id, payload); } catch (e) { /* swallow */ }
+    } finally {
+      state.progressSaveInFlight = false;
+      if (state.progressSaveReschedule) {
+        state.progressSaveReschedule = false;
+        if (state.suspendProgressSave) state.pendingProgressSave = true;
+        else queueSaveProgress(60);
+      }
+    }
+  }
+
+  function queueSaveProgress(delayMs) {
+    if (state.saveTimer) { clearTimeout(state.saveTimer); state.saveTimer = null; }
+    state.saveTimer = setTimeout(function () { state.saveTimer = null; saveProgress(); }, delayMs || 60);
+  }
+
+  function setSuspendProgressSave(suspend, reason) {
+    state.suspendProgressSave = !!suspend;
+    state.suspendProgressSaveReason = String(reason || '');
+    if (!suspend && state.pendingProgressSave) {
+      state.pendingProgressSave = false;
+      queueSaveProgress(60);
+    }
   }
 
   // ── Shortcuts persistence ──────────────────────────────────────
@@ -527,6 +558,7 @@
     loadBookViewSettings: loadBookViewSettings,
     // Progress
     saveProgress: saveProgress,
+    setSuspendProgressSave: setSuspendProgressSave,
     saveShortcuts: saveShortcuts,
   };
 })();

@@ -58,6 +58,11 @@
     ttsHlGranularity: 'both', // 'both' | 'block' | 'word'
     lastLocator: null,
     onDocumentEnd: null,
+    _listeners: {
+      stateChange: [],
+      progress: [],
+      documentEnd: [],
+    },
     ttsEnlargeScale: 1.35, // FIX-TTS08: configurable enlarge factor (1.1–2.0)
 
     _pauseStartedAt: 0,
@@ -206,11 +211,53 @@
     _speakQueueItem(idx);
   }
 
+
+  function _listenerBucket(type) {
+    var map = { state: 'stateChange', statechange: 'stateChange', onstatechange: 'stateChange', progress: 'progress', onprogress: 'progress', documentend: 'documentEnd', ondocumentend: 'documentEnd' };
+    var key = map[String(type || '').toLowerCase()] || null;
+    if (!key) return null;
+    var ls = state._listeners || null;
+    return (ls && Array.isArray(ls[key])) ? ls[key] : null;
+  }
+
+  function _emitListeners(type, args) {
+    var list = _listenerBucket(type);
+    if (!list || !list.length) return;
+    var copy = list.slice();
+    for (var i = 0; i < copy.length; i++) {
+      try { copy[i].apply(null, args || []); } catch (e) {}
+    }
+  }
+
+  function _on(type, fn) {
+    if (typeof fn !== 'function') return function () {};
+    var list = _listenerBucket(type);
+    if (!list) return function () {};
+    if (list.indexOf(fn) < 0) list.push(fn);
+    return function () { _off(type, fn); };
+  }
+
+  function _off(type, fn) {
+    if (typeof fn !== 'function') return;
+    var list = _listenerBucket(type);
+    if (!list) return;
+    var i = list.indexOf(fn);
+    if (i >= 0) list.splice(i, 1);
+  }
+
+  function _fireDocumentEnd(info) {
+    if (typeof state.onDocumentEnd === 'function') {
+      try { state.onDocumentEnd(info); } catch {}
+    }
+    _emitListeners('documentEnd', [info]);
+  }
+
   function fire() {
     state.status = getState();
     if (typeof state.onStateChange === 'function') {
       try { state.onStateChange(state.status, snippetInfo()); } catch {}
     }
+    _emitListeners('stateChange', [state.status, snippetInfo()]);
   }
 
   function _hardCancelAllEngines() {
@@ -229,6 +276,7 @@
     if (typeof state.onProgress === 'function') {
       try { state.onProgress(snippetInfo()); } catch {}
     }
+    _emitListeners('progress', [snippetInfo()]);
   }
 
   var _locatorRefreshTimer = 0;
@@ -863,7 +911,7 @@
     if (typeof state.onNeedAdvance === 'function') {
       state.onNeedAdvance().then(async function (advanced) {
         if (!advanced || state.status !== PLAYING) {
-          try { if (!advanced && typeof state.onDocumentEnd === 'function') state.onDocumentEnd(snippetInfo()); } catch {}
+          try { if (!advanced) _fireDocumentEnd(snippetInfo()); } catch {}
           stop();
           return;
         }
@@ -880,7 +928,7 @@
         }
       }).catch(function () { stop(); });
     } else {
-      try { if (typeof state.onDocumentEnd === 'function') state.onDocumentEnd(snippetInfo()); } catch {}
+      try { _fireDocumentEnd(snippetInfo()); } catch {}
       stop();
     }
   }
@@ -1634,6 +1682,15 @@ function _restartPlaybackFromResumePoint(point) {
   fire();
 }
 
+function _isReconfigActivePlaybackStatus(status) {
+  var s = String(status || '');
+  return s === PLAYING || s === 'section_transition';
+}
+
+function _isReconfigPausedStatus(status) {
+  return /(?:^|-)paused$/.test(String(status || ''));
+}
+
 function _runThrottledRateVoiceChange() {
   _ttsReconfigThrottle.timer = 0;
   if (!_ttsReconfigThrottle.pendingRate && !_ttsReconfigThrottle.pendingVoice) return;
@@ -1647,8 +1704,9 @@ function _runThrottledRateVoiceChange() {
     return;
   }
 
-  if (state.status !== PLAYING) {
+  if (!_isReconfigActivePlaybackStatus(state.status)) {
     _applyVoiceRateSelectionToEngine();
+    if (_isReconfigPausedStatus(state.status)) fireProgress();
     fire();
     return;
   }
@@ -1662,7 +1720,7 @@ function _runThrottledRateVoiceChange() {
 
   _applyVoiceRateSelectionToEngine();
 
-  if (state.status !== PLAYING) {
+  if (!_isReconfigActivePlaybackStatus(state.status)) {
     fire();
     return;
   }
@@ -2207,5 +2265,7 @@ function _queueThrottledRateVoiceChange(kind) {
     set onStateChange(fn) { state.onStateChange = typeof fn === 'function' ? fn : null; },
     set onProgress(fn) { state.onProgress = typeof fn === 'function' ? fn : null; },
     set onDocumentEnd(fn) { state.onDocumentEnd = typeof fn === 'function' ? fn : null; },
+    on: _on,
+    off: _off,
   };
 })();

@@ -34,28 +34,39 @@
   (function bindReaderTtsState() {
     var tts = window.booksTTS;
     console.log('[TTS-BAR] bindReaderTtsState: tts=' + !!tts);
-    if (tts) {
-      tts.onStateChange = function (status, info) {
-        console.log('[TTS-BAR] onStateChange: ' + status);
-        try { bus.emit('reader:tts-state', status); } catch (e) {}
-        try { handleReaderTtsState(status); } catch (e2) {}
-        // Sync play/pause icon directly (listening_player.js overwrites this on Listen click,
-        // but before that the "Start TTS from here" path needs icons to update)
-        try {
-          var ppBtn = document.getElementById('lpTtsPlayPause');
-          if (ppBtn) {
-            var isPlaying = (status === 'playing' || status === 'section_transition');
-            var isPaused = isTtsPausedState(status);
-            ppBtn.innerHTML = isPlaying
-              ? '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/><rect x="10" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/></svg>'
+    if (!tts) return;
+    if (window.__readerTtsBridgeBound) return;
+    window.__readerTtsBridgeBound = true;
+
+    var onState = function (status, info) {
+      console.log('[TTS-BAR] onStateChange: ' + status);
+      try { bus.emit('reader:tts-state', status); } catch (e) {}
+      try { handleReaderTtsState(status); } catch (e2) {}
+      // Sync play/pause icon directly (listening_player.js overwrites this on Listen click,
+      // but before that the "Start TTS from here" path needs icons to update)
+      try {
+        var ppBtn = document.getElementById('lpTtsPlayPause');
+        if (ppBtn) {
+          var isPlaying = (status === 'playing' || status === 'section_transition');
+          var isPaused = isTtsPausedState(status);
+          ppBtn.innerHTML = isPlaying
+            ? '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/><rect x="10" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/></svg>'
 : '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg>';
-            ppBtn.title = isPlaying ? 'Pause' : (isPaused ? 'Resume' : 'Play');
-          }
-        } catch (e3) {}
-      };
-      tts.onProgress = function (info) {
-        try { handleReaderTtsProgress(info); } catch (e3) {}
-      };
+          ppBtn.title = isPlaying ? 'Pause' : (isPaused ? 'Resume' : 'Play');
+        }
+      } catch (e3) {}
+    };
+
+    var onProgress = function (info) {
+      try { handleReaderTtsProgress(info); } catch (e3) {}
+    };
+
+    if (typeof tts.on === 'function') {
+      try { tts.on('stateChange', onState); } catch (e4) {}
+      try { tts.on('progress', onProgress); } catch (e5) {}
+    } else {
+      tts.onStateChange = onState;
+      tts.onProgress = onProgress;
     }
   })();
 
@@ -152,12 +163,21 @@
     return false;
   }
 
+  function isReaderTtsPausedVariant(status) {
+    return /(?:^|-)paused$/.test(String(status || ''));
+  }
+
+  function isReaderTtsActiveState(status) {
+    var s = String(status || '');
+    return s === 'playing' || s === 'section_transition' || isReaderTtsPausedVariant(s);
+  }
+
   function isReaderTtsActive() {
     try {
       var tts = window.booksTTS;
       if (!tts || typeof tts.getState !== 'function') return false;
       var s = String(tts.getState() || '');
-      return s === 'playing' || s === 'paused';
+      return isReaderTtsActiveState(s);
     } catch (e) {
       return false;
     }
@@ -264,7 +284,7 @@
 
   function handleReaderTtsState(status) {
     var s = String(status || '');
-    if (s !== 'playing' && s !== 'paused') {
+    if (!isReaderTtsActiveState(s)) {
       resetTtsReturnUi(true);
       return;
     }

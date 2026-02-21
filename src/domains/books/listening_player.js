@@ -13,7 +13,13 @@
   var _open = false;
   var _interactionWired = false; // PATCH2
   var _ttsStarted = false;
+  var _sessionToken = 0;
+  var _openReaderPending = false;
   var _lastSavedBlockIdx = -1;
+  var _ttsCallbackBindings = null;
+  var _seekDragActive = false;
+  var _seekCommitTimer = null;
+  var _seekPreviewTimer = null;
   var _saveTimer = null;
   var _tocPanelOpen = false;
   var _navigating = false;
@@ -42,8 +48,10 @@
   var _ttsBarHoverBar = false;
   var _ttsBarHoverBottomZone = false;
   var _ttsBarAutoHideUiWired = false;
+  var _ttsBarHideEpoch = 0;
+  var _ttsBarVisibleDesired = true;
   var _ttsBarHasPlayed = false;
-  var TTS_BAR_AUTO_HIDE_MS = 5000;
+  var TTS_BAR_AUTO_HIDE_MS = 3000;
   var TTS_BAR_FADE_MS = 300;
 
 
@@ -256,11 +264,17 @@
         bar.style.opacity = '1';
         bar.style.pointerEvents = 'auto';
       }
+      bar.addEventListener('transitionend', function (ev) {
+        if (!ev || ev.propertyName !== 'opacity') return;
+        if (_ttsBarVisibleDesired) return;
+        if (bar.style.opacity === '0') bar.classList.add('hidden');
+      });
     }
     return bar;
   }
 
   function _clearTtsBarHideTimer() {
+    _ttsBarHideEpoch++;
     if (_ttsBarHideTimer) {
       clearTimeout(_ttsBarHideTimer);
       _ttsBarHideTimer = null;
@@ -301,11 +315,13 @@
     if (!bar) return;
     var hard = !!(opts && opts.hard);
     if (visible) {
+      _ttsBarVisibleDesired = true;
       bar.classList.remove('hidden');
       bar.style.opacity = '1';
       bar.style.pointerEvents = 'auto';
       return;
     }
+    _ttsBarVisibleDesired = false;
     if (hard) {
       bar.style.opacity = '0';
       bar.style.pointerEvents = 'none';
@@ -331,8 +347,10 @@
     _clearTtsBarHideTimer();
     if (!_isTtsBarAutoHideAllowed()) return;
     _setTtsBarVisible(true);
+    var hideEpoch = _ttsBarHideEpoch;
     _ttsBarHideTimer = setTimeout(function () {
       _ttsBarHideTimer = null;
+      if (hideEpoch !== _ttsBarHideEpoch) return;
       if (_isTtsBarAutoHideAllowed()) _setTtsBarVisible(false);
     }, TTS_BAR_AUTO_HIDE_MS);
   }
@@ -578,9 +596,9 @@ function updateCard(info) {
     if (seek) {
       var max = Math.max(0, (cnt || 0) - 1);
       seek.max = String(max);
-      seek.value = String(clamp(((info.blockIdx >= 0) ? info.blockIdx : 0), 0, max));
+      if (!_seekDragActive) seek.value = String(clamp(((info.blockIdx >= 0) ? info.blockIdx : 0), 0, max));
       var prev = qs('lpSeekPreview');
-      if (prev) prev.textContent = '';
+      if (prev && !_seekDragActive) prev.textContent = '';
     }
 
     syncSpeed();
@@ -1011,7 +1029,9 @@ function updateCard(info) {
   function wireTts() {
     var tts = window.booksTTS;
     if (!tts) return;
-    tts.onStateChange = function (status, info) {
+    unwireTts();
+
+    var onState = function (status, info) {
       if (_isPausedLikeStatus(status)) _pausedAtMs = Date.now();
       if (_isPlayingLikeStatus(status)) _pausedAtMs = 0;
       _ttsBarLastStatus = status || 'idle';
@@ -1029,7 +1049,6 @@ function updateCard(info) {
       } else {
         _refreshTtsBarAutoHide(true);
       }
-      // FIX-TTS-B4 #7: Notify user when TTS stopped due to repeated errors
       if (status === 'idle' && info && info.lastError) {
         var code = info.lastError.error || info.lastError.code || '';
         if (code === 'max_errors_reached') {
@@ -1037,22 +1056,40 @@ function updateCard(info) {
         }
       }
     };
-    tts.onProgress = function (info) {
+    var onProgress = function (info) {
       updateCard(info);
       var diagEl = qs('lpTtsDiag');
       if (diagEl && !diagEl.classList.contains('hidden')) updateDiag();
     };
-    tts.onDocumentEnd = function (info) {
+    var onDocumentEnd = function (info) {
       saveProgress(info, true);
     };
+
+    _ttsCallbackBindings = { tts: tts, onState: onState, onProgress: onProgress, onDocumentEnd: onDocumentEnd, unsubs: [] };
+    if (typeof tts.on === 'function') {
+      try { _ttsCallbackBindings.unsubs.push(tts.on('stateChange', onState)); } catch {}
+      try { _ttsCallbackBindings.unsubs.push(tts.on('progress', onProgress)); } catch {}
+      try { _ttsCallbackBindings.unsubs.push(tts.on('documentEnd', onDocumentEnd)); } catch {}
+    } else {
+      tts.onStateChange = onState;
+      tts.onProgress = onProgress;
+      tts.onDocumentEnd = onDocumentEnd;
+    }
   }
 
   function unwireTts() {
-    var tts = window.booksTTS;
+    var binding = _ttsCallbackBindings;
+    _ttsCallbackBindings = null;
+    var tts = (binding && binding.tts) || window.booksTTS;
     if (!tts) return;
-    tts.onStateChange = null;
-    tts.onProgress = null;
-    tts.onDocumentEnd = null;
+    if (binding && Array.isArray(binding.unsubs)) {
+      for (var i = 0; i < binding.unsubs.length; i++) {
+        try { if (typeof binding.unsubs[i] === 'function') binding.unsubs[i](); } catch {}
+      }
+    }
+    if (!binding || tts.onStateChange === binding.onState) tts.onStateChange = null;
+    if (!binding || tts.onProgress === binding.onProgress) tts.onProgress = null;
+    if (!binding || tts.onDocumentEnd === binding.onDocumentEnd) tts.onDocumentEnd = null;
   }
 
   function _buildTtsInitOpts() {
@@ -1077,8 +1114,9 @@ function updateCard(info) {
     };
   }
 
-  function startTts() {
+  function startTts(expectedToken) {
     if (_ttsStarted) return;
+    var sessionToken = (typeof expectedToken === 'number') ? expectedToken : _sessionToken;
     _ttsStarted = true;
     wireTts();
     renderTocPanel();
@@ -1128,7 +1166,7 @@ function updateCard(info) {
       var api = window.Tanko && window.Tanko.api;
       var bookId = _book && (_book.id || _book.path);
       function applyEntry(entry) {
-        if (!_open || !_ttsStarted) return;
+        if (!_open || !_ttsStarted || sessionToken !== _sessionToken) return;
         if (entry && typeof entry.blockIdx === 'number' && entry.blockIdx >= 0) resumeIdx = entry.blockIdx;
         // Update UI immediately (labels) even before the first snippet render
         try {
@@ -1157,6 +1195,7 @@ function updateCard(info) {
         var primary = _book && _book.id ? _book.id : null;
         var fallback = _book && _book.path ? _book.path : null;
         fetchEntry(primary || bookId, fallback).then(function (entry) {
+          if (!_open || !_ttsStarted || sessionToken !== _sessionToken) return;
           applyEntry(entry);
         });
       } else {
@@ -1177,6 +1216,8 @@ function updateCard(info) {
       _setTtsBarVisible(false, { hard: true });
       showOverlay(false);
       _open = false;
+      _openReaderPending = false;
+      _sessionToken++;
       _ttsStarted = false;
     }
     _book = book;
@@ -1184,6 +1225,8 @@ function updateCard(info) {
     // PATCH3: reload preferences for this specific book.
     _loadPrefs();
 
+    var mySessionToken = ++_sessionToken;
+    _openReaderPending = true;
     _open = true;
     _ttsStarted = false;
     _ttsBarLastStatus = 'idle';
@@ -1246,7 +1289,8 @@ function updateCard(info) {
       && RS && RS.state && RS.state.book
       && String(RS.state.book.id || '') === String(book.id || '');
     if (alreadyOpen) {
-      startTts();
+      _openReaderPending = false;
+      startTts(mySessionToken);
       return;
     }
 
@@ -1254,13 +1298,26 @@ function updateCard(info) {
     if (!booksApp || typeof booksApp.openBookInReader !== 'function') return;
     booksApp.openBookInReader(book).catch(function (e) {
       try { console.error('[listen-player] openBookInReader failed:', e); } catch {}
+      if (mySessionToken !== _sessionToken) return;
+      _openReaderPending = false;
       _open = false;
+      _ttsStarted = false;
+      try {
+        var RSrb = window.booksReaderState;
+        if (RSrb && typeof RSrb.setSuspendProgressSave === 'function') RSrb.setSuspendProgressSave(false);
+        else if (RSrb && RSrb.state) { RSrb.state.suspendProgressSave = false; RSrb.state.suspendProgressSaveReason = ''; }
+      } catch {}
+      _clearTtsBarHideTimer();
+      _setTtsBarVisible(false, { hard: true });
+      showOverlay(false);
     });
   }
 
   function closePlayer() {
     if (!_open) return;
     _open = false;
+    _openReaderPending = false;
+    _sessionToken++;
     _ttsStarted = false;
     _clearSleepTimer(); // OPT1
     if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
@@ -1406,8 +1463,10 @@ function updateCard(info) {
     _wireTtsBarAutoHideUi();
     window.addEventListener('books-reader-opened', function () {
       if (!_open) return;
+      _openReaderPending = false;
+      var token = _sessionToken;
       showOverlay(true);
-      startTts();
+      startTts(token);
     });
     window.addEventListener('books-reader-closed', function () {
       if (!_open) return;
@@ -1674,17 +1733,48 @@ function updateCard(info) {
       prev.textContent = t ? t : '';
     }
     if (seek) {
-      seek.addEventListener('input', function () {
-        var idx = parseInt(seek.value || '0', 10) || 0;
-        _seekPreview(idx);
-      });
-      seek.addEventListener('change', function () {
+      function _seekClearTimers() {
+        if (_seekPreviewTimer) { clearTimeout(_seekPreviewTimer); _seekPreviewTimer = null; }
+        if (_seekCommitTimer) { clearTimeout(_seekCommitTimer); _seekCommitTimer = null; }
+      }
+      function _seekCommitNow() {
+        _seekClearTimers();
         var idx = parseInt(seek.value || '0', 10) || 0;
         var tts = window.booksTTS;
+        _seekDragActive = false;
         if (!tts || typeof tts.seekSegment !== 'function') return;
         var st = tts.getState ? tts.getState() : 'idle';
         var playing = (st === 'playing');
         try { tts.seekSegment(idx, playing); } catch {}
+      }
+      seek.addEventListener('pointerdown', function () {
+        _seekDragActive = true;
+        _seekClearTimers();
+      });
+      seek.addEventListener('input', function () {
+        var idx = parseInt(seek.value || '0', 10) || 0;
+        _seekDragActive = true;
+        _seekClearTimers();
+        _seekPreviewTimer = setTimeout(function () {
+          _seekPreviewTimer = null;
+          _seekPreview(idx);
+        }, 40);
+        _seekCommitTimer = setTimeout(function () {
+          _seekCommitTimer = null;
+          _seekCommitNow();
+        }, 220);
+      });
+      seek.addEventListener('change', _seekCommitNow);
+      seek.addEventListener('pointerup', _seekCommitNow);
+      seek.addEventListener('blur', function () { if (_seekDragActive) _seekCommitNow(); });
+      seek.addEventListener('keydown', function (e) {
+        if (!e) return;
+        if (e.key === 'Enter') _seekCommitNow();
+        if (e.key === 'Escape') {
+          _seekClearTimers();
+          _seekDragActive = false;
+          if (prev) prev.textContent = '';
+        }
       });
     }
 
