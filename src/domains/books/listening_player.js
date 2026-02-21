@@ -272,12 +272,28 @@
     return !!(mega && !mega.classList.contains('hidden'));
   }
 
+  function _isPausedLikeStatus(status) {
+    var s = String(status || '');
+    return s === 'paused'
+      || s === 'stop-paused'
+      || s === 'backward-paused'
+      || s === 'forward-paused'
+      || s === 'setrate-paused'
+      || s === 'setvoice-paused';
+  }
+
+  function _isPlayingLikeStatus(status) {
+    var s = String(status || '');
+    return s === 'playing' || s === 'section_transition';
+  }
+
+
   function _isTtsBarAutoHideAllowed() {
     if (!_open || !_ttsStarted) return false;
     if (_isTtsMegaOpen()) return false;
     if (_ttsBarHoverBar || _ttsBarHoverBottomZone) return false;
-    if (_ttsBarLastStatus === 'paused') return false;
-    return (_ttsBarLastStatus === 'playing' || _ttsBarLastStatus === 'section_transition');
+    if (_isPausedLikeStatus(_ttsBarLastStatus)) return false;
+    return _isPlayingLikeStatus(_ttsBarLastStatus);
   }
 
   function _setTtsBarVisible(visible, opts) {
@@ -307,7 +323,7 @@
       return;
     }
     if (forceShow) _setTtsBarVisible(true);
-    if (_isTtsMegaOpen() || _ttsBarLastStatus === 'paused' || _ttsBarHoverBar || _ttsBarHoverBottomZone) {
+    if (_isTtsMegaOpen() || _isPausedLikeStatus(_ttsBarLastStatus) || _ttsBarHoverBar || _ttsBarHoverBottomZone) {
       _clearTtsBarHideTimer();
       _setTtsBarVisible(true);
       return;
@@ -373,7 +389,7 @@
   function syncPlayPause(status) {
     var btn = qs('lpTtsPlayPause');
     if (!btn) return;
-    var showPause = (status === 'playing' || status === 'section_transition');
+    var showPause = _isPlayingLikeStatus(status);
     btn.innerHTML = showPause ? SVG_PAUSE : SVG_PLAY;
     btn.title = showPause ? 'Pause' : 'Play';
   }
@@ -945,7 +961,7 @@ function updateCard(info) {
     _sleepTimerId = setInterval(function () {
       if (Date.now() >= _sleepEndMs) {
         var tts = window.booksTTS;
-        if (tts && tts.getState() === 'playing') tts.pause();
+        if (tts && _isPlayingLikeStatus(tts.getState && tts.getState())) tts.pause();
         _clearSleepTimer();
       }
     }, 1000);
@@ -996,10 +1012,10 @@ function updateCard(info) {
     var tts = window.booksTTS;
     if (!tts) return;
     tts.onStateChange = function (status, info) {
-      if (status === 'paused') _pausedAtMs = Date.now();
-      if (status === 'playing') _pausedAtMs = 0;
+      if (_isPausedLikeStatus(status)) _pausedAtMs = Date.now();
+      if (_isPlayingLikeStatus(status)) _pausedAtMs = 0;
       _ttsBarLastStatus = status || 'idle';
-      if (status === 'playing' || status === 'section_transition') _ttsBarHasPlayed = true;
+      if (_isPlayingLikeStatus(status)) _ttsBarHasPlayed = true;
 
       syncPlayPause(status);
       syncSpeed();
@@ -1335,7 +1351,7 @@ function updateCard(info) {
         if (diag && !diag.classList.contains('hidden')) { diag.classList.add('hidden'); break; }
         // FIX-TTS-B8 #16: Don't close player on Escape when no panel is open —
         // pause TTS instead, so rapid Escape presses don't accidentally exit
-        if (tts && tts.getState() === 'playing') { tts.pause(); }
+        if (tts && _isPlayingLikeStatus(tts.getState && tts.getState())) { tts.pause(); }
         break;
       // OPT1: additional keyboard shortcuts
       case 'm': case 'M':

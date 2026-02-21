@@ -136,6 +136,13 @@
       var state = RS.state;
       if (!state.open) return;
 
+      // LISTEN_P3: when the detached/in-reader listening overlay is open,
+      // let its own keyboard handler own Escape/space/arrows to avoid double-dispatch.
+      try {
+        var _lp = document.getElementById('booksListenPlayerOverlay');
+        if (_lp && !_lp.classList.contains('hidden')) return;
+      } catch (err) {}
+
       if (handleShortcutCapture(e)) return;
 
       // Ctrl+G: goto dialog
@@ -304,7 +311,7 @@
       }
 
       // ? or K key: open keyboard shortcuts overlay
-      if (e.key === '?' || (!e.shiftKey && (e.key === 'k' || e.key === 'K'))) {
+      if ((!e.ctrlKey && !e.metaKey && !e.altKey) && (e.key === '?' || (!e.shiftKey && (e.key === 'k' || e.key === 'K')))) {
         e.preventDefault();
         bus.emit('overlay:toggle', 'keys');
         return;

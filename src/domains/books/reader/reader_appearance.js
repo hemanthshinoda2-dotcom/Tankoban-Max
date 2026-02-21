@@ -6,9 +6,14 @@
   var bus = window.booksReaderBus;
   var FONT_WEIGHT_STORAGE_KEY = 'books_fontWeight';
   var INVERT_DARK_IMAGES_KEY = 'books_invertDarkImages';
+  var DARK_READER_THEMES = ['dark', 'contrast1', 'contrast2', 'contrast3', 'contrast4', 'nord', 'gruvbox', 'gruvboxDark', 'solarized'];
+
+  function isDarkReaderTheme(theme) {
+    return DARK_READER_THEMES.indexOf(String(theme || 'light')) !== -1;
+  }
   var INVERT_DARK_IMAGES_STYLE_ID = 'books-reader-invert-dark-images-style';
   // Prompt 2: exact theme list requested for automatic dark-theme image inversion.
-  var INVERT_DARK_IMAGE_THEMES = ['dark', 'contrast1', 'contrast2', 'contrast3', 'nord', 'gruvbox', 'solarized'];
+  var INVERT_DARK_IMAGE_THEMES = ['dark', 'contrast1', 'contrast2', 'contrast3', 'contrast4', 'nord', 'gruvbox', 'gruvboxDark', 'solarized'];
 
   function clampFontWeight(v) {
     var n = Number(v);
@@ -94,7 +99,7 @@
     if (lp) lp.setAttribute('data-reader-theme', nextTheme);
     // FIX-TTS03: set blend mode for TTS highlight overlayer (lighten for dark themes)
     // BUILD_THEMES: nord and gruvboxDark are dark themes
-    var isDark = INVERT_DARK_IMAGE_THEMES.indexOf(nextTheme) !== -1;
+    var isDark = isDarkReaderTheme(nextTheme);
     document.documentElement.style.setProperty('--overlayer-highlight-blend-mode', isDark ? 'lighten' : 'normal');
   }
 
@@ -115,7 +120,7 @@
 
   function shouldInvertImagesForTheme(theme) {
     var t = String(theme || 'light');
-    return isInvertDarkImagesEnabled() && INVERT_DARK_IMAGE_THEMES.indexOf(t) !== -1;
+    return isInvertDarkImagesEnabled() && isDarkReaderTheme(t) && INVERT_DARK_IMAGE_THEMES.indexOf(t) !== -1;
   }
 
   function collectReaderIframeDocs() {

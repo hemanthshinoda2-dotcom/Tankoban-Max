@@ -322,6 +322,26 @@
 
   // ── HUD auto-hide ────────────────────────────────────────────
 
+  function _isTtsPausedLike(status) {
+    var s = String(status || '');
+    return s === 'paused'
+      || s === 'stop-paused'
+      || s === 'backward-paused'
+      || s === 'forward-paused'
+      || s === 'setrate-paused'
+      || s === 'setvoice-paused';
+  }
+
+  function _isTtsPlayingLike(status) {
+    var s = String(status || '');
+    return s === 'playing' || s === 'section_transition';
+  }
+
+  function _isTtsActiveLike(status) {
+    var s = String(status || '');
+    return _isTtsPlayingLike(s) || _isTtsPausedLike(s);
+  }
+
   function shouldKeepHudVisible() {
     var els = RS.ensureEls();
     var OV = window.booksReaderOverlays;
@@ -522,7 +542,7 @@
     // Hard-stop narration on reader close (prevents background audio).
     try {
       var _bar = document.getElementById('lpTtsBar');
-      if (_bar) { _bar.classList.add('hidden'); _bar.style.display = 'none'; }
+      if (_bar) { _bar.classList.add('hidden'); _bar.style.opacity = '0'; _bar.style.pointerEvents = 'none'; }
     } catch (e) {}
     try {
       var tts = window.booksTTS;
@@ -856,13 +876,19 @@
     bus.on('reader:relocated', function (detail) { onReadingAction(); handleReaderRelocated(detail); }); // TASK2 + PROMPT2
     bus.on('reader:tts-state', function (status) {
       console.log('[TTS-BAR] bus reader:tts-state → ' + status);
-      if (status === 'playing') scheduleHudAutoHide();
+      if (_isTtsPlayingLike(status)) scheduleHudAutoHide();
       try {
         var bar = document.getElementById('lpTtsBar');
         if (bar) {
-          var show = (status !== 'idle');
+          var show = _isTtsActiveLike(status);
           bar.classList.toggle('hidden', !show);
-          bar.style.display = show ? '' : 'none';
+          if (!show) {
+            bar.style.opacity = '0';
+            bar.style.pointerEvents = 'none';
+          } else {
+            bar.style.pointerEvents = 'auto';
+            if (!bar.style.opacity) bar.style.opacity = '1';
+          }
           console.log('[TTS-BAR] bar show=' + show);
         }
       } catch (e) {}

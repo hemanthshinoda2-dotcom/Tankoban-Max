@@ -1841,6 +1841,16 @@ body.inBooksReader .br-reader {
   max-width: calc(100% - 24px);
   backdrop-filter: blur(8px);
 }
+.booksReaderTtsBar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .booksReaderTtsBar,
+  .br-reader .booksReaderReturnTts {
+    transition: none !important;
+  }
+}
 .booksReaderTtsBtn { min-width: 24px; font-size: 12px; }
 .booksReaderTtsSpeed {
   min-width: 36px;
@@ -2833,9 +2843,39 @@ body.inBooksReader .br-reader {
 .booksReaderTtsBar .iconBtn:focus-visible,
 .booksReaderErrorBtn:focus-visible,
 .booksReaderDictCloseBtn:focus-visible {
-  outline: 2px solid rgba(100, 160, 255, 0.7);
+  outline: 2px solid var(--br-focus-ring, rgba(100, 160, 255, 0.7));
   outline-offset: 1px;
   border-radius: 4px;
+}
+
+/* Theme-tuned focus ring contrast (prevents washed-out focus on light/sepia/paper) */
+[data-reader-theme="light"],
+[data-reader-theme="sepia"],
+[data-reader-theme="paper"],
+.booksReaderHost[data-reader-theme="light"],
+.booksReaderHost[data-reader-theme="sepia"],
+.booksReaderHost[data-reader-theme="paper"] {
+  --br-focus-ring: rgba(45, 110, 230, 0.9);
+}
+[data-reader-theme="dark"],
+[data-reader-theme="contrast1"],
+[data-reader-theme="contrast2"],
+[data-reader-theme="contrast3"],
+[data-reader-theme="contrast4"],
+[data-reader-theme="nord"],
+[data-reader-theme="gruvbox"],
+[data-reader-theme="gruvboxDark"],
+[data-reader-theme="solarized"],
+.booksReaderHost[data-reader-theme="dark"],
+.booksReaderHost[data-reader-theme="contrast1"],
+.booksReaderHost[data-reader-theme="contrast2"],
+.booksReaderHost[data-reader-theme="contrast3"],
+.booksReaderHost[data-reader-theme="contrast4"],
+.booksReaderHost[data-reader-theme="nord"],
+.booksReaderHost[data-reader-theme="gruvbox"],
+.booksReaderHost[data-reader-theme="gruvboxDark"],
+.booksReaderHost[data-reader-theme="solarized"] {
+  --br-focus-ring: rgba(146, 190, 255, 0.95);
 }
 
 /* Reader host theme backgrounds */
