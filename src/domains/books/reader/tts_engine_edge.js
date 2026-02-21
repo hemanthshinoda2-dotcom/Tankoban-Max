@@ -6,6 +6,12 @@
 
   window.booksTTSEngines = window.booksTTSEngines || {};
 
+  // OPT-PERF: Session-level state that persists across create()/destroy cycles.
+  // Without this, every init() → create() → probe() does a full Edge TTS synthesis
+  // of "Edge probe" text (~1-3s), even though Edge was already confirmed working.
+  var _sessionHealth = null;   // { known, available, reason } — survives destroy()
+  var _sessionVoices = null;   // voice list array — survives destroy()
+
   function base64ToBlob(b64, mime) {
     try {
       var bin = atob(String(b64 || ''));
@@ -30,12 +36,10 @@
       playing: false,
       paused: false,
       requestId: '',
-      voiceList: [],
-      health: {
-        known: false,
-        available: false,
-        reason: 'edge_probe_uninitialized',
-      },
+      voiceList: _sessionVoices ? _sessionVoices.slice() : [],
+      health: _sessionHealth
+        ? { known: _sessionHealth.known, available: _sessionHealth.available, reason: _sessionHealth.reason }
+        : { known: false, available: false, reason: 'edge_probe_uninitialized' },
       onBoundary: null,
       onEnd: null,
       onError: null,
@@ -242,6 +246,8 @@
         var res = await api.getVoices(opts || {});
         if (res && res.ok && Array.isArray(res.voices) && res.voices.length) {
           state.voiceList = res.voices.slice();
+          // OPT-PERF: Persist voices to session level so future create() calls reuse them
+          _sessionVoices = state.voiceList.slice();
           diag('edge_voices_fetch_ok', String(state.voiceList.length));
           return state.voiceList;
         }
@@ -259,6 +265,8 @@
       // OPT2: skip re-probe if already confirmed available this session
       if (state.health.known && state.health.available) {
         diag('edge_probe_cached', 'skipped');
+        // OPT-PERF: Ensure voices are loaded even when probe is cached
+        if (!state.voiceList.length) { try { await loadVoices({ maxAgeMs: 60000 }); } catch {} }
         return true;
       }
       diag('edge_probe_start', '');
@@ -277,6 +285,8 @@
         state.health.known = true;
         state.health.available = ok;
         state.health.reason = ok ? 'edge_probe_ok' : String(res && res.reason || 'edge_probe_failed');
+        // OPT-PERF: Persist health to session level so future create() calls skip probe
+        if (ok) _sessionHealth = { known: true, available: true, reason: state.health.reason };
         diag(ok ? 'edge_probe_ok' : 'edge_probe_fail', state.health.reason);
         if (ok) {
           await loadVoices({ maxAgeMs: 0 });

@@ -814,11 +814,12 @@
   }
 
   // OPT1: Adaptive preload count — more blocks at higher playback rates
+  // OPT-PERF: Increased base from 3→5 and cap from 8→12 for smoother transitions
   function _adaptivePreloadCount() {
-    var base = 3;
-    var extra = Math.ceil((state.rate - 1.0) * 3);
+    var base = 5;
+    var extra = Math.ceil((state.rate - 1.0) * 4);
     if (extra < 0) extra = 0;
-    return Math.min(base + extra, 8);
+    return Math.min(base + extra, 12);
   }
 
   // FIX-TTS05: Multi-chunk lookahead — synthesize next N blocks in background

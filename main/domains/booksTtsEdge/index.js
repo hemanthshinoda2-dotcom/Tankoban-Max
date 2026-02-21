@@ -107,6 +107,11 @@ function _evictIfNeeded(cacheDir, maxBytes) {
 let edgeTtsLib = null;
 let ttsInstance = null;
 
+// OPT-PERF: Track last setMetadata args to skip redundant WebSocket calls.
+// setMetadata triggers WebSocket handshake/configuration — calling it for every
+// synth request adds ~200-500ms overhead per block even when voice/format are unchanged.
+let _lastMeta = { voice: '', format: '' };
+
 function requireEdgeTts() {
   if (!edgeTtsLib) {
     try {
@@ -162,6 +167,7 @@ function resetTtsInstance() {
     try { ttsInstance.close(); } catch {}
   }
   ttsInstance = null;
+  _lastMeta = { voice: '', format: '' };
 }
 
 function clamp(v, min, max, fallback) {
@@ -258,7 +264,12 @@ async function synthEdge(payload) {
     const outputFormat = lib.OUTPUT_FORMAT && lib.OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3
       || 'audio-24khz-48kbitrate-mono-mp3';
 
-    await tts.setMetadata(voice, outputFormat, { wordBoundaryEnabled: true });
+    // OPT-PERF: Skip setMetadata if voice and format haven't changed since last call.
+    // setMetadata involves WebSocket configuration — redundant calls add ~200-500ms per block.
+    if (_lastMeta.voice !== voice || _lastMeta.format !== outputFormat) {
+      await tts.setMetadata(voice, outputFormat, { wordBoundaryEnabled: true });
+      _lastMeta = { voice, format: outputFormat };
+    }
 
     const result = tts.toStream(text, { rate, pitch });
     const audioChunks = [];
