@@ -1,0 +1,962 @@
+/* =========================================================
+   video-player.css — Video player, episode table, and HUD
+   Extracted from styles.css (Phase 2, Session 5)
+   ========================================================= */
+
+
+/* --- Video folder "Continue watching" widget (preview pane) --- */
+
+/* Build 11: Videos-only folder "Continue watching" widget placed inside preview pane */
+.videoFolderContinue{
+  position:absolute;
+  bottom:12px;
+  left:12px;
+  right:auto;
+  width: min(360px, 40%);
+  max-width: 380px;
+  min-width: 240px;
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(var(--surface-rgb),.42);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+.videoFolderContinue.isRight{ right:12px; left:auto; }
+.videoFolderContinue.isLeft{ left:12px; right:auto; }
+.videoFolderContinue.hidden{ display:none; }
+.videoFolderContinueTitle{ font-weight:900; font-size: 13px; letter-spacing:.2px; }
+.videoFolderContinueMeta{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+.videoFolderContinueEp{ font-weight:800; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.videoFolderContinueFile{ opacity:.78; font-size: 11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.videoFolderContinueRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.videoFolderContinueBar{ height:8px; border-radius:999px; background: rgba(255,255,255,.14); overflow:hidden; }
+.videoFolderContinueBar > div{ height:100%; width:0%; background: rgba(var(--accent-rgb),.78); border-radius:999px; }
+.videoFolderContinueHint{ opacity:.8; font-size: 11px; }
+
+
+/* --- Video episode table column grid & cell styling --- */
+
+/* Build 3.4: video episode table has an extra Resolution column */
+#videoEpTableHead{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
+#videoEpisodesGrid .volTrow{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
+
+/* Build 10: Video episode table readability upgrades (visual progress, better alignment) */
+#videoEpisodesWrap .cell.size,
+#videoEpisodesWrap .cell.duration,
+#videoEpisodesWrap .cell.date{
+  text-align: right;
+}
+#videoEpisodesWrap .cell.resolution{
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+#videoEpisodesWrap .cell.progress{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+#videoEpisodesWrap .videoEpProgressTrack{
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.12);
+  overflow: hidden;
+}
+#videoEpisodesWrap .videoEpProgressFill{
+  height: 100%;
+  width: 0%;
+  background: rgba(255,255,255,.65);
+}
+#videoEpisodesWrap .videoEpProgressLabel{
+  flex: 0 0 auto;
+  min-width: 40px;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(229,231,235,.74);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+#videoEpisodesWrap .videoEpTitleMain{
+  font-weight: 650;
+  color: rgba(229,231,235,.90);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#videoEpisodesWrap .videoEpTitleSub{
+  margin-top: 2px;
+  font-size: 11px;
+  color: rgba(229,231,235,.58);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+#videoEpisodesWrap .volTrow .cell.title{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+}
+
+
+/* --- Video episode folder sections (seasons, specials, arcs) --- */
+
+/* Build 5.1B: show subfolders as collapsible sections (seasons, specials, arcs) */
+.vidFolderSection{ border-bottom: 1px solid rgba(255,255,255,.12); }
+.vidFolderHeader{
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,.06);
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+  color: rgba(229,231,235,.92);
+  font-weight: 900;
+  text-align: left;
+  cursor: pointer;
+}
+.vidFolderHeader:hover{ background: rgba(255,255,255,.08); }
+.vidFolderHeadLeft{ display: flex; align-items: center; gap: 10px; min-width: 0; }
+.vidFolderCaret{ opacity: .9; transform: rotate(0deg); transition: transform .12s ease; }
+.vidFolderTitle{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vidFolderHeadRight{ display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.vidFolderMeta{ color: rgba(229,231,235,.72); font-weight: 700; font-size: 12px; }
+.vidFolderBar{
+  position: relative;
+  height: 4px;
+  width: 140px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.16);
+  overflow: hidden;
+}
+.vidFolderFill{ height: 100%; width: 0%; background: rgba(var(--accent-rgb), .75); }
+.vidFolderSection.collapsed .vidFolderCaret{ transform: rotate(-90deg); }
+.vidFolderSection.collapsed .vidFolderBody{ display: none; }
+
+
+/* --- Video library sidebar rows --- */
+
+.videoList{ display:flex; flex-direction:column; gap:6px; padding:10px; }
+.videoRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.04); cursor:pointer; }
+.videoRow:hover{ background:rgba(255,255,255,0.06); }
+.videoRowLeft{ min-width:0; flex:1; display:flex; align-items:center; gap:10px; }
+.videoThumb{ width:96px; height:54px; border-radius:10px; object-fit:cover; background:rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.10); flex:0 0 auto; }
+.videoRowMain{ min-width:0; display:flex; flex-direction:column; gap:2px; }
+.videoRowTitle{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoRowMeta{ font-size:11px; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoRowMetaLines{ display:flex; flex-direction:column; gap:2px; }
+.videoProgressBar{ height:4px; border-radius:999px; background:rgba(255,255,255,0.12); overflow:hidden; margin-top:4px; }
+.videoProgressFill{ height:100%; width:var(--pct, 0%); background:rgba(255,255,255,0.50); }
+.videoRowRight{ display:flex; align-items:center; gap:8px; }
+.videoBadge{ font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); opacity:0.9; }
+.videoRemoveBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); cursor:pointer; }
+
+/* Build 45 — Videos: sidebar rows align with Comics folder tree (typography + spacing). */
+#videoFoldersList .videoRow{
+  padding: 4px 6px;
+  border-radius: var(--lib-radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+}
+#videoFoldersList .videoRow:hover{
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.08);
+}
+#videoFoldersList .videoRowTitle{ font-size: 12px; font-weight: 600; }
+#videoFoldersList .videoRowMeta{ font-size: 11px; opacity: 0.75; }
+#videoFoldersList .videoRow{ box-shadow: none; }
+#videoFoldersList .videoRemoveBtn{ padding: 4px 8px; border-radius: 10px; }
+
+
+/* --- Video player shell & chrome --- */
+
+.videoPlayerShell{
+  height:calc(100vh - 56px);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  padding:12px;
+}
+
+/* Video player chrome — Noir polish (Build 110)
+   INTENT: Make the player feel "real" (VLC/PotPlayer vibe) without overlaying the native surface.
+   Controls stay outside the render surface; readability comes from subtle panels + gradients. */
+.videoPlayerBar{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 10px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,0.10);
+  background:rgba(10,10,12,0.78);
+  box-shadow: 0 12px 36px rgba(0,0,0,0.45);
+  backdrop-filter: blur(14px);
+}
+
+/* Player bar buttons: slightly larger hit targets, calmer chrome. */
+.videoPlayerBar .iconBtn{
+  width:36px;
+  height:36px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.12);
+  background:rgba(255,255,255,0.04);
+  display:grid;
+  place-items:center;
+}
+.videoPlayerBar .iconBtn:hover{ background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.16); }
+.videoPlayerBar .iconBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.75);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+.videoNowTitle{
+  font-size:13px;
+  opacity:0.92;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  max-width: min(760px, calc(100vw - 420px));
+}
+.videoEl{ width:100%; height:100%; flex:1; min-height:0; border-radius:16px; background:black; object-fit:contain; }
+
+/* Build 38 — Stable player chrome for embedded libmpv:
+   Keep controls OUTSIDE the native video surface (no overlay), so clicks/focus are predictable.
+   We keep the same DOM, but make the stage a column: [video surface] + [control strip]. */
+.mpvHost{
+  position:relative;
+  inset:auto;
+  width:100%;
+  height:auto;
+  flex:1;
+  min-height:0;
+  border-radius:16px;
+  background:black;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* Build 66: libmpv canvas embedded mode renders into a DOM canvas/WebGL surface.
+   Make the entire render surface non-interactive so the stage can reliably receive
+   right-click/mousewheel/mousemove (context menu + minimal HUD reveal zone). */
+body.libmpvCanvas .mpvHost *{ pointer-events:none !important; }
+
+.mpvDetachedPlaceholder{ width:100%; height:100%; border-radius:16px; border:1px dashed rgba(255,255,255,0.18); background:rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; opacity:0.85; }
+.mpvDetachedPlaceholder.hidden{ display:none; }
+body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
+
+.videoPlayerBarRight{ margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+/* Chip buttons — smaller, darker, "brass" hover; consistent focus ring. */
+.chipBtn{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(255,255,255,0.04);
+  color:inherit;
+  cursor:pointer;
+  font-size:12px;
+  line-height:1;
+  opacity:0.92;
+}
+.chipBtn:hover{
+  background:rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.18);
+}
+.chipBtn:active{ transform: translateY(0.5px); }
+.chipBtn:focus-visible{
+  outline: none;
+  border-color: rgba(220, 185, 120, 0.65);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+
+/* --- Video stage & HUD --- */
+
+.videoStage{
+  position:relative;
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:0px;
+}
+
+/* Subtle readability gradient behind the bottom HUD (no click interference). */
+.videoStage::after{
+  content:'';
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:64px;
+  background: linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0.0));
+  opacity:0;
+  pointer-events:none;
+  transition: opacity 160ms ease;
+  z-index:4; /* below HUD (5), above video */
+}
+.videoStage.showHud::after{ opacity:1; }
+
+/* Build 56B: fullscreen polish — hide cursor when controls fade (YouTube-like). */
+.videoStage.hideCursor{ cursor:none; }
+.videoStage.hideCursor *{ cursor:none; }
+body.inVideoPlayer .videoStage{ height:calc(100vh - 120px); }
+
+/* Build 52 — Canvas-only overlay HUD (VLC-ish). Hidden until mouse/keyboard activity. */
+/* BUILD 66: Minimal timeline (ultra-thin, cinema mode) */
+.videoHud--minimal{
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:40px;
+  z-index:5;
+  padding:10px 12px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  border-radius:0;
+  background:transparent;
+  border:none;
+  box-shadow:none;
+  opacity:0;
+  transform:translateY(4px);
+  pointer-events:none;
+  transition:opacity 160ms ease, transform 160ms ease;
+  backdrop-filter:none;
+  height:52px; /* Still compact, but not fiddly */
+}
+
+.videoStage.showHud .videoHud--minimal{
+  opacity:1;
+  transform:none;
+  pointer-events:auto;
+}
+
+/* BUILD 101: Fullscreen exit arrow (top-left, unobtrusive). */
+#videoExitFullscreenBtn{
+  position:absolute;
+  top:10px;
+  left:10px;
+  z-index:6; /* Above video, below menus */
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(0,0,0,0.18);
+  color:rgba(255,255,255,0.88);
+  font-size:16px;
+  line-height:1;
+  display:grid;
+  place-items:center;
+  opacity:0;
+  pointer-events:none;
+  cursor:pointer;
+  transition:opacity 140ms ease, background 140ms ease;
+  backdrop-filter: blur(4px);
+}
+
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn{
+  opacity:0.55;
+  pointer-events:auto;
+}
+
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:hover,
+body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
+  opacity:0.9;
+  background:rgba(0,0,0,0.28);
+}
+
+/* Minimal play button at far left */
+.minimalNavBtn{
+  width:38px;
+  height:38px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.18);
+  background:rgba(0,0,0,0.28);
+  color:inherit;
+  display:grid;
+  place-items:center;
+  margin-right:0;
+  backdrop-filter: blur(6px);
+}
+.minimalNavBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalNavBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.65);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+/* Make the primary play button feel "centered" and easier to hit. */
+.minimalPlayBtn{
+  width:44px;
+  height:44px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.20);
+  background:rgba(12,12,14,0.62);
+  color:inherit;
+  display:grid;
+  place-items:center;
+  font-size:16px;
+  backdrop-filter: blur(8px);
+}
+.minimalPlayBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalPlayBtn:active{ transform: translateY(0.5px); }
+.minimalPlayBtn:focus-visible{
+  outline:none;
+  border-color: rgba(220, 185, 120, 0.75);
+  box-shadow: 0 0 0 3px rgba(220, 185, 120, 0.18);
+}
+
+
+/* --- Video scrub & time --- */
+
+/* Scrub control: thicker on hover, clearer thumb, readable bubble. */
+.videoScrub--minimal{
+  height:12px;
+  align-self:center;
+  padding:0;
+}
+.videoHud--minimal:hover .videoScrub--minimal{ height:14px; }
+.videoScrub--minimal .scrubTrack{
+  height:4px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.14);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubTrack{ height:5px; }
+.videoScrub--minimal .scrubFill{
+  height:4px;
+  border-radius:999px;
+  background:rgba(220, 185, 120, 0.70);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubFill{ height:5px; }
+.videoScrub--minimal .scrubThumb{
+  width:14px;
+  height:14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.24);
+  background:rgba(10,10,12,0.92);
+}
+.videoHud--minimal:hover .videoScrub--minimal .scrubThumb{
+  width:16px;
+  height:16px;
+}
+.videoScrub--minimal .scrubBubble{
+  border-radius:12px;
+  padding:5px 8px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:rgba(10,10,12,0.82);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+}
+
+/* Time display: calmer, more "player-like". */
+.videoTimeDisplay{
+  font-size:12px;
+  opacity:0.90;
+  padding:4px 8px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.14);
+  background:rgba(0,0,0,0.22);
+  backdrop-filter: blur(6px);
+}
+.minimalNavBtn:disabled{ opacity:0.4; cursor:not-allowed; }
+
+
+/* --- Legacy HUD (non-minimal mode) --- */
+
+/* Legacy videoHud for non-minimal mode (keep original for compatibility) */
+.videoHud:not(.videoHud--minimal){
+  position:absolute;
+  left:12px;
+  right:12px;
+  bottom:12px;
+  z-index:5;
+  padding:10px 12px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  border-radius:16px;
+  background:rgba(var(--panel2-rgb), 0.72);
+  border:1px solid rgba(255,255,255,0.16);
+  box-shadow: var(--shadow2);
+  opacity:0;
+  transform: translateY(8px);
+  pointer-events:none;
+  transition: opacity 160ms ease, transform 160ms ease;
+  backdrop-filter: blur(6px);
+}
+
+.videoStage.showHud .videoHud:not(.videoHud--minimal){ opacity:1; transform:none; pointer-events:auto; }
+
+/* Non-canvas mpv surfaces: keep HUD docked and always visible (safety). */
+body.mpvEngine:not(.libmpvCanvas) .videoStage{ gap:10px; }
+body.mpvEngine:not(.libmpvCanvas) .mpvHost{ flex:1; }
+body.mpvEngine:not(.libmpvCanvas) .videoHud{
+  position:relative;
+  left:auto;
+  right:auto;
+  bottom:auto;
+  opacity:1;
+  transform:none;
+  pointer-events:auto;
+  backdrop-filter:none;
+  margin-top:10px;
+}
+body.mpvEngine:not(.libmpvCanvas) .videoStage.showHud .videoHud{ opacity:1; transform:none; pointer-events:auto; }
+body.mpvEngine:not(.libmpvCanvas) .videoToast{ position:relative; top:auto; left:auto; transform:none; margin:0 auto; }
+body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; background:transparent; padding:10px 0; }
+
+
+/* --- Video context menu --- */
+
+/* Video context menu (Build 56C) */
+.videoCtxMenu{
+  position:fixed;
+  z-index:80;
+  min-width:220px;
+  max-width:320px;
+  padding:6px;
+  border-radius:14px;
+  background:rgba(20,20,24,0.94);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 18px 60px rgba(0,0,0,0.55);
+  backdrop-filter:blur(16px);
+}
+.videoCtxMenu.hidden{ display:none; }
+.videoCtxMenu .ctxItem{
+  width:100%;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:left;
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+.videoCtxMenu .ctxItem:hover{ background:rgba(255,255,255,0.08); }
+.videoCtxMenu .ctxItem:disabled{
+  opacity:0.4;
+  cursor:not-allowed;
+}
+.videoCtxMenu .ctxItem:disabled:hover{
+  background:transparent;
+}
+.videoCtxMenu .ctxSep{
+  height:1px;
+  margin:6px 6px;
+  background:rgba(255,255,255,0.12);
+  border-radius:1px;
+}
+
+/* BUILD64: Context menu enhancements */
+.videoCtxMenu .ctxLabel{
+  flex:1;
+}
+.videoCtxMenu .ctxHotkey{
+  opacity:0.5;
+  font-size:0.9em;
+  font-family:monospace;
+}
+.videoCtxMenu .ctxArrow{
+  opacity:0.6;
+  font-size:0.85em;
+}
+.videoCtxMenu .ctxCheck{
+  opacity:0.8;
+  display:none;
+}
+.videoCtxMenu .ctxCheck.visible{
+  display:inline;
+}
+
+/* Submenu container */
+.videoCtxMenu .ctxSubmenu{
+  position:relative;
+}
+
+/* Submenu panel */
+.videoCtxMenu .ctxSubmenuPanel{
+  position:fixed;
+  z-index:81;
+  min-width:200px;
+  max-width:280px;
+  padding:6px;
+  border-radius:14px;
+  background:rgba(20,20,24,0.94);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 18px 60px rgba(0,0,0,0.55);
+  backdrop-filter:blur(16px);
+}
+.videoCtxMenu .ctxSubmenuPanel.hidden{
+  display:none;
+}
+
+/* Active submenu item highlighting */
+.videoCtxMenu .ctxItem[data-act="speed"].active,
+.videoCtxMenu .ctxItem[data-track-id].active{
+  background:rgba(255,255,255,0.15);
+  font-weight:500;
+}
+.videoCtxMenu .ctxItem[data-act="speed"].active::after,
+.videoCtxMenu .ctxItem[data-track-id].active::after{
+  content:'✓';
+  margin-left:8px;
+  opacity:0.8;
+}
+
+body.mpvEngine:not(.libmpvCanvas) .videoPromptCard{ margin:0 auto; }
+
+
+/* --- HUD buttons, UI hidden toggle --- */
+
+/* Build 33: Reader-style hide UI toggle for video player (H) */
+body.videoUiHidden .videoPlayerBar,
+body.videoUiHidden .videoHud,
+body.videoUiHidden #videoTracksPanel,
+body.videoUiHidden #videoVolPanel,
+body.videoUiHidden #videoSpeedPanel,
+body.videoUiHidden #videoPlaylistPanel,
+body.videoUiHidden .videoToast{
+  display: none !important;
+}
+.videoHudRow{ display:flex; align-items:center; gap:8px; }
+.hudBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtnWide{ padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtn:hover, .hudBtnWide:hover{ background:rgba(255,255,255,0.12); }
+.hudBtn:disabled, .hudBtnWide:disabled{ opacity:0.5; cursor:default; }
+.hudTime{ font-size:12px; opacity:0.85; min-width:52px; text-align:center; }
+.hudSeek{ flex:1; }
+
+/* Video timeline uses the reader scrub control */
+.videoHud .videoScrub{ flex:1; min-width:160px; }
+
+.hudVol{ width:120px; }
+.hudSpacer{ flex:1; }
+
+
+/* --- Video toasts --- */
+
+.videoToast{ position:absolute; top:12px; left:50%; transform:translateX(-50%); padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.65); border:1px solid rgba(255,255,255,0.18); font-size:12px; opacity:0.95; }
+.videoToast.hidden{ display:none; }
+.videoLibraryToast{
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12000;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.78);
+  border: 1px solid rgba(255,255,255,0.20);
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0.96;
+}
+.videoLibraryToast.hidden{ display:none; }
+
+
+/* --- Tracks panel (mpv) --- */
+
+/* Tankoban Plus Build 5.4A — Track selectors (mpv only)
+   INTENT: Minimal in-app selectors for audio/subtitle tracks without changing overlay behavior. */
+.videoTracksPanel{ position:absolute; left:0; right:0; bottom:64px; display:flex; align-items:flex-end; justify-content:center; padding:0 10px; pointer-events:none; z-index:30; }
+.videoTracksPanel.hidden{ display:none; }
+.videoTracksCard{ width:min(520px, calc(100% - 24px)); border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); pointer-events:auto; }
+.videoTracksHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.10); }
+.videoTracksTitle{ font-size:13px; opacity:0.92; }
+.videoTracksBody{ display:grid; grid-template-columns: 90px 1fr; gap:10px; padding:12px; align-items:center; }
+.tracksLabel{ font-size:12px; opacity:0.8; }
+.tracksSelect{ width:100%; padding:8px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; }
+.tracksSelect option{ background:#111; color:#f2f2f2; }
+
+
+.tracksDivider{ grid-column:1 / -1; height:1px; background:rgba(255,255,255,0.08); margin:2px 0; }
+.tracksToggle{ grid-column:2 / -1; display:flex; align-items:center; gap:10px; font-size:12px; opacity:0.9; user-select:none; }
+.tracksToggle input{ accent-color: #4aa3ff; }
+.tracksHint{ grid-column:2 / -1; font-size:11px; opacity:0.65; margin-top:-6px; }
+
+/* Tankoban Plus Build 5.4B — Delay controls (mpv only)
+   INTENT: Quick sync nudges with a tiny, consistent control group. */
+.delayControls{ display:flex; align-items:center; justify-content:flex-start; gap:10px; }
+.delayControls.hidden{ display:none; }
+.delayBtn{ min-width:34px; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
+.delayBtn:hover{ background:rgba(255,255,255,0.12); }
+.delayValue{ font-size:12px; opacity:0.9; min-width:60px; text-align:center; }
+
+
+/* Tankoban Plus Build 5.4C — Basic video transforms (mpv only)
+   INTENT: Aspect/crop presets + reset, kept inside the existing tracks panel. */
+.transformsBlock{ display:contents; }
+.transformsBlock.hidden{ display:none; }
+.tracksBtn{ width:100%; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
+.tracksBtn:hover{ background:rgba(255,255,255,0.12); }
+
+/* In mpv mode, the HUD is docked below the surface; keep the panel docked too. */
+/* Dock the tracks panel only for native/embedded mpv surfaces (where overlays can be occluded). */
+body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:auto; right:auto; bottom:auto; padding:0; }
+
+
+/* --- Video prompt dialog --- */
+
+.videoPrompt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); }
+.videoPrompt.hidden{ display:none; }
+.videoPromptCard{ width:min(420px, calc(100% - 24px)); padding:14px; border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.videoPromptTitle{ font-size:14px; margin-bottom:6px; }
+.videoPromptText{ font-size:12px; opacity:0.85; margin-bottom:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.videoPromptActions{ display:flex; gap:10px; justify-content:flex-end; }
+.primaryBtn{ padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.14); color:inherit; cursor:pointer; }
+.primaryBtn:hover{ background:rgba(255,255,255,0.18); }
+
+
+/* --- Continue Watching shelf --- */
+
+/* Build 45 — Videos: stabilize Continue Watching shelf geometry (break layout feedback loop). */
+#videoContinuePanel{
+  height: 430px;
+  display:flex;
+  flex-direction:row;
+}
+
+/* Build 20 — Videos: Continue Watching shelf uses the same tile language as Continue Reading (one tile per show). */
+.videoContinueRow{ display:flex; gap:18px; overflow-x:auto; overflow-y:hidden; padding:20px 6px; flex:1; min-height:0; }
+.videoContinueRow .contTile{ flex:0 0 auto; }
+
+
+/* --- Video Player Shell mode --- */
+
+/* Video Player Shell mode (dedicated controller window) */
+body.videoShellMode .topbar { display: none !important; }
+body.videoShellMode .videoPlayerShell { height: 100vh !important; }
+
+
+/* --- HUD panels (playlist, volume, speed) --- */
+
+/* Playlist panel: compact reader-like overlay */
+.hudPanel {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 64px;
+  background: rgba(18, 18, 18, 0.92);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 16px;
+  box-shadow: 0 14px 44px rgba(0,0,0,0.55);
+  overflow: hidden;
+  z-index: 31;
+  pointer-events: auto;
+}
+
+/* In embedded/native mpv surfaces, overlays can be occluded; dock panels instead.
+   In canvas mode, keep them as true overlays (VLC-ish). */
+body.mpvEngine:not(.libmpvCanvas) .hudPanel {
+  position: relative;
+  left: auto;
+  transform: none;
+  bottom: auto;
+  margin: 0 auto;
+}
+
+#videoPlaylistPanel { width: min(520px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 24px)); }
+#videoPlaylistPanel .panelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+#videoPlaylistPanel .panelTitle { font-weight: 700; }
+#videoPlaylistPanel .panelHeaderActions { display: flex; align-items: center; gap: 10px; }
+#videoPlaylistPanel .panelBody { overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; }
+#videoPlaylistList { flex: 1 1 auto; overflow: auto; padding-right: 4px; min-height: 0; overscroll-behavior: contain; }
+
+.videoPlaylistItem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.videoPlaylistItem:hover { filter: brightness(1.08); }
+.videoPlaylistItem.isCurrent { outline: 1px solid rgba(255,255,255,0.18); }
+
+.videoPlaylistItem .epName { flex: 1; }
+.videoPlaylistItem .epMeta { opacity: 0.75; font-size: 12px; }
+
+.panelToggle { display: inline-flex; align-items: center; gap: 8px; user-select: none; }
+.panelRow { display: flex; gap: 10px; }
+.panelBtn {
+  flex: 1;
+  height: 32px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.panelBtn:hover { filter: brightness(1.08); }
+.panelBtn:disabled { opacity: 0.5; cursor: default; filter: none; }
+
+.panelSub { opacity: 0.75; font-size: 12px; margin-top: 2px; }
+
+
+/* --- Volume & speed panels --- */
+
+/* Build 24 — Video HUD quick tools: mini panels */
+
+/* Volume panel layout */
+.videoVolBody{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:12px;
+}
+.videoVolPanelSlider{ width: 220px; max-width: 50vw; }
+#videoVolPct{ min-width: 56px; text-align: right; opacity:0.85; }
+
+/* Speed panel layout */
+.videoSpeedBody{ padding:12px; display:flex; flex-direction:column; gap:12px; }
+.videoSpeedRow{ display:flex; align-items:center; justify-content:center; gap:12px; }
+#videoSpeedPanelValue{ min-width: 64px; text-align:center; opacity:0.9; }
+
+.videoSpeedPresets{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }
+.speedChip{
+  padding:6px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,0.16);
+  background:rgba(255,255,255,0.08);
+  color:inherit;
+  cursor:pointer;
+  font-size:12px;
+}
+.speedChip:hover{ background:rgba(255,255,255,0.12); }
+
+
+/* --- Overlay fixes (toast + center flash positioning) --- */
+
+/* =========================================================
+   UX FIX: Overlays (toast + center flash) must not shrink video
+   Keep the control bar behavior unchanged.
+   Root cause: #videoStage/.videoStage is a flex column. Any
+   transient UI in normal flow will steal height and "shrink"
+   the video surface. Force the key transient elements to be
+   absolute overlays so they never participate in layout.
+   ========================================================= */
+
+#videoStage, .videoStage {
+  position: relative;
+}
+
+/* Toasts: volume/speed/key feedback */
+#videoStage #videoToast,
+#videoStage .videoToast,
+body.mpvEngine #videoStage #videoToast,
+body.mpvEngine #videoStage .videoToast,
+body.mpvEngine .videoToast {
+  position: absolute !important;
+  right: 18px !important;
+  bottom: 26px !important;
+  top: auto !important;
+  left: auto !important;
+  transform: none !important;
+  margin: 0 !important;
+  pointer-events: none !important;
+  z-index: 999 !important;
+}
+
+/* Center play/pause flash: ensure it never becomes a full-width "bar" */
+#videoStage #videoCenterFlash,
+#videoStage .videoCenterFlash,
+.videoCenterFlash {
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  width: auto !important;
+  height: auto !important;
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  z-index: 1000 !important;
+}
+
+
+/* --- Volume OSD indicator --- */
+
+/* =========================================================
+   BUILD 69: Volume OSD Indicator
+   Prominent on-screen display for volume changes
+   ========================================================= */
+.videoVolumeOSD {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.videoVolumeOSD.visible {
+  opacity: 1;
+}
+
+.videoVolumeOSD.hidden {
+  display: none;
+}
+
+.volumeOSDIcon {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.volumeOSDBars {
+  font-family: monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.volumeOSDPercent {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+}
+
+
+/* --- Time display override --- */
+
+/* =========================================================
+   BUILD 69: Always-visible time display on timeline
+   ========================================================= */
+.videoTimeDisplay {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  padding: 0 12px;
+  user-select: none;
+}
+
+.videoHud--minimal .videoTimeDisplay {
+  font-size: 12px;
+  padding: 0 8px;
+}
