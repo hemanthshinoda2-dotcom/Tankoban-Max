@@ -677,7 +677,7 @@ function updateCard(info) {
       }
       sel.appendChild(optGroup);
     }
-    if (_settings.ttsVoice) sel.value = _settings.ttsVoice;
+    sel.value = _settings.ttsVoice || 'en-US-AndrewNeural';
   }
 
   // ── Highlight controls ──────────────────────────────────────────────────────
@@ -1100,8 +1100,8 @@ function updateCard(info) {
     var opts = _buildTtsInitOpts();
     tts.init(opts).then(function () {
       if (!_open || !_ttsStarted) return;
-      // Apply saved settings
-      if (_settings.ttsVoice) try { tts.setVoice(_settings.ttsVoice); } catch {}
+      // Apply saved settings (default to Andrew if no voice saved)
+      try { tts.setVoice(_settings.ttsVoice || 'en-US-AndrewNeural'); } catch {}
       if (_settings.ttsPreset) try { tts.setPreset(_settings.ttsPreset); } catch {}
       tts.setRate(_settings.ttsRate || 1.0);
       if (typeof tts.setPitch === 'function') {

@@ -803,10 +803,15 @@
             return eng.advanceSection(1).then(function () { return true; }).catch(function () { return false; });
           },
         }).then(function () {
-          // Restore saved rate/volume/voice
-          try { var _r = parseFloat(localStorage.getItem('booksListen.Rate')); if (_r >= 0.5 && _r <= 2.0) tts.setRate(_r); } catch (e) {}
-          try { var _v = parseFloat(localStorage.getItem('booksListen.Volume')); if (_v >= 0 && _v <= 1) tts.setVolume(_v); } catch (e) {}
-          try { var _vc = localStorage.getItem('books_lp_tts_voice'); if (_vc) tts.setVoice(_vc); } catch (e) {}
+          // Restore saved rate/volume/voice (per-book with global fallback)
+          var _bkKey = '';
+          try { var _bid = st.book && (st.book.id || st.book.path); if (_bid) _bkKey = 'bk:' + encodeURIComponent(String(_bid)).slice(0, 180); } catch (e) {}
+          try { var _r = parseFloat((_bkKey && localStorage.getItem('booksListen.' + _bkKey + '.Rate')) || localStorage.getItem('booksListen.Rate')); if (_r >= 0.5 && _r <= 2.0) tts.setRate(_r); } catch (e) {}
+          try { var _v = parseFloat((_bkKey && localStorage.getItem('booksListen.' + _bkKey + '.Volume')) || localStorage.getItem('booksListen.Volume')); if (_v >= 0 && _v <= 1) tts.setVolume(_v); } catch (e) {}
+          try {
+            var _vc = (_bkKey && localStorage.getItem('booksListen.' + _bkKey + '.Voice')) || localStorage.getItem('booksListen.Voice') || 'en-US-AndrewNeural';
+            tts.setVoice(_vc);
+          } catch (e) {}
           var s = (typeof tts.getState === 'function') ? (tts.getState() || 'idle') : 'idle';
           // If there is a selection, start from selection. Otherwise start from current position.
           try {

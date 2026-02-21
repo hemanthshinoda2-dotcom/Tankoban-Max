@@ -304,7 +304,10 @@
         if (tts && txt) {
           try {
             try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
-            if (typeof tts.init === 'function') tts.init({ format: String((st.book && st.book.format) || 'epub').toLowerCase(), getHost: function(){ return st.host || null; }, getViewEngine: function(){ return st.engine || null; }, onNeedAdvance: function(){ var eng = st.engine || null; if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false); return eng.advanceSection(1).then(function(){ return true; }).catch(function(){ return false; }); } }).then(function(){ try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {} try { tts.playFromSelection(txt); } catch (e) {} });
+            if (typeof tts.init === 'function') tts.init({ format: String((st.book && st.book.format) || 'epub').toLowerCase(), getHost: function(){ return st.host || null; }, getViewEngine: function(){ return st.engine || null; }, onNeedAdvance: function(){ var eng = st.engine || null; if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false); return eng.advanceSection(1).then(function(){ return true; }).catch(function(){ return false; }); } }).then(function(){
+              // Restore saved voice (per-book with global fallback, default Andrew)
+              try { var _bk2 = ''; try { var _b2 = st.book && (st.book.id || st.book.path); if (_b2) _bk2 = 'bk:' + encodeURIComponent(String(_b2)).slice(0, 180); } catch(e2){} var _vc2 = (_bk2 && localStorage.getItem('booksListen.' + _bk2 + '.Voice')) || localStorage.getItem('booksListen.Voice') || 'en-US-AndrewNeural'; tts.setVoice(_vc2); } catch(e2){}
+              try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {} try { tts.playFromSelection(txt); } catch (e) {} });
           } catch (e) {}
         }
       } catch (e) {}
