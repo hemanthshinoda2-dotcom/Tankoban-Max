@@ -811,7 +811,7 @@ function updateCard(info) {
     if (!tts) return;
     var st = tts.getState();
     if (st === 'section_transition') return;
-    if (st === 'idle') tts.play();
+    if (st === 'idle') tts.play(0, { startFromVisible: true });
     else if (st === 'playing') tts.pause();
     else if (st === 'paused') {
       if (_autoRewindEnabled && _pausedAtMs && (Date.now() - _pausedAtMs) > AUTO_REWIND_AFTER_PAUSE_MS) {
@@ -1171,7 +1171,7 @@ function updateCard(info) {
           applyEntry(entry);
         });
       } else {
-        try { tts.play(0); } catch {}
+        try { tts.play(0, { startFromVisible: true }); } catch {}
       }
     }).catch(function (e) {
       try { console.error('[listen-player] tts.init() failed:', e); } catch {}

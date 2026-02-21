@@ -1161,7 +1161,7 @@
   // ── Play / Pause / Resume / Stop ─────────────────────────────
 
   // FIX-LISTEN-STAB3: optional startBlockIdx — resume from saved position instead of always block 0
-  async function play(startBlockIdx) {
+  async function play(startBlockIdx, opts) {
     if (!state.engine) return;
 
     if (_isPausedState(state.status)) {
@@ -1179,6 +1179,7 @@
     state._cancelFlag = false;
 
     var resumeIdx = (typeof startBlockIdx === 'number' && startBlockIdx > 0) ? startBlockIdx : 0;
+    var startFromVisible = !!(opts && opts.startFromVisible);
 
     // EPUB/PDF: initialize foliate-js TTS
     var ok = await _initFoliateTTS();
@@ -1190,10 +1191,12 @@
         if (ok && _fol.tts) {
           _generateQueue();
           if (_queue.length > 0) {
+            var idx = resumeIdx;
+            if (startFromVisible) { var vi = getFirstVisibleBlockIndex(); if (vi > 0) idx = vi; }
             state.status = PLAYING;
             acquireWakeLock();
             fire();
-            _speakQueueItem(Math.min(resumeIdx, _queue.length - 1));
+            _speakQueueItem(Math.min(idx, _queue.length - 1));
           }
         } else if (retries < 3) {
           setTimeout(tryInit, 300 * retries);
@@ -1205,6 +1208,8 @@
 
     _generateQueue();
     if (!_queue.length) return;
+
+    if (startFromVisible) { var vi = getFirstVisibleBlockIndex(); if (vi > 0) resumeIdx = vi; }
 
     state.status = PLAYING;
     acquireWakeLock();
@@ -2105,6 +2110,37 @@ function _queueThrottledRateVoiceChange(kind) {
     };
   }
 
+  // ── Find first queue block visible on the current page ──────
+  function getFirstVisibleBlockIndex() {
+    if (!_queue.length) return 0;
+    var renderer = _fol.renderer;
+    if (!renderer) return 0;
+    try {
+      var start = typeof renderer.start !== 'undefined' ? renderer.start : 0;
+      var size = typeof renderer.size !== 'undefined' ? renderer.size : 0;
+      if (!size) return 0;
+      // In paginated mode, the visible page spans [start - size, start) in document coords.
+      // The renderer uses a mapRect function internally; for LTR horizontal it's identity.
+      var pageStart = start - size;
+      var pageEnd = start;
+      for (var i = 0; i < _queue.length; i++) {
+        var item = _queue.items[i];
+        if (!item || !item.ranges || !item.ranges.size) continue;
+        var firstRange = item.ranges.values().next().value;
+        if (!firstRange) continue;
+        try {
+          var rect = firstRange.getBoundingClientRect();
+          if (!rect) continue;
+          // Block is visible if its left edge is within the current page
+          if (rect.left >= pageStart && rect.left < pageEnd) return i;
+          // Also check if block spans across the page boundary
+          if (rect.left < pageStart && rect.right > pageStart) return i;
+        } catch (e) { continue; }
+      }
+    } catch (e) {}
+    return 0;
+  }
+
   // ── Public API ───────────────────────────────────────────────
 
   window.booksTTS = {
@@ -2157,6 +2193,7 @@ function _queueThrottledRateVoiceChange(kind) {
     setEnlargeScale: setEnlargeScale,
     getEnlargeScale: function () { return state.ttsEnlargeScale; },
     getLastBlockInfo: getLastBlockInfo, // TTS-RESUME-HL
+    getFirstVisibleBlockIndex: getFirstVisibleBlockIndex,
     _reinitFoliateTTS: _reinitFoliateTTS,
     // FIX-TTS05: expose queue regeneration for section transitions
     _regenerateQueue: _generateQueue,

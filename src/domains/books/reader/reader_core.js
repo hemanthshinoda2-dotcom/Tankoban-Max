@@ -825,7 +825,7 @@
             }
           } catch (e) {}
           try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
-          try { tts.play(0); } catch (e) {}
+          try { tts.play(0, { startFromVisible: true }); } catch (e) {}
         }).catch(function () {});
       } catch (e) {}
     });
