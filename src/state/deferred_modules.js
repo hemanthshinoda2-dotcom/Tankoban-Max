@@ -170,6 +170,7 @@
         // Group 4-5: orchestrator then library (sequential, order matters)
         await loadScriptOnce('./domains/books/reader/reader_core.js');
         await loadScriptOnce('./domains/books/library.js');
+        await loadScriptOnce('./domains/books/books_opds.js');
         // LISTEN_P3: TTS player overlay (mega panel wiring, voice curation, highlight controls)
         await loadScriptOnce('./domains/books/listening_player.js');
 
