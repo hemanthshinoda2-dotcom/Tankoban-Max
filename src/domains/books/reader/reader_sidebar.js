@@ -65,6 +65,37 @@
     toggleSidebar(false);
   }
 
+
+  function shouldIgnoreReadingAreaClickForSidebarClose(ev) {
+    var t = ev && ev.target;
+    if (!t || !t.closest) return false;
+
+    // Ignore clicks on reader chrome / floating controls / overlays.
+    if (t.closest('.br-toolbar')) return true;
+    if (t.closest('.br-footer')) return true;
+    if (t.closest('.br-overlay')) return true;
+    if (t.closest('.br-overlay-backdrop')) return true;
+    if (t.closest('.booksGotoOverlay')) return true;
+    if (t.closest('.booksAnnotPopup')) return true;
+    if (t.closest('.booksReaderDictPopup')) return true;
+    if (t.closest('.booksReaderTtsBar')) return true;
+    if (t.closest('.booksReaderTtsMega')) return true;
+    if (t.closest('.booksReaderTtsDiag')) return true;
+    if (t.closest('.booksReaderReturnTts')) return true;
+    if (t.closest('.br-reading-ruler')) return true;
+    if (t.closest('.br-para-controls')) return true;
+    if (t.closest('.br-para-toolbar')) return true;
+    if (t.closest('.br-nav-arrow')) return true;
+
+    // Don't collapse sidebar while the user is selecting text.
+    try {
+      var sel = window.getSelection && window.getSelection();
+      if (sel && String(sel).trim()) return true;
+    } catch (e) {}
+
+    return false;
+  }
+
   // ── Bind ─────────────────────────────────────────────────────
 
   function bind() {
@@ -96,8 +127,10 @@
     // FIX_HUD: click on reading area closes sidebar
     var readingArea = document.querySelector('.br-reading-area');
     if (readingArea) {
-      readingArea.addEventListener('click', function () {
-        if (RS.state.sidebarOpen) closeSidebar();
+      readingArea.addEventListener('click', function (ev) {
+        if (!RS.state.sidebarOpen) return;
+        if (shouldIgnoreReadingAreaClickForSidebarClose(ev)) return;
+        closeSidebar();
       });
     }
 

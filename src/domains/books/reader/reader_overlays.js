@@ -6,8 +6,9 @@
   var bus = window.booksReaderBus;
 
   // FIX_AUDIT: split single settings overlay into dedicated font/theme/tts overlays.
-  var NAMES = ['search', 'font', 'theme', 'keys'];
+  var NAMES = ['search', 'font', 'theme', 'tts', 'keys'];
   var current = ''; // name of currently open overlay, or ''
+  var lastOpenerBtn = null;
 
   function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
@@ -20,6 +21,8 @@
       search: 'booksReaderSearchBtn',
       font: 'booksReaderFontBtn',
       theme: 'booksReaderThemeBtn',
+      tts: 'booksReaderTtsBtn',
+      keys: 'booksReaderKeysBtn',
     };
     return document.getElementById(map[name] || '');
   }
@@ -61,6 +64,12 @@
     el.style.right = Math.max(8, rightOffset - 12) + 'px';
   }
 
+
+  function repositionCurrent() {
+    if (!current) return;
+    positionOverlay(current);
+  }
+
   function open(name) {
     if (NAMES.indexOf(name) === -1) return;
     if (current === name) return;
@@ -75,6 +84,7 @@
     el.classList.remove('hidden');
     if (backdrop) backdrop.classList.remove('hidden');
     if (btn) btn.classList.add('active');
+    lastOpenerBtn = btn || null;
     current = name;
 
     bus.emit('overlay:opened', name);
@@ -91,9 +101,16 @@
       if (el) el.classList.add('hidden');
       if (btn) btn.classList.remove('active');
     }
+    var prev = current;
     var backdrop = getBackdrop();
     if (backdrop) backdrop.classList.add('hidden');
     current = '';
+    if (prev) bus.emit('overlay:closed', prev);
+    var restoreBtn = lastOpenerBtn;
+    lastOpenerBtn = null;
+    if (restoreBtn && typeof restoreBtn.focus === 'function') {
+      setTimeout(function () { try { restoreBtn.focus(); } catch (e) {} }, 0);
+    }
   }
 
   function toggle(name) {
@@ -133,6 +150,11 @@
         });
       })(overlayBtns[j]);
     }
+
+    // Keep panel alignment stable if layout changes while an overlay is open
+    window.addEventListener('resize', repositionCurrent, { passive: true });
+    bus.on('sidebar:toggled', function () { repositionCurrent(); });
+    bus.on('reader:fullscreen-changed', function () { repositionCurrent(); });
 
     // Bus events
     bus.on('overlay:toggle', function (name) { toggle(name); });

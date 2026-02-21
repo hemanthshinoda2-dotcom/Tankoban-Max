@@ -139,7 +139,8 @@
 .lp-toc-close:hover { color: var(--lp-text, #e4e8ef); background: rgba(var(--lp-accent-rgb, 74,144,217), 0.08); }
 .lp-toc-list {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
+  overscroll-behavior: contain;
   padding: 6px 0;
 }
 .lp-toc-item {
