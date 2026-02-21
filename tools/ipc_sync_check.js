@@ -181,8 +181,16 @@ function check({ appRoot }) {
   // Scan main handlers
   const { handled, fileMap, orphanedFiles } = scanMainHandlers(ipcIndexPath, registerDir);
 
-  // Scan preload
+  // Scan preload (index.js + namespace files)
   const { channelRefs, eventRefs } = scanPreload(preloadPath);
+  const nsDir = path.join(path.dirname(preloadPath), 'namespaces');
+  if (fs.existsSync(nsDir)) {
+    for (const f of fs.readdirSync(nsDir).filter(f => f.endsWith('.js'))) {
+      const ns = scanPreload(path.join(nsDir, f));
+      for (const r of ns.channelRefs) channelRefs.add(r);
+      for (const r of ns.eventRefs) eventRefs.add(r);
+    }
+  }
 
   // ── Undefined CHANNEL references in preload ──
   for (const ref of channelRefs) {
