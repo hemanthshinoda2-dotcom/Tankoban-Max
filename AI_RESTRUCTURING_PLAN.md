@@ -21,8 +21,8 @@ The restructuring is ordered by **impact and safety**. Every session leaves the 
 | **1** | 1–4 | Zero-risk foundations | None | IPC validator, section markers in CSS + JS, CODEMAP.md |
 | **2** | 5–7 | CSS splits | Low | Extract video/comic-reader CSS + remove dead books stubs from `styles.css` (4,264 → ~1,450 lines) |
 | **3** | 8–11 | Safe JS extractions | Low | OPDS, web sources, video search, ZIP reader out of mega-files |
-| **4** | 12–15 | Medium-risk JS splits | Medium | Video panels, video continue, main/ipc, preload namespaces |
-| **5** | 16–18 | Tooling & polish | Low | IPC scaffold tool, dead code detectors, smoke integration |
+| **4** | 12–13 | Medium-risk JS splits | Medium | Main/ipc split, preload namespace split (video.js splits dropped — see Phase 4) |
+| **5** | 14–16 | Tooling & polish | Low | IPC scaffold tool, dead code detectors, smoke integration |
 
 ---
 
@@ -213,32 +213,23 @@ Lines ~713–825 (~110 lines) — `findEOCD`, `inflateRaw`, `readZipEntries`, `r
 
 ---
 
-## Phase 4: JS Splits — Medium-Risk Extractions (Sessions 12–15)
+## Phase 4: JS Splits — Medium-Risk Extractions (Sessions 12–13)
 
 These extract larger, more interconnected sections. Each requires more bridge variables and more thorough testing.
 
-### Session 12 — Extract Video Panels from video.js
+### ~~Session 12 — Extract Video Panels from video.js~~ DROPPED
 
-Lines ~1310–2100 (~790 lines) — volume panel, speed panel, tracks panel, delay controls, diagnostics overlay. All "tool panels" that open/close independently.
+**Status:** Investigated and dropped. `closeAllToolPanels()` crosses extraction boundaries (calls `closePlaylistPanel()` 4,700 lines away). Context menu reads deep player state. 30+ external callers. Bridge would need 20+ variables — exceeding the complexity threshold the plan warned about.
 
-**Create:** `src/domains/video/video_panels.js`
-**Bridge needs:** `el` (many panel elements), `state.player`, utility functions (`fmtTime`, `hudNotice`, `toast`)
+### ~~Session 13 — Extract Video Continue Shelf from video.js~~ DROPPED
 
-**Test:** Launch app → play a video → test every panel (volume, speed, tracks, subtitles, diagnostics).
+**Status:** Investigated and dropped. `renderContinue()` is scattered across 3 non-contiguous blocks and called from 10+ locations. Bridge would need 22+ variables. The Phase 1 section markers (22 markers in video.js) provide adequate navigation.
 
----
-
-### Session 13 — Extract Video Continue Shelf from video.js
-
-Lines ~3250–3830 (~580 lines) — continue watching rendering, geometry calculations, tile builders.
-
-**Create:** `src/domains/video/video_continue.js`
-
-**Test:** Launch app → Video mode → verify continue watching shelf renders, resizes, clicks work.
+**video.js stays at ~9,481 lines.** The plan's "What's NOT Being Split" table already predicted this outcome: *"Further splits would need 20+ bridge variables. Not worth it."*
 
 ---
 
-### Session 14 — Split main/ipc/index.js — Move Domain Logic to Domain Modules
+### Session 12 (renumbered) — Split main/ipc/index.js — Move Domain Logic to Domain Modules
 
 The main process file is 1,238 lines, but most of it is inline domain logic (library cache, video cache, scan orchestration, window creation) rather than IPC registration. Since main process uses CommonJS `require()`, this is cleaner than IIFE splits.
 
@@ -253,7 +244,7 @@ After this, `main/ipc/index.js` shrinks from 1,238 → ~150 lines (just imports,
 
 ---
 
-### Session 15 — Split preload/index.js into Namespace Files
+### Session 13 (renumbered) — Split preload/index.js into Namespace Files
 
 The preload is 1,139 lines of one flat object. Since it uses CommonJS, split into:
 
@@ -266,18 +257,18 @@ The preload is 1,139 lines of one flat object. Since it uses CommonJS, split int
 
 ---
 
-## Phase 5: Tooling & Polish (Sessions 16–18)
+## Phase 5: Tooling & Polish (Sessions 14–16)
 
-### Session 16 — IPC Scaffold Tool
+### Session 14 — IPC Scaffold Tool
 
 **Create:** `tools/ipc_scaffold.js` — a CLI tool that takes a channel name + namespace and auto-generates the stub in all three files (shared/ipc.js, preload namespace, main domain handler). Eliminates the most common source of IPC bugs.
 
-### Session 17 — Dead CSS / Dead Export Detectors
+### Session 15 — Dead CSS / Dead Export Detectors
 
 **Create:** `tools/css_usage_check.js` — finds CSS classes defined but never referenced in HTML/JS
 **Create:** `tools/dead_export_check.js` — finds `window.*` assignments never read elsewhere
 
-### Session 18 — Wire All Validators into Smoke Check + Final CODEMAP Update
+### Session 16 — Wire All Validators into Smoke Check + Final CODEMAP Update
 
 **Modify:** `tools/smoke_check.js` — call IPC sync, CSS usage, dead export validators
 **Modify:** `CODEMAP.md` — final update with accurate post-restructuring file sizes and paths
@@ -291,7 +282,7 @@ The preload is 1,139 lines of one flat object. Since it uses CommonJS, split int
 | `styles.css` shared library core (after Phase 2) | ~1,450 | Lines 1–1530 are **shared infrastructure** (topbar, sidebar, folder tree, continue shelf, volume table, search, scrollbars, overlays) used by Comics, Books, AND Video. Extracting by domain would duplicate shared CSS or break other modes. |
 | `shell/core.js` (after ZIP extraction) | ~2,565 | Everything shares `el`, `appState`, and closure vars. A bridge object would be as complex as the file itself. Section markers are sufficient. |
 | `books-reader.css` | 2,732 | Already domain-scoped. Under the "urgent" threshold. Section markers from Session 2 are enough. |
-| `video.js` (after 4 extractions) | ~6,000 | The remaining core (library rendering, player adapter, player UI bindings) is deeply intertwined. Further splits would need 20+ bridge variables. Not worth it. |
+| `video.js` (after search extraction) | ~9,481 | **Confirmed unsplittable.** Sessions 12–13 were investigated and dropped: `closeAllToolPanels()` crosses boundaries (30+ callers), `renderContinue()` scattered across 3 non-contiguous blocks (10+ callsites), both need 20+ bridge variables. Section markers (22 markers) provide adequate navigation. |
 | `books/library.js` (after 2 extractions) | ~2,870 | The remaining code (grid rendering, view routing, continue reading) shares too much state. |
 
 ---
@@ -301,7 +292,7 @@ The preload is 1,139 lines of one flat object. Since it uses CommonJS, split int
 | File | Before | After | Reduction |
 |------|--------|-------|-----------|
 | `styles.css` | 4,264 | ~1,450 | **-66%** |
-| `video/video.js` | 9,649 | ~6,000 | **-38%** |
+| `video/video.js` | 9,649 | ~9,481 | -2% (search extraction only; panels/continue splits dropped) |
 | `books/library.js` | 4,037 | ~2,870 | **-29%** |
 | `main/ipc/index.js` | 1,238 | ~150 | **-88%** |
 | `preload/index.js` | 1,139 | ~50 | **-96%** |
