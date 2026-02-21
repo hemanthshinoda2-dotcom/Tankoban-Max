@@ -274,6 +274,59 @@
     return { x: x, y: y };
   }
 
+
+  var _selMenu = null;
+  function _ensureSelMenu() {
+    if (_selMenu) return _selMenu;
+    var el = document.createElement('div');
+    el.id = 'booksReaderSelMenu';
+    el.style.cssText = 'position:fixed;z-index:10020;display:none;background:rgba(18,18,22,.96);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:6px;box-shadow:0 10px 24px rgba(0,0,0,.35);gap:6px;align-items:center';
+    var mkBtn = function (label) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.style.cssText = 'background:#23242a;color:#fff;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:6px 10px;font:12px system-ui;cursor:pointer';
+      return b;
+    };
+    var bTts = mkBtn('Start TTS from here');
+    var bDict = mkBtn('Dictionary');
+    bTts.addEventListener('click', function () {
+      try {
+        var tts = window.booksTTS;
+        var st = RS.state || {};
+        var txt = '';
+        try {
+          if (st.engine && typeof st.engine.getSelectedText === 'function') {
+            var sel = st.engine.getSelectedText();
+            txt = String((sel && typeof sel === 'object') ? (sel.text || '') : (sel || '')).trim();
+          }
+        } catch (e) {}
+        if (tts && txt) {
+          try { if (typeof tts.init === 'function') tts.init({ format: String((st.book && st.book.format) || 'epub').toLowerCase(), getHost: function(){ return st.host || null; }, getViewEngine: function(){ return st.engine || null; }, onNeedAdvance: function(){ var eng = st.engine || null; if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false); return eng.advanceSection(1).then(function(){ return true; }).catch(function(){ return false; }); } }).then(function(){ try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {} try { tts.playFromSelection(txt); } catch (e) {} }); } catch (e) {}
+        }
+      } catch (e) {}
+      _hideSelMenu();
+    });
+    bDict.addEventListener('click', function () { try { triggerDictLookup('', null); } catch (e) {} _hideSelMenu(); });
+    el.appendChild(bTts); el.appendChild(bDict);
+    document.body.appendChild(el);
+    _selMenu = el;
+    return el;
+  }
+  function _hideSelMenu() { if (_selMenu) _selMenu.style.display = 'none'; }
+  function _showSelMenu(anchorEvent) {
+    var word = getSelectedWord();
+    if (!word) { _hideSelMenu(); return; }
+    var el = _ensureSelMenu();
+    var rect = getSelectionRect();
+    var x = 12, y = 12;
+    if (rect) { x = Math.max(8, Math.min(rect.left, window.innerWidth - 280)); y = Math.max(8, rect.bottom + 8); }
+    else {
+      var pt = eventToViewportPoint(anchorEvent); if (pt) { x = pt.x; y = pt.y; }
+    }
+    el.style.left = x + 'px'; el.style.top = y + 'px'; el.style.display = 'flex';
+  }
+
   // ── Selection helpers ────────────────────────────────────────
 
   function getSelectionRect() {
@@ -447,11 +500,24 @@
 
     if (els.host) {
       els.host.addEventListener('dblclick', triggerDictLookup);
+      els.host.addEventListener('contextmenu', function (e) { try { if (getSelectedWord()) { e.preventDefault(); e.stopPropagation(); _showSelMenu(e); } } catch (err) {} });
     }
 
+    document.addEventListener('selectionchange', function () {
+      try {
+        clearTimeout(RS.state._selMenuTimer || 0);
+        RS.state._selMenuTimer = setTimeout(function () {
+          if (getSelectedWord()) _showSelMenu();
+          else _hideSelMenu();
+        }, 120);
+      } catch (e) {}
+    });
+
     document.addEventListener('mousedown', function (e) {
+      if (_selMenu && _selMenu.style.display !== 'none' && !_selMenu.contains(e.target)) _hideSelMenu();
       try { if (e && e.button && e.button !== 0) return; } catch (err) {}
       if (!els.dictPopup) return;
+      _hideSelMenu();
       if (els.dictPopup.classList.contains('hidden')) return;
       if (els.dictPopup.contains(e.target)) return;
       hideDictPopup();

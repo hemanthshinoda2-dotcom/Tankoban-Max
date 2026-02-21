@@ -150,6 +150,18 @@
     }
   }
 
+  function _hardCancelAllEngines() {
+    try {
+      var ids = Object.keys(state.allEngines || {});
+      for (var i = 0; i < ids.length; i++) {
+        var eng = state.allEngines[ids[i]];
+        if (!eng || typeof eng.cancel !== 'function') continue;
+        try { eng.cancel(); } catch (e) {}
+      }
+      try { if (window.speechSynthesis && window.speechSynthesis.cancel) window.speechSynthesis.cancel(); } catch (e) {}
+    } catch (e) {}
+  }
+
   function fireProgress() {
     if (typeof state.onProgress === 'function') {
       try { state.onProgress(snippetInfo()); } catch {}
@@ -1154,6 +1166,8 @@
     if (state.engine) {
       try { state.engine.cancel(); } catch {}
     }
+    _hardCancelAllEngines();
+    _hardCancelAllEngines();
     // FIX-TTS05: Clear ALL highlights on stop (and only on stop)
     clearTtsHighlights();
     // TXT cleanup
@@ -1191,6 +1205,7 @@
     // FIX-TTS05: cancel flag before engine cancel
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
 
     var targetIdx = _queue.index + delta;
     targetIdx = Math.max(0, Math.min(_queue.length - 1, targetIdx));
@@ -1240,6 +1255,7 @@
     // cancel current synthesis before seeking
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
     state._cancelFlag = false;
 
     var shouldPlay = !!autoplay;
@@ -1296,6 +1312,7 @@
 
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
 
     var targetIdx = _queue.index + (blocksToSkip * dir);
     targetIdx = Math.max(0, Math.min(_queue.length - 1, targetIdx));
@@ -1336,6 +1353,7 @@
       if ((_queue.items[i].text || '').toLowerCase().indexOf(needle) >= 0) {
         state._cancelFlag = true;
         if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
         clearTtsHighlights();
         state._cancelFlag = false;
         state.status = PLAYING;
@@ -1364,6 +1382,7 @@
       if ((_queue.items[i].text || '').toLowerCase().indexOf(text.substring(0, 40)) >= 0) {
         state._cancelFlag = true;
         if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
         clearTtsHighlights();
         state._cancelFlag = false;
         state.status = PLAYING;
@@ -1399,6 +1418,7 @@
         var wasPlaying = (state.status === PLAYING);
         state._cancelFlag = true;
         if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
         clearTtsHighlights();
         state._cancelFlag = false;
         state.status = PLAYING;
@@ -1641,7 +1661,7 @@
     try {
       seg.element.classList.add('booksReaderTtsActive');
       if (!state.suppressAutoScrollUntil || Date.now() > state.suppressAutoScrollUntil) {
-        seg.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        seg.element.scrollIntoView({ block: 'nearest', behavior: 'auto' });
       }
     } catch {}
     _txt.activeEl = seg.element;
@@ -1668,6 +1688,7 @@
     if (target === _txt.segIdx) return;
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
     state._cancelFlag = false;
     _txt.segIdx = target;
     if (state.status === PAUSED) {
@@ -1694,6 +1715,7 @@
 
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
     state._cancelFlag = false;
 
     _txt.segIdx = idx;
@@ -1732,6 +1754,7 @@
     if (idx === _txt.segIdx) return;
     state._cancelFlag = true;
     if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
     state._cancelFlag = false;
     _txt.segIdx = idx;
     if (state.status === PAUSED) {
@@ -1776,6 +1799,7 @@
         if (_txt.segments[i].element === target) {
           state._cancelFlag = true;
           if (state.engine) { try { state.engine.cancel(); } catch {} }
+    _hardCancelAllEngines();
           state._cancelFlag = false;
           _txt.segIdx = i;
           state.status = PLAYING;

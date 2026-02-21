@@ -177,7 +177,7 @@
       dictBody: qs('booksReaderDictBody'),
       dictClose: qs('booksReaderDictClose'),
       dictBack: qs('booksReaderDictBack'),
-      // LISTEN_P0: TTS bar elements removed — owned by Listening mode
+      ttsBar: qs('lpTtsBar'),
       flowToggle: qs('brSettingsFlowToggle'),
       flowBtn: qs('booksReaderFlowBtn'), // FIX-TTS03: toolbar flow mode toggle
       shortcutsList: qs('brSettingsShortcuts'),

@@ -25,6 +25,208 @@
     window.booksReaderKeyboard,
   ];
 
+
+
+  function bindReaderTtsSettings() {
+    var once = false;
+    return function () {
+      if (once) return; once = true;
+      function q(id){ return document.getElementById(id); }
+      function safe(fn){ try { return fn(); } catch (e) {} }
+      function withTts(cb){ var t=window.booksTTS; if (!t) return; try { cb(t); } catch (e) {} }
+      function syncPanel(){
+        withTts(function(tts){
+          var voiceSel=q('lpTtsVoice');
+          if (voiceSel){
+            var current = String((voiceSel.value||'') || (tts.getState && tts.getState()) || '');
+            var voices = [];
+            try { voices = tts.getVoices ? (tts.getVoices()||[]) : []; } catch (e) { voices = []; }
+            voiceSel.innerHTML = '';
+            for (var i=0;i<voices.length;i++){
+              var v=voices[i]||{};
+              var opt=document.createElement('option');
+              var vid=String(v.id||v.voiceId||'');
+              opt.value = vid;
+              var bits = [v.name||vid||('Voice '+(i+1))];
+              if (v.lang) bits.push('('+v.lang+')');
+              if (v.engine) bits.push('· '+v.engine);
+              opt.textContent = bits.join(' ');
+              voiceSel.appendChild(opt);
+            }
+            var activeVoice = '';
+            try { var _d = (tts.getLastDiag && tts.getLastDiag()) || null; activeVoice = String((_d && _d.voiceId) || ''); } catch (e) {}
+            if (!activeVoice) activeVoice = String((localStorage.getItem('books_lp_tts_voice')||''));
+            if (activeVoice) { for (var vi = 0; vi < voiceSel.options.length; vi++) { if (String(voiceSel.options[vi].value) === activeVoice) { voiceSel.value = activeVoice; break; } } }
+          }
+          var rateEl=q('lpTtsRate'); if (rateEl && tts.getRate) rateEl.value = String(Number(tts.getRate()||1).toFixed(2));
+          var rateVal=q('lpTtsRateVal'); if (rateVal && tts.getRate) rateVal.textContent = Number(tts.getRate()||1).toFixed(2)+'x';
+          var pitchEl=q('lpTtsPitch'); if (pitchEl && tts.getPitch) pitchEl.value = String(Number(tts.getPitch()||1).toFixed(2));
+          var pitchVal=q('lpTtsPitchVal'); if (pitchVal && tts.getPitch) pitchVal.textContent = Number(tts.getPitch()||1).toFixed(2)+'x';
+          var volEl=q('lpTtsVolume'); if (volEl && tts.getVolume) volEl.value = String(Number(tts.getVolume()||1).toFixed(2));
+          var volVal=q('lpTtsVolumeVal'); if (volVal && tts.getVolume) volVal.textContent = Math.round((tts.getVolume()||1)*100)+'%';
+          var presetSel=q('lpTtsPresetSel');
+          if (presetSel && !presetSel.options.length && tts.getPresets){
+            var presets = tts.getPresets() || {};
+            var base = document.createElement('option'); base.value=''; base.textContent='Custom'; presetSel.appendChild(base);
+            Object.keys(presets).forEach(function(k){ var o=document.createElement('option'); o.value=k; o.textContent=String(presets[k].label||k); presetSel.appendChild(o); });
+          }
+        });
+      }
+
+      var settingsBtn = q('lpTtsSettingsBtn');
+      var mega = q('lpTtsMega');
+      var megaClose = q('lpTtsMegaClose');
+      if (settingsBtn && mega) settingsBtn.addEventListener('click', function (e) { e.preventDefault(); syncPanel(); mega.classList.toggle('hidden'); });
+      if (megaClose && mega) megaClose.addEventListener('click', function(){ mega.classList.add('hidden'); });
+
+      var voiceSel = q('lpTtsVoice');
+      if (voiceSel) voiceSel.addEventListener('change', function(){ withTts(function(tts){ tts.setVoice && tts.setVoice(voiceSel.value||''); try { localStorage.setItem('books_lp_tts_voice', String(voiceSel.value||'')); } catch (e) {} }); });
+      var previewBtn = q('lpTtsPreview');
+      if (previewBtn) previewBtn.addEventListener('click', function(){ withTts(function(tts){ if (voiceSel && voiceSel.value) tts.setVoice && tts.setVoice(voiceSel.value); }); });
+
+      var rateEl = q('lpTtsRate'), rateVal = q('lpTtsRateVal');
+      if (rateEl) rateEl.addEventListener('input', function(){ withTts(function(tts){ var v=Number(rateEl.value||1); tts.setRate && tts.setRate(v); if (rateVal) rateVal.textContent=v.toFixed(2)+'x'; var speedEl=document.getElementById('lpTtsSpeed'); if (speedEl) speedEl.textContent=Number(v).toFixed(1)+'\u00d7'; }); });
+      var pitchEl = q('lpTtsPitch'), pitchVal = q('lpTtsPitchVal');
+      if (pitchEl) pitchEl.addEventListener('input', function(){ withTts(function(tts){ var v=Number(pitchEl.value||1); tts.setPitch && tts.setPitch(v); if (pitchVal) pitchVal.textContent=v.toFixed(2)+'x'; }); });
+      var volEl = q('lpTtsVolume'), volVal = q('lpTtsVolumeVal');
+      if (volEl) volEl.addEventListener('input', function(){ withTts(function(tts){ var v=Number(volEl.value||1); tts.setVolume && tts.setVolume(v); if (volVal) volVal.textContent=Math.round(v*100)+'%'; var barVol=document.getElementById('lpVolume'); if (barVol) barVol.value=String(v); }); });
+      var presetSel = q('lpTtsPresetSel');
+      if (presetSel) presetSel.addEventListener('change', function(){ withTts(function(tts){ if (presetSel.value && tts.setPreset) tts.setPreset(presetSel.value); syncPanel(); }); });
+
+      document.addEventListener('keydown', function(ev){ if (ev.key === 'Escape' && mega && !mega.classList.contains('hidden')) mega.classList.add('hidden'); }, true);
+    };
+  }
+
+  var ensureReaderTtsSettingsBound = bindReaderTtsSettings();
+
+  // ── TTS transport bar wiring ─────────────────────────────────
+  (function bindReaderTtsTransport() {
+    var SVG_PLAY = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg>';
+    var SVG_PAUSE = '<svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/><rect x="10" y="0.87" width="4" height="16.37" rx="0.75" fill="currentColor"/></svg>';
+
+    function q(id) { return document.getElementById(id); }
+
+    function syncPlayPause(status) {
+      var btn = q('lpTtsPlayPause');
+      if (!btn) return;
+      var showPause = (status === 'playing');
+      btn.innerHTML = showPause ? SVG_PAUSE : SVG_PLAY;
+      btn.title = showPause ? 'Pause' : 'Play';
+    }
+
+    function syncSpeed() {
+      var tts = window.booksTTS;
+      var rate = (tts && tts.getRate) ? tts.getRate() : 1.0;
+      var el = q('lpTtsSpeed');
+      if (el) el.textContent = rate.toFixed(1) + '\u00d7';
+    }
+
+    function ttsAdjustSpeed(delta) {
+      var tts = window.booksTTS;
+      if (!tts) return;
+      var current = tts.getRate();
+      var limits = (typeof tts.getRateLimits === 'function') ? tts.getRateLimits() : { min: 0.5, max: 2.0 };
+      var next = Math.max(limits.min, Math.min(limits.max, Math.round((current + delta) * 10) / 10));
+      tts.setRate(next);
+      try { localStorage.setItem('booksListen.Rate', String(next)); } catch (e) {}
+      syncSpeed();
+      var megaRate = q('lpTtsRate');
+      if (megaRate) megaRate.value = String(next.toFixed(2));
+      var megaRateVal = q('lpTtsRateVal');
+      if (megaRateVal) megaRateVal.textContent = next.toFixed(2) + 'x';
+    }
+
+    // Set onStateChange on the TTS singleton. tts_core.js loads before reader_core.js
+    // (Group 2 vs Group 4-5 in deferred_modules.js), so window.booksTTS exists now.
+    // destroy() does NOT nullify onStateChange, so this persists for the page lifetime.
+    var tts = window.booksTTS;
+    if (tts) {
+      tts.onStateChange = function (status) {
+        try { bus.emit('reader:tts-state', status); } catch (e) {}
+        syncPlayPause(status);
+        syncSpeed();
+      };
+    }
+
+    // Volume slider: restore saved value
+    var volSlider = q('lpVolume');
+    if (volSlider) {
+      try {
+        var savedVol = parseFloat(localStorage.getItem('booksListen.Volume'));
+        if (savedVol >= 0 && savedVol <= 1) volSlider.value = String(savedVol);
+      } catch (e) {}
+    }
+
+    // Wire transport buttons
+    var ppBtn = q('lpTtsPlayPause');
+    if (ppBtn) ppBtn.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (!tts) return;
+      try {
+        var st = tts.getState();
+        if (st === 'playing') tts.pause();
+        else if (st === 'paused') tts.resume();
+        else tts.play();
+      } catch (e) {}
+    });
+
+    var back10 = q('lpTtsBack10');
+    if (back10) back10.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (tts) try { tts.jumpApproxMs(-10000); } catch (e) {}
+    });
+
+    var fwd10 = q('lpTtsFwd10');
+    if (fwd10) fwd10.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (tts) try { tts.jumpApproxMs(10000); } catch (e) {}
+    });
+
+    var rewindBtn = q('lpTtsRewind');
+    if (rewindBtn) rewindBtn.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (tts && typeof tts.stepSegment === 'function') try { tts.stepSegment(-1); } catch (e) {}
+    });
+
+    var fwdBtn = q('lpTtsForward');
+    if (fwdBtn) fwdBtn.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (tts && typeof tts.stepSegment === 'function') try { tts.stepSegment(1); } catch (e) {}
+    });
+
+    var slower = q('lpTtsSlower');
+    if (slower) slower.addEventListener('click', function () { ttsAdjustSpeed(-0.1); });
+
+    var faster = q('lpTtsFaster');
+    if (faster) faster.addEventListener('click', function () { ttsAdjustSpeed(0.1); });
+
+    if (volSlider) {
+      volSlider.addEventListener('input', function () {
+        var v = parseFloat(volSlider.value) || 1;
+        var tts = window.booksTTS;
+        if (tts && typeof tts.setVolume === 'function') tts.setVolume(v);
+        try { localStorage.setItem('booksListen.Volume', String(v)); } catch (e) {}
+        var megaVol = q('lpTtsVolume');
+        if (megaVol) megaVol.value = String(v);
+        var megaVolVal = q('lpTtsVolumeVal');
+        if (megaVolVal) megaVolVal.textContent = Math.round(v * 100) + '%';
+      });
+    }
+
+    var themeBtn = q('lpThemeBtn');
+    if (themeBtn) themeBtn.addEventListener('click', function () {
+      if (window.booksReaderAppearance && typeof window.booksReaderAppearance.cycleTheme === 'function') {
+        window.booksReaderAppearance.cycleTheme();
+      }
+    });
+
+    var stopBtn = q('lpTtsStop');
+    if (stopBtn) stopBtn.addEventListener('click', function () {
+      var tts = window.booksTTS;
+      if (tts) try { tts.stop(); } catch (e) {}
+    });
+  })();
+
   // ── Show / hide reader view ──────────────────────────────────
 
   function showReader(show) {
@@ -234,6 +436,19 @@
       }
     }
 
+    // Hard-stop narration on reader close (prevents background audio).
+    try {
+      var _bar = document.getElementById('lpTtsBar');
+      if (_bar) { _bar.classList.add('hidden'); _bar.style.display = 'none'; }
+    } catch (e) {}
+    try {
+      var tts = window.booksTTS;
+      if (tts) {
+        try { if (typeof tts.stop === "function") tts.stop(); } catch (e) {}
+        try { if (typeof tts.destroy === "function") tts.destroy(); } catch (e) {}
+      }
+    } catch (e) {}
+
     if (save && state.open) {
       try { await RS.saveProgress(); } catch (e) {}
     }
@@ -359,12 +574,23 @@
             onDictLookup: function (selectedText, ev) { handleDictLookup(selectedText, ev); },
           });
 
-          await state.engine.open({
-            book: book,
-            host: els.host,
-            locator: progress && progress.locator ? progress.locator : null,
-            settings: Object.assign({}, state.settings),
-          });
+          // HOTFIX: avoid indefinite "Opening EPUB" hangs.
+          // Some engine failures can result in a promise that never resolves.
+          // Use a watchdog timeout so the UI can recover and show an error.
+          var OPEN_TIMEOUT_MS = 20000;
+          await Promise.race([
+            state.engine.open({
+              book: book,
+              host: els.host,
+              locator: progress && progress.locator ? progress.locator : null,
+              settings: Object.assign({}, state.settings),
+            }),
+            new Promise(function (_resolve, reject) {
+              setTimeout(function () {
+                reject(new Error('open_timeout_' + String(book.format || 'book')));
+              }, OPEN_TIMEOUT_MS);
+            }),
+          ]);
           usedEngineId = String(candidate.id || '');
           break;
         } catch (errOpen) {
@@ -467,16 +693,60 @@
     // Fullscreen button
     els.fsBtn && els.fsBtn.addEventListener('click', function () { toggleReaderFullscreen().catch(function () {}); });
 
-    // STRIP-LISTEN-MODE: in-reader Listen button toggles TTS player overlay
+    ensureReaderTtsSettingsBound();
+
+    // Reader-owned narration toggle (no legacy listening HUD).
     els.listenBtn && els.listenBtn.addEventListener('click', function () {
-      var player = window.booksListenPlayer;
-      if (!player || typeof player.open !== 'function') return;
-      if (player.isOpen && player.isOpen()) {
-        player.close();
-        return;
-      }
-      if (!RS.state.book) return;
-      player.open(RS.state.book);
+      var tts = window.booksTTS;
+      if (!tts) return;
+      var st = RS.state;
+      if (!st || !st.book) return;
+
+      // Ensure the narration engine is initialized against the active reader engine.
+      try {
+        tts.init({
+          format: String((st.book && st.book.format) || 'epub').toLowerCase(),
+          getHost: function () { return st.host || null; },
+          getViewEngine: function () { return st.engine || null; },
+          onNeedAdvance: function () {
+            var eng = st.engine || null;
+            if (!eng || typeof eng.advanceSection !== 'function') return Promise.resolve(false);
+            return eng.advanceSection(1).then(function () { return true; }).catch(function () { return false; });
+          },
+        }).then(function () {
+          // Restore saved rate/volume/voice
+          try { var _r = parseFloat(localStorage.getItem('booksListen.Rate')); if (_r >= 0.5 && _r <= 2.0) tts.setRate(_r); } catch (e) {}
+          try { var _v = parseFloat(localStorage.getItem('booksListen.Volume')); if (_v >= 0 && _v <= 1) tts.setVolume(_v); } catch (e) {}
+          try { var _vc = localStorage.getItem('books_lp_tts_voice'); if (_vc) tts.setVoice(_vc); } catch (e) {}
+          var s = (typeof tts.getState === 'function') ? (tts.getState() || 'idle') : 'idle';
+          if (s === 'playing') {
+            try { tts.pause(); } catch (e) {}
+            return;
+          }
+          if (s === 'paused') {
+            try { tts.resume(); } catch (e) {}
+            return;
+          }
+          // If there is a selection, start from selection. Otherwise start from current position.
+          try {
+            if (typeof tts.playFromSelection === 'function') {
+              var selText = '';
+              try {
+                if (st.engine && typeof st.engine.getSelectedText === 'function') {
+                  var _sel = st.engine.getSelectedText();
+                  selText = String((_sel && typeof _sel === 'object') ? (_sel.text || '') : (_sel || '')).trim();
+                }
+              } catch (e) {}
+              if (selText) {
+                try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
+                if (tts.playFromSelection(selText)) return;
+              }
+            }
+          } catch (e) {}
+          try { if (typeof tts.stop === 'function') tts.stop(); } catch (e) {}
+          try { tts.play(0); } catch (e) {}
+        }).catch(function () {});
+      } catch (e) {}
     });
 
     // BUILD_OVERHAUL: host-level dict/annot handlers live in dedicated modules
@@ -487,6 +757,14 @@
     bus.on('reader:relocated', function () { onReadingAction(); }); // TASK2
     bus.on('reader:tts-state', function (status) {
       if (status === 'playing') scheduleHudAutoHide();
+      try {
+        var bar = document.getElementById('lpTtsBar');
+        if (bar) {
+          var show = (status === 'playing' || status === 'paused');
+          bar.classList.toggle('hidden', !show);
+          bar.style.display = show ? '' : 'none';
+        }
+      } catch (e) {}
     });
     // FIX_HUD: hide toolbar when sidebar opens, restore when it closes
     bus.on('sidebar:toggled', function (isOpen) {

@@ -2331,14 +2331,8 @@ function getBookProgress(bookId) {
   async function openBook(input) {
     const b = resolveBook(input);
     if (!b) return false;
-    // LISTEN_P2: in listen mode, route to TTS player instead of opening the reader
-    if (_listenMode) {
-      try {
-        const shell = window.booksListeningShell;
-        if (shell && typeof shell.openListenBook === 'function') shell.openListenBook(b);
-      } catch {}
-      return true;
-    }
+    // NOTE: listen-mode routing disabled. Always open in reader.
+
     const ctl = getReaderController();
     if (!ctl) {
       toast('Books reader is unavailable');
@@ -2820,27 +2814,8 @@ function getBookProgress(bookId) {
     attachThumb: (imgEl, book) => attachThumb(imgEl, book),
     setGlobalSearchSelection: (idx) => setGlobalSearchSelection(idx),
     activateGlobalSearchSelection: () => activateGlobalSearchSelection(),
-    // LISTEN_P2: listen mode toggle (called by listening_shell.js)
-    setListenMode: (v) => {
-      _listenMode = !!v;
-      // LISTEN_P5: pull TTS progress so folder/show views don't show reading progress in Listening mode
-      if (_listenMode) {
-        const api = window.Tanko && window.Tanko.api;
-        if (api && typeof api.getAllBooksTtsProgress === 'function') {
-          api.getAllBooksTtsProgress().then((m) => {
-            // FIX-CONT-TRACK: unwrap byBook from API response; getAll returns { byBook: { ... } }
-            const byBook = (m && typeof m.byBook === 'object') ? m.byBook : (m && typeof m === 'object' ? m : {});
-            state.ttsProgressAll = byBook;
-            if (state.ui.booksSubView === 'show') renderShowView(); else renderHome();
-          }).catch(() => { state.ttsProgressAll = {}; });
-        } else {
-          state.ttsProgressAll = {};
-        }
-      } else {
-        state.ttsProgressAll = {};
-      }
-      renderContinue();
-    },
+    // NOTE: listen mode toggle disabled. Always stay in reader mode.
+    setListenMode: (v) => { _listenMode = false; state.ttsProgressAll = {}; renderContinue(); },
     isListenMode: () => _listenMode,
     setAllProgress: (p) => {
       state.progressAll = p && typeof p === 'object' ? p : {};
