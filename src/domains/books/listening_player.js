@@ -583,14 +583,15 @@ function updateCard(info) {
 
   // ── Progress persistence (LISTEN_P4) ────────────────────────────────────────
   function saveProgress(info, immediate) {
-    if (!_book || !_book.id) return;
-    var primaryId = String(_book.id || '');
+    if (!_book || (!_book.id && !_book.path)) return;
+    var primaryId = String(_book.id || _book.path || '');
     var fallbackId = String(_book.path || '');
     var entry = {
       blockIdx:   info ? info.blockIdx   : (_lastSavedBlockIdx >= 0 ? _lastSavedBlockIdx : 0),
       blockCount: info ? info.blockCount : 0,
       title:  _book.title  || '',
       format: _book.format || '',
+      bookPath: _book.path || '',
     };
     if (immediate) {
       if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }

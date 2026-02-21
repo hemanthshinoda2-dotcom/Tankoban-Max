@@ -399,6 +399,7 @@
 
   // ── searchNow ────────────────────────────────────────────────
   async function searchNow(queryOverride) {
+    var mySeq = ++searchSeq;
     var els = RS.ensureEls();
     var state = RS.state;
     var q = String(queryOverride || (els.utilSearchInput && els.utilSearchInput.value) || '').trim();
@@ -413,6 +414,7 @@
     var res = null;
     var matchOpts = getSearchMatchOptions();
     try { res = await state.engine.search(q, matchOpts); } catch (e) { res = null; }
+    if (mySeq !== searchSeq) return;
 
     var count = Number(res && res.count || 0);
     var hits = (res && Array.isArray(res.hits)) ? res.hits : [];

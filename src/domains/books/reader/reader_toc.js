@@ -45,6 +45,7 @@
 
   // ── renderToc ─────────────────────────────────────────────────
   async function renderToc() {
+    var mySeq = ++tocRenderSeq;
     var state = RS.state;
     if (!state.engine || typeof state.engine.getToc !== 'function') return;
     var toc = [];
@@ -125,6 +126,7 @@
       if (depth > 0) btn.style.paddingLeft = (10 + depth * 16) + 'px';
       btn.dataset.tocIdx = String(i);
       btn.dataset.href = String(item.href || '');
+      if (item && item.dest != null) { try { btn.dataset.destJson = JSON.stringify(item.dest); } catch (e) {} }
       btn.dataset.spineIndex = String(item.spineIndex >= 0 ? item.spineIndex : '');
 
       // BUILD_CHAP_TOC: read state indicator
@@ -156,18 +158,21 @@
       btn.appendChild(labelSpan);
       btn.appendChild(prog);
 
-      btn.addEventListener('click', (function (href, idx) {
-        return function () { navigateToTocItem(href, idx); };
-      })(item.href, i));
+      btn.addEventListener('click', (function (tocItem, idx) {
+        return function () { navigateToTocItem(tocItem, idx); };
+      })(item, i));
       els.tocList.appendChild(btn);
     }
   }
 
   // ── navigateToTocItem ─────────────────────────────────────────
-  async function navigateToTocItem(href, idx) {
+  async function navigateToTocItem(itemOrHref, idx) {
     var state = RS.state;
     if (!state.engine || typeof state.engine.goTo !== 'function') return;
-    try { await state.engine.goTo({ href: href }); } catch (e) { /* swallow */ }
+    var target = itemOrHref;
+    if (typeof itemOrHref === 'string') target = { href: itemOrHref };
+    else if (!target || typeof target !== 'object') target = {};
+    try { await state.engine.goTo(target); } catch (e) { /* swallow */ }
     try { await RS.saveProgress(); } catch (e) { /* swallow */ }
     bus.emit('nav:progress-sync');
   }

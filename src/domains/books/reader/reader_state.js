@@ -278,13 +278,21 @@
   }
 
   function matchShortcut(e, action) {
-    var key = state.shortcuts[action] || DEFAULT_SHORTCUTS[action] || '';
+    var key = String(state.shortcuts[action] || DEFAULT_SHORTCUTS[action] || '').trim();
     if (!key) return false;
-    if (key.length === 1) {
-      var pressed = e.shiftKey && e.key.length === 1 ? e.key : e.key.toLowerCase();
-      return pressed === key;
-    }
-    return false;
+    var parts = key.toLowerCase().split('+').map(function (p) { return p.trim(); }).filter(Boolean);
+    var main = parts.length ? parts[parts.length - 1] : '';
+    if (!main) return false;
+    var needCtrl = parts.indexOf('ctrl') !== -1 || parts.indexOf('control') !== -1;
+    var needShift = parts.indexOf('shift') !== -1;
+    var needAlt = parts.indexOf('alt') !== -1;
+    var needMeta = parts.indexOf('meta') !== -1 || parts.indexOf('cmd') !== -1 || parts.indexOf('command') !== -1;
+    if (!!e.ctrlKey !== needCtrl) return false;
+    if (!!e.shiftKey !== needShift) return false;
+    if (!!e.altKey !== needAlt) return false;
+    if (!!e.metaKey !== needMeta) return false;
+    var pressed = (e.key && e.key.length === 1) ? (e.shiftKey ? e.key : e.key.toLowerCase()) : String(e.key || '').toLowerCase();
+    return pressed === main;
   }
 
   // ── Status & toast ─────────────────────────────────────────────

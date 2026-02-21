@@ -134,6 +134,7 @@
     if (state._destroyed) return;
     if (document.visibilityState === 'visible' && state.status === PLAYING) acquireWakeLock();
   };
+  var _visibilityListenerBound = true;
   document.addEventListener('visibilitychange', _onVisibilityChange);
 
   // ── Utility ──────────────────────────────────────────────────
@@ -1061,6 +1062,10 @@
   }
 
   async function init(opts) {
+    if (!_visibilityListenerBound) {
+      try { document.addEventListener('visibilitychange', _onVisibilityChange); } catch (e) {}
+      _visibilityListenerBound = true;
+    }
     if (state.initPromise) return state.initPromise;
 
     // FIX-LISTEN-STAB3: clear destroyed flag — a new init supersedes previous destroy
@@ -1842,6 +1847,7 @@ function _queueThrottledRateVoiceChange(kind) {
     // FIX-TTS-B2: explicit wake lock release + listener cleanup
     releaseWakeLock();
     document.removeEventListener('visibilitychange', _onVisibilityChange);
+    _visibilityListenerBound = false;
     var ids = Object.keys(state.allEngines);
     for (var i = 0; i < ids.length; i++) {
       try { state.allEngines[ids[i]].cancel(); } catch {}

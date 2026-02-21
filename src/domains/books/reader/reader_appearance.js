@@ -94,7 +94,7 @@
     if (lp) lp.setAttribute('data-reader-theme', nextTheme);
     // FIX-TTS03: set blend mode for TTS highlight overlayer (lighten for dark themes)
     // BUILD_THEMES: nord and gruvboxDark are dark themes
-    var isDark = ['dark', 'contrast1', 'contrast2', 'contrast4', 'nord', 'gruvboxDark'].indexOf(nextTheme) !== -1;
+    var isDark = INVERT_DARK_IMAGE_THEMES.indexOf(nextTheme) !== -1;
     document.documentElement.style.setProperty('--overlayer-highlight-blend-mode', isDark ? 'lighten' : 'normal');
   }
 

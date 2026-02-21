@@ -123,7 +123,7 @@
     tile.appendChild(titleWrap);
 
     tile.onclick = function () {
-      var target = book || { id: entry.bookId, title: entry.title, format: entry.format };
+      var target = book || { id: entry.bookId, path: entry.bookPath || entry.bookId || '', title: entry.title, format: entry.format };
       openListenBook(target);
     };
 

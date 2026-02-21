@@ -1,4 +1,3 @@
-++ b/src/domains/books/reader/reader_paragraph.js
 (function () {
   'use strict';
 

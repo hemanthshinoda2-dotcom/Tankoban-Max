@@ -145,7 +145,7 @@
           var d = defs[j];
           if (!d || !d.definition) continue;
           var li = document.createElement('li');
-          li.innerHTML = d.definition;
+          li.textContent = String(d.definition || '');
           // Examples
           if (Array.isArray(d.examples) && d.examples.length > 0) {
             for (var k = 0; k < d.examples.length; k++) {
