@@ -8,7 +8,7 @@ const { Worker } = require('worker_threads');
 const { dialog, BrowserWindow } = require('electron');
 const { pathToFileURL } = require('url');
 
-const SUPPORTED_EXT_RE = /\.(epub|pdf|txt)$/i;
+const SUPPORTED_EXT_RE = /\.(epub|pdf|txt|mobi|fb2)$/i;
 
 const DEFAULT_SCAN_IGNORE_DIRNAMES = [
   '__macosx',
@@ -507,7 +507,7 @@ async function addFiles(ctx, evt) {
     title: 'Add books files',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Books', extensions: ['epub', 'pdf', 'txt'] },
+      { name: 'Books', extensions: ['epub', 'pdf', 'txt', 'mobi', 'fb2'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
@@ -555,7 +555,7 @@ async function openFileDialog(ctx, evt) {
     title: 'Open book file',
     properties: ['openFile'],
     filters: [
-      { name: 'Books', extensions: ['epub', 'pdf', 'txt'] },
+      { name: 'Books', extensions: ['epub', 'pdf', 'txt', 'mobi', 'fb2'] },
       { name: 'All Files', extensions: ['*'] },
     ],
   });
@@ -619,7 +619,7 @@ async function bookFromPath(ctx, _evt, filePath) {
     const cls = classifyBookPathFromConfig(cfg, fp);
 
     const ext = path.extname(fp).toLowerCase();
-    const format = (ext === '.epub') ? 'epub' : (ext === '.pdf') ? 'pdf' : 'txt';
+    const format = (ext === '.epub') ? 'epub' : (ext === '.pdf') ? 'pdf' : (ext === '.mobi') ? 'mobi' : (ext === '.fb2') ? 'fb2' : 'txt';
     const id = Buffer.from(`${fp}::${st.size}::${st.mtimeMs}`).toString('base64url');
     const title = path.basename(fp).replace(SUPPORTED_EXT_RE, '');
 

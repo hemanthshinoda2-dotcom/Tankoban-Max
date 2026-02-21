@@ -1012,6 +1012,17 @@
       state.engineId = '';
 
       // FIX-TTS05: Edge-only — no webspeech fallback
+      // EDGE_DIRECT: prefer renderer direct WebSocket transport when available
+      if (factories.edgeDirect) {
+        try {
+          var directInst = factories.edgeDirect.create();
+          if (directInst) {
+            state.allEngines.edgeDirect = directInst;
+            state.engineUsable.edgeDirect = false;
+          }
+        } catch {}
+      }
+
       if (factories.edge) {
         try {
           var inst = factories.edge.create();
@@ -1025,6 +1036,11 @@
       // FIX-LISTEN-STAB3: bail out if destroyed during engine creation
       if (state._destroyed) return;
 
+      if (state.allEngines.edgeDirect) {
+        state.engineUsable.edgeDirect = !!(await probeEngine('edgeDirect', state.allEngines.edgeDirect));
+        // OPT2: voices already loaded inside probe() on success — no need to call again
+      }
+
       if (state.allEngines.edge) {
         state.engineUsable.edge = !!(await probeEngine('edge', state.allEngines.edge));
         // OPT2: voices already loaded inside probe() on success — no need to call again
@@ -1033,13 +1049,15 @@
       // FIX-LISTEN-STAB3: bail out if destroyed during probe/voice loading
       if (state._destroyed) return;
 
-      // Select edge if usable
-      if (state.allEngines.edge && isEngineUsable('edge')) {
+      // Select direct renderer Edge engine first, then IPC Edge fallback
+      if (state.allEngines.edgeDirect && isEngineUsable('edgeDirect')) {
+        switchEngine('edgeDirect');
+      } else if (state.allEngines.edge && isEngineUsable('edge')) {
         switchEngine('edge');
       }
 
-      // FIX-TTS05: pre-warm Edge TTS WebSocket for faster first playback
-      if (state.engineUsable.edge) {
+      // FIX-TTS05: pre-warm IPC Edge TTS WebSocket for faster first playback (direct renderer engine does its own socket work)
+      if (state.engineId !== 'edgeDirect' && state.engineUsable.edge) {
         try {
           var ttsApi = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
           if (ttsApi && typeof ttsApi.warmup === 'function') {
@@ -1553,14 +1571,21 @@
 
   function getVoices() {
     var all = [];
-    // FIX-TTS05: Edge-only — just get edge voices
-    var eng = state.allEngines.edge;
-    if (eng && isEngineUsable('edge')) {
+    var seen = Object.create(null);
+    var order = ['edgeDirect', 'edge'];
+    for (var i = 0; i < order.length; i++) {
+      var engineId = order[i];
+      var eng = state.allEngines[engineId];
+      if (!eng || !isEngineUsable(engineId)) continue;
       var voices = [];
       try { voices = eng.getVoices ? eng.getVoices() : []; } catch { voices = []; }
       for (var v = 0; v < voices.length; v++) {
         var voice = voices[v];
-        if (!voice.engine) voice.engine = 'edge';
+        if (!voice) continue;
+        var key = String(voice.voiceURI || voice.name || '') + '|' + String(voice.lang || '');
+        if (seen[key]) continue;
+        seen[key] = true;
+        if (!voice.engine) voice.engine = engineId;
         all.push(voice);
       }
     }

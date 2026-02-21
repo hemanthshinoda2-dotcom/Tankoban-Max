@@ -415,6 +415,20 @@ const api = {
   // ========================================
   // webSources.* (BUILD_WEB)
   // ========================================
+
+  booksOpds: {
+    getFeeds: function () { return ipcRenderer.invoke(CHANNEL.BOOKS_OPDS_GET_FEEDS); },
+    addFeed: function (payload) { return ipcRenderer.invoke(CHANNEL.BOOKS_OPDS_ADD_FEED, payload); },
+    updateFeed: function (payload) { return ipcRenderer.invoke(CHANNEL.BOOKS_OPDS_UPDATE_FEED, payload); },
+    removeFeed: function (payload) { return ipcRenderer.invoke(CHANNEL.BOOKS_OPDS_REMOVE_FEED, payload); },
+    fetchCatalog: function (payload) { return ipcRenderer.invoke(CHANNEL.BOOKS_OPDS_FETCH_CATALOG, payload); },
+    onFeedsUpdated: function (cb) {
+      if (typeof cb !== 'function') return function () {};
+      var h = function (_event, data) { try { cb(data); } catch {} };
+      ipcRenderer.on(EVENT.BOOKS_OPDS_FEEDS_UPDATED, h);
+      return function () { try { ipcRenderer.removeListener(EVENT.BOOKS_OPDS_FEEDS_UPDATED, h); } catch {} };
+    },
+  },
   webSources: {
     get: () => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_GET),
     add: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_ADD, payload),
@@ -422,6 +436,7 @@ const api = {
     update: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SOURCES_UPDATE, payload),
     routeDownload: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_ROUTE, payload),
     getDestinations: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_DESTINATIONS),
+    downloadFromUrl: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_DIRECT_URL, payload),
     getDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_GET),
     clearDownloadHistory: () => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_CLEAR),
     removeDownloadHistory: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_HISTORY_REMOVE, payload),

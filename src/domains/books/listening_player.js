@@ -216,11 +216,6 @@
 
   function qs(id) {
     try {
-      var overlay = document.getElementById('booksListenPlayerOverlay');
-      if (overlay && typeof overlay.querySelector === 'function') {
-        var found = overlay.querySelector('#' + String(id));
-        if (found) return found;
-      }
       return document.getElementById(id);
     } catch {
       return null;

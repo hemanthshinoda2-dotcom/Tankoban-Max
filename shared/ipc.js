@@ -679,6 +679,18 @@ const CHANNEL = {
   /** Clear settings for a series. Returns: void */
   SERIES_SETTINGS_CLEAR: 'seriesSettings:clear',
 
+
+
+  // ========================================
+  // Books OPDS
+  // ========================================
+
+  BOOKS_OPDS_GET_FEEDS: 'booksOpds:getFeeds',
+  BOOKS_OPDS_ADD_FEED: 'booksOpds:addFeed',
+  BOOKS_OPDS_UPDATE_FEED: 'booksOpds:updateFeed',
+  BOOKS_OPDS_REMOVE_FEED: 'booksOpds:removeFeed',
+  BOOKS_OPDS_FETCH_CATALOG: 'booksOpds:fetchCatalog',
+
   // ========================================
   // Web Sources (BUILD_WEB)
   // ========================================
@@ -700,6 +712,9 @@ const CHANNEL = {
 
   /** Get download destination folders for each library type. Returns: { ok, books?: string, comics?: string } */
   WEB_DOWNLOAD_DESTINATIONS: 'webDownload:destinations',
+
+  /** Download directly from a URL and route to Books/Comics by extension. Args: { url, referer?, suggestedFilename?, title? }. Returns: { ok, id } */
+  WEB_DOWNLOAD_DIRECT_URL: 'webDownload:downloadDirectUrl',
 
   /** Get persisted download history. Returns: { ok, downloads: Array } */
   WEB_DOWNLOAD_HISTORY_GET: 'webDownload:historyGet',
@@ -813,6 +828,14 @@ const EVENT = {
    */
   mpvEvent: (playerId) => `mpv:event:${playerId}`,
   
+
+
+  // ========================================
+  // Books OPDS Events
+  // ========================================
+
+  BOOKS_OPDS_FEEDS_UPDATED: 'booksOpds:feedsUpdated',
+
   // ========================================
   // Web Events (BUILD_WEB)
   // ========================================

@@ -79,6 +79,7 @@ const thumbsDomain = require('../domains/thumbs');
 const libraryDomain = require('../domains/library');
 const booksDomain = require('../domains/books');
 const booksTtsEdgeDomain = require('../domains/booksTtsEdge');
+const booksOpdsDomain = require('../domains/booksOpds');
 const videoDomain = require('../domains/video');
 __bLog('registerIpc: Phase 4C domains OK (thumbs, library, books, video)');
 
@@ -1162,6 +1163,7 @@ try {
     require('./register/books_tts_progress'), // LISTEN_P4
     require('./register/books_settings'),
     require('./register/books_ui_state'),
+    require('./register/books_opds'),
     require('./register/video'),
     require('./register/video_posters'),
     require('./register/page_thumbnails'),
@@ -1188,7 +1190,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_tabs'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_tabs'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -1201,6 +1203,7 @@ for (let i = 0; i < registerModules.length; i++) {
     libraryDomain,
     booksDomain,
     booksTtsEdgeDomain,
+    booksOpdsDomain,
     playerCoreDomain,
     shellDomain,
     thumbsDomain,

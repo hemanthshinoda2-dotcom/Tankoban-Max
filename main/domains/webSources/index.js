@@ -488,6 +488,377 @@ function setupDownloadHandler(ctx) {
   }
 }
 
+
+function newDlId() {
+  return 'wdl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function sanitizeFilename(filename) {
+  var s = String(filename || '').trim();
+  s = s.replace(/[\\/:*?"<>|]+/g, '_');
+  s = s.replace(/\s+/g, ' ').trim();
+  if (!s) s = 'download';
+  if (s.length > 180) s = s.slice(0, 180).trim();
+  return s;
+}
+
+function extFromMime(type) {
+  var t = String(type || '').toLowerCase();
+  if (!t) return '';
+  if (t.indexOf(';') !== -1) t = t.split(';')[0].trim();
+  if (t === 'application/epub+zip') return '.epub';
+  if (t === 'application/pdf') return '.pdf';
+  if (t === 'application/x-cbr' || t === 'application/vnd.comicbook-rar') return '.cbr';
+  if (t === 'application/vnd.comicbook+zip' || t === 'application/x-cbz' || t === 'application/zip') return '.cbz';
+  if (t === 'text/plain') return '.txt';
+  if (t === 'application/x-mobipocket-ebook') return '.mobi';
+  return '';
+}
+
+function filenameFromContentDisposition(v) {
+  var s = String(v || '');
+  if (!s) return '';
+  var m = s.match(/filename\*=UTF-8''([^;]+)/i);
+  if (m && m[1]) {
+    try { return sanitizeFilename(decodeURIComponent(m[1])); } catch {}
+    return sanitizeFilename(m[1]);
+  }
+  m = s.match(/filename="([^"]+)"/i);
+  if (m && m[1]) return sanitizeFilename(m[1]);
+  m = s.match(/filename=([^;]+)/i);
+  if (m && m[1]) return sanitizeFilename(m[1].trim());
+  return '';
+}
+
+function filenameFromUrl(u) {
+  try {
+    var x = new URL(String(u || ''));
+    var base = path.basename(decodeURIComponent(x.pathname || ''));
+    return sanitizeFilename(base || '');
+  } catch {
+    return '';
+  }
+}
+
+function buildSuggestedFilename(payload, res) {
+  var explicit = sanitizeFilename((payload && payload.suggestedFilename) || '');
+  var byHeader = filenameFromContentDisposition(res && res.headers && res.headers.get && res.headers.get('content-disposition'));
+  var byUrl = filenameFromUrl(res && res.url);
+  var byReqUrl = filenameFromUrl(payload && payload.url);
+  var base = explicit || byHeader || byUrl || byReqUrl || sanitizeFilename((payload && payload.title) || '') || 'download';
+  var ext = path.extname(base || '').toLowerCase();
+  if (!ext) {
+    var inferred = extFromMime(res && res.headers && res.headers.get && res.headers.get('content-type'));
+    if (inferred) base += inferred;
+  }
+  return sanitizeFilename(base);
+}
+
+async function persistDownloadUpdate(ctx, dlId, mutator) {
+  try {
+    var cfg = ensureDownloadsCache(ctx);
+    var found = null;
+    for (var i = 0; i < (cfg.downloads || []).length; i++) {
+      var d = cfg.downloads[i];
+      if (d && String(d.id) === String(dlId)) { found = d; break; }
+    }
+    if (found && typeof mutator === 'function') mutator(found, cfg);
+    cfg.updatedAt = Date.now();
+    capDownloads(cfg);
+    await writeDownloads(ctx, cfg);
+    emitDownloadsUpdated(ctx);
+  } catch {}
+}
+
+async function pushFailedDownload(ctx, info) {
+  try {
+    var cfg = ensureDownloadsCache(ctx);
+    cfg.downloads.unshift({
+      id: info.id || newDlId(),
+      filename: String(info.filename || 'download'),
+      destination: String(info.destination || ''),
+      library: String(info.library || ''),
+      state: 'failed',
+      startedAt: Date.now(),
+      finishedAt: Date.now(),
+      error: String(info.error || 'Download failed'),
+      pageUrl: String(info.pageUrl || ''),
+      downloadUrl: String(info.downloadUrl || ''),
+      totalBytes: 0,
+      receivedBytes: 0,
+    });
+    cfg.updatedAt = Date.now();
+    capDownloads(cfg);
+    await writeDownloads(ctx, cfg);
+    emitDownloadsUpdated(ctx);
+  } catch {}
+}
+
+function triggerLibraryRescan(ctx, library) {
+  try {
+    if (library === 'books') {
+      var booksDomain = require('../books');
+      booksDomain.scan(ctx, null, {}).catch(function () {});
+    } else if (library === 'comics') {
+      var libraryDomain = require('../library');
+      libraryDomain.scan(ctx, null, {}).catch(function () {});
+    }
+  } catch {}
+}
+
+async function runDirectDownload(ctx, dlId, payload) {
+  var ipc = require('../../../shared/ipc');
+  var url = String((payload && payload.url) || '').trim();
+  if (!/^https?:\/\//i.test(url)) {
+    await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', downloadUrl: url });
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL' });
+    } catch {}
+    return;
+  }
+
+  var ac = null;
+  try { ac = new AbortController(); } catch {}
+  if (ac) activeDownloadItems.set(dlId, { cancel: function () { try { ac.abort(); } catch {} } });
+
+  var res;
+  try {
+    var headers = { 'user-agent': 'Tankoban-Max/OPDS (+Electron)' };
+    if (payload && payload.referer) headers.referer = String(payload.referer);
+    res = await fetch(url, { redirect: 'follow', headers: headers, signal: ac ? ac.signal : undefined });
+  } catch (err) {
+    activeDownloadItems.delete(dlId);
+    await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), downloadUrl: url });
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error') });
+    } catch {}
+    return;
+  }
+
+  var filename = buildSuggestedFilename(payload, res);
+  var route = routeDownloadSync(ctx, filename);
+  if (!route.ok) {
+    activeDownloadItems.delete(dlId);
+    await pushFailedDownload(ctx, { id: dlId, filename: filename, error: route.error, downloadUrl: String(res.url || url) });
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: route.error });
+    } catch {}
+    return;
+  }
+
+  if (!res.ok) {
+    activeDownloadItems.delete(dlId);
+    var httpErr = 'HTTP ' + Number(res.status || 0) + (res.statusText ? (' ' + String(res.statusText)) : '');
+    await pushFailedDownload(ctx, { id: dlId, filename: filename, destination: route.destination, library: route.library, error: httpErr, downloadUrl: String(res.url || url) });
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: httpErr });
+    } catch {}
+    return;
+  }
+
+  var totalBytes = 0;
+  try { totalBytes = Number((res.headers && res.headers.get && res.headers.get('content-length')) || 0) || 0; } catch {}
+  var startedAt = Date.now();
+
+  try {
+    var cfgStart = ensureDownloadsCache(ctx);
+    cfgStart.downloads.unshift({
+      id: dlId,
+      filename: filename,
+      destination: route.destination,
+      library: route.library,
+      state: 'downloading',
+      startedAt: startedAt,
+      finishedAt: null,
+      error: '',
+      pageUrl: String((payload && payload.referer) || ''),
+      downloadUrl: String(res.url || url),
+      totalBytes: totalBytes,
+      receivedBytes: 0,
+      progress: null,
+    });
+    cfgStart.updatedAt = Date.now();
+    capDownloads(cfgStart);
+    await writeDownloads(ctx, cfgStart);
+    emitDownloadsUpdated(ctx);
+  } catch {}
+
+  activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
+
+  try {
+    ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+      id: dlId,
+      filename: filename,
+      destination: route.destination,
+      library: route.library,
+      state: 'downloading',
+      pageUrl: String((payload && payload.referer) || ''),
+      downloadUrl: String(res.url || url),
+      totalBytes: totalBytes,
+    });
+  } catch {}
+
+  var tmpPath = route.destination + '.part';
+  var ws = fs.createWriteStream(tmpPath);
+  var reader = null;
+  var received = 0;
+  var lastPersistAt = 0;
+  var done = false;
+
+  function emitProgressNow(force) {
+    var now = Date.now();
+    var sp = activeSpeed.get(dlId);
+    if (sp) {
+      var dt = Math.max(1, now - sp.lastAt);
+      if (force || dt >= 500) {
+        var db = Math.max(0, received - sp.lastBytes);
+        sp.bytesPerSec = Math.round((db * 1000) / dt);
+        sp.lastAt = now;
+        sp.lastBytes = received;
+        activeSpeed.set(dlId, sp);
+      }
+    }
+    var pct = totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : null;
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_PROGRESS, {
+        id: dlId,
+        filename: filename,
+        destination: route.destination,
+        library: route.library,
+        state: 'downloading',
+        receivedBytes: received,
+        totalBytes: totalBytes,
+        progress: pct,
+        bytesPerSec: (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0,
+      });
+    } catch {}
+    if (force || (now - lastPersistAt >= 1000)) {
+      lastPersistAt = now;
+      persistDownloadUpdate(ctx, dlId, function (d) {
+        d.state = 'downloading';
+        d.receivedBytes = received;
+        d.totalBytes = totalBytes;
+        d.progress = pct;
+        d.bytesPerSec = (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0;
+        d.updatedAt = now;
+      });
+    }
+  }
+
+  function finalizeError(errMsg, stateName) {
+    if (done) return;
+    done = true;
+    try { ws.destroy(); } catch {}
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch {}
+    activeDownloadItems.delete(dlId);
+    activeSpeed.delete(dlId);
+    persistDownloadUpdate(ctx, dlId, function (d) {
+      d.state = stateName || 'failed';
+      d.error = String(errMsg || 'Download failed');
+      d.finishedAt = Date.now();
+      d.receivedBytes = received;
+      d.totalBytes = totalBytes;
+      d.progress = totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : null;
+      d.updatedAt = Date.now();
+    });
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+        id: dlId,
+        filename: filename,
+        error: String(errMsg || 'Download failed'),
+      });
+    } catch {}
+  }
+
+  function finalizeSuccess() {
+    if (done) return;
+    done = true;
+    try { if (fs.existsSync(route.destination)) fs.unlinkSync(route.destination); } catch {}
+    try { fs.renameSync(tmpPath, route.destination); }
+    catch (err) { finalizeError(String((err && err.message) || err || 'Failed to finalize file'), 'failed'); return; }
+
+    activeDownloadItems.delete(dlId);
+    activeSpeed.delete(dlId);
+    persistDownloadUpdate(ctx, dlId, function (d) {
+      d.state = 'completed';
+      d.error = '';
+      d.finishedAt = Date.now();
+      d.receivedBytes = received;
+      d.totalBytes = totalBytes;
+      d.progress = totalBytes > 0 ? 1 : d.progress;
+      d.updatedAt = Date.now();
+    });
+    triggerLibraryRescan(ctx, route.library);
+    try {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+        ok: true,
+        id: dlId,
+        filename: filename,
+        destination: route.destination,
+        library: route.library,
+      });
+    } catch {}
+  }
+
+  ws.on('error', function (err) {
+    finalizeError(String((err && err.message) || err || 'Write failed'), 'failed');
+  });
+
+  try {
+    if (!res.body) {
+      var ab = await res.arrayBuffer();
+      var buf = Buffer.from(ab);
+      received = buf.length;
+      await new Promise(function (resolve, reject) {
+        ws.write(buf, function (e) { if (e) reject(e); else resolve(); });
+      });
+      await new Promise(function (resolve, reject) { ws.end(function (e) { if (e) reject(e); else resolve(); }); });
+      emitProgressNow(true);
+      finalizeSuccess();
+      return;
+    }
+
+    reader = res.body.getReader ? res.body.getReader() : null;
+    if (!reader) {
+      var ab2 = await res.arrayBuffer();
+      var buf2 = Buffer.from(ab2);
+      received = buf2.length;
+      await new Promise(function (resolve, reject) {
+        ws.write(buf2, function (e) { if (e) reject(e); else resolve(); });
+      });
+      await new Promise(function (resolve, reject) { ws.end(function (e) { if (e) reject(e); else resolve(); }); });
+      emitProgressNow(true);
+      finalizeSuccess();
+      return;
+    }
+
+    while (true) {
+      var step = await reader.read();
+      if (!step || step.done) break;
+      var chunk = Buffer.from(step.value);
+      received += chunk.length;
+      await new Promise(function (resolve, reject) {
+        if (!ws.write(chunk)) ws.once('drain', resolve);
+        else resolve();
+      }).catch(function (err) { throw err; });
+      emitProgressNow(false);
+    }
+    await new Promise(function (resolve, reject) { ws.end(function (e) { if (e) reject(e); else resolve(); }); });
+    emitProgressNow(true);
+    finalizeSuccess();
+  } catch (err) {
+    var msg = String((err && err.message) || err || 'Download failed');
+    var stateName = /abort/i.test(msg) ? 'cancelled' : 'failed';
+    finalizeError(msg, stateName);
+  }
+}
+
+async function downloadFromUrl(ctx, _evt, payload) {
+  var dlId = newDlId();
+  runDirectDownload(ctx, dlId, payload || {}).catch(function () {});
+  return { ok: true, id: dlId, queued: true };
+}
+
 async function pauseDownload(ctx, _evt, payload) {
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
@@ -563,6 +934,7 @@ module.exports = {
   update,
   routeDownload,
   getDestinations,
+  downloadFromUrl,
   getDownloadHistory,
   clearDownloadHistory,
   removeDownloadHistory,

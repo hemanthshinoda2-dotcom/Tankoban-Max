@@ -66,6 +66,8 @@
     if (f === 'epub') return 'application/epub+zip';
     if (f === 'pdf') return 'application/pdf';
     if (f === 'txt') return 'text/plain';
+    if (f === 'mobi') return 'application/x-mobipocket-ebook';
+    if (f === 'fb2') return 'application/x-fictionbook+xml';
     return 'application/octet-stream';
   }
 
@@ -525,7 +527,7 @@
 
       if (!state.view) return;
 
-      if (state.format === 'epub') {
+      if (state.format === 'epub' || state.format === 'mobi' || state.format === 'fb2') {
         try {
           // PATCH7_SCROLL: preserve scroll position in scrolled flow when typography changes
           const isScrolled = String(s.flowMode || 'paginated') === 'scrolled';
@@ -848,7 +850,7 @@
         state.lastRelocate = ev && ev.detail ? ev.detail : null;
         bindIframeEvents(); // FIX-R04: re-register iframe events after section change
         // RCSS_INTEGRATION: re-apply ReadiumCSS flags after section change (fresh iframe)
-        if (state.settings && state.format === 'epub') {
+        if (state.settings && (state.format === 'epub' || state.format === 'mobi' || state.format === 'fb2')) {
           try { applyReadiumCSSFlags(state.settings); } catch {}
         }
         emitReadingAction(); // TASK2: page turn = reading action, hides HUD
@@ -920,7 +922,7 @@
       applySettings(o.settings || {});
 
       // WAVE1: apply flow mode for EPUB
-      if (state.format === 'epub') {
+      if (state.format === 'epub' || state.format === 'mobi' || state.format === 'fb2') {
         const flowMode = (o.settings && o.settings.flowMode) || 'paginated';
         try {
           if (state.view.renderer && typeof state.view.renderer.setAttribute === 'function') {
@@ -1360,4 +1362,6 @@
 
   window.booksReaderEngines.epub = { create };
   window.booksReaderEngines.pdf = { create };
+  window.booksReaderEngines.mobi = { create };
+  window.booksReaderEngines.fb2 = { create };
 })();

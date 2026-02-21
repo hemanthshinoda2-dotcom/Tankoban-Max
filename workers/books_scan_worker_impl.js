@@ -11,12 +11,14 @@ const { statSafe } = require('./shared/fs_safe');
 const { makeIgnoreConfig, shouldIgnorePath } = require('./shared/ignore');
 const { seriesIdForFolder, bookIdForPath } = require('./shared/ids');
 
-const BOOK_EXT_RE = /\.(epub|pdf|txt)$/i;
+const BOOK_EXT_RE = /\.(epub|pdf|txt|mobi|fb2)$/i;
 
 function extToFormat(filePath) {
   const ext = path.extname(String(filePath || '')).toLowerCase();
   if (ext === '.epub') return 'epub';
   if (ext === '.pdf') return 'pdf';
+  if (ext === '.mobi') return 'mobi';
+  if (ext === '.fb2') return 'fb2';
   return 'txt';
 }
 

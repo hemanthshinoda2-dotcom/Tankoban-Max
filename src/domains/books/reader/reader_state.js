@@ -233,7 +233,7 @@
   function isEpubOrTxtOpen() {
     if (!state.book) return false;
     var f = String(state.book.format || '').toLowerCase();
-    return f === 'epub' || f === 'txt';
+    return f === 'epub' || f === 'txt' || f === 'mobi' || f === 'fb2';
   }
 
   function ttsSupported() {
@@ -248,7 +248,7 @@
     var pathVal = String(book.path || '');
     var format = String(book.format || '').toLowerCase();
     if (!id || !pathVal) return null;
-    if (['epub', 'pdf', 'txt'].indexOf(format) < 0) return null;
+    if (['epub', 'pdf', 'txt', 'mobi', 'fb2'].indexOf(format) < 0) return null;
     return {
       id: id,
       title: String(book.title || ''),
@@ -269,6 +269,7 @@
     if (f === 'epub') { add('epub'); add('epub_legacy'); return out; }
     if (f === 'pdf') { add('pdf'); add('pdf_legacy'); return out; }
     if (f === 'txt') { add('txt'); return out; }
+    if (f === 'mobi' || f === 'fb2') { add(f); add('epub'); return out; }
     return out;
   }
 

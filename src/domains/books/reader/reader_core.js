@@ -20,7 +20,9 @@
     window.booksReaderAnnotations,
     window.booksReaderToc,
     window.booksReaderNav,
+    window.booksReaderParagraph,
     window.booksReaderSidebar,
+    window.booksReaderRuler,
     // LISTEN_P0: TTS removed from reader — moved to dedicated Listening mode
     window.booksReaderKeyboard,
   ];

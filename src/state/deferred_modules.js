@@ -143,6 +143,7 @@
           './domains/books/reader/engine_foliate.js',
           './domains/books/reader/engine_txt.js',
           './domains/books/reader/tts_engine_edge.js',
+          './domains/books/reader/tts_engine_edge_direct.js',
           './domains/books/reader/reader_bus.js',
         ]);
         // Group 2: state + TTS core (need bus + engine registrations)
@@ -160,7 +161,9 @@
           './domains/books/reader/reader_annotations.js',
           './domains/books/reader/reader_toc.js',
           './domains/books/reader/reader_nav.js',
+          './domains/books/reader/reader_paragraph.js',
           './domains/books/reader/reader_sidebar.js',
+          './domains/books/reader/reader_ruler.js',
           './domains/books/reader/reader_overlays.js',
           './domains/books/reader/reader_keyboard.js',
         ]);
