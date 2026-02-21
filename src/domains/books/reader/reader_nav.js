@@ -24,7 +24,7 @@
   }
 
   function isScrolledTextFlow() {
-    return RS.isEpubOrTxtOpen() && String(RS.state.settings.flowMode || 'paginated') === 'scrolled';
+    return false; // scroll mode removed — always paginated
   }
 
   async function stepNextSmart() {
@@ -192,10 +192,6 @@
     // Store direction for advance
     state.chapterTransDir = detail.direction;
 
-    // Scrolled mode variant — position at bottom
-    var isScrolled = state.settings && state.settings.flowMode === 'scrolled';
-    els.chapterTransition.classList.toggle('br-chapter-transition--scrolled', !!isScrolled);
-
     els.chapterTransition.classList.remove('hidden');
 
     // Auto-advance countdown (3 seconds)
@@ -312,13 +308,12 @@
   function applyPauseBoundaryByMode() {
     var state = RS.state;
     if (!state.engine || typeof state.engine.setPauseBoundary !== 'function') return;
-    // FIX_AUDIT: scrolled EPUB/TXT should continue directly into the next chapter.
     state.engine.setPauseBoundary(false);
   }
 
   var syncOnActivityTs = 0;
   function syncProgressOnActivity() {
-    if (!RS.state.open || RS.isPdfOpen() || !isScrolledTextFlow()) return;
+    return; // scroll mode removed — no-op
     var now = Date.now();
     if ((now - syncOnActivityTs) < 120) return;
     syncOnActivityTs = now;

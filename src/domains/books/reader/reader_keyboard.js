@@ -239,30 +239,22 @@
       }
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault();
-        if (e.key === 'ArrowRight' && String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) return;
         bus.emit('nav:next');
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault();
-        if (e.key === 'ArrowLeft' && String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) return;
         bus.emit('nav:prev');
         return;
       }
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        // FIX_HUD: in scroll mode, arrow keys scroll content instead of jumping chapters
-        if (String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) {
-          if (state.engine && typeof state.engine.scrollContent === 'function') state.engine.scrollContent(80);
-        } else bus.emit('nav:next');
+        bus.emit('nav:next');
         return;
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault();
-        // FIX_HUD: in scroll mode, arrow keys scroll content instead of jumping chapters
-        if (String(state.settings.flowMode || '') === 'scrolled' && RS.isEpubOrTxtOpen()) {
-          if (state.engine && typeof state.engine.scrollContent === 'function') state.engine.scrollContent(-80);
-        } else bus.emit('nav:prev');
+        bus.emit('nav:prev');
         return;
       }
       if (e.key === 'Home') {
@@ -319,44 +311,6 @@
       }
     });
 
-    // PATCH7_SCROLL: wheel/trackpad scrolling in scrolled flow should feel smooth and predictable.
-    // Some setups produce jumpy / awkward scrolling inside foliate-view; routing through
-    // engine.scrollContent normalizes deltas and avoids fighting the internal view.
-    var els = RS.ensureEls();
-    if (els && els.readerView) {
-      var wheelAccum = 0;
-      var wheelRAF = 0;
-      var flushWheel = function () {
-        wheelRAF = 0;
-        var d = wheelAccum;
-        wheelAccum = 0;
-        if (!d) return;
-        var step = Math.max(-320, Math.min(320, d));
-        var st = RS.state;
-        if (st.engine && typeof st.engine.scrollContent === 'function') {
-          st.engine.scrollContent(step);
-        }
-      };
-
-      els.readerView.addEventListener('wheel', function (e) {
-        try {
-          var st = RS.state;
-          if (!st || !st.open) return;
-          if (!RS.isEpubOrTxtOpen()) return;
-          if (String(st.settings.flowMode || '') !== 'scrolled') return;
-          if (e.ctrlKey) return; // pinch zoom
-
-          var dy = Number(e.deltaY || 0);
-          if (e.deltaMode === 1) dy = dy * 20;      // lines -> px-ish
-          else if (e.deltaMode === 2) dy = dy * 200; // pages -> px-ish
-          dy = dy * 1.15; // slight gain so it does not feel sluggish
-
-          wheelAccum += dy;
-          e.preventDefault();
-          if (!wheelRAF) wheelRAF = requestAnimationFrame(flushWheel);
-        } catch {}
-      }, { passive: false });
-    }
   }
 
   function onOpen() {

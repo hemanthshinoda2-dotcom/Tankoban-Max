@@ -534,22 +534,7 @@
     els.zoomDown && els.zoomDown.addEventListener('click', function () { adjustPdfZoom(-0.1).catch(function () {}); });
     els.zoomUp && els.zoomUp.addEventListener('click', function () { adjustPdfZoom(0.1).catch(function () {}); });
 
-    // Flow mode toggle (settings panel checkbox)
-    var flowToggle = els.flowToggle;
-    if (flowToggle) {
-      flowToggle.addEventListener('change', function () {
-        var next = flowToggle.checked ? 'scrolled' : 'paginated';
-        state.settings.flowMode = next;
-        if (state.engine && typeof state.engine.setFlowMode === 'function') {
-          state.engine.setFlowMode(next);
-        }
-        // FIX_AUDIT: keep nav boundary behavior synchronized with flow mode changes.
-        bus.emit('appearance:flow-mode-changed', next);
-        updateFlowBtnLabel();
-        syncAaPanelUI();
-        RS.persistSettings().catch(function () {});
-      });
-    }
+    // Flow mode toggle removed — scroll mode no longer available
 
     // Image inversion toggle for dark themes (localStorage-only preference)
     if (els.invertDarkImagesToggle) {
@@ -570,8 +555,7 @@
       }, true);
     }
 
-    // Flow button in footer
-    els.flowBtn && els.flowBtn.addEventListener('click', function () { toggleFlowMode().catch(function () {}); });
+    // Flow button removed — scroll mode no longer available
     // Appearance button in toolbar — click is handled by reader_overlays.js via data-overlay attribute
 
     // Bus events
