@@ -61,9 +61,11 @@ Navigation document for AI assistants. Start here each session.
 
 | File | Lines | Owns |
 |------|-------|------|
-| `styles.css` | 4,264 | Global layout, comic reader, video player (24 sections) |
-| `books-reader.css` | 2,764 | Books reader, listening player, TTS |
+| `books-reader.css` | 3,011 | Books reader, listening player, TTS |
+| `styles.css` | 1,747 | Global layout, sidebar, topbar, shared library (20 sections) |
 | `overhaul.css` | 1,441 | Noir theme override layer |
+| `comic-reader.css` | 1,107 | Comic reader UI |
+| `video-player.css` | 962 | Video player UI |
 | `web-browser.css` | 859 | Web browser UI |
 | `video-library-match.css` | 590 | Video-specific library styling |
 | `ui-bridge.css` | 157 | Shoelace integration |
@@ -73,7 +75,7 @@ Navigation document for AI assistants. Start here each session.
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `ipc/index.js` | 1,238 | IPC registry hub, ctx creation, window lifecycle |
+| `ipc/index.js` | 496 | IPC registry hub, ctx creation, window lifecycle |
 | `domains/video/index.js` | 1,595 | Video library scan, episodes, show management |
 | `domains/player_core/index.js` | 1,221 | Player Core (Qt launcher, state machine) |
 | `domains/webSources/index.js` | 945 | Web sources, downloads, history |
@@ -93,57 +95,61 @@ Navigation document for AI assistants. Start here each session.
 | File | Lines | Purpose |
 |------|-------|---------|
 | `shared/ipc.js` | 874 | Channel + Event constants (single source of truth) |
-| `preload/index.js` | 1,139 | Preload API bridge (32 namespaces + legacy aliases) |
+| `preload/index.js` | 64 | Preload orchestrator (imports namespaces, exposes API) |
+| `preload/namespaces/*.js` | 668 (12 files) | Per-domain preload API (window, shell, library, books, video, media, player, web, progress, series, _legacy) |
 | `main/ipc/register/*.js` | 564 (30 files) | Domain-specific handler registration |
 
 ### Tools
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `tools/smoke_check.js` | 427 | Build-time validation + IPC sync |
-| `tools/ipc_sync_check.js` | 301 | IPC channel/event cross-reference validator |
+| `tools/smoke_check.js` | 453 | Build-time validation + IPC sync + CSS/export checks |
+| `tools/ipc_scaffold.js` | 310 | Auto-generate IPC channel stubs across all 3 files |
+| `tools/ipc_sync_check.js` | 309 | IPC channel/event cross-reference validator |
+| `tools/css_usage_check.js` | 178 | Dead CSS class detector (advisory) |
+| `tools/dead_export_check.js` | 186 | Dead window.* export detector (advisory) |
 | `tools/books_phase8_verify.js` | 231 | Books reader module verification |
 
 ---
 
 ## IPC Namespace Map
 
-Each `Tanko.api.*` namespace maps to: preload line range, shared/ipc.js domain, and main handler.
+Each `Tanko.api.*` namespace maps to: preload namespace file, shared/ipc.js domain, and main handler.
 
-| Namespace | Preload Lines | IPC Domain | Main Handler |
-|-----------|--------------|------------|--------------|
-| `api.window` | 26–54 | Window | register/window.js |
-| `api.shell` | 59–63 | Shell | register/shell.js |
-| `api.library` | 68–113 | Library | register/library.js |
-| `api.books` | 118–143 | Books | register/books.js |
-| `api.booksTtsEdge` | 148–156 | Books Edge TTS | register/books_tts_edge.js |
-| `api.video` | 161–216 | Video | register/video.js |
-| `api.thumbs` | 221–238 | Thumbnails + Pages | register/page_thumbnails.js |
-| `api.archives` | 243–259 | CBR + CBZ | register/archives.js |
-| `api.export` | 264–269 | Export | register/export.js |
-| `api.files` | 274–277 | File Access | register/files.js |
-| `api.clipboard` | 282–285 | Clipboard | (inline in ipc/index.js) |
-| `api.progress` | 290–301 | Comic Progress | register/progress.js |
-| `api.booksProgress` | 306–312 | Books Progress | register/books_progress.js |
-| `api.booksTtsProgress` | 317–322 | Books TTS Progress | register/books_tts_progress.js |
-| `api.videoProgress` | 327–342 | Video Progress | register/video_progress.js |
-| `api.videoSettings` | 347–354 | Video Settings | register/video_settings.js |
-| `api.booksBookmarks` | 359–364 | Books Bookmarks | register/books_bookmarks.js |
-| `api.booksAnnotations` | 369–374 | Books Annotations | register/books_annotations.js |
-| `api.booksDisplayNames` | 379–383 | Books Display Names | register/books_display_names.js |
-| `api.videoDisplayNames` | 388–392 | Video Display Names | register/video_display_names.js |
-| `api.booksSettings` | 397–401 | Books Settings | register/books_settings.js |
-| `api.videoUi` | 406–413 | Video UI State | register/video_ui_state.js |
-| `api.booksOpds` | 419–431 | Books OPDS | register/books_opds.js |
-| `api.webSources` | 432–471 | Web Sources + Downloads | register/web_sources.js |
-| `api.webTabs` | 476–501 | Web Tabs | register/web_tabs.js |
-| `api.booksUi` | 506–510 | Books UI State | register/books_ui_state.js |
-| `api.videoPoster` | 515–526 | Video Posters | register/video_posters.js |
-| `api.seriesSettings` | 531–538 | Series Settings | register/series_settings.js |
-| `api.player` | 545–602 | Player Core | register/player_core.js |
-| `api.build14` | 607–632 | BUILD14 State | register/player_core.js |
-| `api.mpv` | 637–739 | mpv | (no handler — dead code) |
-| `api.libmpv` | 744–937 | libmpv | (no handler — dead code) |
+| Namespace | Preload File | Main Handler |
+|-----------|-------------|--------------|
+| `api.window` | `namespaces/window.js` | register/window.js |
+| `api.shell` | `namespaces/shell.js` | register/shell.js |
+| `api.library` | `namespaces/library.js` | register/library.js |
+| `api.books` | `namespaces/books.js` | register/books.js |
+| `api.booksTtsEdge` | `namespaces/books.js` | register/books_tts_edge.js |
+| `api.booksOpds` | `namespaces/books.js` | register/books_opds.js |
+| `api.video` | `namespaces/video.js` | register/video.js |
+| `api.videoProgress` | `namespaces/video.js` | register/video_progress.js |
+| `api.videoSettings` | `namespaces/video.js` | register/video_settings.js |
+| `api.videoDisplayNames` | `namespaces/video.js` | register/video_display_names.js |
+| `api.videoUi` | `namespaces/video.js` | register/video_ui_state.js |
+| `api.videoPoster` | `namespaces/video.js` | register/video_posters.js |
+| `api.thumbs` | `namespaces/media.js` | register/page_thumbnails.js |
+| `api.archives` | `namespaces/media.js` | register/archives.js |
+| `api.export` | `namespaces/media.js` | register/export.js |
+| `api.files` | `namespaces/media.js` | register/files.js |
+| `api.clipboard` | `namespaces/media.js` | register/shell.js |
+| `api.progress` | `namespaces/progress.js` | register/progress.js |
+| `api.booksProgress` | `namespaces/books_metadata.js` | register/books_progress.js |
+| `api.booksTtsProgress` | `namespaces/books_metadata.js` | register/books_tts_progress.js |
+| `api.booksBookmarks` | `namespaces/books_metadata.js` | register/books_bookmarks.js |
+| `api.booksAnnotations` | `namespaces/books_metadata.js` | register/books_annotations.js |
+| `api.booksDisplayNames` | `namespaces/books_metadata.js` | register/books_display_names.js |
+| `api.booksSettings` | `namespaces/books_metadata.js` | register/books_settings.js |
+| `api.booksUi` | `namespaces/books_metadata.js` | register/books_ui_state.js |
+| `api.webSources` | `namespaces/web.js` | register/web_sources.js |
+| `api.webTabs` | `namespaces/web.js` | register/web_tabs.js |
+| `api.seriesSettings` | `namespaces/series.js` | register/series_settings.js |
+| `api.player` | `namespaces/player.js` | register/player_core.js |
+| `api.build14` | `namespaces/player.js` | register/player_core.js |
+| `api.mpv` | `namespaces/player.js` | (no handler — dead code) |
+| `api.libmpv` | `namespaces/player.js` | (no handler — dead code) |
 
 ---
 
@@ -244,12 +250,12 @@ web.js  (single file)
 | Looking for... | Where to search |
 |---------------|----------------|
 | Button click handler | Element ID in `index.html` → grep that ID in renderer JS |
-| IPC channel for a feature | `preload/index.js` — find the api namespace method |
+| IPC channel for a feature | `preload/namespaces/*.js` — find the api namespace method |
 | CSS for a component | Class name across `src/styles/*.css` |
 | Domain handler logic | `main/domains/<domain>/index.js` |
 | Data persistence | `main/domains/*/index.js` → look for `storage.*` calls |
 | Mode switching | `src/state/mode_router.js` + `deferred_modules.js` |
-| Adding a new IPC channel | Update all 3: `shared/ipc.js`, `preload/index.js`, `main/ipc/register/*.js` |
+| Adding a new IPC channel | Run `node tools/ipc_scaffold.js --channel NAME --namespace NS` (auto-updates all 3 files) |
 | Section in a mega-file | `grep "══════ SECTION:" <file>` |
 | Bug tracing | Renderer DevTools → `Tanko.api.*` call → preload bridge → main handler |
 
@@ -257,7 +263,10 @@ web.js  (single file)
 
 ## Validation Tools
 
-- `npm run smoke` — Full smoke check (baseline + IPC sync + trace markers + load order)
+- `npm run smoke` — Full smoke check (baseline + IPC sync + trace markers + load order + CSS/export advisories)
 - `npm run ipc:check` — IPC channel/event cross-reference validator
+- `node tools/ipc_scaffold.js` — Auto-generate IPC channel stubs across all 3 files
+- `node tools/css_usage_check.js` — Find potentially unused CSS classes (advisory)
+- `node tools/dead_export_check.js` — Find potentially dead window.* exports (advisory)
 - `npm run doctor` — Environment diagnostics
 - `npm run map` — Repo map generator

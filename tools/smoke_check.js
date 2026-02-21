@@ -143,11 +143,15 @@ function enforceOneIpcRegistry(allJs, ipcRegistryDir) {
     path.resolve(ipcRegistryDir, 'register'),
   ];
 
+  const toolsDir = path.resolve(ROOT, 'tools');
+
   function isAllowed(file) {
     const abs = path.resolve(file);
     if (abs === allowed[0]) return true;
     // allow anything under main/ipc/register/
     if (abs.startsWith(allowed[1] + path.sep)) return true;
+    // allow tools/ — they contain templates and regex patterns, not real handlers
+    if (abs.startsWith(toolsDir + path.sep)) return true;
     return false;
   }
 
@@ -414,6 +418,32 @@ try {
     }
   } catch (e) {
     fail(`IPC sync: checker crashed: ${e.message}`);
+  }
+
+  // ===== CSS usage check (advisory) =====
+  try {
+    const { check: cssCheck } = require('./css_usage_check');
+    const cssRes = cssCheck({ appRoot: ROOT });
+    if (cssRes.warnings.length) {
+      console.log(`CSS usage: ${cssRes.stats.unusedClasses} potentially unused classes (advisory)`);
+    } else {
+      ok('CSS usage: no unused classes detected');
+    }
+  } catch (e) {
+    console.warn(`CSS usage: checker crashed: ${e.message}`);
+  }
+
+  // ===== Dead export check (advisory) =====
+  try {
+    const { check: exportCheck } = require('./dead_export_check');
+    const exportRes = exportCheck({ appRoot: ROOT });
+    if (exportRes.warnings.length) {
+      console.log(`Dead exports: ${exportRes.stats.deadExports} potentially dead window.* exports (advisory)`);
+    } else {
+      ok('Dead exports: no dead window exports detected');
+    }
+  } catch (e) {
+    console.warn(`Dead exports: checker crashed: ${e.message}`);
   }
 
   // ===== Done =====
