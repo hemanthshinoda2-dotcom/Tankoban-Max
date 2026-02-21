@@ -28,7 +28,6 @@ Navigation document for AI assistants. Start here each session.
 | `books/reader/reader_core.js` | 889 | Books reader core (open, render, lifecycle) |
 | `books/reader/reader_nav.js` | 660 | Reader navigation (page turns, chapters) |
 | `books/reader/reader_appearance.js` | 640 | Reader themes, fonts, layout |
-| `books/reader/reader_paragraph.js` | 605 | Paragraph-mode rendering |
 | `books/reader/reader_annotations.js` | 566 | Highlights and annotations |
 | `books/reader/reader_dict.js` | 544 | Dictionary lookup popup |
 | `books/reader/engine_epub.js` | 539 | EPUB engine (epub.js) |
@@ -233,7 +232,7 @@ Group 1 (parallel): engine_epub, engine_pdf, engine_foliate, engine_txt,
 Group 2 (parallel): reader_state, tts_core
 Group 3 (parallel): reader_appearance, reader_dict, reader_search,
                      reader_bookmarks, reader_annotations, reader_toc,
-                     reader_nav, reader_paragraph, reader_sidebar,
+                     reader_nav, reader_sidebar,
                      reader_ruler, reader_overlays, reader_keyboard
 Then sequential: reader_core → library.js → listening_player.js
 ```

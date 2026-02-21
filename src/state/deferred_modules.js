@@ -162,7 +162,6 @@
           './domains/books/reader/reader_annotations.js',
           './domains/books/reader/reader_toc.js',
           './domains/books/reader/reader_nav.js',
-          './domains/books/reader/reader_paragraph.js',
           './domains/books/reader/reader_sidebar.js',
           './domains/books/reader/reader_ruler.js',
           './domains/books/reader/reader_overlays.js',

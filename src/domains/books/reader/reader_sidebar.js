@@ -83,8 +83,6 @@
     if (t.closest('.booksReaderTtsDiag')) return true;
     if (t.closest('.booksReaderReturnTts')) return true;
     if (t.closest('.br-reading-ruler')) return true;
-    if (t.closest('.br-para-controls')) return true;
-    if (t.closest('.br-para-toolbar')) return true;
     if (t.closest('.br-nav-arrow')) return true;
 
     // Don't collapse sidebar while the user is selecting text.

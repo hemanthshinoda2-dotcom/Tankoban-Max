@@ -20,7 +20,6 @@
     window.booksReaderAnnotations,
     window.booksReaderToc,
     window.booksReaderNav,
-    window.booksReaderParagraph,
     window.booksReaderSidebar,
     window.booksReaderRuler,
     // LISTEN_P0: TTS removed from reader — moved to dedicated Listening mode
@@ -889,7 +888,7 @@
             bar.style.pointerEvents = 'none';
           } else {
             bar.style.pointerEvents = 'auto';
-            if (!bar.style.opacity) bar.style.opacity = '1';
+            bar.style.opacity = '1';
           }
           console.log('[TTS-BAR] bar show=' + show);
         }
