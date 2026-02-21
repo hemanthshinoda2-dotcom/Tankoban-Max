@@ -2,7 +2,25 @@
    BUILD_OVERHAUL: Books Reader — Standard Layout
    Toolbar + Sidebar + Reading Area + Footer
    All classes prefixed with br- to avoid video/comic player conflicts
+
+   SECTION INDEX:
+     Sub-Mode Tabs & Continue Listening .. line ~7
+     Chapter TOC Panel ................... line ~60
+     TTS Listening Player Overlay ........ line ~154
+     TTS Mega Settings ................... line ~460
+     Layout Shell & Reader Themes ........ line ~506
+     Toolbar ............................. line ~644
+     Main Area & Sidebar ................. line ~731
+     Reading Area & Ruler ................ line ~992
+     Navigation Arrows & Footer .......... line ~1153
+     Reader Theme Attributes ............. line ~1319
+     HUD Auto-Hide & Fullscreen .......... line ~1352
+     TTS Bar & Mini Bar .................. line ~1447
+     Floating Overlay Panels ............. line ~2153
+     Chapter-Aware Reading ............... line ~2565
    ══════════════════════════════════════════════════════════════ */
+
+/* ══════ SECTION: Sub-Mode Tabs & Continue Listening ══════ */
 
 /* ── LISTEN_P1: Books sub-mode tab strip (Reading / Listening) ── */
 .books-mode-tabs {
@@ -57,6 +75,8 @@
   background: rgba(74,144,217,0.85);
   border-radius: 0 0 0 0;
 }
+/* ══════ SECTION: Chapter TOC Panel ══════ */
+
 /* ── LISTEN_P5: Chapter TOC panel ── */
 .lp-toc-btn {
   display: flex;
@@ -150,6 +170,8 @@
   font-size: 0.82rem;
 }
 .lp-toc-empty.hidden { display: none; }
+
+/* ══════ SECTION: TTS Listening Player Overlay ══════ */
 
 /* ── LISTEN_P3: TTS Listening player overlay ── */
 .lp-shell {
@@ -503,6 +525,8 @@
   min-width: 32px;
 }
 
+/* ══════ SECTION: Layout Shell & Reader Themes ══════ */
+
 /* ── Layout shell ─────────────────────────────────────────── */
 .br-reader {
   --br-reader-bg: #101216;
@@ -641,6 +665,8 @@
   --br-reader-accent-rgb: 38,139,210;
 }
 
+/* ══════ SECTION: Toolbar ══════ */
+
 /* ── Toolbar (48px, always visible) ───────────────────────── */
 .br-toolbar {
   position: absolute;
@@ -727,6 +753,8 @@
 /* History buttons (smaller) */
 .br-hist-btn { font-size: 10px; min-width: 24px; opacity: 0.6; }
 .br-hist-btn:not(:disabled):hover { opacity: 1; }
+
+/* ══════ SECTION: Main Area & Sidebar ══════ */
 
 /* ── Main area (flex row) ─────────────────────────────────── */
 .br-main {
@@ -989,6 +1017,8 @@
 }
 .br-bookmark-toggle:hover { background: rgba(255,255,255,0.06); }
 
+/* ══════ SECTION: Reading Area & Ruler ══════ */
+
 /* ── Reading area ─────────────────────────────────────────── */
 .br-reading-area {
   flex: 1;
@@ -1149,6 +1179,8 @@
 .br-nav-left { left: 0; border-radius: 0 4px 4px 0; }
 .br-nav-right { right: 0; border-radius: 4px 0 0 4px; }
 .br-nav-arrow svg { width: 22px; height: 22px; fill: currentColor; }
+
+/* ══════ SECTION: Navigation Arrows & Footer ══════ */
 
 /* ── Footer (always visible) ─────────────────────────────── */
 .br-footer {
@@ -1316,6 +1348,8 @@
 
 .br-footer-spacer { flex: 1; }
 
+/* ══════ SECTION: Reader Theme Attributes ══════ */
+
 /* ── Reader theme data attributes on host ─────────────────── */
 .br-host[data-reader-theme="light"] { background: #ffffff; color: #111111; }
 .br-host[data-reader-theme="sepia"] { background: #f4ecdc; color: #4d3d2c; }
@@ -1348,6 +1382,8 @@
   height: 0 !important;
 }
 /* Paged mode: foliate-view shadow DOM handles its own overflow clipping */
+
+/* ══════ SECTION: HUD Auto-Hide & Fullscreen ══════ */
 
 /* ── HUD auto-hide ────────────────────────────────────────── */
 .br-reader .br-toolbar,
@@ -1443,6 +1479,8 @@ body.inBooksReader .br-reader {
   z-index: 20;
   border-radius: 0;
 }
+
+/* ══════ SECTION: TTS Bar & Mini Bar ══════ */
 
 /* ── TTS bar repositioned inside reading area ─────────────── */
 .br-reading-area > .booksReaderTtsBar {
@@ -2150,6 +2188,8 @@ body.inBooksReader .br-reader {
   background: rgba(240, 120, 120, 0.12);
 }
 
+/* ══════ SECTION: Floating Overlay Panels ══════ */
+
 /* ── Floating overlay panels ────────────────────────────── */
 
 /* Backdrop — transparent click target */
@@ -2562,9 +2602,7 @@ body.inBooksReader .br-reader {
   .br-overlay { left: 0 !important; right: 0 !important; transform: none !important; }
 }
 
-/* ══════════════════════════════════════════════════════════════
-   BUILD_CHAP: Chapter-Aware Reading
-   ══════════════════════════════════════════════════════════════ */
+/* ══════ SECTION: Chapter-Aware Reading ══════ */
 
 /* ── Chapter transition card ──────────────────────────────── */
 .br-chapter-transition {

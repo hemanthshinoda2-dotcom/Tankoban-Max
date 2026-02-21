@@ -149,11 +149,11 @@ Each `Tanko.api.*` namespace maps to: preload line range, shared/ipc.js domain, 
 
 ## CSS Ownership Map
 
-### styles.css — Section markers (search `══════ SECTION:`)
-Global Setup & Fullscreen, CSS Variables & Tokens, Base Layout & Library Shell, Scrollbar Styling, Series View & Topbar, Sidebar Nav & Folder Tree, Global Search, Shared UI Primitives, Continue Reading Shelf, Series Grid & Cards, Volumes & Episode Table, Library Overlays, Comic Reader (Player Bar, Footer, Scrub, Timeline), Toast & Context Menu, End of Volume & Mega Settings, Loading & Debug Overlays, Mode Menu & Loupe, Video Mode (Library, Player Shell, HUD, Timeline, Context Menu, Tracks), Video & Books Continue Panels, Volume OSD
+### styles.css — 20 sections (search `══════ SECTION:`)
+Video Shell & Fullscreen, Window Chrome & Utilities, Theme Tokens (OLED Cinema), Topbar & Library Controls, Sidebar & Folder Tree, Global Search, Continue Reading Shelf, Series Grid & Tiles, Volumes & Episode Table, Inside-Series View, Volume Navigator & Overlays, Comic Reader / Player, Toast & Hint, Context Menu, End-of-Volume & Mega Settings, HUD Hide & Player Body Rules, Loading Overlay & Spinner, Mode Menu Loupe & FX, Video Mode (Library + Player), Books Mode Stubs
 
-### books-reader.css — Section markers (search `BUILD_OVERHAUL:`, `LISTEN_P`)
-Listening Player (tabs, shell, themes, reading card, TTS bar), Reader Shell & Themes, Toolbar, Main Area & Sidebar, Settings & Swatches, Reading Area & Ruler, Footer & Scrub, HUD Visibility, Responsive & Fullscreen, Shortcuts & Utilities, Status/Toast/Bookmarks/Dictionary, TTS Bar & Diagnostics, Annotations, Floating Overlays, Theme-Aware Overlays, Chapter-Aware Reading
+### books-reader.css — 14 sections (search `══════ SECTION:`)
+Sub-Mode Tabs & Continue Listening, Chapter TOC Panel, TTS Listening Player Overlay, Layout Shell & Reader Themes, Toolbar, Main Area & Sidebar, Reading Area & Ruler, Navigation Arrows & Footer, Reader Theme Attributes, HUD Auto-Hide & Fullscreen, TTS Bar & Mini Bar, Floating Overlay Panels, Chapter-Aware Reading
 
 ### Other CSS files
 - `overhaul.css` — Noir theme overrides (loads after styles.css, wins at equal specificity)

@@ -3,8 +3,31 @@ OWNERSHIP (styles):
 - Global UI styling for the app
 - Video HUD / fullscreen / toast / mpv-mode layout rules live here
 - Keep selectors stable; many behaviors depend on specific class hooks on <body>
+
+SECTION INDEX:
+  Video Shell & Fullscreen ........... line ~9
+  Window Chrome & Utilities .......... line ~164
+  Theme Tokens (OLED Cinema) ......... line ~185
+  Topbar & Library Controls .......... line ~272
+  Sidebar & Folder Tree .............. line ~551
+  Global Search ...................... line ~613
+  Continue Reading Shelf ............. line ~704
+  Series Grid & Tiles ................ line ~842
+  Volumes & Episode Table ............ line ~969
+  Inside-Series View ................. line ~1060
+  Volume Navigator & Overlays ........ line ~1357
+  Comic Reader / Player .............. line ~1531
+  Toast & Hint ....................... line ~2109
+  Context Menu ....................... line ~2127
+  End-of-Volume & Mega Settings ...... line ~2172
+  HUD Hide & Player Body Rules ....... line ~2391
+  Loading Overlay & Spinner .......... line ~2525
+  Mode Menu, Loupe & FX .............. line ~2622
+  Video Mode (library + player) ...... line ~2774
+  Books Mode Stubs ................... line ~3630
 */
 
+/* ══════ SECTION: Video Shell & Fullscreen ══════ */
 
 /* BUILD34: avoid scrollbars in the video shell (fullscreen/windowed). */
 body.inVideoPlayer {
@@ -161,6 +184,8 @@ body{
   color:var(--text);
 }
 
+/* ══════ SECTION: Window Chrome & Utilities ══════ */
+
 /* Build 36: standard OS window chrome is enabled; hide redundant in-app window buttons. */
 .winChromeHidden{ display:none !important; }
 
@@ -181,6 +206,8 @@ body{
   max-height: calc(2 * 1em * var(--lib-line));
   min-height: calc(2 * 1em * var(--lib-line));
 }
+
+/* ══════ SECTION: Theme Tokens (OLED Cinema) ══════ */
 
 /* BUILD 24 — OLED Cinema Library skin (Theme C) */
 /* INTENT: Scope theme tokens to the Library UI only (body:not(.inPlayer)) so the Player/Reader colors remain unchanged. */
@@ -268,6 +295,8 @@ body:not(.inPlayer) .view{ gap:0; }
   min-height: 0;
   overflow:hidden;
 }
+
+/* ══════ SECTION: Topbar & Library Controls ══════ */
 
 /* Build 4.5 — true view switch inside the Library content area */
 .homeView{
@@ -548,6 +577,8 @@ body:not(.inPlayer) .search{
 .navBtn:hover{ background: rgba(var(--surface-rgb),.55); }
 .navBtn:active{ transform: translateY(1px); }
 
+/* ══════ SECTION: Sidebar & Folder Tree ══════ */
+
 /* Build 12: library sidebar folders tree */
 .folderTree{ display:flex; flex-direction:column; gap:4px; margin-top:6px; }
 .folderTreeEmpty{ color: var(--muted); font-size: 11px; padding: 4px 2px; }
@@ -609,6 +640,8 @@ body:not(.inPlayer) .search{
   background:rgba(255,255,255,.55);
   transition:width .15s;
 }
+
+/* ══════ SECTION: Global Search ══════ */
 
 /* Global search */
 .globalSearchWrap{
@@ -700,6 +733,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
 
 .hidden{ display:none !important; }
+
+/* ══════ SECTION: Continue Reading Shelf ══════ */
 
 /* Continue Reading (Build 2) */
 .continuePanel{
@@ -839,6 +874,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   color: rgba(229,231,235,.86);
 }
 
+/* ══════ SECTION: Series Grid & Tiles ══════ */
+
 /* Series */
 .seriesPanel{ padding: 6px; }
 .seriesPanel .panelTitleRow{ margin-bottom: 6px; }
@@ -966,6 +1003,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .seriesCard:hover .seriesRemove{ opacity: 1; }
 .seriesRemove:active{ transform: translateY(1px); }
 
+/* ══════ SECTION: Volumes & Episode Table ══════ */
+
 /* Volumes */
 .volBar{
   display:flex;
@@ -1057,6 +1096,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 
 
 
+/* ══════ SECTION: Inside-Series View ══════ */
+
 /* Build 4 — Inside folder/series view: split preview + dense table */
 /* Build 4.5 — the inside-series panel is a dedicated view (not stacked under HomeView). */
 #seriesDetailPanel{ flex:1; min-height:0; display:flex; flex-direction:column; }
@@ -1099,36 +1140,7 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   max-height: none;
 }
 
-/* Build 11: Videos-only folder "Continue watching" widget placed inside preview pane */
-.videoFolderContinue{
-  position:absolute;
-  bottom:12px;
-  left:12px;
-  right:auto;
-  width: min(360px, 40%);
-  max-width: 380px;
-  min-width: 240px;
-  border:1px solid rgba(255,255,255,.18);
-  background: rgba(var(--surface-rgb),.42);
-  backdrop-filter: blur(10px);
-  border-radius: 14px;
-  padding: 10px 12px;
-  display:flex;
-  flex-direction:column;
-  gap:8px;
-  box-shadow: 0 14px 34px rgba(0,0,0,.45);
-}
-.videoFolderContinue.isRight{ right:12px; left:auto; }
-.videoFolderContinue.isLeft{ left:12px; right:auto; }
-.videoFolderContinue.hidden{ display:none; }
-.videoFolderContinueTitle{ font-weight:900; font-size: 13px; letter-spacing:.2px; }
-.videoFolderContinueMeta{ display:flex; flex-direction:column; gap:2px; min-width:0; }
-.videoFolderContinueEp{ font-weight:800; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.videoFolderContinueFile{ opacity:.78; font-size: 11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.videoFolderContinueRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.videoFolderContinueBar{ height:8px; border-radius:999px; background: rgba(255,255,255,.14); overflow:hidden; }
-.videoFolderContinueBar > div{ height:100%; width:0%; background: rgba(var(--accent-rgb),.78); border-radius:999px; }
-.videoFolderContinueHint{ opacity:.8; font-size: 11px; }
+/* Extracted to video-player.css */
 
 
 .volTableWrap{
@@ -1189,52 +1201,26 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 #booksEpisodesWrap.previewHidden .volPreviewPane{ display:none; height:0; }
 #booksEpisodesWrap.previewHidden .volTableWrap{ flex: 1 1 auto; }
 
-/* Build 3.4: video episode table has an extra Resolution column */
-#videoEpTableHead{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
-#videoEpisodesGrid .volTrow{ grid-template-columns: 42px minmax(260px, 4.2fr) 90px 92px 92px 120px 132px; }
+/* Video-scoped episode table rules extracted to video-player.css */
 #booksEpTableHead{ grid-template-columns: 42px minmax(320px, 5fr) 92px 92px 120px 132px; }
 #booksEpisodesGrid .volTrow{ grid-template-columns: 42px minmax(320px, 5fr) 92px 92px 120px 132px; }
 
-/* Build 10: Video episode table readability upgrades (visual progress, better alignment) */
-#videoEpisodesWrap .cell.size,
-#videoEpisodesWrap .cell.duration,
-#videoEpisodesWrap .cell.date{
-  text-align: right;
-}
+/* Books episode table readability (video equivalents in video-player.css) */
 #booksEpisodesWrap .cell.size,
 #booksEpisodesWrap .cell.duration,
 #booksEpisodesWrap .cell.date{
   text-align: right;
-}
-#videoEpisodesWrap .cell.resolution{
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
 }
 #booksEpisodesWrap .cell.resolution{
   text-align: center;
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
-#videoEpisodesWrap .cell.progress{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-}
 #booksEpisodesWrap .cell.progress{
   display:flex;
   align-items:center;
   gap:8px;
   min-width:0;
-}
-#videoEpisodesWrap .videoEpProgressTrack{
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.12);
-  overflow: hidden;
 }
 #booksEpisodesWrap .videoEpProgressTrack{
   flex: 1 1 auto;
@@ -1244,24 +1230,10 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   background: rgba(255,255,255,.12);
   overflow: hidden;
 }
-#videoEpisodesWrap .videoEpProgressFill{
-  height: 100%;
-  width: 0%;
-  background: rgba(255,255,255,.65);
-}
 #booksEpisodesWrap .videoEpProgressFill{
   height: 100%;
   width: 0%;
   background: rgba(255,255,255,.65);
-}
-#videoEpisodesWrap .videoEpProgressLabel{
-  flex: 0 0 auto;
-  min-width: 40px;
-  text-align: right;
-  font-size: 11px;
-  color: rgba(229,231,235,.74);
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
 }
 #booksEpisodesWrap .videoEpProgressLabel{
   flex: 0 0 auto;
@@ -1272,24 +1244,9 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
-#videoEpisodesWrap .videoEpTitleMain{
-  font-weight: 650;
-  color: rgba(229,231,235,.90);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 #booksEpisodesWrap .videoEpTitleMain{
   font-weight: 650;
   color: rgba(229,231,235,.90);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-#videoEpisodesWrap .videoEpTitleSub{
-  margin-top: 2px;
-  font-size: 11px;
-  color: rgba(229,231,235,.58);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1301,11 +1258,6 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-#videoEpisodesWrap .volTrow .cell.title{
-  display:flex;
-  flex-direction:column;
-  min-width:0;
 }
 #booksEpisodesWrap .volTrow .cell.title{
   display:flex;
@@ -1353,6 +1305,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .volTrow.folderRow:hover{ background: rgba(255,255,255,.08); }
 .volTrow.folderRow .cell.title{ font-weight: 800; }
 
+
+/* ══════ SECTION: Volume Navigator & Overlays ══════ */
 
 /* Volume navigator overlay */
 .volNavOverlay{
@@ -1527,6 +1481,8 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   .keysCols{ grid-template-columns: 1fr; }
   .search{ min-width: 180px; }
 }
+
+/* ══════ SECTION: Comic Reader / Player ══════ */
 
 /* Player */
 .playerBar{
@@ -2106,6 +2062,8 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .scrub:active .scrubThumb,
 .scrub.dragging .scrubThumb{ opacity: 1; }
 
+/* ══════ SECTION: Toast & Hint ══════ */
+
 .hint{ margin-left:auto; }
 
 .toast{
@@ -2123,6 +2081,8 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   backdrop-filter: blur(8px);
   z-index: 99;
 }
+
+/* ══════ SECTION: Context Menu ══════ */
 
 /* FIND_THIS:CONTEXT_MENU_STYLES */
 .contextMenu{
@@ -2168,6 +2128,8 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   margin: 6px 6px;
   background: rgba(255,255,255,.14);
 }
+
+/* ══════ SECTION: End-of-Volume & Mega Settings ══════ */
 
 /* End-of-volume overlay */
 .endOverlay{
@@ -2388,6 +2350,8 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   to{ opacity: 1; transform: translateY(0); }
 }
 
+/* ══════ SECTION: HUD Hide & Player Body Rules ══════ */
+
 /* HUD hide */
 body.hudHidden .playerBar,
 body.hudHidden .playerFooter,
@@ -2522,6 +2486,8 @@ body.inPlayer .iconBtn{
 body.inPlayer .iconBtn:hover{ background: rgba(0,0,0,.52); }
 body.inPlayer .ytPlay{ width: 38px; height: 38px; }
 
+/* ══════ SECTION: Loading Overlay & Spinner ══════ */
+
 /* Loading overlay (spinner + optional progress bar) */
 .loadingOverlay{
   position: fixed;
@@ -2618,6 +2584,8 @@ body.inPlayer .ytPlay{ width: 38px; height: 38px; }
   white-space: pre;
 }
 
+
+/* ══════ SECTION: Mode Menu, Loupe & FX ══════ */
 
 /* Build 43B: control mode menu (YouTube-resolution style) */
 .modeMenu{
@@ -2770,6 +2738,8 @@ body.inPlayer .ytPlay{ width: 38px; height: 38px; }
   width: min(var(--loupeSize, 220px), calc(100vw - 28px));
   height: min(var(--loupeSize, 220px), calc(100vh - 140px));
 }
+
+/* ══════ SECTION: Video Mode (Library + Player) ══════ */
 
 /* Tankoban Plus Build 1: mode switch + video views */
 .modeSwitch{ display:flex; gap:6px; align-items:center; justify-content:center; margin-top:6px; }
@@ -3627,9 +3597,7 @@ body.mpvEngine .videoToast {
   padding: 0 8px;
 }
 
-/* =========================================================
-   Tankoban Max: Books mode + Books reader
-   ========================================================= */
+/* ══════ SECTION: Books Mode Stubs (legacy — see books-reader.css) ══════ */
 body.inBooksMode #hiddenSeriesBtn,
 body.inWebMode #tileDensityBtn,
 body.inWebMode #hiddenSeriesBtn {
