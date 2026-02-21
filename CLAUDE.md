@@ -8,8 +8,8 @@ Do what I say and only what I say. Nothing more, nothing less.
 ### 1. Commit and push after EVERY change
 Every single edit, no matter how small, gets its own commit and push immediately. No batching. No "I'll commit later." Edit → commit → push. Every time.
 
-### 2. Launch the app and verify your changes
-After every edit, run the app yourself (`unset ELECTRON_RUN_AS_NODE && npm start`) and check the logs/output to confirm the change actually works. Do NOT blindly commit without verifying. If something looks wrong in the logs, fix it before telling me it's done.
+### 2. Launch the app and let the user verify with live logging
+After every fix (before committing), add `console.log` diagnostic lines to the changed code paths, then launch the app (`unset ELECTRON_RUN_AS_NODE && npm start`). Watch the console output while the user clicks through and tests. Only commit and push after confirming the logs show correct behavior. If something looks wrong in the logs, fix it before committing.
 
 ### 3. Review your own edits for regressions
 Before committing, re-read the diff. Ask yourself: "Did I break something else?" If you changed CSS, check that you didn't make something invisible. If you changed JS, check that you didn't remove a needed event listener. Think like a code reviewer, not just a code writer.

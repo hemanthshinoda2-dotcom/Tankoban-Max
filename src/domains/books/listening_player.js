@@ -1305,6 +1305,12 @@ function updateCard(info) {
       var mega = qs('lpTtsMega');
       if (!mega) return;
       mega.classList.toggle('hidden');
+      if (!mega.classList.contains('hidden')) {
+        populateVoices();
+        populateHlControls();
+        syncSpeed();
+        syncEngine();
+      }
       var diag = qs('lpTtsDiag');
       if (diag && !mega.classList.contains('hidden')) diag.classList.add('hidden');
     });

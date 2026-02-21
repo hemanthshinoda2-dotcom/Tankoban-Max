@@ -1661,7 +1661,7 @@
     try {
       seg.element.classList.add('booksReaderTtsActive');
       if (!state.suppressAutoScrollUntil || Date.now() > state.suppressAutoScrollUntil) {
-        seg.element.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        seg.element.scrollIntoView({ block: 'center', behavior: 'smooth' });
       }
     } catch {}
     _txt.activeEl = seg.element;

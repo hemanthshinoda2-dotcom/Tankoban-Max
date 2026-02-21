@@ -167,8 +167,8 @@
         // Group 4-5: orchestrator then library (sequential, order matters)
         await loadScriptOnce('./domains/books/reader/reader_core.js');
         await loadScriptOnce('./domains/books/library.js');
-        // NOTE: Listening-mode shell + legacy listening HUD are disabled.
-        // Narration is owned by the reader (context menu + reader toolbar).
+        // LISTEN_P3: TTS player overlay (mega panel wiring, voice curation, highlight controls)
+        await loadScriptOnce('./domains/books/listening_player.js');
 
         window.__tankoBooksModulesLoaded = true;
 
