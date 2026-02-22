@@ -229,10 +229,7 @@ function handleAddonEvents(events) {
       emitToOwner(EVENT.HG_EOF, { ok: true });
       continue;
     }
-    if (eventName === 'shutdown') {
-      emitToOwner(EVENT.HG_EOF, { ok: true, reason: 'shutdown' });
-      continue;
-    }
+    if (eventName === 'shutdown') continue;
   }
 }
 

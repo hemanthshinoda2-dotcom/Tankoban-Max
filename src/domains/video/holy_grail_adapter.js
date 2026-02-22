@@ -220,6 +220,17 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (canvas.height !== pxH) canvas.height = pxH;
     }
 
+    async function applyRenderFidelityDefaults() {
+      // Keep this conservative: prioritize motion stability/sharpness without forcing risky vo rewrites.
+      await safeInvoke(hg, 'setProperty', 'scale', 'ewa_lanczossharp');
+      await safeInvoke(hg, 'setProperty', 'cscale', 'spline36');
+      await safeInvoke(hg, 'setProperty', 'dscale', 'mitchell');
+      await safeInvoke(hg, 'setProperty', 'correct-downscaling', 'yes');
+      await safeInvoke(hg, 'setProperty', 'sigmoid-upscaling', 'yes');
+      await safeInvoke(hg, 'setProperty', 'deband', 'yes');
+      await safeInvoke(hg, 'setProperty', 'dither-depth', 'auto');
+    }
+
     function createCanvasSurface() {
       hostEl.innerHTML = '';
       canvas = document.createElement('canvas');
@@ -231,7 +242,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       canvas.setAttribute('aria-label', 'Video');
       hostEl.appendChild(canvas);
 
-      ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: false });
       if (ctx2d) {
         ctx2d.imageSmoothingEnabled = true;
         try { ctx2d.imageSmoothingQuality = 'high'; } catch {}
@@ -569,12 +580,14 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (!loopRes || loopRes.ok === false) return { ok: false, error: loopRes && loopRes.error ? String(loopRes.error) : 'restart_loop_failed' };
 
       if (seekSec > 0.25) await safeInvoke(hg, 'command', ['seek', String(seekSec), 'absolute', 'exact']);
+      await applyRenderFidelityDefaults();
       await safeInvoke(hg, 'setProperty', 'pause', paused ? 'yes' : 'no');
       await safeInvoke(hg, 'setProperty', 'volume', String(volume * 100));
       await safeInvoke(hg, 'setProperty', 'mute', muted ? 'yes' : 'no');
       await safeInvoke(hg, 'setProperty', 'speed', String(speed));
       await safeInvoke(hg, 'setProperty', 'audio-delay', String(audioDelay));
       await safeInvoke(hg, 'setProperty', 'sub-delay', String(subDelay));
+      await applyRenderFidelityDefaults();
       if (audioTrackId) await safeInvoke(hg, 'command', ['set', 'aid', audioTrackId]);
       if (subtitleTrackId && subtitlesVisible) {
         await safeInvoke(hg, 'command', ['set', 'sid', subtitleTrackId]);
@@ -1149,7 +1162,9 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     }
 
     if (typeof hg.onEof === 'function') {
-      cleanupFns.push(hg.onEof(() => {
+      cleanupFns.push(hg.onEof((payload) => {
+        const reason = String((payload && payload.reason) || '').toLowerCase();
+        if (reason === 'shutdown') return;
         if (suppressEofSignals || !state.ready) return;
         if (!state.eofReached) {
           state.eofReached = true;

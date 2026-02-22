@@ -940,6 +940,13 @@ async function refreshChaptersFromPlayer(){
     return ui;
   }
 
+
+  function withOpenReason(extra, openReason) {
+    const base = (extra && typeof extra === 'object') ? { ...extra } : {};
+    if (!base._openReason && openReason) base._openReason = String(openReason);
+    return base;
+  }
+
   function setActivePlayerEngine(engine, reason) {
     const nextEngine = (String(engine || '').toLowerCase() === 'qt')
       ? 'qt'
@@ -948,9 +955,10 @@ async function refreshChaptersFromPlayer(){
         : 'none';
     const routeReason = String(reason || (nextEngine === 'embedded' ? 'default_embedded' : 'unknown'));
     const nowMs = Date.now();
+    const openReason = String(state._activeOpenReason || 'unknown_open_reason');
 
     state.activePlayerEngine = nextEngine;
-    state.lastOpenRoute = { engine: nextEngine, reason: routeReason, atMs: nowMs };
+    state.lastOpenRoute = { engine: nextEngine, reason: routeReason, openReason, atMs: nowMs };
 
     const ui = ensureHgUiControllers();
     try { ui && ui.topStrip && ui.topStrip.setEngine(nextEngine, routeReason); } catch {}
@@ -958,6 +966,7 @@ async function refreshChaptersFromPlayer(){
     if (el.videoEngineBadge) {
       el.videoEngineBadge.dataset.engine = nextEngine;
       el.videoEngineBadge.dataset.reason = routeReason;
+      el.videoEngineBadge.dataset.openReason = openReason;
       const isDefaultEmbedded = (nextEngine === 'embedded' && routeReason === 'default_embedded');
       const showBadge = (!isDefaultEmbedded && nextEngine !== 'none');
       el.videoEngineBadge.classList.toggle('hidden', !showBadge);
@@ -965,10 +974,10 @@ async function refreshChaptersFromPlayer(){
         el.videoEngineBadge.textContent = 'Embedded (HG)';
         el.videoEngineBadge.title = routeReason === 'default_embedded'
           ? 'Embedded Holy Grail engine active.'
-          : `Embedded Holy Grail engine active (${routeReason}).`;
+          : `Embedded Holy Grail engine active (${routeReason}; ${openReason}).`;
       } else if (nextEngine === 'qt') {
         el.videoEngineBadge.textContent = 'Qt';
-        el.videoEngineBadge.title = `Qt engine active (${routeReason}).`;
+        el.videoEngineBadge.title = `Qt engine active (${routeReason}; ${openReason}).`;
       } else {
         el.videoEngineBadge.textContent = 'No Engine';
         el.videoEngineBadge.title = 'No active engine.';
@@ -979,6 +988,7 @@ async function refreshChaptersFromPlayer(){
       console.log('[video-route]', {
         engine: nextEngine,
         reason: routeReason,
+        openReason,
         atMs: nowMs,
       });
     } catch {}
@@ -3962,7 +3972,7 @@ function getContinueVideos() {
     titleWrap.appendChild(title);
     tile.appendChild(titleWrap);
 
-    tile.onclick = () => safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume')));
+    tile.onclick = () => safe(() => playViaShell(ep, withOpenReason(buildPlaybackOpts(ep, 'resume'), 'continue_tile')));
     tile.addEventListener('contextmenu', (e) => openContinueShowContextMenu(e, show, ep));
 
     // Build 23: optional drag-and-drop poster on Continue Watching tiles too.
@@ -5667,7 +5677,7 @@ function getEpisodeById(epId){
     row.appendChild(mkCell('date', fmtDate(ep.mtimeMs)));
 
     row.onclick = () => { selectEpisode(ep.id); };
-    row.ondblclick = () => { selectEpisode(ep.id); safe(() => playViaShell(ep)); };
+    row.ondblclick = () => { selectEpisode(ep.id); safe(() => playViaShell(ep, withOpenReason(null, 'episode_row_dblclick'))); };
     row.addEventListener('contextmenu', (e) => openEpisodeContextMenu(e, ep));
 
     return row;
@@ -5779,7 +5789,7 @@ function getEpisodeById(epId){
     row.appendChild(mkCell('date', fmtDate(ep.mtimeMs)));
 
     row.onclick = () => { selectEpisode(ep.id); };
-    row.ondblclick = () => { selectEpisode(ep.id); safe(() => playViaShell(ep)); };
+    row.ondblclick = () => { selectEpisode(ep.id); safe(() => playViaShell(ep, withOpenReason(null, 'episode_row_dblclick'))); };
     row.addEventListener('contextmenu', (e) => openEpisodeContextMenu(e, ep));
 
     return row;
@@ -6001,7 +6011,7 @@ function getEpisodeById(epId){
         e.preventDefault();
         e.stopPropagation();
         try { selectEpisode(ep.id); } catch {}
-        safe(() => playViaShell(ep));
+        safe(() => playViaShell(ep, withOpenReason(null, 'continue_card_play')));
       };
       titleRow.appendChild(left);
       titleRow.appendChild(btn);
@@ -6411,7 +6421,7 @@ async function playViaShell(v, extra) {
     toast('Episode metadata is still loading. Try again.', 1800);
     return;
   }
-  return openVideo(target, extra && typeof extra === 'object' ? extra : {});
+  return openVideo(target, withOpenReason(extra, 'library_play'));
 }
 
 async function playViaEmbedded(v, extra) {
@@ -6420,7 +6430,8 @@ async function playViaEmbedded(v, extra) {
     toast('Episode metadata is still loading. Try again.', 1800);
     return;
   }
-  const opts = (extra && typeof extra === 'object') ? { ...extra, forceEmbedded: true } : { forceEmbedded: true };
+  const opts = withOpenReason(extra, 'explicit_embedded_open');
+  opts.forceEmbedded = true;
   return openVideo(target, opts);
 }
 
@@ -6430,7 +6441,8 @@ async function playViaQt(v, extra) {
     toast('Episode metadata is still loading. Try again.', 1800);
     return;
   }
-  const opts = (extra && typeof extra === 'object') ? { ...extra, forceQt: true } : { forceQt: true };
+  const opts = withOpenReason(extra, 'explicit_qt_open');
+  opts.forceQt = true;
   return openVideoQtFallback(target, opts);
 }
 
@@ -6901,6 +6913,19 @@ async function openVideo(v, opts = {}) {
   const explicitEmbedded = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
   const userPrefQt = !!(!explicitEmbedded && getQtPlayerPreference());
   const forceQt = !!(explicitQt || userPrefQt);
+  const openReason = String((opts && typeof opts === 'object' && opts._openReason) || 'unknown');
+  state._activeOpenReason = openReason;
+  try {
+    console.log('[video-open-request]', {
+      openReason,
+      explicitQt,
+      explicitEmbedded,
+      userPrefQt,
+      videoId: String((v && v.id) || ''),
+      file: String((v && v.path) || ''),
+    });
+  } catch {}
+
   const requestedReason = explicitQt
     ? 'explicit_qt'
     : explicitEmbedded
