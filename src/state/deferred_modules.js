@@ -79,6 +79,17 @@
           './domains/video/video_utils.js',
           './domains/video/build14_state.js',
           './domains/video/holy_grail_adapter.js',
+          './domains/video/hg_ui/utils.js',
+          './domains/video/hg_ui/drawer.js',
+          './domains/video/hg_ui/toast.js',
+          './domains/video/hg_ui/center_flash.js',
+          './domains/video/hg_ui/volume_hud.js',
+          './domains/video/hg_ui/diagnostics.js',
+          './domains/video/hg_ui/top_strip.js',
+          './domains/video/hg_ui/playlist.js',
+          './domains/video/hg_ui/tracks_drawer.js',
+          './domains/video/hg_ui/context_menu.js',
+          './domains/video/hg_ui/hud.js',
           './domains/video/video.js',
         ]);
         await loadScriptOnce('./domains/video/video_search.js');

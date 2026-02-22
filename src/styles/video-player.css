@@ -256,6 +256,36 @@ body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
 
 .videoPlayerBarRight{ margin-left:auto; display:flex; align-items:center; gap:8px; }
 
+.videoEngineBadge{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:116px;
+  height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid rgba(var(--chrome-rgb),0.18);
+  background:rgba(var(--chrome-rgb),0.05);
+  color:rgba(var(--chrome-rgb),0.88);
+  font-size:11px;
+  font-weight:700;
+  letter-spacing:0.2px;
+  user-select:none;
+}
+.videoEngineBadge[data-engine="embedded"]{
+  border-color:rgba(110,205,140,0.48);
+  background:rgba(110,205,140,0.15);
+  color:rgba(190,255,210,0.98);
+}
+.videoEngineBadge[data-engine="qt"]{
+  border-color:rgba(230,177,89,0.48);
+  background:rgba(230,177,89,0.14);
+  color:rgba(255,228,184,0.98);
+}
+.videoEngineBadge[data-engine="none"]{
+  opacity:0.74;
+}
+
 /* Chip buttons — smaller, darker, "brass" hover; consistent focus ring. */
 .chipBtn{
   padding:6px 10px;
@@ -944,6 +974,53 @@ body.mpvEngine .videoToast {
   font-size: 24px;
   font-weight: 600;
   color: #fff;
+}
+
+.videoVolumeHud{
+  position:absolute;
+  left:50%;
+  top:34%;
+  transform:translate(-50%, -50%);
+  width:min(380px, 70vw);
+  padding:14px 16px;
+  border-radius:14px;
+  background:rgba(0,0,0,0.72);
+  border:1px solid rgba(var(--chrome-rgb),0.2);
+  box-shadow:0 18px 32px rgba(0,0,0,0.45);
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:12px;
+  z-index:1100;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 140ms ease;
+}
+.videoVolumeHud.visible{ opacity:1; }
+.videoVolumeHud.hidden{ display:none; }
+.videoVolumeHudIcon{
+  font-size:11px;
+  font-weight:800;
+  letter-spacing:0.4px;
+  min-width:36px;
+  text-align:center;
+}
+.videoVolumeHudBar{
+  height:8px;
+  border-radius:999px;
+  background:rgba(255,255,255,0.2);
+  overflow:hidden;
+}
+.videoVolumeHudFill{
+  height:100%;
+  width:0;
+  background:linear-gradient(90deg, rgba(90,195,255,0.8), rgba(157,230,167,0.85));
+}
+.videoVolumeHudPct{
+  min-width:44px;
+  text-align:right;
+  font-size:12px;
+  font-weight:800;
 }
 
 
