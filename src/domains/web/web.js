@@ -2537,7 +2537,7 @@
       if (tab && tab.canGoBack && tab.mainTabId) {
         webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
       } else {
-        closeBrowser();
+        showToast('No back history');
       }
       return;
     }
