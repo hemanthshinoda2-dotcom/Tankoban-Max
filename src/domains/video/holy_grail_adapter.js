@@ -110,7 +110,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     }
   }
 
-  function createHolyGrailAdapter({ hostEl } = {}) {
+  function createHolyGrailAdapter({ hostEl, renderQuality, videoSyncDisplayResample } = {}) {
     if (!hostEl) {
       throw new Error('createHolyGrailAdapter requires hostEl');
     }
@@ -124,6 +124,11 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
 
     const emitter = createEmitter();
     const state = createDefaultState();
+    const initialRenderQuality = String(renderQuality || '').trim().toLowerCase();
+    if (initialRenderQuality === 'auto' || initialRenderQuality === 'high' || initialRenderQuality === 'extreme' || initialRenderQuality === 'balanced') {
+      state.renderQuality = initialRenderQuality;
+    }
+    let videoSyncResampleEnabled = !!videoSyncDisplayResample;
 
     let destroyed = false;
     let gpuInitialized = false;
@@ -189,6 +194,20 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       return { ok: true };
     }
 
+    async function applyVideoSyncPreference(enabled) {
+      const on = !!enabled;
+      videoSyncResampleEnabled = on;
+      if (on) {
+        await safeInvoke(hg, 'setProperty', 'video-sync', 'display-resample');
+        await safeInvoke(hg, 'setProperty', 'interpolation', 'yes');
+        await safeInvoke(hg, 'setProperty', 'tscale', 'oversample');
+      } else {
+        await safeInvoke(hg, 'setProperty', 'interpolation', 'no');
+        await safeInvoke(hg, 'setProperty', 'video-sync', 'audio');
+      }
+      return { ok: true, value: on };
+    }
+
     function setCanvasSizeFromHost() {
       if (!canvas || !hostEl) return;
       const rect = hostEl.getBoundingClientRect ? hostEl.getBoundingClientRect() : { width: 0, height: 0 };
@@ -213,6 +232,10 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       hostEl.appendChild(canvas);
 
       ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: true });
+      if (ctx2d) {
+        ctx2d.imageSmoothingEnabled = true;
+        try { ctx2d.imageSmoothingQuality = 'high'; } catch {}
+      }
       setCanvasSizeFromHost();
 
       if (typeof ResizeObserver === 'function') {
@@ -644,6 +667,11 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         emit('error', { reason: 'init', message: initRes.error || 'init_failed' });
         return initRes;
       }
+
+      const syncPref = Object.prototype.hasOwnProperty.call(opts, 'videoSyncDisplayResample')
+        ? !!opts.videoSyncDisplayResample
+        : videoSyncResampleEnabled;
+      await applyVideoSyncPreference(syncPref);
 
       pendingStartSeekSec = Math.max(0, toFiniteNumber(opts.startSeconds, 0));
       readyEmitted = false;

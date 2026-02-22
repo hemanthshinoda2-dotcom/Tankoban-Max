@@ -572,33 +572,9 @@
     try { el.urlDisplay.setAttribute('placeholder', 'Search ' + label + ' or type a URL'); } catch (e) {}
   }
 
-  function syncSearchEngineSelect() {
-    if (!el.searchEngineSelect) return;
-    var key = getActiveSearchEngine();
-    if (el.searchEngineSelect.value !== key) {
-      el.searchEngineSelect.value = key;
-    }
-  }
-
-  function saveBrowserSettings(nextSettings) {
-    var next = Object.assign({}, state.browserSettings, (nextSettings && typeof nextSettings === 'object') ? nextSettings : {});
-    var normalizedKey = String(next.defaultSearchEngine || 'yandex').trim().toLowerCase();
-    if (!SEARCH_ENGINES[normalizedKey]) normalizedKey = 'yandex';
-    next.defaultSearchEngine = normalizedKey;
-    state.browserSettings = next;
-    syncSearchEngineSelect();
-    syncOmniPlaceholder();
-
-    if (!api.webBrowserSettings || typeof api.webBrowserSettings.save !== 'function') return;
-
-    api.webBrowserSettings.save({ defaultSearchEngine: normalizedKey }).then(function (res) {
-      if (!res || !res.ok || !res.settings) return;
-      state.browserSettings = {
-        defaultSearchEngine: String(res.settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex'
-      };
-      syncSearchEngineSelect();
-      syncOmniPlaceholder();
-    }).catch(function () {});
+  function isAllowedOmniScheme(raw) {
+    var lower = String(raw || '').trim().toLowerCase();
+    return lower.indexOf('http:') === 0 || lower.indexOf('https:') === 0 || lower === 'about:blank';
   }
 
   // Chrome-like omnibox: accept URL or search query
@@ -606,8 +582,13 @@
     var raw = String(input || '').trim();
     if (!raw) return '';
 
-    // If it's already a URL with scheme
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw;
+    // SECURITY: never pass through arbitrary schemes from omnibox text.
+    // Inputs like javascript:/data:/file:/custom protocol can execute code or
+    // access local resources, so we downgrade any non-allowlisted scheme to a search.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
+      if (isAllowedOmniScheme(raw)) return raw;
+      return getSearchQueryUrl(raw);
+    }
 
     // Looks like a domain (no spaces, has a dot)
     if (raw.indexOf(' ') === -1 && raw.indexOf('.') !== -1) {
@@ -1523,10 +1504,18 @@
       totalBytes: d.totalBytes != null ? Number(d.totalBytes) : 0,
       progress: d.progress != null ? Number(d.progress) : null,
       bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
+      transport: d.transport != null ? String(d.transport) : '',
+      canPause: d.canPause != null ? !!d.canPause : null,
+      canResume: d.canResume != null ? !!d.canResume : null,
+      canCancel: d.canCancel != null ? !!d.canCancel : null,
     };
     if (out.state === 'downloading' || out.state === 'in_progress' || out.state === 'progressing') out.state = 'progressing';
     if (out.state === 'paused') out.state = 'paused';
     if (out.state === 'cancelled') out.state = 'cancelled';
+    if (!out.transport) out.transport = 'electron-item';
+    if (out.canPause == null) out.canPause = out.transport !== 'direct';
+    if (out.canResume == null) out.canResume = out.transport !== 'direct';
+    if (out.canCancel == null) out.canCancel = true;
     if (typeof out.progress === 'number') out.progress = Math.max(0, Math.min(1, out.progress));
     if (out.progress == null && out.totalBytes > 0 && out.receivedBytes >= 0) out.progress = Math.max(0, Math.min(1, out.receivedBytes / out.totalBytes));
     if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
@@ -1788,9 +1777,14 @@
       var x = active[j];
       var pTxt = pctText(x.progress);
       var sub = (x.library ? ('\u2192 ' + x.library) : 'Direct download') + (pTxt ? (' \u2022 ' + pTxt) : '');
-      var pauseResume = String(x.state) === 'paused'
-        ? '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>'
-        : '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
+      var pauseResume = '';
+      if (x.canPause || x.canResume) {
+        if (String(x.state) === 'paused') {
+          if (x.canResume) pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>';
+        } else if (x.canPause) {
+          pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
+        }
+      }
 
       html += '' +
         '<div class="webHubItem" data-direct-open-id="' + escapeHtml(x.id) + '">' +
@@ -1802,7 +1796,7 @@
           (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
           '<div class="webHubSectionActions">' +
             pauseResume +
-            '<button class="btn btn-ghost btn-sm" data-direct-action="cancel" data-direct-id="' + escapeHtml(x.id) + '">Cancel</button>' +
+            (x.canCancel ? ('<button class="btn btn-ghost btn-sm" data-direct-action="cancel" data-direct-id="' + escapeHtml(x.id) + '">Cancel</button>') : '') +
           '</div>' +
         '</div>';
     }
@@ -2570,7 +2564,7 @@
       if (tab && tab.canGoBack && tab.mainTabId) {
         webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
       } else {
-        closeBrowser();
+        showToast('No back history');
       }
       return;
     }
@@ -2760,6 +2754,9 @@
         if (e.key === 'Enter') {
           var resolved = resolveOmniInputToUrl(el.urlDisplay.value);
           if (!resolved) return;
+          if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = resolved;
+          else el.urlDisplay.textContent = resolved;
+          setOmniIconForUrl(resolved);
           var tab = getActiveTab();
           if (!tab || !tab.mainTabId) {
             var src = {
@@ -2925,11 +2922,19 @@
           var action = String(actionEl.getAttribute('data-direct-action') || '');
           var id = String(actionEl.getAttribute('data-direct-id') || '');
           if (!id || !api.webSources) return;
-          if (action === 'pause' && api.webSources.pauseDownload) {
+          var direct = null;
+          for (var i = 0; i < state.downloads.length; i++) {
+            if (state.downloads[i] && String(state.downloads[i].id) === id) { direct = state.downloads[i]; break; }
+          }
+          if (!direct) return;
+          if (action === 'pause') {
+            if (!direct.canPause || !api.webSources.pauseDownload) return;
             api.webSources.pauseDownload({ id: id }).catch(function () {});
-          } else if (action === 'resume' && api.webSources.resumeDownload) {
+          } else if (action === 'resume') {
+            if (!direct.canResume || !api.webSources.resumeDownload) return;
             api.webSources.resumeDownload({ id: id }).catch(function () {});
-          } else if (action === 'cancel' && api.webSources.cancelDownload) {
+          } else if (action === 'cancel') {
+            if (!direct.canCancel || !api.webSources.cancelDownload) return;
             api.webSources.cancelDownload({ id: id }).catch(function () {});
           }
           return;
