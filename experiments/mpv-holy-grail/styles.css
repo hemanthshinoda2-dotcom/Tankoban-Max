@@ -31,6 +31,7 @@ body {
     height: 100%;
     object-fit: contain;
     display: none;           /* shown when video is loaded */
+    transform: scaleY(-1);    /* fix ANGLE→D3D11 vertical coordinate flip */
 }
 
 /* ── Landing ────────────────────────────────────────────────────── */

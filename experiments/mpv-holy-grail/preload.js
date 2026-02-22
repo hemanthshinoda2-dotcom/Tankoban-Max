@@ -1,8 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // ── Shared texture receiver ────────────────────────────────────────
-// Electron's sharedTexture module in the renderer process receives
-// GPU-backed VideoFrame objects from the main process.
 let onFrameCallback = null;
 
 try {
@@ -18,17 +16,31 @@ try {
             importedSharedTexture.release();
         });
         console.log('[preload] sharedTexture receiver registered');
-    } else {
-        console.warn('[preload] sharedTexture module not available');
     }
 } catch (e) {
-    console.warn('[preload] Failed to set up sharedTexture receiver:', e.message);
+    console.warn('[preload] sharedTexture setup failed:', e.message);
 }
 
 // ── Exposed API ────────────────────────────────────────────────────
 contextBridge.exposeInMainWorld('holyGrail', {
-    openVideo:         ()             => ipcRenderer.invoke('open-video'),
-    checkCapabilities: ()             => ipcRenderer.invoke('check-capabilities'),
-    testSharedTexture: (r, g, b)      => ipcRenderer.invoke('test-shared-texture', r, g, b),
-    onVideoFrame:      (callback)     => { onFrameCallback = callback; },
+    // Capabilities
+    checkCapabilities: ()                => ipcRenderer.invoke('check-capabilities'),
+
+    // File dialog
+    openVideo:         ()                => ipcRenderer.invoke('open-video'),
+
+    // GPU pipeline
+    initGpu:           (w, h)            => ipcRenderer.invoke('init-gpu', w, h),
+    loadVideoMpv:      (path)            => ipcRenderer.invoke('load-video-mpv', path),
+    startFrameLoop:    ()                => ipcRenderer.invoke('start-frame-loop'),
+    stopFrameLoop:     ()                => ipcRenderer.invoke('stop-frame-loop'),
+
+    // mpv controls
+    mpvCommand:        (args)            => ipcRenderer.invoke('mpv-command', args),
+    mpvGetProperty:    (name)            => ipcRenderer.invoke('mpv-get-property', name),
+    mpvSetProperty:    (name, val)       => ipcRenderer.invoke('mpv-set-property', name, val),
+    mpvGetState:       ()                => ipcRenderer.invoke('mpv-get-state'),
+
+    // VideoFrame receiver
+    onVideoFrame:      (cb)              => { onFrameCallback = cb; },
 });
