@@ -38,6 +38,7 @@
     navForward: qs('webNavForward'),
     navReload: qs('webNavReload'),
     navHome: qs('webNavHome'),
+    searchEngineSelect: qs('webSearchEngineSelect'),
     urlDisplay: qs('webUrlDisplay'),
     omniIcon: qs('webOmniIcon'),
     browserHomePanel: qs('webBrowserHomePanel'),
@@ -98,8 +99,19 @@
   var MAX_TABS = 8;
   var MAX_BROWSING_HISTORY_UI = 500;
   var MAX_UNIFIED_HISTORY_UI = 2000;
+  var SEARCH_ENGINES = {
+    yandex: { label: 'Yandex', url: 'https://yandex.com/search/?text=' },
+    google: { label: 'Google', url: 'https://www.google.com/search?q=' },
+    duckduckgo: { label: 'DuckDuckGo', url: 'https://duckduckgo.com/?q=' },
+    bing: { label: 'Bing', url: 'https://www.bing.com/search?q=' },
+    brave: { label: 'Brave', url: 'https://search.brave.com/search?q=' }
+  };
   var SEARCH_ENGINE_URLS = {
-    yandex: 'https://yandex.com/search/?text='
+    yandex: SEARCH_ENGINES.yandex.url,
+    google: SEARCH_ENGINES.google.url,
+    duckduckgo: SEARCH_ENGINES.duckduckgo.url,
+    bing: SEARCH_ENGINES.bing.url,
+    brave: SEARCH_ENGINES.brave.url
   };
 
   var state = {
@@ -543,7 +555,7 @@
 
   function getActiveSearchEngine() {
     var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'yandex').trim().toLowerCase();
-    if (!SEARCH_ENGINE_URLS[key]) key = 'yandex';
+    if (!SEARCH_ENGINES[key]) key = 'yandex';
     return key;
   }
 
@@ -556,7 +568,7 @@
   function syncOmniPlaceholder() {
     if (!el.urlDisplay) return;
     var key = getActiveSearchEngine();
-    var label = key === 'yandex' ? 'Yandex' : key;
+    var label = (SEARCH_ENGINES[key] && SEARCH_ENGINES[key].label) ? SEARCH_ENGINES[key].label : 'Yandex';
     try { el.urlDisplay.setAttribute('placeholder', 'Search ' + label + ' or type a URL'); } catch (e) {}
   }
 
@@ -902,8 +914,10 @@
       state.browserSettings = {
         defaultSearchEngine: String(settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex'
       };
+      syncSearchEngineSelect();
       syncOmniPlaceholder();
     }).catch(function () {
+      syncSearchEngineSelect();
       syncOmniPlaceholder();
     });
   }
@@ -2773,6 +2787,13 @@
       el.urlDisplay.addEventListener('blur', function () {
         updateUrlDisplay();
       });
+    }
+
+    if (el.searchEngineSelect) {
+      el.searchEngineSelect.addEventListener('change', function () {
+        saveBrowserSettings({ defaultSearchEngine: el.searchEngineSelect.value });
+      });
+      syncSearchEngineSelect();
     }
 
     // MERIDIAN_SPLIT: split view toggle button
