@@ -444,6 +444,8 @@
     bind: bind,
     onOpen: onOpen,
     onClose: onClose,
+    hasSavedPairing: function () { return !!_savedPairing; },
+    triggerAutoLoad: function () { autoLoadPairedAudiobook(); },
   };
 
 })();

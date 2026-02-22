@@ -102,4 +102,19 @@ async function clear(ctx, _evt, bookId) {
   return { ok: true };
 }
 
-module.exports = { getAll, get, save, clear };
+function pruneByRemovedIds(ctx, removedIds) {
+  if (!Array.isArray(removedIds) || !removedIds.length) return;
+  const mem = getMem(ctx);
+  const byBook = (mem && typeof mem.byBook === 'object') ? mem.byBook : {};
+  let changed = false;
+  for (const id of removedIds) {
+    const k = String(id || '');
+    if (k && Object.prototype.hasOwnProperty.call(byBook, k)) {
+      delete byBook[k];
+      changed = true;
+    }
+  }
+  if (changed) flush(ctx);
+}
+
+module.exports = { getAll, get, save, clear, pruneByRemovedIds };

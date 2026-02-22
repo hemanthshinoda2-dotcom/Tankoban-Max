@@ -312,6 +312,11 @@ function startBooksScan(ctx, cfg, opts = null) {
         }
 
         pruneBooksProgressByRemovedBookIds(ctx, removed);
+        // Cascade-clean orphaned metadata for removed books
+        try { require('../booksDisplayNames').pruneByRemovedIds(ctx, removed); } catch {}
+        try { require('../booksBookmarks').pruneByRemovedIds(ctx, removed); } catch {}
+        try { require('../booksAnnotations').pruneByRemovedIds(ctx, removed); } catch {}
+        try { require('../booksTtsProgress').pruneByRemovedIds(ctx, removed); } catch {}
       }
 
       emitBooksUpdated(ctx);
@@ -414,7 +419,7 @@ async function addRootFolder(ctx, evt) {
 
   const snap = makeBooksStateSnapshot(ctx, state);
   startBooksScan(ctx, state, { force: true });
-  return { ok: true, state: snap };
+  return { ok: true, state: snap, folder };
 }
 
 async function removeRootFolder(ctx, _evt, rootPath) {
@@ -452,7 +457,7 @@ async function addSeriesFolder(ctx, evt) {
 
   const snap = makeBooksStateSnapshot(ctx, state);
   startBooksScan(ctx, state, { force: true });
-  return { ok: true, state: snap };
+  return { ok: true, state: snap, folder };
 }
 
 async function removeSeriesFolder(ctx, _evt, folderPath) {
@@ -482,9 +487,10 @@ async function removeSeriesFolder(ctx, _evt, folderPath) {
   }
 
   // Persist the trimmed index so it survives restarts (until next scan)
+  // FIX7: async write — in-memory index is already updated, no need to block event loop
   try {
     const indexPath = ctx.storage.dataPath('books_library_index.json');
-    fs.writeFileSync(indexPath, JSON.stringify(booksCache.idx, null, 2), 'utf-8');
+    fs.promises.writeFile(indexPath, JSON.stringify(booksCache.idx, null, 2), 'utf-8').catch(function () {});
   } catch (_e) { /* best-effort */ }
 
   booksCache.pendingPruneProgress = true;

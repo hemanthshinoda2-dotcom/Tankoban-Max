@@ -428,31 +428,56 @@
       getDownloadHistory: (...a) => ea.webSources?.getDownloadHistory ? ea.webSources.getDownloadHistory(...a) : Promise.resolve({ ok: false, downloads: [] }),
       clearDownloadHistory: (...a) => ea.webSources?.clearDownloadHistory ? ea.webSources.clearDownloadHistory(...a) : Promise.resolve({ ok: false }),
       removeDownloadHistory: (...a) => ea.webSources?.removeDownloadHistory ? ea.webSources.removeDownloadHistory(...a) : Promise.resolve({ ok: false }),
+      pauseDownload: (...a) => ea.webSources?.pauseDownload ? ea.webSources.pauseDownload(...a) : Promise.resolve({ ok: false }),
+      resumeDownload: (...a) => ea.webSources?.resumeDownload ? ea.webSources.resumeDownload(...a) : Promise.resolve({ ok: false }),
+      cancelDownload: (...a) => ea.webSources?.cancelDownload ? ea.webSources.cancelDownload(...a) : Promise.resolve({ ok: false }),
+      pickDestinationFolder: (...a) => ea.webSources?.pickDestinationFolder ? ea.webSources.pickDestinationFolder(...a) : Promise.resolve({ ok: false, cancelled: true }),
+      listDestinationFolders: (...a) => ea.webSources?.listDestinationFolders ? ea.webSources.listDestinationFolders(...a) : Promise.resolve({ ok: false, folders: [] }),
+      resolveDestinationPicker: (...a) => ea.webSources?.resolveDestinationPicker ? ea.webSources.resolveDestinationPicker(...a) : Promise.resolve({ ok: false }),
       onUpdated: (...a) => ea.webSources?.onUpdated ? ea.webSources.onUpdated(...a) : undefined,
       onDownloadStarted: (...a) => ea.webSources?.onDownloadStarted ? ea.webSources.onDownloadStarted(...a) : undefined,
       onDownloadProgress: (...a) => ea.webSources?.onDownloadProgress ? ea.webSources.onDownloadProgress(...a) : undefined,
       onDownloadCompleted: (...a) => ea.webSources?.onDownloadCompleted ? ea.webSources.onDownloadCompleted(...a) : undefined,
       onDownloadsUpdated: (...a) => ea.webSources?.onDownloadsUpdated ? ea.webSources.onDownloadsUpdated(...a) : undefined,
-      onPopupOpen: (...a) => ea.webSources?.onPopupOpen ? ea.webSources.onPopupOpen(...a) : undefined,
+      onDestinationPickerRequest: (...a) => ea.webSources?.onDestinationPickerRequest ? ea.webSources.onDestinationPickerRequest(...a) : undefined,
     },
 
     // ========================================
+    // webBrowserSettings.*
     // ========================================
-    // webTabs.* (BUILD_WCV)
+    webBrowserSettings: {
+      get: (...a) => ea.webBrowserSettings?.get ? ea.webBrowserSettings.get(...a) : Promise.resolve({ ok: false, settings: { defaultSearchEngine: 'yandex' } }),
+      save: (...a) => ea.webBrowserSettings?.save ? ea.webBrowserSettings.save(...a) : Promise.resolve({ ok: false }),
+    },
+
     // ========================================
-    webTabs: {
-      create: (...a) => ea.webTabs?.create ? ea.webTabs.create(...a) : Promise.resolve({ ok: false }),
-      close: (...a) => ea.webTabs?.close ? ea.webTabs.close(...a) : Promise.resolve({ ok: false }),
-      activate: (...a) => ea.webTabs?.activate ? ea.webTabs.activate(...a) : Promise.resolve({ ok: false }),
-      navigate: (...a) => ea.webTabs?.navigate ? ea.webTabs.navigate(...a) : Promise.resolve({ ok: false }),
-      setBounds: (...a) => ea.webTabs?.setBounds ? ea.webTabs.setBounds(...a) : Promise.resolve({ ok: false }),
-      hideAll: (...a) => ea.webTabs?.hideAll ? ea.webTabs.hideAll(...a) : Promise.resolve({ ok: false }),
-      query: (...a) => ea.webTabs?.query ? ea.webTabs.query(...a) : Promise.resolve({ ok: false }),
-      splitBounds: (...a) => ea.webTabs?.splitBounds ? ea.webTabs.splitBounds(...a) : Promise.resolve({ ok: false }),
-      onTitleUpdated: (...a) => ea.webTabs?.onTitleUpdated ? ea.webTabs.onTitleUpdated(...a) : undefined,
-      onUrlUpdated: (...a) => ea.webTabs?.onUrlUpdated ? ea.webTabs.onUrlUpdated(...a) : undefined,
-      onLoading: (...a) => ea.webTabs?.onLoading ? ea.webTabs.onLoading(...a) : undefined,
-      onNavState: (...a) => ea.webTabs?.onNavState ? ea.webTabs.onNavState(...a) : undefined,
+    // webHistory.*
+    // ========================================
+    webHistory: {
+      list: (...a) => ea.webHistory?.list ? ea.webHistory.list(...a) : Promise.resolve({ ok: false, entries: [], total: 0 }),
+      add: (...a) => ea.webHistory?.add ? ea.webHistory.add(...a) : Promise.resolve({ ok: false }),
+      clear: (...a) => ea.webHistory?.clear ? ea.webHistory.clear(...a) : Promise.resolve({ ok: false }),
+      remove: (...a) => ea.webHistory?.remove ? ea.webHistory.remove(...a) : Promise.resolve({ ok: false }),
+      onUpdated: (...a) => ea.webHistory?.onUpdated ? ea.webHistory.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webTorrent.*
+    // ========================================
+    webTorrent: {
+      startMagnet: (...a) => ea.webTorrent?.startMagnet ? ea.webTorrent.startMagnet(...a) : Promise.resolve({ ok: false }),
+      startTorrentUrl: (...a) => ea.webTorrent?.startTorrentUrl ? ea.webTorrent.startTorrentUrl(...a) : Promise.resolve({ ok: false }),
+      pause: (...a) => ea.webTorrent?.pause ? ea.webTorrent.pause(...a) : Promise.resolve({ ok: false }),
+      resume: (...a) => ea.webTorrent?.resume ? ea.webTorrent.resume(...a) : Promise.resolve({ ok: false }),
+      cancel: (...a) => ea.webTorrent?.cancel ? ea.webTorrent.cancel(...a) : Promise.resolve({ ok: false }),
+      getActive: (...a) => ea.webTorrent?.getActive ? ea.webTorrent.getActive(...a) : Promise.resolve({ ok: false, torrents: [] }),
+      getHistory: (...a) => ea.webTorrent?.getHistory ? ea.webTorrent.getHistory(...a) : Promise.resolve({ ok: false, torrents: [] }),
+      clearHistory: (...a) => ea.webTorrent?.clearHistory ? ea.webTorrent.clearHistory(...a) : Promise.resolve({ ok: false }),
+      removeHistory: (...a) => ea.webTorrent?.removeHistory ? ea.webTorrent.removeHistory(...a) : Promise.resolve({ ok: false }),
+      onStarted: (...a) => ea.webTorrent?.onStarted ? ea.webTorrent.onStarted(...a) : undefined,
+      onProgress: (...a) => ea.webTorrent?.onProgress ? ea.webTorrent.onProgress(...a) : undefined,
+      onCompleted: (...a) => ea.webTorrent?.onCompleted ? ea.webTorrent.onCompleted(...a) : undefined,
+      onUpdated: (...a) => ea.webTorrent?.onUpdated ? ea.webTorrent.onUpdated(...a) : undefined,
     },
 
     // ========================================

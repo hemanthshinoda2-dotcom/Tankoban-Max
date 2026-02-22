@@ -103,11 +103,24 @@ function scanKeyFromConfig(cfg) {
   });
 }
 
+// Collect all roots: audiobook-specific roots + books root folders (shared)
+function collectAllRoots(ctx, cfg) {
+  const abRoots = uniq((cfg || {}).audiobookRootFolders);
+  // Also scan books root folders so audiobooks inside book roots are auto-discovered
+  let booksRoots = [];
+  try {
+    const booksConfig = ctx.storage.readJSON(ctx.storage.dataPath('books_library_state.json'), {});
+    booksRoots = Array.isArray(booksConfig.bookRootFolders) ? booksConfig.bookRootFolders : [];
+  } catch {}
+  return uniq([...abRoots, ...booksRoots]);
+}
+
 function startAudiobookScan(ctx, cfg, opts = null) {
   ensureAudiobookIndexLoaded(ctx);
 
   const c = cfg || readAudiobookConfig(ctx);
-  const key = scanKeyFromConfig(c);
+  const allRoots = collectAllRoots(ctx, c);
+  const key = JSON.stringify({ audiobookRootFolders: allRoots });
 
   if (audiobookCache.scanning) {
     audiobookCache.scanQueuedCfg = {
@@ -125,7 +138,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
   audiobookCache.error = null;
   const myScanId = ++audiobookCache.scanId;
 
-  const totalFolders = uniq(c.audiobookRootFolders).length;
+  const totalFolders = allRoots.length;
 
   try {
     ctx.win?.webContents?.send(ctx.EVENT.AUDIOBOOK_SCAN_STATUS, {
@@ -143,7 +156,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
 
   const w = new Worker(workerURL, {
     workerData: {
-      audiobookRootFolders: uniq(c.audiobookRootFolders),
+      audiobookRootFolders: allRoots,
       indexPath,
       ignore: {
         dirNames: DEFAULT_SCAN_IGNORE_DIRNAMES,
@@ -249,10 +262,35 @@ async function scan(ctx) {
   return { ok: true };
 }
 
-async function addRootFolder(ctx, evt) {
+async function addRootFolder(ctx, evt, folderPath) {
+  let folder;
+  if (typeof folderPath === 'string' && folderPath.trim()) {
+    // Called programmatically with a path (e.g. from unified "Add root..." button)
+    folder = folderPath.trim();
+  } else {
+    const parent = getDialogParent(evt);
+    const res = await dialog.showOpenDialog(parent, {
+      title: 'Add audiobook root folder',
+      properties: ['openDirectory'],
+    });
+    if (res.canceled || !res.filePaths || !res.filePaths.length) return { ok: false };
+    folder = String(res.filePaths[0] || '');
+  }
+  if (!folder) return { ok: false };
+
+  const state = readAudiobookConfig(ctx);
+  state.audiobookRootFolders = uniq([folder, ...(state.audiobookRootFolders || [])]);
+  await writeAudiobookConfig(ctx, state);
+
+  const snap = makeAudiobookStateSnapshot(ctx, state);
+  startAudiobookScan(ctx, state, { force: true });
+  return { ok: true, state: snap };
+}
+
+async function addFolder(ctx, evt) {
   const parent = getDialogParent(evt);
   const res = await dialog.showOpenDialog(parent, {
-    title: 'Add audiobook root folder',
+    title: 'Add audiobook folder',
     properties: ['openDirectory'],
   });
   if (res.canceled || !res.filePaths || !res.filePaths.length) return { ok: false };
@@ -260,8 +298,10 @@ async function addRootFolder(ctx, evt) {
   const folder = String(res.filePaths[0] || '');
   if (!folder) return { ok: false };
 
+  // The selected folder IS the audiobook — add its parent as a root so the scanner picks it up
+  const parentDir = path.dirname(folder);
   const state = readAudiobookConfig(ctx);
-  state.audiobookRootFolders = uniq([folder, ...(state.audiobookRootFolders || [])]);
+  state.audiobookRootFolders = uniq([parentDir, ...(state.audiobookRootFolders || [])]);
   await writeAudiobookConfig(ctx, state);
 
   const snap = makeAudiobookStateSnapshot(ctx, state);
@@ -286,5 +326,6 @@ module.exports = {
   getState,
   scan,
   addRootFolder,
+  addFolder,
   removeRootFolder,
 };

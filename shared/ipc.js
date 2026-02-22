@@ -750,13 +750,13 @@ const CHANNEL = {
   /** Update a web source. Args: { id, name?, url?, color? }. Returns: { ok } */
   WEB_SOURCES_UPDATE: 'webSources:update',
 
-  /** Route a downloaded file to the correct library folder. Args: { suggestedFilename }. Returns: { ok, destination?, library? } */
+  /** Route a downloaded file via in-app destination picker. Args: { suggestedFilename }. Returns: { ok, destination?, library? } */
   WEB_DOWNLOAD_ROUTE: 'webDownload:route',
 
   /** Get download destination folders for each library type. Returns: { ok, books?: string, comics?: string } */
   WEB_DOWNLOAD_DESTINATIONS: 'webDownload:destinations',
 
-  /** Download directly from a URL and route to Books/Comics by extension. Args: { url, referer?, suggestedFilename?, title? }. Returns: { ok, id } */
+  /** Download directly from a URL using in-app destination picker. Args: { url, referer?, suggestedFilename?, title? }. Returns: { ok, id } */
   WEB_DOWNLOAD_DIRECT_URL: 'webDownload:downloadDirectUrl',
 
   /** Get persisted download history. Returns: { ok, downloads: Array } */
@@ -777,33 +777,71 @@ const CHANNEL = {
   /** Cancel an active download. Args: { id }. Returns: { ok, error? } */
   WEB_DOWNLOAD_CANCEL: 'webDownload:cancel',
 
+  /** Request an in-app destination folder selection. Args: { kind?, suggestedFilename?, modeHint? }. Returns: { ok, folderPath?, library?, cancelled?, error? } */
+  WEB_DOWNLOAD_PICK_FOLDER: 'webDownload:pickFolder',
+
+  /** List subfolders for picker navigation. Args: { mode, path }. Returns: { ok, folders: Array<{name,path}> } */
+  WEB_DOWNLOAD_PICKER_LIST_FOLDERS: 'webDownload:pickerListFolders',
+
+  /** Resolve pending picker request from renderer UI. Args: { requestId, ok?, cancelled?, mode?, folderPath?, error? } */
+  WEB_DOWNLOAD_PICKER_RESOLVE: 'webDownload:pickerResolve',
+
   // ========================================
-  // Web Tabs (BUILD_WCV)
+  // Web Browser Settings
   // ========================================
 
-  /** Create a WebContentsView tab. Args: { url }. Returns: { ok, tabId } */
-  WEB_TAB_CREATE: 'webTab:create',
+  /** Get browser settings. Returns: { ok, settings } */
+  WEB_BROWSER_SETTINGS_GET: 'webBrowserSettings:get',
 
-  /** Close a tab. Args: { tabId }. Returns: { ok } */
-  WEB_TAB_CLOSE: 'webTab:close',
+  /** Save browser settings. Args: partial settings. Returns: { ok, settings } */
+  WEB_BROWSER_SETTINGS_SAVE: 'webBrowserSettings:save',
 
-  /** Activate a tab (show it, hide others). Args: { tabId }. Returns: { ok } */
-  WEB_TAB_ACTIVATE: 'webTab:activate',
+  // ========================================
+  // Web Browsing History
+  // ========================================
 
-  /** Navigate a tab. Args: { tabId, action, url? }. action: 'back'|'forward'|'reload'|'stop'|'loadUrl'. Returns: { ok } */
-  WEB_TAB_NAVIGATE: 'webTab:navigate',
+  /** List browsing history. Args: { query?, limit?, offset?, from?, to? }. Returns: { ok, entries, total } */
+  WEB_HISTORY_LIST: 'webHistory:list',
 
-  /** Set tab view bounds. Args: { tabId, bounds: {x,y,width,height} }. Returns: { ok } */
-  WEB_TAB_BOUNDS: 'webTab:bounds',
+  /** Add one browsing history entry. Args: { url, title?, visitedAt?, sourceTabId? }. Returns: { ok, entry } */
+  WEB_HISTORY_ADD: 'webHistory:add',
 
-  /** Hide all tab views (zero-bounds). Returns: { ok } */
-  WEB_TAB_HIDE_ALL: 'webTab:hideAll',
+  /** Clear browsing history. Args: { from?, to? }. Returns: { ok } */
+  WEB_HISTORY_CLEAR: 'webHistory:clear',
 
-  /** Query tab state. Args: { tabId }. Returns: { canGoBack, canGoForward, url, title, loading } */
-  WEB_TAB_QUERY: 'webTab:query',
+  /** Remove a browsing history entry. Args: { id }. Returns: { ok } */
+  WEB_HISTORY_REMOVE: 'webHistory:remove',
 
-  /** Set split view bounds for two tabs. Args: { left: {tabId,bounds}, right: {tabId,bounds} }. Returns: { ok } */
-  WEB_TAB_SPLIT_BOUNDS: 'webTab:splitBounds',
+  // ========================================
+  // WebTorrent
+  // ========================================
+
+  /** Start a magnet download. Args: { magnetUri, referer? }. Returns: { ok, id?, error? } */
+  WEB_TORRENT_START_MAGNET: 'webTorrent:startMagnet',
+
+  /** Start a .torrent download from URL. Args: { url, referer? }. Returns: { ok, id?, error? } */
+  WEB_TORRENT_START_TORRENT_URL: 'webTorrent:startTorrentUrl',
+
+  /** Pause a torrent. Args: { id }. Returns: { ok, error? } */
+  WEB_TORRENT_PAUSE: 'webTorrent:pause',
+
+  /** Resume a torrent. Args: { id }. Returns: { ok, error? } */
+  WEB_TORRENT_RESUME: 'webTorrent:resume',
+
+  /** Cancel a torrent. Args: { id }. Returns: { ok, error? } */
+  WEB_TORRENT_CANCEL: 'webTorrent:cancel',
+
+  /** Get active torrents. Returns: { ok, torrents } */
+  WEB_TORRENT_GET_ACTIVE: 'webTorrent:getActive',
+
+  /** Get torrent history. Returns: { ok, torrents } */
+  WEB_TORRENT_GET_HISTORY: 'webTorrent:getHistory',
+
+  /** Clear torrent history. Returns: { ok } */
+  WEB_TORRENT_CLEAR_HISTORY: 'webTorrent:clearHistory',
+
+  /** Remove one torrent history entry. Args: { id }. Returns: { ok } */
+  WEB_TORRENT_REMOVE_HISTORY: 'webTorrent:removeHistory',
 
   // ========================================
   // Audiobooks (FEAT-AUDIOBOOK)
@@ -817,6 +855,9 @@ const CHANNEL = {
 
   /** Add audiobook root folder via dialog. Returns: { ok: boolean, state?: object } */
   AUDIOBOOK_ADD_ROOT_FOLDER: 'audiobook:addRootFolder',
+
+  /** Add single audiobook folder via dialog. Returns: { ok: boolean, state?: object } */
+  AUDIOBOOK_ADD_FOLDER: 'audiobook:addFolder',
 
   /** Remove audiobook root folder. Returns: { ok: boolean, state?: object } */
   AUDIOBOOK_REMOVE_ROOT_FOLDER: 'audiobook:removeRootFolder',
@@ -949,15 +990,12 @@ const EVENT = {
   WEB_DOWNLOAD_PROGRESS: 'webDownload:progress',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
   WEB_DOWNLOADS_UPDATED: 'webDownload:listUpdated',
-
-  // FIX-WEB-POPUP: popup requested (window.open / target=_blank)
-  WEB_POPUP_OPEN: 'web:popupOpen',
-
-  // BUILD_WCV: WebContentsView tab events
-  WEB_TAB_TITLE_UPDATED: 'webTab:titleUpdated',
-  WEB_TAB_URL_UPDATED: 'webTab:urlUpdated',
-  WEB_TAB_LOADING: 'webTab:loading',
-  WEB_TAB_NAV_STATE: 'webTab:navState',
+  WEB_DOWNLOAD_PICKER_REQUEST: 'webDownload:pickerRequest',
+  WEB_HISTORY_UPDATED: 'webHistory:updated',
+  WEB_TORRENT_STARTED: 'webTorrent:started',
+  WEB_TORRENT_PROGRESS: 'webTorrent:progress',
+  WEB_TORRENT_COMPLETED: 'webTorrent:completed',
+  WEB_TORRENTS_UPDATED: 'webTorrent:listUpdated',
 
   // ========================================
   // Audiobook Events (FEAT-AUDIOBOOK)

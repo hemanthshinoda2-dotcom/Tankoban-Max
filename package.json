@@ -215,6 +215,7 @@
         "music-metadata": "^11.12.1",
         "node-unrar-js": "^2.0.2",
         "pdfjs-dist": "^3.11.174",
+        "webtorrent": "^2.8.5",
         "ws": "^8.18.0"
     },
     "productName": "Tankoban Max"

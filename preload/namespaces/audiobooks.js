@@ -33,7 +33,8 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       },
 
       scan: () => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_SCAN),
-      addRootFolder: () => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_ADD_ROOT_FOLDER),
+      addRootFolder: (folderPath) => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_ADD_ROOT_FOLDER, folderPath),
+      addFolder: () => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_ADD_FOLDER),
       removeRootFolder: (rootPath) => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_REMOVE_ROOT_FOLDER, rootPath),
 
       // Progress

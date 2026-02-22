@@ -87,12 +87,21 @@ SECTION INDEX (search: ══════ SECTION:)
     audiobooksGrid: qs('booksAudiobooksGrid'),
     audiobooksEmpty: qs('booksAudiobooksEmpty'),
     audiobooksLabel: qs('booksAudiobooksLabel'),
-    addAudiobookRootBtn: qs('booksAddAudiobookRootBtn'),
+    audiobookSection: qs('booksAudiobookSection'),
     audiobookFoldersList: qs('booksAudiobookFoldersList'),
     // FEAT-AUDIOBOOK: continue listening shelf
     abContinuePanel: qs('booksAbContinuePanel'),
     abContinueRow: qs('booksAbContinueRow'),
     abContinueEmpty: qs('booksAbContinueEmpty'),
+    // FEAT-AUDIOBOOK: audiobook detail/chapter view
+    abView: qs('booksAudiobookShowView'),
+    abBackBtn: qs('abBackBtn'),
+    abCrumbText: qs('abCrumbText'),
+    abDetailInfo: qs('abDetailInfo'),
+    abDetailCover: qs('abDetailCover'),
+    abDetailPlayBtn: qs('abDetailPlayBtn'),
+    abDetailChapterList: qs('abDetailChapterList'),
+    abDetailEmpty: qs('abDetailEmpty'),
   };
 
 // ══════ SECTION: DOM Refs ══════
@@ -131,10 +140,12 @@ SECTION INDEX (search: ══════ SECTION:)
       selectedShowId: null,
       selectedBookId: null,
       showFolderRel: '',
+      selectedAudiobookId: null,
       hideFinishedShows: false,
       showTreeExpanded: {},
       dismissedContinueShows: {},
       hiddenShowIds: new Set(),
+      hiddenAudiobookIds: new Set(),
       epSort: 'title_asc',
       globalSearchSel: 0,
     },
@@ -737,6 +748,7 @@ function getBookProgress(bookId) {
         dismissedContinueShows: { ...(state.ui.dismissedContinueShows || {}) },
         epSort: String(state.ui.epSort || 'title_asc'),
         hiddenShowIds: state.ui.hiddenShowIds ? Array.from(state.ui.hiddenShowIds) : [],
+        hiddenAudiobookIds: state.ui.hiddenAudiobookIds ? Array.from(state.ui.hiddenAudiobookIds) : [],
 
         // Backward compat
         booksHideFinished: !!state.ui.hideFinishedShows,
@@ -764,6 +776,7 @@ function getBookProgress(bookId) {
       state.ui.dismissedContinueShows = ui.dismissedContinueShows && typeof ui.dismissedContinueShows === 'object' ? ui.dismissedContinueShows : {};
       state.ui.epSort = String(ui.epSort || 'title_asc');
       state.ui.hiddenShowIds = Array.isArray(ui.hiddenShowIds) ? new Set(ui.hiddenShowIds.map(String)) : new Set();
+      state.ui.hiddenAudiobookIds = Array.isArray(ui.hiddenAudiobookIds) ? new Set(ui.hiddenAudiobookIds.map(String)) : new Set();
 
       if (!state.ui.hideFinishedShows && typeof ui.booksHideFinished === 'boolean') state.ui.hideFinishedShows = !!ui.booksHideFinished;
       if (!Object.keys(state.ui.showTreeExpanded || {}).length && ui.booksTreeExpanded && typeof ui.booksTreeExpanded === 'object') {
@@ -839,6 +852,11 @@ function getBookProgress(bookId) {
     if (!el.audiobooksPanel || !el.audiobooksGrid || !el.audiobooksEmpty) return;
     var audiobooks = state.audiobookSnap.audiobooks || [];
     var hasRoots = (state.audiobookSnap.audiobookRootFolders || []).length > 0;
+    // Filter out hidden audiobooks
+    var hidden = state.ui.hiddenAudiobookIds;
+    if (hidden && hidden.size) {
+      audiobooks = audiobooks.filter(function (ab) { return !hidden.has(String(ab.id || '')); });
+    }
 
     el.audiobooksPanel.classList.toggle('hidden', !hasRoots && !audiobooks.length);
     el.audiobooksGrid.textContent = '';
@@ -938,56 +956,235 @@ function getBookProgress(bookId) {
     card.onkeydown = function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFn(); }
     };
+    card.addEventListener('contextmenu', function (e) {
+      openAudiobookTileContextMenu(e, ab);
+    });
 
     return card;
   }
 
-  // FEAT-AUDIOBOOK: open audiobook in standalone overlay player
+  // FEAT-AUDIOBOOK: open audiobook detail/chapter view
   function openAudiobook(ab) {
+    if (!ab || !ab.id) return;
+    state.ui.booksSubView = 'audiobook';
+    state.ui.selectedAudiobookId = ab.id;
+    renderViews();
+    renderAudiobookDetail(ab);
+    scheduleSaveUi();
+  }
+
+  // FEAT-AUDIOBOOK: find audiobook by id
+  function findAudiobookById(id) {
+    if (!id) return null;
+    var audiobooks = state.audiobookSnap.audiobooks || [];
+    for (var i = 0; i < audiobooks.length; i++) {
+      if (audiobooks[i].id === id) return audiobooks[i];
+    }
+    return null;
+  }
+
+  // FEAT-AUDIOBOOK: play audiobook in overlay (optionally from a specific chapter)
+  function playAudiobookFromChapter(ab, chapterIndex) {
     if (!ab) return;
     var overlay = window.booksAudiobookOverlay;
     if (overlay && typeof overlay.open === 'function') {
-      overlay.open(ab);
+      overlay.open(ab, { chapterIndex: chapterIndex, position: 0 });
     } else {
       toast('Audiobook player not ready');
     }
   }
 
-  // FEAT-AUDIOBOOK: render audiobook root folders in sidebar
+  // FEAT-AUDIOBOOK: render audiobook detail view with chapters
+  function renderAudiobookDetail(ab) {
+    if (!ab) return;
+    var prog = state.audiobookProgressAll[ab.id] || null;
+
+    // Breadcrumb
+    if (el.abCrumbText) {
+      el.abCrumbText.textContent = ab.title || 'Untitled';
+      el.abCrumbText.title = ab.path || '';
+    }
+
+    // Cover
+    if (el.abDetailCover) {
+      if (ab.coverPath) {
+        el.abDetailCover.src = 'file://' + ab.coverPath.replace(/\\/g, '/').replace(/#/g, '%23');
+        el.abDetailCover.style.display = '';
+      } else {
+        el.abDetailCover.src = '';
+        el.abDetailCover.style.display = 'none';
+      }
+    }
+
+    // Info text
+    if (el.abDetailInfo) {
+      var parts = [];
+      parts.push((ab.chapters ? ab.chapters.length : 0) + ' chapters');
+      if (ab.totalDuration > 0) parts.push(formatDuration(ab.totalDuration));
+      if (prog && !prog.finished && prog.chapterIndex != null) {
+        var elapsed = 0;
+        for (var ci = 0; ci < (prog.chapterIndex || 0) && ci < ab.chapters.length; ci++) {
+          elapsed += (ab.chapters[ci].duration || 0);
+        }
+        elapsed += (prog.position || 0);
+        var pct = ab.totalDuration > 0 ? Math.round((elapsed / ab.totalDuration) * 100) : 0;
+        parts.push(pct + '% listened');
+      } else if (prog && prog.finished) {
+        parts.push('Finished');
+      }
+      el.abDetailInfo.textContent = parts.join(' \u00B7 ');
+    }
+
+    // Play/resume button text
+    if (el.abDetailPlayBtn) {
+      var hasProgress = prog && prog.chapterIndex != null && !prog.finished;
+      el.abDetailPlayBtn.textContent = hasProgress ? '\u25B6 Resume' : '\u25B6 Play';
+    }
+
+    // Chapters table
+    renderAudiobookChapterRows(ab, prog);
+  }
+
+  // FEAT-AUDIOBOOK: render chapter rows in detail view
+  function renderAudiobookChapterRows(ab, prog) {
+    if (!el.abDetailChapterList) return;
+    el.abDetailChapterList.innerHTML = '';
+    if (!ab.chapters || !ab.chapters.length) {
+      if (el.abDetailEmpty) el.abDetailEmpty.classList.remove('hidden');
+      return;
+    }
+    if (el.abDetailEmpty) el.abDetailEmpty.classList.add('hidden');
+
+    var currentChIdx = (prog && prog.chapterIndex != null) ? prog.chapterIndex : -1;
+
+    for (var i = 0; i < ab.chapters.length; i++) {
+      (function (ch, idx) {
+        var row = document.createElement('div');
+        row.className = 'volTrow' + ((idx % 2) ? ' alt' : '') + (idx === currentChIdx ? ' sel' : '');
+        row.dataset.chapterIndex = idx;
+
+        var numCell = document.createElement('div');
+        numCell.className = 'cell num';
+        numCell.textContent = String(idx + 1);
+        row.appendChild(numCell);
+
+        var titleCell = document.createElement('div');
+        titleCell.className = 'cell title';
+        titleCell.textContent = ch.title || ('Chapter ' + (idx + 1));
+        titleCell.title = ch.file || ch.title || '';
+        row.appendChild(titleCell);
+
+        var durCell = document.createElement('div');
+        durCell.className = 'cell duration';
+        durCell.textContent = ch.duration ? formatDuration(ch.duration) : '-';
+        row.appendChild(durCell);
+
+        // Progress cell
+        var progressCell = document.createElement('div');
+        progressCell.className = 'cell progress';
+        if (idx < currentChIdx) {
+          var track = document.createElement('div');
+          track.className = 'videoEpProgressTrack';
+          var fill = document.createElement('div');
+          fill.className = 'videoEpProgressFill';
+          fill.style.width = '100%';
+          track.appendChild(fill);
+          progressCell.appendChild(track);
+        } else if (idx === currentChIdx && prog) {
+          var chDur = ch.duration || 0;
+          var chPct = (chDur > 0 && prog.position > 0) ? Math.min(100, Math.round((prog.position / chDur) * 100)) : 0;
+          if (chPct > 0) {
+            var track2 = document.createElement('div');
+            track2.className = 'videoEpProgressTrack';
+            var fill2 = document.createElement('div');
+            fill2.className = 'videoEpProgressFill';
+            fill2.style.width = chPct + '%';
+            track2.appendChild(fill2);
+            progressCell.appendChild(track2);
+          } else {
+            progressCell.textContent = '-';
+          }
+        } else {
+          progressCell.textContent = '-';
+        }
+        row.appendChild(progressCell);
+
+        // Double click plays from this chapter
+        row.ondblclick = function () {
+          playAudiobookFromChapter(ab, idx);
+        };
+
+        // Context menu
+        row.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          showCtx({
+            x: e.clientX, y: e.clientY,
+            items: [
+              { label: 'Play from this chapter', onClick: function () { playAudiobookFromChapter(ab, idx); } },
+              { label: 'Play from beginning', onClick: function () { playAudiobookFromChapter(ab, 0); } },
+            ],
+          });
+        });
+
+        el.abDetailChapterList.appendChild(row);
+      })(ab.chapters[i], i);
+    }
+  }
+
+  // FEAT-AUDIOBOOK: render individual audiobooks in sidebar (mirrors books series entries)
   function renderAudiobookSidebar() {
     if (!el.audiobookFoldersList) return;
     el.audiobookFoldersList.textContent = '';
-    var roots = state.audiobookSnap.audiobookRootFolders || [];
-    if (!roots.length) return;
+    var audiobooks = state.audiobookSnap.audiobooks || [];
 
-    for (var i = 0; i < roots.length; i++) {
-      (function (rootPath) {
-        var row = document.createElement('div');
-        row.className = 'folderRow';
+    // Filter out hidden audiobooks
+    var hidden = state.ui.hiddenAudiobookIds;
+    if (hidden && hidden.size) {
+      audiobooks = audiobooks.filter(function (ab) { return !hidden.has(String(ab.id || '')); });
+    }
+
+    // Show/hide the entire Audiobooks section
+    if (el.audiobookSection) {
+      el.audiobookSection.style.display = audiobooks.length ? '' : 'none';
+    }
+    if (!audiobooks.length) return;
+
+    // Sort alphabetically by title
+    var sorted = audiobooks.slice().sort(function (a, b) {
+      return (a.title || '').localeCompare(b.title || '');
+    });
+
+    for (var i = 0; i < sorted.length; i++) {
+      (function (ab) {
+        var row = document.createElement('button');
+        row.type = 'button';
+        var isActive = state.ui.booksSubView === 'audiobook' && state.ui.selectedAudiobookId === ab.id;
+        row.className = 'folderItem folderChild' + (isActive ? ' active' : '');
+
+        var icon = document.createElement('span');
+        icon.className = 'folderIcon';
+        icon.textContent = '';
+
         var label = document.createElement('span');
-        label.className = 'folderLabel u-ellipsis';
-        label.title = rootPath;
-        var basename = rootPath.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || rootPath;
-        label.textContent = basename;
-        var removeBtn = document.createElement('button');
-        removeBtn.className = 'folderRemove iconBtn';
-        removeBtn.title = 'Remove';
-        removeBtn.textContent = '\u00d7';
-        removeBtn.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var ok = window.confirm('Remove this audiobook root? Files on disk are not deleted.');
-          if (!ok) return;
-          api.audiobooks.removeRootFolder(rootPath).then(function (res) {
-            if (res && res.state) applyAudiobookSnapshot(res.state);
-            loadAudiobookProgress().then(function () { renderAudiobooks(); });
-            toast('Audiobook root removed');
-          }).catch(function () {});
-        });
+        label.className = 'folderLabel';
+        label.textContent = ab.title || 'Untitled';
+        label.title = ab.path || ab.title || '';
+
+        var count = document.createElement('span');
+        count.className = 'folderCount';
+        var chapterCount = (ab.chapters && ab.chapters.length) ? ab.chapters.length : 0;
+        count.textContent = String(chapterCount);
+
+        row.appendChild(icon);
         row.appendChild(label);
-        row.appendChild(removeBtn);
+        row.appendChild(count);
+
+        row.addEventListener('click', function () {
+          openAudiobook(ab);
+        });
+
         el.audiobookFoldersList.appendChild(row);
-      })(roots[i]);
+      })(sorted[i]);
     }
   }
 
@@ -1007,11 +1204,13 @@ function getBookProgress(bookId) {
     for (var a = 0; a < audiobooks.length; a++) abById[audiobooks[a].id] = audiobooks[a];
 
     // Collect in-progress audiobooks, sorted by most recently updated
+    var hidden = state.ui.hiddenAudiobookIds;
     var items = [];
     var keys = Object.keys(progAll);
     for (var k = 0; k < keys.length; k++) {
       var prog = progAll[keys[k]];
       if (!prog || prog.finished) continue;
+      if (hidden && hidden.size && hidden.has(String(keys[k]))) continue;
       var ab = abById[keys[k]];
       if (!ab) continue;
       items.push({ audiobook: ab, progress: prog });
@@ -1085,6 +1284,9 @@ function getBookProgress(bookId) {
     tile.appendChild(titleWrap);
 
     tile.onclick = function () { openAudiobook(ab); };
+    tile.addEventListener('contextmenu', function (e) {
+      openAbContinueTileContextMenu(e, ab, prog);
+    });
     return tile;
   }
 
@@ -1570,8 +1772,26 @@ function getBookProgress(bookId) {
   }
 
   function renderScan() {
-    // Toast-only UX: never render a persistent in-panel refresh pill.
-    if (el.scanPill) el.scanPill.classList.add('hidden');
+    if (!el.scanPill) return;
+    var on = !!state.scanStatus.scanning;
+    el.scanPill.classList.toggle('hidden', !on);
+
+    var p = state.scanStatus.progress;
+    var done = Math.max(0, (p && p.foldersDone) || 0);
+    var total = Math.max(0, (p && p.foldersTotal) || 0);
+    var cur = String((p && p.currentFolder) || '').trim();
+
+    if (el.scanText) {
+      el.scanText.textContent = (total > 0)
+        ? 'Refreshing\u2026 ' + done + '/' + total
+        : 'Refreshing\u2026';
+    }
+    if (on) {
+      el.scanPill.title = cur
+        ? 'Refreshing books\u2026 (' + done + '/' + total + ')\n' + cur
+        : 'Refreshing books\u2026 (' + done + '/' + total + ')';
+    }
+    if (el.scanCancel) el.scanCancel.classList.toggle('hidden', !on);
   }
 
   const booksContinueGeom = { raf: 0, lastCoverH: 0 };
@@ -1667,6 +1887,112 @@ function getBookProgress(bookId) {
 
 
 // ══════ SECTION: Context Menus ══════
+
+  // FEAT-AUDIOBOOK: context menu for audiobook grid tiles
+  function openAudiobookTileContextMenu(e, ab) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!ab) return;
+    var prog = state.audiobookProgressAll[ab.id] || null;
+    var hasProgress = !!(prog && (prog.chapterIndex > 0 || prog.position > 0));
+    showCtx({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Open', onClick: function () { openAudiobook(ab); } },
+        { label: 'Play', onClick: function () {
+          var overlay = window.booksAudiobookOverlay;
+          if (overlay && typeof overlay.open === 'function') overlay.open(ab);
+          else toast('Audiobook player not ready');
+        }},
+        { label: 'Play from beginning', disabled: !hasProgress, onClick: function () {
+          playAudiobookFromChapter(ab, 0);
+        }},
+        { separator: true },
+        { label: 'Clear progress', disabled: !hasProgress, onClick: function () {
+          api.audiobooks.clearProgress(ab.id).then(function () {
+            loadAudiobookProgress().then(function () {
+              renderAudiobooks();
+              renderAbContinue();
+              if (state.ui.booksSubView === 'audiobook' && state.ui.selectedAudiobookId === ab.id) {
+                renderAudiobookDetail(ab);
+              }
+            });
+          }).catch(function () {});
+        }},
+        { separator: true },
+        { label: 'Reveal in Explorer', disabled: !(canReveal() && ab.path), onClick: function () {
+          if (ab.path) api.shell.revealPath(ab.path);
+        }},
+        { label: 'Copy path', disabled: !ab.path, onClick: function () {
+          if (ab.path && api.clipboard && api.clipboard.copyText) {
+            api.clipboard.copyText(ab.path).then(function () { toast('Path copied'); }).catch(function () {});
+          }
+        }},
+        { separator: true },
+        { label: 'Remove from library', danger: true, onClick: function () {
+          if (!state.ui.hiddenAudiobookIds) state.ui.hiddenAudiobookIds = new Set();
+          state.ui.hiddenAudiobookIds.add(String(ab.id || ''));
+          scheduleSaveUi();
+          renderAudiobooks();
+          renderAudiobookSidebar();
+          renderAbContinue();
+          toast('Audiobook removed from library');
+        }},
+      ],
+    });
+  }
+
+  // FEAT-AUDIOBOOK: context menu for continue listening tiles
+  function openAbContinueTileContextMenu(e, ab, prog) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!ab) return;
+    var hasProgress = !!(prog && (prog.chapterIndex > 0 || prog.position > 0));
+    showCtx({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Continue listening', onClick: function () {
+          var overlay = window.booksAudiobookOverlay;
+          if (overlay && typeof overlay.open === 'function') overlay.open(ab);
+          else toast('Audiobook player not ready');
+        }},
+        { label: 'Open audiobook', onClick: function () { openAudiobook(ab); } },
+        { label: 'Play from beginning', onClick: function () {
+          playAudiobookFromChapter(ab, 0);
+        }},
+        { separator: true },
+        { label: 'Clear from Continue Listening', onClick: function () {
+          api.audiobooks.clearProgress(ab.id).then(function () {
+            loadAudiobookProgress().then(function () {
+              renderAudiobooks();
+              renderAbContinue();
+            });
+          }).catch(function () {});
+        }},
+        { separator: true },
+        { label: 'Reveal in Explorer', disabled: !(canReveal() && ab.path), onClick: function () {
+          if (ab.path) api.shell.revealPath(ab.path);
+        }},
+        { label: 'Copy path', disabled: !ab.path, onClick: function () {
+          if (ab.path && api.clipboard && api.clipboard.copyText) {
+            api.clipboard.copyText(ab.path).then(function () { toast('Path copied'); }).catch(function () {});
+          }
+        }},
+        { separator: true },
+        { label: 'Remove from library', danger: true, onClick: function () {
+          if (!state.ui.hiddenAudiobookIds) state.ui.hiddenAudiobookIds = new Set();
+          state.ui.hiddenAudiobookIds.add(String(ab.id || ''));
+          scheduleSaveUi();
+          renderAudiobooks();
+          renderAudiobookSidebar();
+          renderAbContinue();
+          toast('Audiobook removed from library');
+        }},
+      ],
+    });
+  }
 
   function openContinueTileContextMenu(e, item) {
     e.preventDefault();
@@ -1941,7 +2267,7 @@ function getBookProgress(bookId) {
 
     // R1: sync restore-hidden button state
     if (el.restoreHiddenBtn) {
-      const hasHidden = !!(state.ui.hiddenShowIds && state.ui.hiddenShowIds.size);
+      const hasHidden = !!(state.ui.hiddenShowIds && state.ui.hiddenShowIds.size) || !!(state.ui.hiddenAudiobookIds && state.ui.hiddenAudiobookIds.size);
       el.restoreHiddenBtn.disabled = !hasHidden;
       el.restoreHiddenBtn.setAttribute('aria-disabled', hasHidden ? 'false' : 'true');
     }
@@ -2597,20 +2923,27 @@ function getBookProgress(bookId) {
   function renderViews() {
     if (!el.homeView || !el.showView) return;
     const showOn = !state.readerOpen && state.ui.booksSubView === 'show' && !!state.ui.selectedShowId;
-    const homeOn = !state.readerOpen && !showOn;
+    const abOn = !state.readerOpen && state.ui.booksSubView === 'audiobook' && !!state.ui.selectedAudiobookId;
+    const homeOn = !state.readerOpen && !showOn && !abOn;
     el.homeView.classList.toggle('hidden', !homeOn);
     el.showView.classList.toggle('hidden', !showOn);
+    if (el.abView) el.abView.classList.toggle('hidden', !abOn);
   }
 
   function renderAll() {
     ensureSelection();
     renderScan();
     renderSidebar();
+    renderAudiobookSidebar();
     renderContinue();
     renderAudiobooks();
     renderAbContinue();
     renderViews();
     if (!state.readerOpen && state.ui.booksSubView === 'show' && state.ui.selectedShowId) renderShowView();
+    else if (!state.readerOpen && state.ui.booksSubView === 'audiobook' && state.ui.selectedAudiobookId) {
+      var ab = findAudiobookById(state.ui.selectedAudiobookId);
+      if (ab) renderAudiobookDetail(ab);
+    }
     else if (!state.readerOpen) renderHome();
   }
   function applySnapshot(snap) {
@@ -2621,6 +2954,7 @@ function getBookProgress(bookId) {
       folders: Array.isArray(s.folders) ? s.folders : [],
       bookSeriesFolders: Array.isArray(s.bookSeriesFolders) ? s.bookSeriesFolders : [],
       scanning: !!s.scanning,
+      error: s.error || null,
     };
     rebuildDerived();
     ensureSelection();
@@ -2818,6 +3152,14 @@ function getBookProgress(bookId) {
       return true;
     }
 
+    if (state.ui.booksSubView === 'audiobook') {
+      state.ui.booksSubView = 'home';
+      state.ui.selectedAudiobookId = null;
+      scheduleSaveUi();
+      renderAll();
+      return true;
+    }
+
     if (state.ui.booksSubView === 'show') {
       state.ui.booksSubView = 'home';
       state.ui.selectedShowId = null;
@@ -3003,22 +3345,33 @@ function getBookProgress(bookId) {
 
     // R1: wire restore-hidden button
     el.restoreHiddenBtn && el.restoreHiddenBtn.addEventListener('click', () => {
-      if (!state.ui.hiddenShowIds || !state.ui.hiddenShowIds.size) return;
-      state.ui.hiddenShowIds.clear();
+      var hadShows = state.ui.hiddenShowIds && state.ui.hiddenShowIds.size;
+      var hadAudiobooks = state.ui.hiddenAudiobookIds && state.ui.hiddenAudiobookIds.size;
+      if (!hadShows && !hadAudiobooks) return;
+      if (hadShows) state.ui.hiddenShowIds.clear();
+      if (hadAudiobooks) state.ui.hiddenAudiobookIds.clear();
       scheduleSaveUi();
       renderAll();
-      toast('Hidden series restored');
+      toast('Hidden items restored');
     });
 
     // R5: action feedback toasts
     el.addRootBtn && el.addRootBtn.addEventListener('click', async () => {
       const res = await api.books.addRootFolder();
       if (res && res.state) { applySnapshot(res.state); await loadProgress(); renderAll(); toast('Root folder added'); }
+      // Re-scan audiobooks — the audiobook scanner reads books roots automatically
+      if (res && res.ok) {
+        api.audiobooks.scan().catch(function () {});
+      }
     });
 
     el.addSeriesBtn && el.addSeriesBtn.addEventListener('click', async () => {
       const res = await api.books.addSeriesFolder();
       if (res && res.state) { applySnapshot(res.state); await loadProgress(); renderAll(); toast('Series folder added'); }
+      // Re-scan audiobooks — the audiobook scanner reads books roots automatically
+      if (res && res.ok) {
+        api.audiobooks.scan().catch(function () {});
+      }
     });
 
     el.addFilesBtn && el.addFilesBtn.addEventListener('click', async () => {
@@ -3065,6 +3418,26 @@ function getBookProgress(bookId) {
       renderAll();
     });
 
+    // FEAT-AUDIOBOOK: detail view back button
+    el.abBackBtn && el.abBackBtn.addEventListener('click', function () {
+      state.ui.booksSubView = 'home';
+      state.ui.selectedAudiobookId = null;
+      scheduleSaveUi();
+      renderAll();
+    });
+
+    // FEAT-AUDIOBOOK: detail view play/resume button
+    el.abDetailPlayBtn && el.abDetailPlayBtn.addEventListener('click', function () {
+      var ab = findAudiobookById(state.ui.selectedAudiobookId);
+      if (!ab) return;
+      var overlay = window.booksAudiobookOverlay;
+      if (overlay && typeof overlay.open === 'function') {
+        overlay.open(ab);
+      } else {
+        toast('Audiobook player not ready');
+      }
+    });
+
     // R7: keyboard navigation (Backspace, K)
     document.addEventListener('keydown', (e) => {
       if (!document.body.classList.contains('inBooksMode')) return;
@@ -3102,9 +3475,21 @@ function getBookProgress(bookId) {
     const booksLibTipsClose = qs('booksLibTipsClose');
     booksLibTipsClose && booksLibTipsClose.addEventListener('click', () => toggleBooksLibTipsOverlay(false));
 
-    api.books.onUpdated((snap) => {
-      applySnapshot(snap || {});
-      loadProgress().then(() => renderAll()).catch(() => {});
+    var pendingBooksUpdate = null;
+    var booksUpdateTimer = null;
+    var flushBooksUpdate = function () {
+      booksUpdateTimer = null;
+      var snap = pendingBooksUpdate;
+      pendingBooksUpdate = null;
+      if (!snap || typeof snap !== 'object') return;
+      applySnapshot(snap);
+      loadProgress().then(function () { renderAll(); }).catch(function () {});
+    };
+    api.books.onUpdated(function (snap) {
+      if (!snap || typeof snap !== 'object') return;
+      pendingBooksUpdate = snap;
+      if (booksUpdateTimer) return;
+      booksUpdateTimer = setTimeout(flushBooksUpdate, 140);
     });
 
     // R4: scan lifecycle toasts
@@ -3118,7 +3503,11 @@ function getBookProgress(bookId) {
       renderScan();
       if (!wasScanning && state.scanStatus.scanning) toast('Refreshing books library...');
       if (wasScanning && !state.scanStatus.scanning) {
-        toast('Books refresh complete');
+        if (state.snap && state.snap.error) {
+          toast('Books refresh failed: ' + state.snap.error);
+        } else {
+          toast('Books refresh complete');
+        }
         loadProgress().then(() => renderAll()).catch(() => renderAll());
       }
     });
@@ -3174,25 +3563,6 @@ function getBookProgress(bookId) {
       });
     }
 
-    // FEAT-AUDIOBOOK: add audiobook root folder button
-    if (el.addAudiobookRootBtn) {
-      el.addAudiobookRootBtn.addEventListener('click', async function () {
-        try {
-          var result = await api.audiobooks.addRootFolder();
-          if (result && result.state) {
-            applyAudiobookSnapshot(result.state);
-          } else {
-            // Fallback for older IPC responses
-            refreshAudiobookState().catch(function () {});
-          }
-          if (result && result.ok) {
-            toast('Audiobook folder added — scanning...');
-          }
-        } catch (err) {
-          console.error('[Books] addAudiobookRootBtn error:', err);
-        }
-      });
-    }
   }
 
 
@@ -3223,6 +3593,7 @@ function getBookProgress(bookId) {
     state.ui.selectedShowId = null;
     state.ui.selectedBookId = null;
     state.ui.showFolderRel = '';
+    state.ui.selectedAudiobookId = null;
     scheduleSaveUi();
     renderAll();
   }
@@ -3262,6 +3633,7 @@ function getBookProgress(bookId) {
     getAudiobookProgress: () => Object.assign({}, state.audiobookProgressAll),
     refreshAudiobookState: () => refreshAudiobookState(),
     openAudiobook: (ab) => openAudiobook(ab),
+    findAudiobookById: (id) => findAudiobookById(id),
   };
 
   // Reset to home view when entering books mode from another tab

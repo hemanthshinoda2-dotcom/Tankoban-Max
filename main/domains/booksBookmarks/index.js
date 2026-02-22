@@ -74,9 +74,24 @@ async function clear(ctx, _evt, bookId) {
   return { ok: true };
 }
 
+function pruneByRemovedIds(ctx, removedIds) {
+  if (!Array.isArray(removedIds) || !removedIds.length) return;
+  const mem = getBookmarksMem(ctx);
+  let changed = false;
+  for (const id of removedIds) {
+    const k = String(id || '');
+    if (k && Object.prototype.hasOwnProperty.call(mem, k)) {
+      delete mem[k];
+      changed = true;
+    }
+  }
+  if (changed) persist(ctx);
+}
+
 module.exports = {
   get,
   save,
   delete: del,
   clear,
+  pruneByRemovedIds,
 };

@@ -1,0 +1,877 @@
+/* Tankoban Player HG — base styles */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+/* Stage: fills the entire window, stable geometry */
+#playerStage {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#playerStage.hideCursor {
+  cursor: none;
+}
+
+/* Video surface: letterboxed, fills stage */
+#videoSurface {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+  outline: none;
+}
+
+/* Drag-drop overlay */
+#dropZone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+}
+
+#dropZone.active {
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px dashed rgba(255, 255, 255, 0.3);
+  pointer-events: auto;
+}
+
+#dropZone .dropLabel {
+  font-size: 18px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  display: none;
+}
+
+#dropZone.active .dropLabel {
+  display: block;
+}
+
+/* Overlay base: all overlays are absolutely positioned siblings of the video */
+.overlay {
+  position: absolute;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+/* Drawer base */
+.drawer {
+  position: absolute;
+  z-index: 20;
+}
+
+.drawer.hidden {
+  display: none;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Drawer Panel — matches Qt SlideDrawer + PlaylistDrawer
+   ══════════════════════════════════════════════════════════ */
+
+.drawer-panel {
+  position: absolute;
+  z-index: 50;
+  background: rgba(8, 8, 10, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 0 14px;
+  flex-shrink: 0;
+}
+
+.drawer-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.90);
+}
+
+.drawer-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.drawer-close-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.drawer-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 12px 14px;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.drawer-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.drawer-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.drawer-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ── Playlist drawer ── */
+
+.playlist-folder {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playlist-check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+}
+
+.playlist-list {
+  flex: 1;
+  overflow-y: auto;
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+}
+
+.playlist-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-item:last-child {
+  border-bottom: none;
+}
+
+.playlist-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.playlist-item.active {
+  background: rgba(96, 130, 255, 0.38);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.playlist-nav {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ── Tracks drawer ── */
+
+.tracks-section-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  padding-bottom: 4px;
+}
+
+.tracks-list {
+  background: rgba(0, 0, 0, 0.40);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.tracks-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.tracks-item:last-child {
+  border-bottom: none;
+}
+
+.tracks-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tracks-item.active {
+  background: rgba(96, 130, 255, 0.38);
+  color: rgba(255, 255, 255, 0.98);
+}
+
+.tracks-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.40);
+  text-align: center;
+  font-style: italic;
+}
+
+/* Idle state: no file loaded */
+#idleMessage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 5;
+}
+
+#idleMessage.hidden {
+  display: none;
+}
+
+#idleMessage .idleTitle {
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#idleMessage .idleHint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+#openFileBtn {
+  padding: 8px 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#openFileBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Top Strip — matches Qt TopStripWidget
+   ══════════════════════════════════════════════════════════ */
+
+#topStrip {
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  background: rgba(12, 12, 12, 0.45);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  z-index: 10;
+}
+
+.strip-title {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.strip-spacer {
+  flex: 1;
+}
+
+.strip-btn {
+  background: linear-gradient(to bottom,
+    rgba(78, 78, 78, 0.98) 0%,
+    rgba(50, 50, 50, 0.98) 50%,
+    rgba(28, 28, 28, 0.98) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.75);
+  border-top-color: rgba(130, 130, 130, 0.65);
+  border-bottom-color: rgba(0, 0, 0, 0.85);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: rgba(245, 245, 245, 0.96);
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 22px;
+  cursor: pointer;
+  font-family: inherit;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.strip-btn:hover {
+  background: linear-gradient(to bottom,
+    rgba(98, 98, 98, 0.98) 0%,
+    rgba(62, 62, 62, 0.98) 50%,
+    rgba(34, 34, 34, 0.98) 100%);
+}
+
+.strip-btn:active {
+  background: linear-gradient(to bottom,
+    rgba(24, 24, 24, 0.98) 0%,
+    rgba(48, 48, 48, 0.98) 60%,
+    rgba(78, 78, 78, 0.98) 100%);
+  border-top-color: rgba(0, 0, 0, 0.9);
+  border-bottom-color: rgba(130, 130, 130, 0.4);
+}
+
+.strip-btn-close:hover {
+  background: linear-gradient(to bottom,
+    rgba(180, 50, 50, 0.95) 0%,
+    rgba(140, 30, 30, 0.98) 50%,
+    rgba(100, 20, 20, 0.98) 100%);
+  border-top-color: rgba(220, 80, 80, 0.6);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Bottom HUD — matches Qt BottomHUDWidget
+   ══════════════════════════════════════════════════════════ */
+
+#bottomHud {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 6px 10px;
+  background: rgba(10, 10, 10, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── Seek row ── */
+
+.hud-seek-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-time {
+  color: #fff;
+  font-size: 11px;
+  min-width: 40px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ── Seek slider ── */
+
+.hud-seek-slider {
+  flex: 1;
+  position: relative;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.hud-seek-track {
+  position: relative;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(to bottom,
+    rgba(80, 80, 80, 0.9),
+    rgba(30, 30, 30, 0.95));
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.hud-seek-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 0%;
+  background: linear-gradient(to bottom,
+    rgba(210, 210, 210, 0.95),
+    rgba(140, 140, 140, 0.95));
+  border-radius: 2px;
+}
+
+.hud-seek-handle {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  margin-left: -6px;
+  background: linear-gradient(to bottom,
+    rgba(230, 230, 230, 0.98),
+    rgba(150, 150, 150, 0.98));
+  border: 1px solid rgba(0, 0, 0, 0.7);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* Hover time bubble — positioned above the slider */
+.hud-seek-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  margin-bottom: 6px;
+  background: rgba(12, 12, 12, 0.78);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 4px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  display: none;
+}
+
+/* Chapter tick marks — vertical lines on the seek track */
+.hud-seek-chapters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.hud-chapter-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+/* ── Main row ── */
+
+.hud-main-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-title {
+  color: rgba(255, 255, 255, 0.90);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 120px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Buttons: shared base ── */
+
+.hud-btn,
+.hud-chip {
+  background: linear-gradient(to bottom,
+    rgba(70, 70, 70, 0.95) 0%,
+    rgba(48, 48, 48, 0.98) 45%,
+    rgba(28, 28, 28, 0.98) 100%);
+  border: 1px solid rgba(0, 0, 0, 0.75);
+  border-top-color: rgba(120, 120, 120, 0.7);
+  border-bottom-color: rgba(0, 0, 0, 0.85);
+  border-radius: 3px;
+  color: rgba(245, 245, 245, 0.98);
+  cursor: pointer;
+  font-family: inherit;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.hud-btn:hover,
+.hud-chip:hover {
+  background: linear-gradient(to bottom,
+    rgba(92, 92, 92, 0.98) 0%,
+    rgba(58, 58, 58, 0.98) 50%,
+    rgba(32, 32, 32, 0.98) 100%);
+}
+
+.hud-btn:active,
+.hud-chip:active {
+  background: linear-gradient(to bottom,
+    rgba(24, 24, 24, 0.98) 0%,
+    rgba(46, 46, 46, 0.98) 60%,
+    rgba(72, 72, 72, 0.98) 100%);
+  border-top-color: rgba(0, 0, 0, 0.9);
+  border-bottom-color: rgba(120, 120, 120, 0.4);
+}
+
+/* ── ChipButton (seek ±10s, utility chips) ── */
+
+.hud-chip {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 46px;
+}
+
+/* ── Back button ── */
+
+.hud-btn {
+  padding: 4px 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Transport: prev / next ── */
+
+.hud-btn-transport {
+  padding: 2px 8px;
+  font-size: 18px;
+  font-weight: normal;
+  background: linear-gradient(to bottom,
+    rgba(80, 80, 80, 0.95) 0%,
+    rgba(52, 52, 52, 0.98) 50%,
+    rgba(30, 30, 30, 0.98) 100%);
+  border-color: rgba(0, 0, 0, 0.8);
+  border-top-color: rgba(130, 130, 130, 0.7);
+  border-bottom-color: rgba(0, 0, 0, 0.9);
+}
+
+.hud-btn-transport:hover {
+  background: linear-gradient(to bottom,
+    rgba(100, 100, 100, 0.98) 0%,
+    rgba(62, 62, 62, 0.98) 50%,
+    rgba(36, 36, 36, 0.98) 100%);
+}
+
+.hud-btn-transport:active {
+  background: linear-gradient(to bottom,
+    rgba(26, 26, 26, 0.98) 0%,
+    rgba(52, 52, 52, 0.98) 60%,
+    rgba(82, 82, 82, 0.98) 100%);
+  border-top-color: rgba(0, 0, 0, 0.9);
+  border-bottom-color: rgba(140, 140, 140, 0.35);
+}
+
+/* ── Play/pause: slightly elevated ── */
+
+.hud-btn-play {
+  padding: 2px 10px;
+  font-size: 20px;
+  font-weight: normal;
+  background: linear-gradient(to bottom,
+    rgba(96, 96, 96, 0.98) 0%,
+    rgba(66, 66, 66, 0.98) 50%,
+    rgba(36, 36, 36, 0.98) 100%);
+  border-color: rgba(0, 0, 0, 0.85);
+  border-top-color: rgba(150, 150, 150, 0.7);
+  border-bottom-color: rgba(0, 0, 0, 0.95);
+}
+
+.hud-btn-play:hover {
+  background: linear-gradient(to bottom,
+    rgba(120, 120, 120, 0.98) 0%,
+    rgba(78, 78, 78, 0.98) 50%,
+    rgba(40, 40, 40, 0.98) 100%);
+}
+
+.hud-btn-play:active {
+  background: linear-gradient(to bottom,
+    rgba(30, 30, 30, 0.98) 0%,
+    rgba(60, 60, 60, 0.98) 60%,
+    rgba(96, 96, 96, 0.98) 100%);
+  border-top-color: rgba(0, 0, 0, 0.95);
+  border-bottom-color: rgba(160, 160, 160, 0.35);
+}
+
+/* ── Chip row (right side of main row) ── */
+
+.hud-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Context Menu — matches Qt _show_context_menu
+   ══════════════════════════════════════════════════════════ */
+
+.ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 1001;
+  background: rgba(12, 12, 12, 0.88);
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px;
+  font-size: 12px;
+  min-width: 160px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.ctx-item {
+  padding: 8px 18px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+
+.ctx-item:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.ctx-disabled {
+  color: rgba(255, 255, 255, 0.35);
+  cursor: default;
+}
+
+.ctx-disabled:hover {
+  background: none;
+}
+
+.ctx-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 6px;
+}
+
+.ctx-submenu-wrapper {
+  position: relative;
+}
+
+.ctx-submenu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ctx-arrow {
+  font-size: 8px;
+  margin-left: 12px;
+  opacity: 0.5;
+}
+
+.ctx-submenu {
+  position: absolute;
+  left: 100%;
+  top: -6px;
+  display: none;
+}
+
+.ctx-submenu-wrapper:hover > .ctx-submenu {
+  display: block;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Volume HUD — matches Qt VolumeHUD
+   ══════════════════════════════════════════════════════════ */
+
+#volumeHud {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.68);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 30;
+  width: 240px;
+}
+
+.vol-symbol {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.95);
+  flex-shrink: 0;
+}
+
+.vol-bar-container {
+  flex: 1;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  position: relative;
+}
+
+.vol-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.vol-percent {
+  font-size: 13px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.95);
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Center Flash — matches Qt CenterFlashWidget
+   ══════════════════════════════════════════════════════════ */
+
+#centerFlash {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 35;
+}
+
+.flash-icon {
+  display: block;
+  font-size: 80px;
+  color: white;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50px;
+  padding: 20px;
+  line-height: 1;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Toast HUD — matches Qt ToastHUD
+   ══════════════════════════════════════════════════════════ */
+
+#toastHud {
+  pointer-events: none;
+  z-index: 40;
+}
+
+.toast-label {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.68);
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Diagnostics Overlay — matches Qt DiagnosticsOverlay
+   ══════════════════════════════════════════════════════════ */
+
+#diagnosticsOverlay {
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
+  padding: 8px;
+  z-index: 45;
+  pointer-events: none;
+}
+
+.diag-label {
+  font-family: 'Consolas', 'Menlo', 'Courier New', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.92);
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Delay Controls — in tracks drawer
+   ══════════════════════════════════════════════════════════ */
+
+.tracks-delay-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.tracks-delay-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.60);
+  min-width: 60px;
+}
+
+.tracks-delay-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  min-width: 44px;
+  text-align: center;
+}
+
+.tracks-delay-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tracks-delay-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}

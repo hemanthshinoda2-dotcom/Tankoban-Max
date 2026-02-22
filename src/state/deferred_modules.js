@@ -174,7 +174,6 @@
         await loadScriptOnce('./domains/books/reader/reader_core.js');
         await loadScriptOnce('./domains/books/library.js');
         await loadScriptOnce('./domains/books/books_opds.js');
-        await loadScriptOnce('./domains/books/books_web_sources.js');
         // LISTEN_P3: TTS player overlay (mega panel wiring, voice curation, highlight controls)
         await loadScriptOnce('./domains/books/listening_player.js');
         // FEAT-AUDIOBOOK: Standalone audiobook player overlay

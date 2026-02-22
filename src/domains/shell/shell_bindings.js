@@ -116,6 +116,18 @@
     try { if (el.libMenuBtn) el.libMenuBtn.setAttribute('aria-expanded', String(isOpen)); } catch {}
   };
 
+  const isReaderOrPlayerContext = () => {
+    try {
+      return !!(
+        document.body.classList.contains('inPlayer') ||
+        document.body.classList.contains('inVideoPlayer') ||
+        document.body.classList.contains('inBooksReader')
+      );
+    } catch {
+      return false;
+    }
+  };
+
   const toggleDrawer = () => {
     const open = !document.body.classList.contains('libDrawerOpen');
     setDrawerOpen(open);
@@ -133,7 +145,7 @@
       e.preventDefault();
       e.stopPropagation();
       // Drawer is only relevant in library/video library views (not during reader/player).
-      if (document.body.classList.contains('inPlayer')) return;
+      if (isReaderOrPlayerContext()) return;
       toggleDrawer();
     });
   }
@@ -149,11 +161,496 @@
   // Escape closes drawer.
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!document.body.classList.contains('libDrawerOpen')) return;
-    if (document.body.classList.contains('inPlayer')) return;
-    e.preventDefault();
-    setDrawerOpen(false);
+    var closed = false;
+    if (isDownloadDestPickerOpen()) {
+      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Cancelled' });
+      closed = true;
+    }
+    if (isReaderOrPlayerContext()) {
+      if (closed) e.preventDefault();
+      return;
+    }
+    if (document.body.classList.contains('libDrawerOpen')) {
+      setDrawerOpen(false);
+      closed = true;
+    }
+    if (document.body.classList.contains('webHubOpen')) {
+      setWebHubOpen(false);
+      closed = true;
+    }
+    if (closed) e.preventDefault();
   });
+
+  // Global right Browser Hub drawer
+  var webHubToggleBtn = document.getElementById('webHubToggleBtn');
+  var webHubPanel = document.getElementById('webHubPanel');
+  var webHubBackdrop = document.getElementById('webHubBackdrop');
+  var webHubCloseBtn = document.getElementById('webHubCloseBtn');
+  var webHubOpenBrowserBtn = document.getElementById('webHubOpenBrowserBtn');
+  var webHubAddSourceBtn = document.getElementById('webHubAddSourceBtn');
+  var webHubSectionToggles = document.querySelectorAll('.webHubSectionToggle[data-target]');
+  var WEB_HUB_COLLAPSE_KEY = 'webHubCollapsedSections';
+
+  function readWebHubCollapsedState() {
+    try {
+      var raw = localStorage.getItem(WEB_HUB_COLLAPSE_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function writeWebHubCollapsedState(state) {
+    try { localStorage.setItem(WEB_HUB_COLLAPSE_KEY, JSON.stringify(state || {})); } catch (err) {}
+  }
+
+  function applyWebHubCollapsedState() {
+    var state = readWebHubCollapsedState();
+    for (var i = 0; i < webHubSectionToggles.length; i++) {
+      var btn = webHubSectionToggles[i];
+      var targetId = btn.getAttribute('data-target');
+      var key = btn.getAttribute('data-collapse-key');
+      if (!targetId || !key) continue;
+      var target = document.getElementById(targetId);
+      if (!target) continue;
+      var collapsed = !!state[key];
+      target.classList.toggle('hidden', collapsed);
+    }
+  }
+
+  function setWebHubOpen(open) {
+    var isOpen = !!open;
+    if (isOpen && isReaderOrPlayerContext()) return;
+    document.body.classList.toggle('webHubOpen', isOpen);
+    try { if (webHubPanel) webHubPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true'); } catch (err) {}
+    try { if (webHubBackdrop) webHubBackdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true'); } catch (err) {}
+    if (isOpen) setDrawerOpen(false);
+  }
+
+  function toggleWebHubOpen() {
+    var willOpen = !document.body.classList.contains('webHubOpen');
+    setWebHubOpen(willOpen);
+    if (willOpen) {
+      try {
+        if (window.Tanko && window.Tanko.deferred && typeof window.Tanko.deferred.ensureWebModulesLoaded === 'function') {
+          window.Tanko.deferred.ensureWebModulesLoaded().catch(function () {});
+        }
+      } catch (err) {}
+    }
+  }
+
+  if (webHubToggleBtn) {
+    webHubToggleBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (isReaderOrPlayerContext()) return;
+      toggleWebHubOpen();
+    });
+  }
+
+  if (webHubCloseBtn) {
+    webHubCloseBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setWebHubOpen(false);
+    });
+  }
+
+  if (webHubBackdrop) {
+    webHubBackdrop.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      setWebHubOpen(false);
+    });
+  }
+
+  if (webHubOpenBrowserBtn) {
+    webHubOpenBrowserBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var d = window.Tanko && window.Tanko.deferred;
+      if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
+      d.ensureWebModulesLoaded().then(function () {
+        if (window.Tanko && window.Tanko.web && typeof window.Tanko.web.openHome === 'function') {
+          window.Tanko.web.openHome();
+        }
+      }).catch(function () {});
+    });
+  }
+
+  if (webHubAddSourceBtn) {
+    webHubAddSourceBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var d = window.Tanko && window.Tanko.deferred;
+      if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
+      d.ensureWebModulesLoaded().then(function () {
+        if (window.Tanko && window.Tanko.web && typeof window.Tanko.web.openAddSourceDialog === 'function') {
+          window.Tanko.web.openAddSourceDialog();
+        } else {
+          var overlay = document.getElementById('webAddSourceOverlay');
+          if (overlay) overlay.classList.remove('hidden');
+        }
+      }).catch(function () {});
+    });
+  }
+
+  for (var whi = 0; whi < webHubSectionToggles.length; whi++) {
+    webHubSectionToggles[whi].addEventListener('click', function (e) {
+      e.preventDefault();
+      var btn = this;
+      var targetId = btn.getAttribute('data-target');
+      var key = btn.getAttribute('data-collapse-key');
+      if (!targetId || !key) return;
+      var target = document.getElementById(targetId);
+      if (!target) return;
+      var collapsed = target.classList.toggle('hidden');
+      var state = readWebHubCollapsedState();
+      state[key] = collapsed;
+      writeWebHubCollapsedState(state);
+    });
+  }
+
+  applyWebHubCollapsedState();
+
+  // In-app download destination picker (Books/Comics/Videos only)
+  var downloadDestPickerOverlay = document.getElementById('downloadDestPickerOverlay');
+  var downloadDestPickerTitle = document.getElementById('downloadDestPickerTitle');
+  var downloadDestPickerSubtext = document.getElementById('downloadDestPickerSubtext');
+  var downloadDestPickerCancelBtn = document.getElementById('downloadDestPickerCancelBtn');
+  var downloadDestPickerModes = document.getElementById('downloadDestPickerModes');
+  var downloadDestPickerRootSelect = document.getElementById('downloadDestPickerRootSelect');
+  var downloadDestPickerPath = document.getElementById('downloadDestPickerPath');
+  var downloadDestPickerList = document.getElementById('downloadDestPickerList');
+  var downloadDestPickerEmpty = document.getElementById('downloadDestPickerEmpty');
+  var downloadDestPickerUpBtn = document.getElementById('downloadDestPickerUpBtn');
+  var downloadDestPickerUseBtn = document.getElementById('downloadDestPickerUseBtn');
+  var pickerModes = ['books', 'comics', 'videos'];
+
+  var downloadDestPickerState = {
+    requestId: '',
+    kind: 'direct',
+    suggestedFilename: '',
+    mode: '',
+    roots: { books: [], comics: [], videos: [] },
+    currentRoot: '',
+    currentPath: '',
+    navStack: [],
+    loadToken: '',
+  };
+
+  function getWebSourcesApi() {
+    try { return window.Tanko && window.Tanko.api && window.Tanko.api.webSources ? window.Tanko.api.webSources : null; } catch { return null; }
+  }
+
+  function isDownloadDestPickerOpen() {
+    return !!(downloadDestPickerOverlay && !downloadDestPickerOverlay.classList.contains('hidden') && downloadDestPickerState.requestId);
+  }
+
+  function modeLabel(mode) {
+    if (mode === 'books') return 'Books';
+    if (mode === 'comics') return 'Comics';
+    if (mode === 'videos') return 'Videos';
+    return 'Library';
+  }
+
+  function pickerEscapeHtml(v) {
+    var s = String(v == null ? '' : v);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function getPickerRoots(mode) {
+    var m = String(mode || '').toLowerCase();
+    var list = downloadDestPickerState.roots && Array.isArray(downloadDestPickerState.roots[m]) ? downloadDestPickerState.roots[m] : [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var p = String(list[i] || '').trim();
+      if (p) out.push(p);
+    }
+    return out;
+  }
+
+  function getAvailablePickerModes() {
+    var out = [];
+    for (var i = 0; i < pickerModes.length; i++) {
+      if (getPickerRoots(pickerModes[i]).length) out.push(pickerModes[i]);
+    }
+    return out;
+  }
+
+  function pickDefaultMode(modeHint) {
+    var hint = String(modeHint || '').trim().toLowerCase();
+    var available = getAvailablePickerModes();
+    if (available.indexOf(hint) !== -1) return hint;
+    return available.length ? available[0] : '';
+  }
+
+  function setPickerModeButtons() {
+    if (!downloadDestPickerModes) return;
+    var btns = downloadDestPickerModes.querySelectorAll('.downloadDestPickerMode[data-mode]');
+    for (var i = 0; i < btns.length; i++) {
+      var b = btns[i];
+      var mode = String(b.getAttribute('data-mode') || '').toLowerCase();
+      var enabled = getPickerRoots(mode).length > 0;
+      b.disabled = !enabled;
+      b.classList.toggle('active', mode === downloadDestPickerState.mode);
+    }
+  }
+
+  function setPickerPathText() {
+    if (!downloadDestPickerPath) return;
+    var cur = String(downloadDestPickerState.currentPath || '').trim();
+    downloadDestPickerPath.textContent = cur || 'No folder selected';
+  }
+
+  function setPickerTitleText() {
+    if (!downloadDestPickerTitle || !downloadDestPickerSubtext) return;
+    var kind = String(downloadDestPickerState.kind || 'direct');
+    if (kind === 'torrent') downloadDestPickerTitle.textContent = 'Choose Torrent Destination';
+    else downloadDestPickerTitle.textContent = 'Choose Download Folder';
+    var modeTxt = modeLabel(downloadDestPickerState.mode);
+    var suggested = String(downloadDestPickerState.suggestedFilename || '').trim();
+    downloadDestPickerSubtext.textContent = suggested
+      ? ('Save "' + suggested + '" in ' + modeTxt + '.')
+      : ('Pick a folder in ' + modeTxt + '.');
+  }
+
+  function renderPickerRoots() {
+    if (!downloadDestPickerRootSelect) return;
+    var roots = getPickerRoots(downloadDestPickerState.mode);
+    var html = '';
+    for (var i = 0; i < roots.length; i++) {
+      var r = String(roots[i] || '');
+      var selected = (r === downloadDestPickerState.currentRoot) ? ' selected' : '';
+      html += '<option value="' + pickerEscapeHtml(r) + '"' + selected + '>' + pickerEscapeHtml(r) + '</option>';
+    }
+    downloadDestPickerRootSelect.innerHTML = html;
+    downloadDestPickerRootSelect.disabled = roots.length <= 1;
+  }
+
+  function renderPickerFolderNodes(folders) {
+    if (!downloadDestPickerList || !downloadDestPickerEmpty) return;
+    var list = Array.isArray(folders) ? folders : [];
+    if (!list.length) {
+      downloadDestPickerList.innerHTML = '';
+      downloadDestPickerEmpty.classList.remove('hidden');
+      return;
+    }
+    downloadDestPickerEmpty.classList.add('hidden');
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i] || {};
+      var name = String(f.name || '').trim();
+      var p = String(f.path || '').trim();
+      if (!name || !p) continue;
+      html += '<button class="downloadDestPickerNode" type="button" data-folder-path="' + pickerEscapeHtml(p) + '">' + pickerEscapeHtml(name) + '</button>';
+    }
+    downloadDestPickerList.innerHTML = html;
+
+    var nodes = downloadDestPickerList.querySelectorAll('.downloadDestPickerNode[data-folder-path]');
+    for (var j = 0; j < nodes.length; j++) {
+      nodes[j].addEventListener('click', function (e) {
+        e.preventDefault();
+        var next = String(this.getAttribute('data-folder-path') || '').trim();
+        if (!next) return;
+        if (downloadDestPickerState.currentPath) downloadDestPickerState.navStack.push(downloadDestPickerState.currentPath);
+        downloadDestPickerState.currentPath = next;
+        setPickerPathText();
+        loadPickerFolders();
+      });
+    }
+  }
+
+  function syncPickerActionButtons() {
+    if (downloadDestPickerUseBtn) downloadDestPickerUseBtn.disabled = !downloadDestPickerState.currentPath;
+    if (downloadDestPickerUpBtn) {
+      var atRoot = !downloadDestPickerState.currentPath || downloadDestPickerState.currentPath === downloadDestPickerState.currentRoot;
+      downloadDestPickerUpBtn.disabled = atRoot && downloadDestPickerState.navStack.length === 0;
+    }
+  }
+
+  function setPickerMode(mode) {
+    var m = String(mode || '').trim().toLowerCase();
+    if (pickerModes.indexOf(m) === -1) return;
+    var roots = getPickerRoots(m);
+    if (!roots.length) return;
+    downloadDestPickerState.mode = m;
+    downloadDestPickerState.currentRoot = roots[0];
+    downloadDestPickerState.currentPath = roots[0];
+    downloadDestPickerState.navStack = [];
+    setPickerTitleText();
+    setPickerModeButtons();
+    renderPickerRoots();
+    setPickerPathText();
+    syncPickerActionButtons();
+    loadPickerFolders();
+  }
+
+  function loadPickerFolders() {
+    var api = getWebSourcesApi();
+    if (!api || typeof api.listDestinationFolders !== 'function') {
+      renderPickerFolderNodes([]);
+      return;
+    }
+    var mode = downloadDestPickerState.mode;
+    var currentPath = downloadDestPickerState.currentPath;
+    if (!mode || !currentPath) {
+      renderPickerFolderNodes([]);
+      syncPickerActionButtons();
+      return;
+    }
+
+    var token = String(downloadDestPickerState.requestId || '') + '|' + mode + '|' + currentPath;
+    downloadDestPickerState.loadToken = token;
+    renderPickerFolderNodes([]);
+    if (downloadDestPickerEmpty) {
+      downloadDestPickerEmpty.textContent = 'Loading folders...';
+      downloadDestPickerEmpty.classList.remove('hidden');
+    }
+
+    api.listDestinationFolders({ mode: mode, path: currentPath }).then(function (res) {
+      if (downloadDestPickerState.loadToken !== token) return;
+      if (!res || !res.ok) {
+        renderPickerFolderNodes([]);
+        if (downloadDestPickerEmpty) downloadDestPickerEmpty.textContent = (res && res.error) ? String(res.error) : 'Could not load folders.';
+        syncPickerActionButtons();
+        return;
+      }
+      renderPickerFolderNodes(Array.isArray(res.folders) ? res.folders : []);
+      if (downloadDestPickerEmpty) downloadDestPickerEmpty.textContent = 'No subfolders in this folder.';
+      syncPickerActionButtons();
+    }).catch(function () {
+      if (downloadDestPickerState.loadToken !== token) return;
+      renderPickerFolderNodes([]);
+      if (downloadDestPickerEmpty) downloadDestPickerEmpty.textContent = 'Could not load folders.';
+      syncPickerActionButtons();
+    });
+  }
+
+  function closeDownloadDestPicker(result) {
+    if (!downloadDestPickerOverlay) return;
+    var reqId = String(downloadDestPickerState.requestId || '');
+    downloadDestPickerState.requestId = '';
+    downloadDestPickerState.loadToken = '';
+    downloadDestPickerOverlay.classList.add('hidden');
+    try { downloadDestPickerOverlay.setAttribute('aria-hidden', 'true'); } catch {}
+
+    if (!reqId) return;
+    var api = getWebSourcesApi();
+    if (!api || typeof api.resolveDestinationPicker !== 'function') return;
+    var payload = Object.assign({ requestId: reqId }, result || {});
+    api.resolveDestinationPicker(payload).catch(function () {});
+  }
+
+  function openDownloadDestPicker(req) {
+    var request = (req && typeof req === 'object') ? req : {};
+    var reqId = String(request.requestId || '').trim();
+    if (!reqId) return;
+
+    if (downloadDestPickerState.requestId) {
+      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Replaced by a new picker request' });
+    }
+
+    downloadDestPickerState.requestId = reqId;
+    downloadDestPickerState.kind = String(request.kind || 'direct').toLowerCase();
+    downloadDestPickerState.suggestedFilename = String(request.suggestedFilename || '').trim();
+    downloadDestPickerState.roots = {
+      books: Array.isArray(request.roots && request.roots.books) ? request.roots.books : [],
+      comics: Array.isArray(request.roots && request.roots.comics) ? request.roots.comics : [],
+      videos: Array.isArray(request.roots && request.roots.videos) ? request.roots.videos : [],
+    };
+
+    var mode = pickDefaultMode(request.modeHint);
+    if (!mode) {
+      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'No configured library roots available' });
+      return;
+    }
+
+    if (downloadDestPickerOverlay) {
+      downloadDestPickerOverlay.classList.remove('hidden');
+      try { downloadDestPickerOverlay.setAttribute('aria-hidden', 'false'); } catch {}
+    }
+    setPickerMode(mode);
+  }
+
+  if (downloadDestPickerModes) {
+    downloadDestPickerModes.addEventListener('click', function (e) {
+      var btn = e && e.target ? e.target.closest('.downloadDestPickerMode[data-mode]') : null;
+      if (!btn) return;
+      e.preventDefault();
+      setPickerMode(btn.getAttribute('data-mode'));
+    });
+  }
+
+  if (downloadDestPickerRootSelect) {
+    downloadDestPickerRootSelect.addEventListener('change', function () {
+      var nextRoot = String(downloadDestPickerRootSelect.value || '').trim();
+      if (!nextRoot) return;
+      downloadDestPickerState.currentRoot = nextRoot;
+      downloadDestPickerState.currentPath = nextRoot;
+      downloadDestPickerState.navStack = [];
+      setPickerPathText();
+      syncPickerActionButtons();
+      loadPickerFolders();
+    });
+  }
+
+  if (downloadDestPickerUpBtn) {
+    downloadDestPickerUpBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (downloadDestPickerState.navStack.length > 0) {
+        downloadDestPickerState.currentPath = downloadDestPickerState.navStack.pop();
+      } else {
+        downloadDestPickerState.currentPath = downloadDestPickerState.currentRoot;
+      }
+      setPickerPathText();
+      syncPickerActionButtons();
+      loadPickerFolders();
+    });
+  }
+
+  if (downloadDestPickerUseBtn) {
+    downloadDestPickerUseBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (!downloadDestPickerState.currentPath) return;
+      closeDownloadDestPicker({
+        ok: true,
+        cancelled: false,
+        mode: downloadDestPickerState.mode,
+        folderPath: downloadDestPickerState.currentPath,
+      });
+    });
+  }
+
+  if (downloadDestPickerCancelBtn) {
+    downloadDestPickerCancelBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Cancelled' });
+    });
+  }
+
+  if (downloadDestPickerOverlay) {
+    downloadDestPickerOverlay.addEventListener('click', function (e) {
+      if (e && e.target === downloadDestPickerOverlay) {
+        closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Cancelled' });
+      }
+    });
+  }
+
+  try {
+    var _wsApi = getWebSourcesApi();
+    if (_wsApi && typeof _wsApi.onDestinationPickerRequest === 'function') {
+      _wsApi.onDestinationPickerRequest(function (payload) {
+        openDownloadDestPicker(payload || {});
+      });
+    }
+  } catch {}
 
   // MERIDIAN_PIN: Sidebar pin/float toggle
   var getSidebarPinned = function () {

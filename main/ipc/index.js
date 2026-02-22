@@ -89,9 +89,10 @@ __bLog('registerIpc: Phase 4D domains OK (player_core, holy_grail, clipboard, fi
 
 // BUILD_WEB: Web Sources domain
 const webSourcesDomain = require('../domains/webSources');
-// BUILD_WCV: Web Tabs domain (WebContentsView)
-const webTabsDomain = require('../domains/webTabs');
-__bLog('registerIpc: BUILD_WEB webSourcesDomain + webTabsDomain OK');
+const webBrowserSettingsDomain = require('../domains/webBrowserSettings');
+const webHistoryDomain = require('../domains/webHistory');
+const webTorrentDomain = require('../domains/webTorrent');
+__bLog('registerIpc: BUILD_WEB webSourcesDomain + settings/history/torrent domains OK');
 
 // FEAT-AUDIOBOOK: Audiobook domains
 const audiobooksDomain = require('../domains/audiobooks');
@@ -284,6 +285,7 @@ function createWindow(opts = {}) {
       nodeIntegration: false,
       // CRITICAL BUGFIX (Build 84): disabling sandbox keeps preload module loading intact.
       sandbox: false,
+      webviewTag: true,
     },
   });
 
@@ -372,6 +374,7 @@ function createVideoShellWindow() {
       nodeIntegration: false,
       // CRITICAL BUGFIX (Build 84): disabling sandbox keeps preload module loading intact.
       sandbox: false,
+      webviewTag: true,
     },
   });
 
@@ -448,7 +451,9 @@ try {
     require('./register/video_display_names'), // RENAME-VIDEO
     require('./register/health_check'),
     require('./register/web_sources'), // BUILD_WEB
-    require('./register/web_tabs'), // BUILD_WCV
+    require('./register/web_browser_settings'),
+    require('./register/web_history'),
+    require('./register/web_torrent'),
     require('./register/audiobooks'), // FEAT-AUDIOBOOK
     require('./register/audiobook_progress'), // FEAT-AUDIOBOOK
     require('./register/audiobook_pairing'), // FEAT-AUDIOBOOK
@@ -459,7 +464,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_tabs','audiobooks','audiobook_progress','audiobook_pairing'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_torrent','audiobooks','audiobook_progress','audiobook_pairing'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -493,7 +498,9 @@ for (let i = 0; i < registerModules.length; i++) {
     videoUi,
     seriesSettings,
     webSourcesDomain, // BUILD_WEB
-    webTabsDomain, // BUILD_WCV
+    webBrowserSettingsDomain,
+    webHistoryDomain,
+    webTorrentDomain,
     audiobooksDomain, // FEAT-AUDIOBOOK
     audiobookProgress, // FEAT-AUDIOBOOK
     audiobookPairing, // FEAT-AUDIOBOOK

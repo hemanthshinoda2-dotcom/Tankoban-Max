@@ -43,8 +43,23 @@ async function clear(ctx, _evt, bookId) {
   return { ok: true };
 }
 
+function pruneByRemovedIds(ctx, removedIds) {
+  if (!Array.isArray(removedIds) || !removedIds.length) return;
+  var mem = getMem(ctx);
+  var changed = false;
+  for (var i = 0; i < removedIds.length; i++) {
+    var k = String(removedIds[i] || '');
+    if (k && Object.prototype.hasOwnProperty.call(mem, k)) {
+      delete mem[k];
+      changed = true;
+    }
+  }
+  if (changed) persist(ctx);
+}
+
 module.exports = {
   getAll,
   save,
   clear,
+  pruneByRemovedIds,
 };

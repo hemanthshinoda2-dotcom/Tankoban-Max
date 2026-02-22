@@ -3168,9 +3168,13 @@ body.inBooksReader .br-reader {
   font-size: 12px;
   border-radius: 5px;
   border: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.15);
-  background: rgba(var(--chrome-rgb, 255,255,255), 0.04);
+  background: #1e2028;
   color: var(--text-primary, #eee);
   outline: none;
+}
+.ab-pair-select option {
+  background: #1e2028;
+  color: var(--text-primary, #eee);
 }
 .ab-pair-select:focus {
   border-color: var(--vx-accent, #7c5cfc);
@@ -3233,9 +3237,13 @@ body.inBooksReader .br-reader {
   font-size: 10px;
   border-radius: 4px;
   border: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.12);
-  background: rgba(var(--chrome-rgb, 255,255,255), 0.04);
+  background: #1e2028;
   color: var(--text-primary, #eee);
   outline: none;
+}
+.ab-pair-ch-select option {
+  background: #1e2028;
+  color: var(--text-primary, #eee);
 }
 .ab-pair-ch-select:focus {
   border-color: var(--vx-accent, #7c5cfc);
@@ -3252,8 +3260,17 @@ body.inBooksReader .br-reader {
 [data-reader-theme="light"] .ab-pair-ch-select,
 [data-reader-theme="sepia"] .ab-pair-ch-select,
 [data-reader-theme="paper"] .ab-pair-ch-select {
-  background: rgba(0,0,0,0.03);
+  background: #f5f5f5;
   border-color: rgba(0,0,0,0.12);
+  color: var(--br-reader-text);
+}
+[data-reader-theme="light"] .ab-pair-select option,
+[data-reader-theme="sepia"] .ab-pair-select option,
+[data-reader-theme="paper"] .ab-pair-select option,
+[data-reader-theme="light"] .ab-pair-ch-select option,
+[data-reader-theme="sepia"] .ab-pair-ch-select option,
+[data-reader-theme="paper"] .ab-pair-ch-select option {
+  background: #f5f5f5;
   color: var(--br-reader-text);
 }
 [data-reader-theme="light"] .ab-pair-btn,

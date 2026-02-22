@@ -182,5 +182,6 @@
     onClose: onClose,
     toggleSidebar: toggleSidebar,
     switchTab: switchTab,
+    openTab: switchTab,
   };
 })();

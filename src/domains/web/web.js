@@ -1,4 +1,4 @@
-// Tankoban Max — Web browser mode renderer (BUILD_WEB + BUILD_WEB_HOME + BUILD_WCV)
+﻿// Tankoban Max â€” Web browser mode renderer (BUILD_WEB + BUILD_WEB_HOME + BUILD_WCV)
 // BUILD_WCV: Replaced <webview> tags with main-process WebContentsView via IPC.
 (function webBrowserDomain() {
   'use strict';
@@ -6,8 +6,8 @@
   if (window.__tankoWebBrowserBound) return;
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
-  if (!api || !api.webSources || !api.webTabs) {
-    console.warn('[BUILD_WCV] Tanko.api.webSources or webTabs not available');
+  if (!api || !api.webSources) {
+    console.warn('[BUILD_WEBVIEW] Tanko.api.webSources not available');
     return;
   }
 
@@ -40,6 +40,10 @@
     navHome: qs('webNavHome'),
     urlDisplay: qs('webUrlDisplay'),
     omniIcon: qs('webOmniIcon'),
+    browserHomePanel: qs('webBrowserHomePanel'),
+    browserHomeGrid: qs('webBrowserHomeGrid'),
+    browserHomeEmpty: qs('webBrowserHomeEmpty'),
+    browserHomeAddSourceBtn: qs('webBrowserHomeAddSourceBtn'),
     viewContainer: qs('webViewContainer'),
     loadBar: qs('webLoadBar'),
     dlPill: qs('webDlPill'),
@@ -76,10 +80,27 @@
     tipsClose: qs('webLibTipsClose'),
     tipsBtn: qs('webTipsBtn'),
     toast: qs('webToast'),
-    contextMenu: qs('contextMenu')
+    contextMenu: qs('contextMenu'),
+    // Global right Browser Hub
+    hubDirectActiveList: qs('webHubDirectActiveList'),
+    hubDirectActiveEmpty: qs('webHubDirectActiveEmpty'),
+    hubTorrentActiveList: qs('webHubTorrentActiveList'),
+    hubTorrentActiveEmpty: qs('webHubTorrentActiveEmpty'),
+    hubDownloadHistoryList: qs('webHubDownloadHistoryList'),
+    hubDownloadHistoryEmpty: qs('webHubDownloadHistoryEmpty'),
+    hubDownloadHistoryClearBtn: qs('webHubDownloadHistoryClearBtn'),
+    hubBrowseHistoryList: qs('webHubBrowseHistoryList'),
+    hubBrowseHistoryEmpty: qs('webHubBrowseHistoryEmpty'),
+    hubBrowseSearch: qs('webHubBrowseSearch'),
+    hubBrowseHistoryClearBtn: qs('webHubBrowseHistoryClearBtn')
   };
 
   var MAX_TABS = 8;
+  var MAX_BROWSING_HISTORY_UI = 500;
+  var MAX_UNIFIED_HISTORY_UI = 2000;
+  var SEARCH_ENGINE_URLS = {
+    yandex: 'https://yandex.com/search/?text='
+  };
 
   var state = {
     sources: [],
@@ -104,8 +125,370 @@
     // MERIDIAN_SPLIT
     split: false,
     splitTabId: null,
-    splitRatio: 0.5
+    splitRatio: 0.5,
+    showBrowserHome: false,
+    browserSettings: {
+      defaultSearchEngine: 'yandex'
+    },
+    browsingHistory: [],
+    browsingHistoryQuery: '',
+    browseSearchTimer: null,
+    torrentActive: [],
+    torrentHistory: []
   };
+
+  function isMagnetUrl(url) {
+    return /^magnet:/i.test(String(url || '').trim());
+  }
+
+  function isTorrentFileUrl(url) {
+    var raw = String(url || '').trim();
+    if (!/^https?:/i.test(raw)) return false;
+    try {
+      var u = new URL(raw);
+      var p = String(u.pathname || '').toLowerCase();
+      return p.indexOf('.torrent') !== -1;
+    } catch (e) {
+      return /\.torrent(\?|#|$)/i.test(raw);
+    }
+  }
+
+  function maybeStartTorrentFromUrl(url, referer) {
+    var target = String(url || '').trim();
+    if (!target || !api || !api.webTorrent || !api.webSources || !api.webSources.pickDestinationFolder) return false;
+
+    if (isMagnetUrl(target)) {
+      try {
+        api.webSources.pickDestinationFolder({
+          kind: 'torrent',
+          suggestedFilename: 'magnet',
+          modeHint: 'videos',
+        }).then(function (picked) {
+          if (!picked || !picked.ok) {
+            if (picked && !picked.cancelled) showToast(String(picked.error || 'Destination not selected'));
+            return null;
+          }
+          return api.webTorrent.startMagnet({
+            magnetUri: target,
+            referer: String(referer || ''),
+            destinationRoot: String(picked.folderPath || ''),
+          });
+        }).then(function (res) {
+          if (!res) return;
+          if (res && res.ok) showToast('Torrent started');
+          else showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
+          refreshTorrentState();
+        }).catch(function () {
+          showToast('Failed to start torrent');
+        });
+      } catch (e) {
+        showToast('Failed to start torrent');
+      }
+      return true;
+    }
+
+    if (isTorrentFileUrl(target)) {
+      try {
+        var nameHint = 'torrent';
+        try {
+          var _u = new URL(target);
+          var _p = String(_u.pathname || '').trim();
+          if (_p) {
+            var _parts = _p.split('/');
+            nameHint = decodeURIComponent(_parts[_parts.length - 1] || 'torrent');
+          }
+        } catch (e0) {}
+
+        api.webSources.pickDestinationFolder({
+          kind: 'torrent',
+          suggestedFilename: nameHint,
+          modeHint: 'videos',
+        }).then(function (picked) {
+          if (!picked || !picked.ok) {
+            if (picked && !picked.cancelled) showToast(String(picked.error || 'Destination not selected'));
+            return null;
+          }
+          return api.webTorrent.startTorrentUrl({
+            url: target,
+            referer: String(referer || ''),
+            destinationRoot: String(picked.folderPath || ''),
+          });
+        }).then(function (res) {
+          if (!res) return;
+          if (res && res.ok) showToast('Torrent started');
+          else showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
+          refreshTorrentState();
+        }).catch(function () {
+          showToast('Failed to start torrent');
+        });
+      } catch (e2) {
+        showToast('Failed to start torrent');
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  function createRendererWebTabsShim() {
+    var nextTabId = 1;
+    var tabs = new Map(); // tabId -> { tabId, webview }
+    var splitState = { enabled: false, leftId: null, rightId: null };
+    var listeners = {
+      title: [],
+      url: [],
+      loading: [],
+      nav: []
+    };
+
+    function emit(type, payload) {
+      var arr = listeners[type];
+      if (!arr || !arr.length) return;
+      for (var i = 0; i < arr.length; i++) {
+        try { arr[i](payload || {}); } catch (e) {}
+      }
+    }
+
+    function on(type, cb) {
+      if (typeof cb !== 'function' || !listeners[type]) return;
+      listeners[type].push(cb);
+    }
+
+    function safeCanGoBack(wv) {
+      try { return !!(wv && wv.canGoBack && wv.canGoBack()); } catch (e) { return false; }
+    }
+
+    function safeCanGoForward(wv) {
+      try { return !!(wv && wv.canGoForward && wv.canGoForward()); } catch (e) { return false; }
+    }
+
+    function safeUrl(wv) {
+      try { return String((wv && wv.getURL && wv.getURL()) || ''); } catch (e) { return ''; }
+    }
+
+    function emitNav(tabId, wv) {
+      emit('nav', {
+        tabId: tabId,
+        canGoBack: safeCanGoBack(wv),
+        canGoForward: safeCanGoForward(wv)
+      });
+    }
+
+    function hideRecord(rec) {
+      if (!rec || !rec.webview) return;
+      rec.webview.classList.add('hidden');
+      rec.webview.style.left = '0px';
+      rec.webview.style.width = '100%';
+      rec.webview.style.zIndex = '1';
+    }
+
+    function showRecord(rec, leftPx, widthPx, z) {
+      if (!rec || !rec.webview) return;
+      rec.webview.classList.remove('hidden');
+      rec.webview.style.left = Math.max(0, Math.round(leftPx || 0)) + 'px';
+      rec.webview.style.width = Math.max(0, Math.round(widthPx || 0)) + 'px';
+      rec.webview.style.zIndex = String(z || 1);
+    }
+
+    function hideAllInternal() {
+      tabs.forEach(function (rec) { hideRecord(rec); });
+    }
+
+    function showSingle(tabId) {
+      splitState.enabled = false;
+      splitState.leftId = null;
+      splitState.rightId = null;
+
+      hideAllInternal();
+      var rec = tabs.get(Number(tabId));
+      if (!rec || !el.viewContainer) return;
+      var rect = el.viewContainer.getBoundingClientRect();
+      showRecord(rec, 0, rect.width, 2);
+    }
+
+    function showSplit(leftId, rightId, leftBounds, rightBounds) {
+      var leftRec = tabs.get(Number(leftId));
+      var rightRec = tabs.get(Number(rightId));
+      if (!leftRec || !rightRec || !el.viewContainer) {
+        showSingle(leftId);
+        return;
+      }
+      splitState.enabled = true;
+      splitState.leftId = Number(leftId);
+      splitState.rightId = Number(rightId);
+      hideAllInternal();
+
+      var rect = el.viewContainer.getBoundingClientRect();
+      var totalW = Math.max(0, Math.round(rect.width));
+      var leftW = (leftBounds && leftBounds.width != null) ? Number(leftBounds.width) : Math.round(totalW * 0.5);
+      var rightW = (rightBounds && rightBounds.width != null) ? Number(rightBounds.width) : (totalW - leftW);
+
+      leftW = Math.max(80, Math.min(totalW - 80, Math.round(leftW)));
+      rightW = Math.max(80, totalW - leftW);
+
+      showRecord(leftRec, 0, leftW, 2);
+      showRecord(rightRec, leftW, rightW, 2);
+    }
+
+    function bindWebview(tabId, wv) {
+      wv.addEventListener('did-start-loading', function () {
+        emit('loading', { tabId: tabId, loading: true });
+      });
+
+      wv.addEventListener('did-stop-loading', function () {
+        emit('loading', { tabId: tabId, loading: false });
+        emit('url', { tabId: tabId, url: safeUrl(wv) });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('page-title-updated', function (ev) {
+        var title = ev && ev.title ? String(ev.title) : '';
+        emit('title', { tabId: tabId, title: title });
+      });
+
+      wv.addEventListener('dom-ready', function () {
+        emit('url', { tabId: tabId, url: safeUrl(wv) });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('did-navigate', function (ev) {
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('did-navigate-in-page', function (ev) {
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('will-navigate', function (ev) {
+        var target = String((ev && ev.url) || '').trim();
+        if (!target) return;
+        if (maybeStartTorrentFromUrl(target, safeUrl(wv))) {
+          try { ev.preventDefault(); } catch (e) {}
+          return;
+        }
+      });
+
+      wv.addEventListener('new-window', function (ev) {
+        var target = String((ev && ev.url) || '').trim();
+        if (!target) return;
+        try { ev.preventDefault(); } catch (e) {}
+        if (maybeStartTorrentFromUrl(target, safeUrl(wv))) return;
+        var parent = getTabByMainId(tabId);
+        openPopupUrlInNewTab(target, parent);
+      });
+    }
+
+    return {
+      create: function (payload) {
+        var url = String((payload && payload.url) || '').trim() || 'about:blank';
+        var tabId = nextTabId++;
+        var wv = document.createElement('webview');
+        wv.className = 'webTabWebview hidden';
+        wv.setAttribute('partition', 'persist:webmode');
+        wv.setAttribute('allowpopups', '');
+        wv.src = url;
+        bindWebview(tabId, wv);
+
+        if (el.viewContainer) el.viewContainer.appendChild(wv);
+        tabs.set(tabId, { tabId: tabId, webview: wv });
+        return Promise.resolve({ ok: true, tabId: tabId });
+      },
+
+      close: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var rec = tabs.get(tabId);
+        if (!rec) return Promise.resolve({ ok: true });
+        try {
+          if (rec.webview && rec.webview.parentElement) rec.webview.parentElement.removeChild(rec.webview);
+        } catch (e) {}
+        tabs.delete(tabId);
+        if (splitState.enabled && (splitState.leftId === tabId || splitState.rightId === tabId)) {
+          splitState.enabled = false;
+          splitState.leftId = null;
+          splitState.rightId = null;
+          hideAllInternal();
+        }
+        return Promise.resolve({ ok: true });
+      },
+
+      activate: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        if (!tabs.has(tabId)) return Promise.resolve({ ok: false, error: 'Not found' });
+        showSingle(tabId);
+        return Promise.resolve({ ok: true });
+      },
+
+      navigate: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var action = String((payload && payload.action) || '').trim();
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false, error: 'Not found' });
+        var wv = rec.webview;
+        try {
+          if (action === 'back') {
+            if (safeCanGoBack(wv)) wv.goBack();
+          } else if (action === 'forward') {
+            if (safeCanGoForward(wv)) wv.goForward();
+          } else if (action === 'reload') {
+            wv.reload();
+          } else if (action === 'loadUrl') {
+            var url = String((payload && payload.url) || '').trim();
+            if (url) {
+              if (!maybeStartTorrentFromUrl(url, safeUrl(wv))) {
+                wv.loadURL(url);
+              }
+            }
+          }
+        } catch (e) {
+          return Promise.resolve({ ok: false, error: String(e && e.message || e || 'Navigation failed') });
+        }
+        setTimeout(function () { emitNav(tabId, wv); }, 0);
+        return Promise.resolve({ ok: true });
+      },
+
+      setBounds: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        if (!tabs.has(tabId)) return Promise.resolve({ ok: false, error: 'Not found' });
+        showSingle(tabId);
+        return Promise.resolve({ ok: true });
+      },
+
+      splitBounds: function (payload) {
+        var left = payload && payload.left ? payload.left : null;
+        var right = payload && payload.right ? payload.right : null;
+        var leftId = Number(left && left.tabId);
+        var rightId = Number(right && right.tabId);
+        if (!tabs.has(leftId) || !tabs.has(rightId)) return Promise.resolve({ ok: false, error: 'Not found' });
+        showSplit(leftId, rightId, left && left.bounds, right && right.bounds);
+        return Promise.resolve({ ok: true });
+      },
+
+      hideAll: function () {
+        hideAllInternal();
+        splitState.enabled = false;
+        splitState.leftId = null;
+        splitState.rightId = null;
+        return Promise.resolve({ ok: true });
+      },
+
+      query: function () {
+        var ids = [];
+        tabs.forEach(function (rec, id) {
+          ids.push({ tabId: id, url: safeUrl(rec.webview) });
+        });
+        return Promise.resolve({ ok: true, tabs: ids });
+      },
+
+      onTitleUpdated: function (cb) { on('title', cb); },
+      onUrlUpdated: function (cb) { on('url', cb); },
+      onLoading: function (cb) { on('loading', cb); },
+      onNavState: function (cb) { on('nav', cb); },
+    };
+  }
+
+  var webTabs = createRendererWebTabsShim();
 
   // ---- Utilities ----
 
@@ -158,6 +541,25 @@
     }
   }
 
+  function getActiveSearchEngine() {
+    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'yandex').trim().toLowerCase();
+    if (!SEARCH_ENGINE_URLS[key]) key = 'yandex';
+    return key;
+  }
+
+  function getSearchQueryUrl(query) {
+    var key = getActiveSearchEngine();
+    var base = SEARCH_ENGINE_URLS[key] || SEARCH_ENGINE_URLS.yandex;
+    return base + encodeURIComponent(String(query || ''));
+  }
+
+  function syncOmniPlaceholder() {
+    if (!el.urlDisplay) return;
+    var key = getActiveSearchEngine();
+    var label = key === 'yandex' ? 'Yandex' : key;
+    try { el.urlDisplay.setAttribute('placeholder', 'Search ' + label + ' or type a URL'); } catch (e) {}
+  }
+
   // Chrome-like omnibox: accept URL or search query
   function resolveOmniInputToUrl(input) {
     var raw = String(input || '').trim();
@@ -172,7 +574,7 @@
     }
 
     // Otherwise treat as search
-    return 'https://www.google.com/search?q=' + encodeURIComponent(raw);
+    return getSearchQueryUrl(raw);
   }
 
   function setOmniIconForUrl(url) {
@@ -396,7 +798,7 @@
       return;
     }
     var bounds = getContainerBounds();
-    api.webTabs.setBounds({ tabId: tab.mainTabId, bounds: bounds }).catch(function () {});
+    webTabs.setBounds({ tabId: tab.mainTabId, bounds: bounds }).catch(function () {});
   }
 
   function reportSplitBounds() {
@@ -422,7 +824,7 @@
     var rightW = Math.round((totalW - dividerW) * (1 - state.splitRatio));
 
     // FIX-WEB-MODE: setBounds uses CSS/logical pixels
-    api.webTabs.splitBounds({
+    webTabs.splitBounds({
       left: {
         tabId: mainTab.mainTabId,
         bounds: {
@@ -473,9 +875,27 @@
         state.sources = res.sources;
         renderSources();
         renderSourcesGrid(); // BUILD_WEB_HOME
+        renderBrowserHome(); // Browser overlay home tiles
         renderContinue();    // BUILD_WEB_HOME
       }
     }).catch(function () {});
+  }
+
+  function loadBrowserSettings() {
+    if (!api.webBrowserSettings || typeof api.webBrowserSettings.get !== 'function') {
+      syncOmniPlaceholder();
+      return;
+    }
+    api.webBrowserSettings.get().then(function (res) {
+      if (!res || !res.ok || !res.settings) return;
+      var settings = res.settings || {};
+      state.browserSettings = {
+        defaultSearchEngine: String(settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex'
+      };
+      syncOmniPlaceholder();
+    }).catch(function () {
+      syncOmniPlaceholder();
+    });
   }
 
   function loadDestinations() {
@@ -559,6 +979,45 @@
     for (var i = 0; i < state.sources.length; i++) {
       el.sourcesGrid.appendChild(makeSourceCard(state.sources[i]));
     }
+  }
+
+  function renderBrowserHome() {
+    if (!el.browserHomeGrid || !el.browserHomeEmpty || !el.browserHomePanel) return;
+    el.browserHomeGrid.innerHTML = '';
+    el.browserHomeEmpty.classList.toggle('hidden', !!state.sources.length);
+    for (var i = 0; i < state.sources.length; i++) {
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'webBrowserHomeCard';
+      card.setAttribute('data-source-id', state.sources[i].id);
+
+      var iconWrap = document.createElement('div');
+      iconWrap.className = 'webBrowserHomeCardIcon';
+      var img = document.createElement('img');
+      img.alt = '';
+      img.src = getFaviconUrl(state.sources[i].url);
+      img.onerror = function () {
+        this.style.display = 'none';
+      };
+      iconWrap.appendChild(img);
+
+      var name = document.createElement('div');
+      name.className = 'webBrowserHomeCardTitle';
+      name.textContent = state.sources[i].name || 'Source';
+
+      var url = document.createElement('div');
+      url.className = 'webBrowserHomeCardUrl';
+      url.textContent = state.sources[i].url || '';
+
+      card.appendChild(iconWrap);
+      card.appendChild(name);
+      card.appendChild(url);
+      el.browserHomeGrid.appendChild(card);
+    }
+
+    var show = !!state.showBrowserHome;
+    el.browserHomePanel.classList.toggle('hidden', !show);
+    if (el.viewContainer) el.viewContainer.classList.toggle('hidden', show);
   }
 
   function makeContinueTile(tab) {
@@ -655,6 +1114,11 @@
   }
 
   function openBrowser(source) {
+    if (!source) {
+      openHome();
+      return;
+    }
+
     // Check if a tab for this source already exists
     var existing = null;
     for (var j = 0; j < state.tabs.length; j++) {
@@ -666,14 +1130,29 @@
       createTab(source, source.url);
     }
 
+    state.showBrowserHome = false;
     state.browserOpen = true;
     _hideCurrentLibraryView();
     if (el.browserView) el.browserView.classList.remove('hidden');
     if (el.browserTitle) el.browserTitle.textContent = source.name || '';
     renderSources();
+    renderBrowserHome();
     syncLoadBar();
     // BUILD_WCV: report bounds after browser opens (needs a frame for layout)
     setTimeout(reportBoundsForActiveTab, 50);
+  }
+
+  function openHome() {
+    state.showBrowserHome = true;
+    state.browserOpen = true;
+    _hideCurrentLibraryView();
+    if (el.browserView) el.browserView.classList.remove('hidden');
+    if (el.browserTitle) el.browserTitle.textContent = 'Browser Home';
+    webTabs.hideAll().catch(function () {});
+    renderBrowserHome();
+    updateUrlDisplay();
+    updateNavButtons();
+    syncLoadBar();
   }
 
   function openBrowserForTab(tabId) {
@@ -684,11 +1163,13 @@
     if (!tab) return;
 
     activateTab(tabId);
+    state.showBrowserHome = false;
     state.browserOpen = true;
     _hideCurrentLibraryView();
     if (el.browserView) el.browserView.classList.remove('hidden');
     if (el.browserTitle) el.browserTitle.textContent = tab.sourceName || '';
     renderSources();
+    renderBrowserHome();
     syncLoadBar();
     // BUILD_WCV: report bounds after browser opens
     setTimeout(reportBoundsForActiveTab, 50);
@@ -704,8 +1185,9 @@
     }
 
     state.browserOpen = false;
+    state.showBrowserHome = false;
     // BUILD_WCV: hide native views BEFORE showing library (prevents stale overlay)
-    api.webTabs.hideAll().catch(function () {});
+    webTabs.hideAll().catch(function () {});
     if (el.browserView) el.browserView.classList.add('hidden');
     _showCurrentLibraryView();
     if (el.browserTitle) el.browserTitle.textContent = '';
@@ -716,6 +1198,7 @@
     setOmniIconForUrl('');
     renderSources();
     renderSourcesGrid();
+    renderBrowserHome();
     renderContinue();
     hideTips();
     hideContextMenu();
@@ -737,7 +1220,7 @@
       html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
         favHtml +
         '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
-        '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">×</button>' +
+        '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">Ã—</button>' +
         '</div>';
     }
 
@@ -801,7 +1284,7 @@
         var items = [];
         items.push({ label: 'New tab', onClick: function () { createTab(''); } });
         items.push({ label: 'Duplicate tab', onClick: function () { createTab(t.url || ''); } });
-        items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) api.webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+        items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
         items.push({ separator: true });
         items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
         items.push({ separator: true });
@@ -876,7 +1359,7 @@
       var show = state.downloading > 0;
       el.dlPill.classList.toggle('hidden', !show);
       if (show) {
-        var label = state.downloadingHasProgress ? 'Downloading…' : 'Paused…';
+        var label = state.downloadingHasProgress ? 'Downloadingâ€¦' : 'Pausedâ€¦';
         if (state.downloading > 1) el.dlPill.textContent = label + ' (' + state.downloading + ')';
         else el.dlPill.textContent = label;
       }
@@ -884,7 +1367,7 @@
 
     if (el.downloadStatus) {
       if (state.downloading > 0) {
-        el.downloadStatus.textContent = state.lastDownloadName ? ((state.downloadingHasProgress ? 'Downloading: ' : 'Paused: ') + state.lastDownloadName) : ((state.downloadingHasProgress ? 'Downloading… (' : 'Paused… (') + state.downloading + ')');
+        el.downloadStatus.textContent = state.lastDownloadName ? ((state.downloadingHasProgress ? 'Downloading: ' : 'Paused: ') + state.lastDownloadName) : ((state.downloadingHasProgress ? 'Downloadingâ€¦ (' : 'Pausedâ€¦ (') + state.downloading + ')');
       } else {
         // keep whatever latest completion message set; fall back if blank
         if (!el.downloadStatus.textContent) el.downloadStatus.textContent = 'No active downloads';
@@ -1027,6 +1510,8 @@
       dlRenderTimer = null;
       renderDownloadsPanel();
       renderHomeDownloads();
+      renderHubDirectActive();
+      renderHubDownloadHistory();
     }, 120);
   }
 
@@ -1054,7 +1539,7 @@
       Object.assign(found, n);
     }
 
-    if (state.downloads.length > 200) state.downloads.length = 200;
+    if (state.downloads.length > 1000) state.downloads.length = 1000;
     recomputeDownloadingCount();
     scheduleDlRender();
   }
@@ -1071,6 +1556,8 @@
       recomputeDownloadingCount();
       renderDownloadsPanel();
       renderHomeDownloads();
+      renderHubDirectActive();
+      renderHubDownloadHistory();
     }).catch(function () {});
   }
 
@@ -1211,6 +1698,305 @@
     renderDownloadList(el.homeDlList, el.homeDlEmpty, list, { compact: true, allowRemove: true });
   }
 
+  function isDirectActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress';
+  }
+
+  function isTorrentActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'downloading' || s === 'paused' || s === 'checking';
+  }
+
+  function formatWhen(ts) {
+    var n = Number(ts || 0);
+    if (!n) return '';
+    try { return new Date(n).toLocaleString(); } catch (e) { return ''; }
+  }
+
+  function pctText(p) {
+    var n = Number(p);
+    if (!isFinite(n)) return '';
+    if (n < 0) n = 0;
+    if (n > 1) n = 1;
+    return Math.round(n * 100) + '%';
+  }
+
+  function renderHubDirectActive() {
+    if (!el.hubDirectActiveList || !el.hubDirectActiveEmpty) return;
+    var active = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (!isDirectActiveState(d.state)) continue;
+      active.push(d);
+    }
+    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+
+    if (!active.length) {
+      el.hubDirectActiveList.innerHTML = '';
+      el.hubDirectActiveEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubDirectActiveEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < active.length; j++) {
+      var x = active[j];
+      var pTxt = pctText(x.progress);
+      var sub = (x.library ? ('\u2192 ' + x.library) : 'Direct download') + (pTxt ? (' \u2022 ' + pTxt) : '');
+      var pauseResume = String(x.state) === 'paused'
+        ? '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>'
+        : '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
+
+      html += '' +
+        '<div class="webHubItem" data-direct-open-id="' + escapeHtml(x.id) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.filename || 'Download') + '</div>' +
+            '<span class="webHubBadge">Direct</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
+          '<div class="webHubSectionActions">' +
+            pauseResume +
+            '<button class="btn btn-ghost btn-sm" data-direct-action="cancel" data-direct-id="' + escapeHtml(x.id) + '">Cancel</button>' +
+          '</div>' +
+        '</div>';
+    }
+    el.hubDirectActiveList.innerHTML = html;
+  }
+
+  function normalizeTorrentEntry(t) {
+    if (!t) return null;
+    return {
+      id: String(t.id || ''),
+      infoHash: String(t.infoHash || ''),
+      name: String(t.name || ''),
+      state: String(t.state || ''),
+      progress: Number(t.progress || 0),
+      downloadRate: Number(t.downloadRate || 0),
+      uploaded: Number(t.uploaded || 0),
+      downloaded: Number(t.downloaded || 0),
+      startedAt: Number(t.startedAt || 0),
+      finishedAt: t.finishedAt != null ? Number(t.finishedAt) : null,
+      error: String(t.error || ''),
+      routedFiles: Number(t.routedFiles || 0),
+      ignoredFiles: Number(t.ignoredFiles || 0),
+      failedFiles: Number(t.failedFiles || 0),
+    };
+  }
+
+  function renderHubTorrentActive() {
+    if (!el.hubTorrentActiveList || !el.hubTorrentActiveEmpty) return;
+    var active = [];
+    for (var i = 0; i < state.torrentActive.length; i++) {
+      var t = state.torrentActive[i];
+      if (!t || !isTorrentActiveState(t.state)) continue;
+      active.push(t);
+    }
+    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+
+    if (!active.length) {
+      el.hubTorrentActiveList.innerHTML = '';
+      el.hubTorrentActiveEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubTorrentActiveEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < active.length; j++) {
+      var x = active[j];
+      var pTxt = pctText(x.progress);
+      var speed = x.downloadRate > 0 ? (' \u2022 ' + formatSpeed(x.downloadRate)) : '';
+      var sub = (x.state || 'downloading') + (pTxt ? (' \u2022 ' + pTxt) : '') + speed;
+      var pauseResume = String(x.state) === 'paused'
+        ? '<button class="btn btn-ghost btn-sm" data-torrent-action="resume" data-torrent-id="' + escapeHtml(x.id) + '">Resume</button>'
+        : '<button class="btn btn-ghost btn-sm" data-torrent-action="pause" data-torrent-id="' + escapeHtml(x.id) + '">Pause</button>';
+
+      html += '' +
+        '<div class="webHubItem">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.name || x.infoHash || 'Torrent') + '</div>' +
+            '<span class="webHubBadge">Torrent</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
+          '<div class="webHubSectionActions">' +
+            pauseResume +
+            '<button class="btn btn-ghost btn-sm" data-torrent-action="cancel" data-torrent-id="' + escapeHtml(x.id) + '">Cancel</button>' +
+          '</div>' +
+        '</div>';
+    }
+    el.hubTorrentActiveList.innerHTML = html;
+  }
+
+  function buildUnifiedHistory() {
+    var merged = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d || !d.id) continue;
+      if (isDirectActiveState(d.state)) continue;
+      merged.push({
+        id: 'direct:' + d.id,
+        transport: 'direct',
+        rawId: d.id,
+        filename: d.filename || 'Download',
+        state: d.state || '',
+        progress: d.progress,
+        startedAt: Number(d.startedAt || 0),
+        finishedAt: Number(d.finishedAt || 0) || null,
+        library: d.library || '',
+        error: d.error || '',
+        destination: d.destination || ''
+      });
+    }
+
+    for (var j = 0; j < state.torrentHistory.length; j++) {
+      var t = state.torrentHistory[j];
+      if (!t || !t.id) continue;
+      if (isTorrentActiveState(t.state)) continue;
+      merged.push({
+        id: 'torrent:' + t.id,
+        transport: 'torrent',
+        rawId: t.id,
+        filename: t.name || t.infoHash || 'Torrent',
+        state: t.state || '',
+        progress: t.progress,
+        startedAt: Number(t.startedAt || 0),
+        finishedAt: Number(t.finishedAt || 0) || null,
+        library: '',
+        error: t.error || '',
+        destination: ''
+      });
+    }
+
+    merged.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+    if (merged.length > MAX_UNIFIED_HISTORY_UI) merged.length = MAX_UNIFIED_HISTORY_UI;
+    return merged;
+  }
+
+  function renderHubDownloadHistory() {
+    if (!el.hubDownloadHistoryList || !el.hubDownloadHistoryEmpty) return;
+    var list = buildUnifiedHistory();
+    if (!list.length) {
+      el.hubDownloadHistoryList.innerHTML = '';
+      el.hubDownloadHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubDownloadHistoryEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      var when = formatWhen(x.finishedAt || x.startedAt);
+      var sub = (x.state || 'done') + (x.library ? (' \u2022 ' + x.library) : '') + (when ? (' \u2022 ' + when) : '');
+      var badge = x.transport === 'torrent' ? 'Torrent' : 'Direct';
+      var removeBtn = '<button class="btn btn-ghost btn-sm" data-unified-remove-id="' + escapeHtml(x.id) + '">Remove</button>';
+      html += '' +
+        '<div class="webHubItem" data-unified-open-id="' + escapeHtml(x.id) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.filename) + '</div>' +
+            '<span class="webHubBadge">' + escapeHtml(badge) + '</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + (x.error ? (' \u2022 ' + escapeHtml(x.error)) : '') + '</div>' +
+          '<div class="webHubSectionActions">' + removeBtn + '</div>' +
+        '</div>';
+    }
+    el.hubDownloadHistoryList.innerHTML = html;
+  }
+
+  function renderHubBrowsingHistory() {
+    if (!el.hubBrowseHistoryList || !el.hubBrowseHistoryEmpty) return;
+    var list = state.browsingHistory || [];
+    if (!list.length) {
+      el.hubBrowseHistoryList.innerHTML = '';
+      el.hubBrowseHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubBrowseHistoryEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i] || {};
+      var title = x.title || x.url || 'History';
+      var sub = (x.url || '') + (x.visitedAt ? (' \u2022 ' + formatWhen(x.visitedAt)) : '');
+      html += '' +
+        '<div class="webHubItem" data-history-open-id="' + escapeHtml(String(x.url || '')) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(title) + '</div>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          '<div class="webHubSectionActions">' +
+            '<button class="btn btn-ghost btn-sm" data-history-remove-id="' + escapeHtml(String(x.id || '')) + '">Remove</button>' +
+          '</div>' +
+        '</div>';
+    }
+    el.hubBrowseHistoryList.innerHTML = html;
+  }
+
+  function renderHubAll() {
+    renderHubDirectActive();
+    renderHubTorrentActive();
+    renderHubDownloadHistory();
+    renderHubBrowsingHistory();
+  }
+
+  function loadBrowsingHistory() {
+    if (!api.webHistory || typeof api.webHistory.list !== 'function') return;
+    api.webHistory.list({
+      query: String(state.browsingHistoryQuery || ''),
+      limit: MAX_BROWSING_HISTORY_UI
+    }).then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.entries)) return;
+      state.browsingHistory = res.entries;
+      renderHubBrowsingHistory();
+    }).catch(function () {});
+  }
+
+  function refreshTorrentState() {
+    if (!api.webTorrent) return;
+    var p1 = (typeof api.webTorrent.getActive === 'function') ? api.webTorrent.getActive() : Promise.resolve({ ok: false, torrents: [] });
+    var p2 = (typeof api.webTorrent.getHistory === 'function') ? api.webTorrent.getHistory() : Promise.resolve({ ok: false, torrents: [] });
+
+    Promise.all([p1, p2]).then(function (results) {
+      var activeRes = results[0] || {};
+      var histRes = results[1] || {};
+      state.torrentActive = [];
+      state.torrentHistory = [];
+
+      if (activeRes.ok && Array.isArray(activeRes.torrents)) {
+        for (var i = 0; i < activeRes.torrents.length; i++) {
+          var a = normalizeTorrentEntry(activeRes.torrents[i]);
+          if (a) state.torrentActive.push(a);
+        }
+      }
+      if (histRes.ok && Array.isArray(histRes.torrents)) {
+        for (var j = 0; j < histRes.torrents.length; j++) {
+          var h = normalizeTorrentEntry(histRes.torrents[j]);
+          if (h) state.torrentHistory.push(h);
+        }
+      }
+      renderHubTorrentActive();
+      renderHubDownloadHistory();
+    }).catch(function () {});
+  }
+
+  function maybeRecordBrowsingHistory(tab, url) {
+    if (!tab || !url || !api.webHistory || typeof api.webHistory.add !== 'function') return;
+    var u = String(url || '').trim();
+    if (!/^https?:\/\//i.test(u)) return;
+    var now = Date.now();
+    if (tab._lastHistoryUrl === u && (now - Number(tab._lastHistoryAt || 0) < 3000)) return;
+    tab._lastHistoryUrl = u;
+    tab._lastHistoryAt = now;
+    api.webHistory.add({
+      url: u,
+      title: String(tab.title || tab.sourceName || ''),
+      visitedAt: now,
+      sourceTabId: String(tab.id)
+    }).catch(function () {});
+  }
+
   function openDownloadsPanel() {
     if (!el.dlPanel) return;
     state.dlPanelOpen = true;
@@ -1263,7 +2049,7 @@
     }, DL_BAR_AUTO_HIDE_MS);
   }
 
-  // ---- Popup → new tab ----
+  // ---- Popup â†’ new tab ----
 
   function openPopupUrlInNewTab(url, parentTab) {
     url = String(url || '').trim();
@@ -1328,7 +2114,9 @@
 
     state.tabs.push(tab);
     state.activeTabId = tabId;
+    state.showBrowserHome = false;
     renderTabs();
+    renderBrowserHome();
     renderContinue();
 
     if (!opts.silentToast) {
@@ -1336,11 +2124,11 @@
     }
 
     // BUILD_WCV: create WebContentsView in main process
-    api.webTabs.create({ url: startUrl }).then(function (res) {
+    webTabs.create({ url: startUrl }).then(function (res) {
       if (res && res.ok && res.tabId) {
         tab.mainTabId = res.tabId;
         // Activate this tab's view (show it, hide others)
-        api.webTabs.activate({ tabId: res.tabId }).catch(function () {});
+        webTabs.activate({ tabId: res.tabId }).catch(function () {});
         // Report bounds after a frame so layout is settled
         setTimeout(reportBoundsForActiveTab, 50);
       }
@@ -1352,13 +2140,15 @@
   // BUILD_WCV: activateTab uses IPC instead of CSS visibility
   function activateTab(tabId) {
     state.activeTabId = tabId;
+    state.showBrowserHome = false;
     var tab = getActiveTab();
     if (tab && tab.mainTabId) {
-      api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
+      webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
       // Defer bounds report to let layout settle
       setTimeout(reportBoundsForActiveTab, 30);
     }
     renderTabs();
+    renderBrowserHome();
     updateNavButtons();
     updateUrlDisplay();
     syncLoadBar();
@@ -1397,7 +2187,7 @@
 
     // BUILD_WCV: destroy view in main process
     if (tab.mainTabId) {
-      api.webTabs.close({ tabId: tab.mainTabId }).catch(function () {});
+      webTabs.close({ tabId: tab.mainTabId }).catch(function () {});
     }
 
     state.tabs.splice(idx, 1);
@@ -1417,7 +2207,13 @@
     }
 
     if (!state.tabs.length && state.browserOpen) {
-      closeBrowser();
+      state.activeTabId = null;
+      state.showBrowserHome = true;
+      webTabs.hideAll().catch(function () {});
+      renderBrowserHome();
+      updateUrlDisplay();
+      updateNavButtons();
+      syncLoadBar();
     }
 
     renderSources();
@@ -1429,7 +2225,10 @@
     }
     state.tabs = [];
     state.activeTabId = null;
+    state.showBrowserHome = !!state.browserOpen;
+    webTabs.hideAll().catch(function () {});
     renderTabs();
+    renderBrowserHome();
     renderSources();
     renderSourcesGrid();
     renderContinue();
@@ -1439,7 +2238,7 @@
   // BUILD_WCV: nav state from cached tab properties (updated via IPC events)
   function updateNavButtons() {
     var tab = getActiveTab();
-    if (!tab) {
+    if (!tab || state.showBrowserHome) {
       if (el.navBack) el.navBack.disabled = true;
       if (el.navForward) el.navForward.disabled = true;
       return;
@@ -1455,7 +2254,7 @@
       if (document.activeElement === el.urlDisplay) return;
     } catch (e) {}
     var tab = getActiveTab();
-    var u = (tab && tab.url) ? tab.url : '';
+    var u = (tab && !state.showBrowserHome && tab.url) ? tab.url : '';
     if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = u;
     else el.urlDisplay.textContent = u;
     setOmniIconForUrl(u);
@@ -1464,11 +2263,17 @@
   // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
 
   function applySplitLayout() {
+    if (state.showBrowserHome) {
+      webTabs.hideAll().catch(function () {});
+      renderBrowserHome();
+      return;
+    }
+
     if (!state.split) {
       // Unsplit: just activate the current tab normally
       var tab = getActiveTab();
       if (tab && tab.mainTabId) {
-        api.webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
+        webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
         setTimeout(reportBoundsForActiveTab, 30);
       }
       return;
@@ -1512,13 +2317,17 @@
   }
 
   function openTabPicker() {
-    // BUILD_WEB_PARITY: simple behavior — send user back to Home picker
-    if (state.browserOpen) {
-      closeBrowser();
-      showToast('Pick a source');
-    } else {
-      if (el.homeView) el.homeView.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    state.showBrowserHome = true;
+    if (!state.browserOpen) {
+      openHome();
+      return;
     }
+    webTabs.hideAll().catch(function () {});
+    renderBrowserHome();
+    updateUrlDisplay();
+    updateNavButtons();
+    syncLoadBar();
+    showToast('Pick a source');
   }
 
   // ---- Add source dialog ----
@@ -1687,7 +2496,7 @@
       e.preventDefault();
       var t0 = getActiveTab();
       if (t0 && t0.mainTabId) {
-        api.webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
+        webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
       }
       return;
     }
@@ -1716,7 +2525,7 @@
       e.preventDefault();
       var tab = getActiveTab();
       if (tab && tab.canGoBack && tab.mainTabId) {
-        api.webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+        webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
       } else {
         closeBrowser();
       }
@@ -1728,13 +2537,13 @@
       if (state.browserOpen) {
         var t = getActiveTab();
         if (t && t.mainTabId) {
-          api.webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {});
-          showToast('Reloading…');
+          webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {});
+          showToast('Reloadingâ€¦');
         }
       } else {
         loadSources();
         loadDestinations();
-        showToast('Refreshing sources…');
+        showToast('Refreshing sourcesâ€¦');
       }
       return;
     }
@@ -1832,6 +2641,26 @@
       });
     }
 
+    if (el.browserHomeGrid) {
+      el.browserHomeGrid.addEventListener('click', function (e) {
+        var target = e.target;
+        while (target && target !== el.browserHomeGrid && !target.getAttribute('data-source-id')) {
+          target = target.parentNode;
+        }
+        if (!target || target === el.browserHomeGrid) return;
+        var sourceId = target.getAttribute('data-source-id');
+        var src = getSourceById(sourceId);
+        if (!src) return;
+        openBrowser(src);
+      });
+    }
+
+    if (el.browserHomeAddSourceBtn) {
+      el.browserHomeAddSourceBtn.onclick = function () {
+        openAddSourceDialog(null);
+      };
+    }
+
     if (el.browserBackBtn) {
       el.browserBackBtn.onclick = function () {
         closeBrowser();
@@ -1843,7 +2672,7 @@
       el.navBack.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+          webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
         }
       };
     }
@@ -1852,7 +2681,7 @@
       el.navForward.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
+          webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
         }
       };
     }
@@ -1861,8 +2690,8 @@
       el.navReload.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
-          showToast('Reloading…');
+          webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
+          showToast('Reloadingâ€¦');
         }
       };
     }
@@ -1871,14 +2700,14 @@
       el.navHome.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
+          webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
         }
       };
     }
 
     // Chrome-ish omnibox behavior
     if (el.urlDisplay) {
-      try { el.urlDisplay.setAttribute('placeholder', 'Search Google or type a URL'); } catch (e) {}
+      syncOmniPlaceholder();
 
       el.urlDisplay.addEventListener('focus', function () {
         try { this.select(); } catch (e) {}
@@ -1886,13 +2715,22 @@
 
       el.urlDisplay.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
-          var tab = getActiveTab();
-          if (!tab || !tab.mainTabId) return;
           var resolved = resolveOmniInputToUrl(el.urlDisplay.value);
           if (!resolved) return;
-          api.webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: resolved }).catch(function () {});
+          var tab = getActiveTab();
+          if (!tab || !tab.mainTabId) {
+            var src = {
+              id: 'omni_' + Date.now(),
+              name: siteNameFromUrl(resolved) || 'New Tab',
+              url: resolved,
+              color: '#555'
+            };
+            createTab(src, resolved, { silentToast: true });
+          } else {
+            webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: resolved }).catch(function () {});
+          }
           try { el.urlDisplay.blur(); } catch (err) {}
-          showToast('Loading…');
+          showToast('Loadingâ€¦');
           e.preventDefault();
           return;
         }
@@ -1932,8 +2770,20 @@
     if (el.dlClearBtn) {
       el.dlClearBtn.onclick = function (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        if (api.webSources && api.webSources.clearDownloadHistory) {
+          api.webSources.clearDownloadHistory().then(function () {
+            showToast('Downloads cleared');
+            loadDownloadHistory();
+            closeDownloadsPanel();
+          }).catch(function () {
+            showToast('Failed to clear downloads');
+          });
+          return;
+        }
         state.downloads = [];
         renderDownloadsPanel();
+        renderHubDirectActive();
+        renderHubDownloadHistory();
         closeDownloadsPanel();
         showToast('Downloads cleared');
       };
@@ -1961,7 +2811,7 @@
       };
     }
 
-    // FIX-WEB-MODE: right-click on library home → paste link as source
+    // FIX-WEB-MODE: right-click on library home â†’ paste link as source
     if (el.homeView) {
       el.homeView.addEventListener('contextmenu', function (e) {
         // Don't hijack right-click on source cards (they have their own menu)
@@ -1975,7 +2825,7 @@
         var items = [
           { label: 'Add source\u2026', onClick: function () { openAddSourceDialog(null); } },
         ];
-        // Read clipboard — async, so build menu after
+        // Read clipboard â€” async, so build menu after
         var clipPromise = null;
         try {
           if (navigator.clipboard && navigator.clipboard.readText) {
@@ -2016,6 +2866,149 @@
       closeDownloadsPanel();
     }, true);
 
+    if (el.hubDirectActiveList) {
+      el.hubDirectActiveList.addEventListener('click', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t) return;
+        var actionEl = t.closest ? t.closest('[data-direct-action]') : null;
+        if (actionEl) {
+          var action = String(actionEl.getAttribute('data-direct-action') || '');
+          var id = String(actionEl.getAttribute('data-direct-id') || '');
+          if (!id || !api.webSources) return;
+          if (action === 'pause' && api.webSources.pauseDownload) {
+            api.webSources.pauseDownload({ id: id }).catch(function () {});
+          } else if (action === 'resume' && api.webSources.resumeDownload) {
+            api.webSources.resumeDownload({ id: id }).catch(function () {});
+          } else if (action === 'cancel' && api.webSources.cancelDownload) {
+            api.webSources.cancelDownload({ id: id }).catch(function () {});
+          }
+          return;
+        }
+      });
+    }
+
+    if (el.hubTorrentActiveList) {
+      el.hubTorrentActiveList.addEventListener('click', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t) return;
+        var actionEl = t.closest ? t.closest('[data-torrent-action]') : null;
+        if (!actionEl || !api.webTorrent) return;
+        var action = String(actionEl.getAttribute('data-torrent-action') || '');
+        var id = String(actionEl.getAttribute('data-torrent-id') || '');
+        if (!id) return;
+        if (action === 'pause' && api.webTorrent.pause) {
+          api.webTorrent.pause({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+        } else if (action === 'resume' && api.webTorrent.resume) {
+          api.webTorrent.resume({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+        } else if (action === 'cancel' && api.webTorrent.cancel) {
+          api.webTorrent.cancel({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+        }
+      });
+    }
+
+    if (el.hubDownloadHistoryList) {
+      el.hubDownloadHistoryList.addEventListener('click', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t) return;
+        var rm = t.closest ? t.closest('[data-unified-remove-id]') : null;
+        if (rm) {
+          var rid = String(rm.getAttribute('data-unified-remove-id') || '');
+          if (!rid) return;
+          var split = rid.split(':');
+          if (split.length < 2) return;
+          var transport = split[0];
+          var rawId = split.slice(1).join(':');
+          if (transport === 'direct' && api.webSources && api.webSources.removeDownloadHistory) {
+            api.webSources.removeDownloadHistory({ id: rawId }).then(function () { loadDownloadHistory(); }).catch(function () {});
+          } else if (transport === 'torrent' && api.webTorrent && api.webTorrent.removeHistory) {
+            api.webTorrent.removeHistory({ id: rawId }).then(function () { refreshTorrentState(); }).catch(function () {});
+          }
+          return;
+        }
+
+        var open = t.closest ? t.closest('[data-unified-open-id]') : null;
+        if (!open) return;
+        var oid = String(open.getAttribute('data-unified-open-id') || '');
+        if (!oid || oid.indexOf('direct:') !== 0) return;
+        var directId = oid.slice('direct:'.length);
+        for (var i = 0; i < state.downloads.length; i++) {
+          var d = state.downloads[i];
+          if (!d || String(d.id) !== directId) continue;
+          if (d.destination && api.shell && api.shell.revealPath) {
+            try { api.shell.revealPath(d.destination); } catch (e) {}
+          }
+          break;
+        }
+      });
+    }
+
+    if (el.hubDownloadHistoryClearBtn) {
+      el.hubDownloadHistoryClearBtn.onclick = function () {
+        var p1 = (api.webSources && api.webSources.clearDownloadHistory) ? api.webSources.clearDownloadHistory() : Promise.resolve();
+        var p2 = (api.webTorrent && api.webTorrent.clearHistory) ? api.webTorrent.clearHistory() : Promise.resolve();
+        Promise.all([p1, p2]).then(function () {
+          showToast('Download history cleared');
+          loadDownloadHistory();
+          refreshTorrentState();
+        }).catch(function () {
+          showToast('Failed to clear history');
+        });
+      };
+    }
+
+    if (el.hubBrowseSearch) {
+      el.hubBrowseSearch.addEventListener('input', function () {
+        state.browsingHistoryQuery = String(el.hubBrowseSearch.value || '').trim();
+        if (state.browseSearchTimer) {
+          try { clearTimeout(state.browseSearchTimer); } catch (e) {}
+          state.browseSearchTimer = null;
+        }
+        state.browseSearchTimer = setTimeout(function () {
+          state.browseSearchTimer = null;
+          loadBrowsingHistory();
+        }, 180);
+      });
+    }
+
+    if (el.hubBrowseHistoryClearBtn) {
+      el.hubBrowseHistoryClearBtn.onclick = function () {
+        if (!api.webHistory || !api.webHistory.clear) return;
+        api.webHistory.clear({}).then(function () {
+          loadBrowsingHistory();
+          showToast('Browsing history cleared');
+        }).catch(function () {
+          showToast('Failed to clear browsing history');
+        });
+      };
+    }
+
+    if (el.hubBrowseHistoryList) {
+      el.hubBrowseHistoryList.addEventListener('click', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t) return;
+        var rm = t.closest ? t.closest('[data-history-remove-id]') : null;
+        if (rm) {
+          var rid = String(rm.getAttribute('data-history-remove-id') || '');
+          if (!rid || !api.webHistory || !api.webHistory.remove) return;
+          api.webHistory.remove({ id: rid }).then(function () { loadBrowsingHistory(); }).catch(function () {});
+          return;
+        }
+
+        var open = t.closest ? t.closest('[data-history-open-id]') : null;
+        if (!open) return;
+        var url = String(open.getAttribute('data-history-open-id') || '').trim();
+        if (!url) return;
+
+        var src = {
+          id: 'history',
+          name: siteNameFromUrl(url) || 'History',
+          url: url,
+          color: '#667085'
+        };
+        openBrowser(src);
+      });
+    }
+
     // Download events
     if (api.webSources.getDownloadHistory) {
       loadDownloadHistory();
@@ -2025,6 +3018,7 @@
       el.homeDlClearBtn.onclick = function () {
         api.webSources.clearDownloadHistory().then(function () {
           showToast('Downloads cleared');
+          loadDownloadHistory();
         }).catch(function () {});
       };
     }
@@ -2056,6 +3050,8 @@
         syncDownloadIndicator();
         renderDownloadsPanel();
         renderHomeDownloads();
+        renderHubDirectActive();
+        renderHubDownloadHistory();
       });
     }
 
@@ -2124,7 +3120,7 @@
       });
     }
 
-    // BUILD_WCV: Popup → new tab (main-process handler now sends tabId instead of wcId)
+    // BUILD_WCV: Popup â†’ new tab (main-process handler now sends tabId instead of wcId)
     if (api.webSources.onPopupOpen) {
       api.webSources.onPopupOpen(function (info) {
         var url = info && info.url ? String(info.url) : '';
@@ -2145,33 +3141,37 @@
     });
 
     // BUILD_WCV: Listen to main-process tab events
-    api.webTabs.onTitleUpdated(function (data) {
+    webTabs.onTitleUpdated(function (data) {
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.title = data.title || tab.sourceName || 'Tab';
       renderTabs();
+      renderBrowserHome();
       renderContinue();
     });
 
-    api.webTabs.onUrlUpdated(function (data) {
+    webTabs.onUrlUpdated(function (data) {
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
+      maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
       }
+      renderBrowserHome();
       renderContinue();
     });
 
-    api.webTabs.onLoading(function (data) {
+    webTabs.onLoading(function (data) {
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.loading = !!data.loading;
       renderTabs();
+      renderBrowserHome();
       syncLoadBar();
     });
 
-    api.webTabs.onNavState(function (data) {
+    webTabs.onNavState(function (data) {
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.canGoBack = !!data.canGoBack;
@@ -2180,6 +3180,51 @@
         updateNavButtons();
       }
     });
+
+    if (api.webHistory && api.webHistory.onUpdated) {
+      api.webHistory.onUpdated(function () {
+        loadBrowsingHistory();
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onUpdated) {
+      api.webTorrent.onUpdated(function (payload) {
+        if (payload && Array.isArray(payload.torrents)) {
+          state.torrentActive = [];
+          for (var ti = 0; ti < payload.torrents.length; ti++) {
+            var ta = normalizeTorrentEntry(payload.torrents[ti]);
+            if (ta) state.torrentActive.push(ta);
+          }
+        }
+        if (payload && Array.isArray(payload.history)) {
+          state.torrentHistory = [];
+          for (var hi = 0; hi < payload.history.length; hi++) {
+            var th = normalizeTorrentEntry(payload.history[hi]);
+            if (th) state.torrentHistory.push(th);
+          }
+        }
+        renderHubTorrentActive();
+        renderHubDownloadHistory();
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onStarted) {
+      api.webTorrent.onStarted(function () {
+        refreshTorrentState();
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onProgress) {
+      api.webTorrent.onProgress(function () {
+        renderHubTorrentActive();
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onCompleted) {
+      api.webTorrent.onCompleted(function () {
+        refreshTorrentState();
+      });
+    }
 
     // BUILD_WCV: ResizeObserver for bounds reporting
     if (el.viewContainer && typeof ResizeObserver !== 'undefined') {
@@ -2195,10 +3240,16 @@
     }
 
     // Init
+    loadBrowserSettings();
     loadSources();
     loadDestinations();
+    loadBrowsingHistory();
+    refreshTorrentState();
     syncDownloadIndicator();
     renderDownloadsPanel();
+    renderHomeDownloads();
+    renderBrowserHome();
+    renderHubAll();
   }
 
   // ---- Init ----
@@ -2212,7 +3263,12 @@
   // Expose openBrowser globally so Comics/Books sidebars can call it
   try {
     window.Tanko = window.Tanko || {};
-    window.Tanko.web = { openBrowser: openBrowser };
+    window.Tanko.web = {
+      openBrowser: openBrowser,
+      openHome: openHome,
+      openAddSourceDialog: function () { openAddSourceDialog(null); }
+    };
   } catch (e) {}
 
 })();
+

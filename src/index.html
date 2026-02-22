@@ -72,6 +72,7 @@ COMMON ANCHORS
           <svg class="themeIcon themeIcon--moon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="display:none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
         </button>
         <sl-button id="hiddenSeriesBtn" class="btn btn-ghost btn-sm" size="small" title="Hidden series">Hidden</sl-button>
+        <button id="webHubToggleBtn" class="iconBtn" title="Tankoban Browser Hub" aria-label="Tankoban Browser Hub">Web</button>
 
         <!-- Global search across library -->
         <div class="globalSearchWrap compact">
@@ -96,6 +97,62 @@ COMMON ANCHORS
 
     <!-- Off-canvas library drawer backdrop (used when sidebar is hidden) -->
     <div id="libDrawerBackdrop" class="drawerBackdrop" aria-hidden="true"></div>
+    <div id="webHubBackdrop" class="webHubBackdrop" aria-hidden="true"></div>
+
+    <!-- Global right browser hub drawer -->
+    <aside id="webHubPanel" class="webHubPanel" aria-label="Tankoban Browser Hub" aria-hidden="true">
+      <div class="webHubTop">
+        <div class="webHubTitle">Tankoban Browser</div>
+        <button id="webHubCloseBtn" class="btn btn-ghost btn-sm" title="Close">Close</button>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubBrowserToggle" class="webHubSectionToggle" type="button" data-target="webHubBrowserBody" data-collapse-key="browser">Browser</button>
+        <div id="webHubBrowserBody" class="webHubSectionBody">
+          <button id="webHubOpenBrowserBtn" class="navBtn" type="button">Open Tankoban Browser</button>
+          <button id="webHubAddSourceBtn" class="navBtn" type="button">Add source...</button>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubDirectToggle" class="webHubSectionToggle" type="button" data-target="webHubDirectBody" data-collapse-key="directActive">Active Direct Downloads</button>
+        <div id="webHubDirectBody" class="webHubSectionBody">
+          <div id="webHubDirectActiveList" class="webHubList"></div>
+          <div id="webHubDirectActiveEmpty" class="navMuted">No active direct downloads.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubTorrentToggle" class="webHubSectionToggle" type="button" data-target="webHubTorrentBody" data-collapse-key="torrentActive">Active Torrent Downloads</button>
+        <div id="webHubTorrentBody" class="webHubSectionBody">
+          <div id="webHubTorrentActiveList" class="webHubList"></div>
+          <div id="webHubTorrentActiveEmpty" class="navMuted">No active torrent downloads.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubHistoryToggle" class="webHubSectionToggle" type="button" data-target="webHubHistoryBody" data-collapse-key="downloadHistory">Download History</button>
+        <div id="webHubHistoryBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <button id="webHubDownloadHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+          </div>
+          <div id="webHubDownloadHistoryList" class="webHubList"></div>
+          <div id="webHubDownloadHistoryEmpty" class="navMuted">No download history.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubBrowseToggle" class="webHubSectionToggle" type="button" data-target="webHubBrowseBody" data-collapse-key="browsingHistory">Browsing History</button>
+        <div id="webHubBrowseBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <input id="webHubBrowseSearch" class="search webHubSearch" type="search" placeholder="Search history..." autocomplete="off" />
+            <button id="webHubBrowseHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+          </div>
+          <div id="webHubBrowseHistoryList" class="webHubList"></div>
+          <div id="webHubBrowseHistoryEmpty" class="navMuted">No browsing history.</div>
+        </div>
+      </div>
+    </aside>
 
     <main>
       <!-- Library view -->
@@ -132,25 +189,6 @@ COMMON ANCHORS
               </div>
             </div>
 
-            <div class="navSep"></div>
-
-            <div class="navSection">
-              <div class="navHeader navHeaderCollapsible" id="comicsSourcesHeader">&#9662; Sources</div>
-              <div class="navItems" id="comicsSourcesItems">
-                <div id="comicsSourcesList" class="folderTree" role="list" aria-label="Download sources"></div>
-                <sl-button id="comicsAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
-              </div>
-            </div>
-
-            <div class="navSep"></div>
-
-            <div class="navSection">
-              <div class="navHeader navHeaderCollapsible" id="comicsDownloadsHeader">&#9662; Downloads</div>
-              <div class="navItems" id="comicsDownloadsItems">
-                <div id="comicsDownloadsList" class="sidebarDlList" role="list"></div>
-                <div id="comicsDownloadsEmpty" class="navMuted">No downloads yet.</div>
-              </div>
-            </div>
           </aside>
 
           <div class="libContent">
@@ -292,11 +330,10 @@ COMMON ANCHORS
 
             <div class="navSep"></div>
 
-            <!-- FEAT-AUDIOBOOK: Audiobook folder management -->
-            <div class="navSection">
+            <!-- FEAT-AUDIOBOOK: Audiobook folders (auto-detected from roots) -->
+            <div class="navSection" id="booksAudiobookSection" style="display:none">
               <div class="navHeader">Audiobooks</div>
               <div class="navItems">
-                <sl-button id="booksAddAudiobookRootBtn" class="navBtn" title="Add audiobook root folder">Add audiobook root...</sl-button>
                 <div id="booksAudiobookFoldersList" class="folderTree" role="list" aria-label="Audiobook folders"></div>
               </div>
             </div>
@@ -313,25 +350,6 @@ COMMON ANCHORS
               </div>
             </div>
 
-            <div class="navSep"></div>
-
-            <div class="navSection">
-              <div class="navHeader navHeaderCollapsible" id="booksSourcesHeader">&#9662; Sources</div>
-              <div class="navItems" id="booksSourcesItems">
-                <div id="booksSourcesList" class="folderTree" role="list" aria-label="Download sources"></div>
-                <sl-button id="booksAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
-              </div>
-            </div>
-
-            <div class="navSep"></div>
-
-            <div class="navSection">
-              <div class="navHeader navHeaderCollapsible" id="booksDownloadsHeader">&#9662; Downloads</div>
-              <div class="navItems" id="booksDownloadsItems">
-                <div id="booksDownloadsList" class="sidebarDlList" role="list"></div>
-                <div id="booksDownloadsEmpty" class="navMuted">No downloads yet.</div>
-              </div>
-            </div>
           </aside>
 
           <div class="libContent">
@@ -417,6 +435,42 @@ COMMON ANCHORS
                     <div id="booksEpisodesGrid" class="volTableBody" role="rowgroup"></div>
                     <div id="booksEpisodesEmpty" class="muted tiny hidden" style="padding:10px">No volumes found in this folder.</div>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- FEAT-AUDIOBOOK: Audiobook detail view (mirrors booksShowView) -->
+            <div id="booksAudiobookShowView" class="seriesView hidden">
+              <div class="panel seriesPanel seriesDetailPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Chapters</div>
+                  <div class="crumb" id="abCrumb">
+                    <sl-button id="abBackBtn" class="btn btn-ghost btn-sm" size="small">Back</sl-button>
+                    <span id="abCrumbText" class="muted tiny"></span>
+                  </div>
+                </div>
+
+                <!-- Audiobook info header: cover + meta + play button -->
+                <div id="abDetailHeader" class="abDetailHeader">
+                  <div class="abDetailCoverWrap">
+                    <img id="abDetailCover" class="abDetailCoverImg" alt="Audiobook cover" />
+                  </div>
+                  <div class="abDetailMeta">
+                    <div id="abDetailInfo" class="muted tiny"></div>
+                    <sl-button id="abDetailPlayBtn" class="navBtn">&#9654; Play</sl-button>
+                  </div>
+                </div>
+
+                <!-- Chapter table (columns: #, Chapter, Duration, Progress) -->
+                <div class="volTableWrap" role="table" aria-label="Chapters">
+                  <div id="abTableHead" class="volTableHead" role="row">
+                    <div class="cell num" role="columnheader">#</div>
+                    <div class="cell title" role="columnheader">Chapter</div>
+                    <div class="cell duration" role="columnheader">Duration</div>
+                    <div class="cell progress" role="columnheader">Progress</div>
+                  </div>
+                  <div id="abDetailChapterList" class="volTableBody" role="rowgroup"></div>
+                  <div id="abDetailEmpty" class="muted tiny hidden" style="padding:10px">No chapters found.</div>
                 </div>
               </div>
             </div>
@@ -1594,6 +1648,36 @@ COMMON ANCHORS
         </div>
       </div>
 
+      <div id="downloadDestPickerOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Choose download destination">
+        <div class="settingsCard downloadDestPickerCard">
+          <div class="settingsTop">
+            <div id="downloadDestPickerTitle" class="settingsTitle">Choose Download Folder</div>
+            <button id="downloadDestPickerCancelBtn" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+          </div>
+          <div id="downloadDestPickerSubtext" class="downloadDestPickerSub">Pick a folder inside Books, Comics, or Videos.</div>
+
+          <div id="downloadDestPickerModes" class="downloadDestPickerModes" role="tablist" aria-label="Library mode">
+            <button class="downloadDestPickerMode active" type="button" data-mode="books">Books</button>
+            <button class="downloadDestPickerMode" type="button" data-mode="comics">Comics</button>
+            <button class="downloadDestPickerMode" type="button" data-mode="videos">Videos</button>
+          </div>
+
+          <div class="downloadDestPickerRootRow">
+            <label class="settingsLabel" for="downloadDestPickerRootSelect">Root Folder</label>
+            <select id="downloadDestPickerRootSelect" class="select"></select>
+          </div>
+
+          <div id="downloadDestPickerPath" class="downloadDestPickerPath"></div>
+          <div id="downloadDestPickerList" class="folderTree downloadDestPickerList" role="list"></div>
+          <div id="downloadDestPickerEmpty" class="folderTreeEmpty hidden">No folders available in this mode.</div>
+
+          <div class="settingsActions">
+            <button id="downloadDestPickerUpBtn" class="btn btn-ghost btn-sm" type="button">Up</button>
+            <button id="downloadDestPickerUseBtn" class="btn" type="button">Download Here</button>
+          </div>
+        </div>
+      </div>
+
       <!-- BUILD_WEB_HOME: Web browser view (overlay, hidden by default) -->
       <div id="webBrowserView" class="webBrowserView hidden">
         <div class="webBrowserToolbar">
@@ -1639,6 +1723,14 @@ COMMON ANCHORS
         </div>
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
         <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
+        <div id="webBrowserHomePanel" class="webBrowserHomePanel hidden" aria-label="Browser home">
+          <div class="webBrowserHomeHead">
+            <div class="webBrowserHomeTitle">Sources</div>
+            <button id="webBrowserHomeAddSourceBtn" class="btn btn-ghost btn-sm" type="button">Add source...</button>
+          </div>
+          <div id="webBrowserHomeGrid" class="webBrowserHomeGrid"></div>
+          <div id="webBrowserHomeEmpty" class="muted tiny hidden">No sources yet. Add one to get started.</div>
+        </div>
         <div id="webViewContainer" class="webViewContainer"></div>
         <!-- FIX-WEB-DL: Chrome-like download bottom bar -->
         <div id="webDlBar" class="webDlBar hidden" role="status" aria-live="polite">

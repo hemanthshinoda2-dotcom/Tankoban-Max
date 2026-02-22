@@ -913,6 +913,31 @@
       } catch (e) {}
     });
 
+    // FEAT-AUDIOBOOK: reader toolbar audiobook button (smart detect)
+    els.audiobookBtn && els.audiobookBtn.addEventListener('click', function () {
+      // 1. If audiobook already loaded in reader — toggle play/pause
+      var abPlayer = window.booksReaderAudiobook;
+      if (abPlayer && abPlayer.isLoaded && abPlayer.isLoaded()) {
+        if (typeof abPlayer.togglePlayPause === 'function') {
+          abPlayer.togglePlayPause();
+        }
+        return;
+      }
+      // 2. If pairing exists but not loaded — auto-load paired audiobook
+      var pairing = window.booksReaderAudiobookPairing;
+      if (pairing && typeof pairing.hasSavedPairing === 'function' && pairing.hasSavedPairing()) {
+        if (typeof pairing.triggerAutoLoad === 'function') {
+          pairing.triggerAutoLoad();
+        }
+        return;
+      }
+      // 3. No pairing — open sidebar Audio tab
+      var sidebar = window.booksReaderSidebar;
+      if (sidebar && typeof sidebar.openTab === 'function') {
+        sidebar.openTab('audio');
+      }
+    });
+
     // BUILD_OVERHAUL: host-level dict/annot handlers live in dedicated modules
 
     // Bus events

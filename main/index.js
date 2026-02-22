@@ -1,5 +1,5 @@
-/*
-TankobanPlus — Main Boot (Build 77, Phase 3)
+﻿/*
+TankobanPlus â€” Main Boot (Build 77, Phase 3)
 
 OWNERSHIP: App lifecycle and window creation.
 All IPC handlers are in main/ipc/index.js.
@@ -54,6 +54,100 @@ function ensureCrossOriginIsolationHeaders() {
 try {
   app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer');
 } catch {}
+
+let __didInstallWebModeSecurity = false;
+function isAllowedWebModeTopLevelUrl(targetUrl) {
+  var raw = String(targetUrl || '').trim();
+  if (!raw) return false;
+  if (raw === 'about:blank') return true;
+  try {
+    var protocol = new URL(raw).protocol.toLowerCase();
+    return protocol === 'http:' || protocol === 'https:' || protocol === 'magnet:';
+  } catch {
+    return false;
+  }
+}
+
+function ensureWebModeSecurity() {
+  if (__didInstallWebModeSecurity) return;
+  __didInstallWebModeSecurity = true;
+
+  var ses = null;
+  try { ses = session.fromPartition('persist:webmode'); } catch {}
+  if (!ses) return;
+
+  const blockedPermissions = new Set([
+    'media', 'mediaKeySystem', 'audioCapture', 'videoCapture',
+    'camera', 'microphone', 'geolocation', 'notifications',
+    'midi', 'midiSysex', 'pointerLock', 'fullscreen',
+    'openExternal', 'clipboard-read', 'clipboard-sanitized-write',
+  ]);
+
+  try {
+    ses.setPermissionRequestHandler((_wc, permission, callback) => {
+      const key = String(permission || '').trim();
+      if (blockedPermissions.has(key)) return callback(false);
+      return callback(false);
+    });
+  } catch {}
+
+  try {
+    ses.setPermissionCheckHandler((_wc, permission) => {
+      const key = String(permission || '').trim();
+      if (blockedPermissions.has(key)) return false;
+      return false;
+    });
+  } catch {}
+
+  try {
+    ses.webRequest.onBeforeRequest((details, callback) => {
+      try {
+        const kind = String(details && details.resourceType || '');
+        const url = String(details && details.url || '');
+        if (kind === 'mainFrame' && !isAllowedWebModeTopLevelUrl(url)) {
+          callback({ cancel: true });
+          return;
+        }
+      } catch {}
+      callback({ cancel: false });
+    });
+  } catch {}
+
+  try {
+    app.on('web-contents-created', (_event, contents) => {
+      try {
+        if (!contents || contents.getType() !== 'webview') return;
+      } catch {
+        return;
+      }
+
+      try {
+        contents.setWindowOpenHandler(function (details) {
+          const target = details && details.url ? String(details.url) : '';
+          if (!isAllowedWebModeTopLevelUrl(target)) return { action: 'deny' };
+          // Popups are handled by renderer tab logic; never spawn native popup windows.
+          return { action: 'deny' };
+        });
+      } catch {}
+
+      try {
+        contents.on('will-navigate', (event, navUrl) => {
+          if (!isAllowedWebModeTopLevelUrl(navUrl)) {
+            try { event.preventDefault(); } catch {}
+          }
+        });
+      } catch {}
+
+      try {
+        contents.on('will-redirect', (event, navUrl) => {
+          if (!isAllowedWebModeTopLevelUrl(navUrl)) {
+            try { event.preventDefault(); } catch {}
+          }
+        });
+      } catch {}
+    });
+  } catch {}
+}
 
 
 // FIND_THIS:TANKOBAN_RENAME_PRESERVE_DATA (Tankoban Build 1A)
@@ -318,7 +412,7 @@ function createWindow(opts = {}) {
       // Keep the renderer sandbox disabled so IPC + dialogs + persisted libraries work reliably.
       sandbox: false,
       devTools: __allowDevTools,
-      // BUILD_WCV: webviewTag removed — web browser uses WebContentsView now
+      webviewTag: true,
     },
   });
 
@@ -390,7 +484,7 @@ function createWindow(opts = {}) {
 
   w.loadFile(path.join(APP_ROOT, 'src', 'index.html'), openBookId ? { query: { book: openBookId } } : {})
     .then(() => {
-      // FIX-WIN-CTRL: show first, then maximize — maximize before show is unreliable on Windows 11
+      // FIX-WIN-CTRL: show first, then maximize â€” maximize before show is unreliable on Windows 11
       w.show();
       w.maximize();
       // BUILD14: Log ready state
@@ -591,6 +685,7 @@ app.whenReady().then(async () => {
 
   // BUILD110: make SharedArrayBuffer usable (helps mpv shared surface avoid per-frame copies).
   try { ensureCrossOriginIsolationHeaders(); } catch {}
+  try { ensureWebModeSecurity(); } catch {}
 
   // Register IPC handlers early (needed for player_core even in launcher mode).
   // Safe with win=null: the IPC registry uses optional chaining for window access.
@@ -644,3 +739,4 @@ app.on('window-all-closed', () => {
 // Note: before-quit cleanup handled in IPC registry where state lives
 
 }; // end boot
+

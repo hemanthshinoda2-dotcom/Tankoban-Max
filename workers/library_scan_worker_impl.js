@@ -172,8 +172,13 @@ async function buildLibraryIndex(seriesFolders) {
     if (indexPath) {
       try {
         fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-    // TRACE:PERSIST_WRITE fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
-        fs.writeFileSync(indexPath, JSON.stringify(idx, null, 2), 'utf-8');
+        // TRACE:PERSIST_WRITE — atomic temp+rename
+        var tmp = indexPath + '.' + process.pid + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(idx, null, 2), 'utf-8');
+        try { fs.renameSync(tmp, indexPath); } catch (_) {
+          try { fs.copyFileSync(tmp, indexPath); } catch (_) {}
+          try { fs.unlinkSync(tmp); } catch (_) {}
+        }
       } catch {}
     }
 

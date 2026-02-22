@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; media-src 'self' file: blob:;">
+  <title>Tankoban Player</title>
+  <link rel="stylesheet" href="styles/player.css">
+</head>
+<body>
+  <!-- Stage: fills entire window, stable geometry -->
+  <div id="playerStage">
+    <!-- Video surface -->
+    <video id="videoSurface" playsinline></video>
+
+    <!-- Idle state: shown when no file is loaded -->
+    <div id="idleMessage">
+      <div class="idleTitle">Tankoban Player</div>
+      <button id="openFileBtn">Open Video File</button>
+      <div class="idleHint">or drag &amp; drop a video file</div>
+    </div>
+
+    <!-- Drop zone overlay (shown during drag) -->
+    <div id="dropZone">
+      <span class="dropLabel">Drop video file here</span>
+    </div>
+
+    <!-- Future overlays (hidden, added in later tiers) -->
+    <!-- <div id="topStrip" class="overlay hidden"></div> -->
+    <!-- <div id="bottomHud" class="overlay hidden"></div> -->
+    <!-- <div id="volumeHud" class="overlay hidden"></div> -->
+    <!-- <div id="centerFlash" class="overlay hidden"></div> -->
+    <!-- <div id="toastHud" class="overlay hidden"></div> -->
+    <!-- <div id="tracksDrawer" class="drawer hidden"></div> -->
+    <!-- <div id="playlistDrawer" class="drawer hidden"></div> -->
+  </div>
+
+  <!-- Scripts in dependency order -->
+  <script src="renderer/utils.js"></script>
+  <script src="renderer/player_state.js"></script>
+  <script src="renderer/adapter.js"></script>
+  <script src="renderer/html5_backend.js"></script>
+  <script src="renderer/hud.js"></script>
+  <script src="renderer/top_strip.js"></script>
+  <script src="renderer/volume_hud.js"></script>
+  <script src="renderer/center_flash.js"></script>
+  <script src="renderer/toast.js"></script>
+  <script src="renderer/context_menu.js"></script>
+  <script src="renderer/drawer.js"></script>
+  <script src="renderer/playlist.js"></script>
+  <script src="renderer/tracks_drawer.js"></script>
+  <script src="renderer/diagnostics.js"></script>
+
+  <!-- Boot script: wires everything together -->
+  <script>
+    (function () {
+      'use strict';
+
+      var videoEl = document.getElementById('videoSurface');
+      var idleMessage = document.getElementById('idleMessage');
+      var openFileBtn = document.getElementById('openFileBtn');
+      var dropZone = document.getElementById('dropZone');
+      var adapter = null;
+
+      // ── Create adapter ──
+
+      function initAdapter() {
+        if (adapter) return adapter;
+        adapter = window.TankoPlayer.createAdapter('html5', {
+          videoElement: videoEl,
+        });
+
+        // Log adapter events for debugging
+        adapter.on('ready', function () { console.log('[boot] adapter ready'); });
+        adapter.on('play', function () { console.log('[boot] playing'); });
+        adapter.on('pause', function () { console.log('[boot] paused'); });
+        adapter.on('ended', function () { console.log('[boot] ended'); });
+        adapter.on('error', function (msg) { console.error('[boot] error:', msg); });
+        adapter.on('time', function (t) {
+          // Throttle time logs to every 5s
+          if (Math.floor(t) % 5 === 0 && Math.abs(t - Math.floor(t)) < 0.3) {
+            console.log('[boot] time: %s / %s',
+              window.TankoPlayer.utils.fmtTime(t),
+              window.TankoPlayer.utils.fmtTime(adapter.getDuration())
+            );
+          }
+        });
+
+        // Init overlays
+        window.TankoPlayer.hud.init(adapter);
+        window.TankoPlayer.topStrip.init();
+        window.TankoPlayer.volumeHud.init();
+        window.TankoPlayer.centerFlash.init();
+        window.TankoPlayer.toast.init();
+        window.TankoPlayer.contextMenu.init();
+        window.TankoPlayer.playlist.init(loadFile);
+        window.TankoPlayer.tracksDrawer.init();
+        window.TankoPlayer.diagnostics.init();
+
+        // Center flash on play/pause
+        adapter.on('play', function () {
+          window.TankoPlayer.centerFlash.flash('\u23F8'); // ⏸
+        });
+        adapter.on('pause', function () {
+          window.TankoPlayer.centerFlash.flash('\u25B6'); // ▶
+        });
+
+        // Set top strip title and build playlist when file loads
+        adapter.on('file-loaded', function () {
+          var s = window.TankoPlayer.state.get();
+          if (s.filePath) {
+            var name = s.filePath.replace(/\\/g, '/').split('/').pop();
+            name = name.replace(/\.[^.]+$/, '');
+            window.TankoPlayer.topStrip.setTitle(name);
+            window.TankoPlayer.playlist.buildFromFolder(s.filePath);
+          }
+        });
+
+        // Auto-advance on EOF
+        adapter.on('ended', function () {
+          window.TankoPlayer.playlist.onEnded();
+        });
+
+        // Update debug reference
+        window._adapter = adapter;
+
+        // Apply saved settings to newly created adapter
+        adapter.setVolume(volumePercent / 100);
+        adapter.setMuted(muted);
+        if (currentSpeed !== 1) {
+          adapter.setSpeed(currentSpeed);
+          if (window.TankoPlayer.hud.setSpeedLabel) {
+            window.TankoPlayer.hud.setSpeedLabel(currentSpeed);
+          }
+        }
+
+        return adapter;
+      }
+
+      // ── Load and play a file ──
+
+      function loadFile(filePath) {
+        if (!filePath) return;
+        initAdapter();
+
+        // Hide idle message, show video
+        idleMessage.classList.add('hidden');
+        videoEl.style.display = '';
+
+        // Set window title to filename
+        var filename = filePath.replace(/\\/g, '/').split('/').pop();
+        if (window.PlayerBridge && window.PlayerBridge.setTitle) {
+          window.PlayerBridge.setTitle(filename);
+        }
+
+        console.log('[boot] loading:', filePath);
+        adapter.load(filePath).then(function () {
+          return adapter.play();
+        });
+      }
+
+      // ── Open file dialog ──
+
+      openFileBtn.addEventListener('click', function () {
+        if (window.PlayerBridge && window.PlayerBridge.openFileDialog) {
+          window.PlayerBridge.openFileDialog().then(function (path) {
+            if (path) loadFile(path);
+          });
+        }
+      });
+
+      // ── Drag and drop ──
+
+      document.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('active');
+      });
+
+      document.addEventListener('dragleave', function (e) {
+        // Only deactivate when leaving the window
+        if (e.relatedTarget === null) {
+          dropZone.classList.remove('active');
+        }
+      });
+
+      document.addEventListener('drop', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('active');
+
+        var files = e.dataTransfer && e.dataTransfer.files;
+        if (files && files.length > 0) {
+          var file = files[0];
+          // file.path gives the local filesystem path in Electron
+          if (file.path) {
+            loadFile(file.path);
+          }
+        }
+      });
+
+      // ── Seek helper with toast feedback ──
+
+      function doSeek(seconds) {
+        adapter.seekBy(seconds);
+        window.TankoPlayer.hud.show();
+        window.TankoPlayer.hud.armAutoHide();
+        // Toast: ⟪ 10s / ⟫ 30s
+        var mag = Math.abs(seconds);
+        var delta = mag < 60 ? mag + 's' : window.TankoPlayer.utils.fmtTime(mag);
+        var sym = seconds < 0 ? '\u27EA' : '\u27EB'; // ⟪ / ⟫
+        window.TankoPlayer.toast.show(sym + ' ' + delta);
+      }
+
+      // ── Volume helper ──
+
+      var volumePercent = 100;
+      var muted = false;
+
+      function changeVolume(delta) {
+        var clamp = window.TankoPlayer.utils.clamp;
+        volumePercent = clamp(volumePercent + delta, 0, 100);
+        if (muted) {
+          muted = false;
+          adapter.setMuted(false);
+        }
+        adapter.setVolume(volumePercent / 100);
+        window.TankoPlayer.volumeHud.show(volumePercent);
+        scheduleSettingsSave();
+      }
+
+      function toggleMute() {
+        muted = !muted;
+        adapter.setMuted(muted);
+        window.TankoPlayer.volumeHud.show(muted ? 0 : volumePercent);
+        scheduleSettingsSave();
+      }
+
+      // ── Speed helper ──
+
+      var speedPresets = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
+      var currentSpeed = 1.0;
+
+      // Aspect ratio cycle presets (matches Qt fallback cycle)
+      var aspectPresets = ['auto', '16:9', '4:3', '2.35:1'];
+      var currentAspectIdx = 0;
+
+      // ── Settings persistence (250ms debounce) ──
+
+      var settingsTimer = null;
+
+      function scheduleSettingsSave() {
+        if (settingsTimer) clearTimeout(settingsTimer);
+        settingsTimer = setTimeout(function () {
+          if (window.PlayerBridge && window.PlayerBridge.saveSettings) {
+            window.PlayerBridge.saveSettings({
+              volume: volumePercent,
+              muted: muted,
+              speed: currentSpeed,
+            });
+          }
+        }, 250);
+      }
+
+      // Load saved settings at boot (async — applies before first file load)
+      if (window.PlayerBridge && window.PlayerBridge.loadSettings) {
+        window.PlayerBridge.loadSettings().then(function (settings) {
+          if (!settings) return;
+          if (typeof settings.volume === 'number') {
+            volumePercent = Math.max(0, Math.min(100, settings.volume));
+          }
+          if (typeof settings.muted === 'boolean') {
+            muted = settings.muted;
+          }
+          if (typeof settings.speed === 'number' && settings.speed > 0) {
+            currentSpeed = settings.speed;
+          }
+        });
+      }
+
+      function cycleSpeed(direction) {
+        var idx = speedPresets.indexOf(currentSpeed);
+        if (idx === -1) idx = 3; // default to 1.0×
+        var next = Math.max(0, Math.min(speedPresets.length - 1, idx + direction));
+        setSpeed(speedPresets[next]);
+      }
+
+      function setSpeed(speed) {
+        currentSpeed = speed;
+        adapter.setSpeed(speed);
+        window.TankoPlayer.toast.show('Speed ' + speed.toFixed(2) + '\u00D7');
+        // Update speed chip if it exists
+        if (window.TankoPlayer.hud.setSpeedLabel) {
+          window.TankoPlayer.hud.setSpeedLabel(speed);
+        }
+        scheduleSettingsSave();
+      }
+
+      // ── Go-to-time helper ──
+
+      function goToTime() {
+        var s = window.TankoPlayer.state.get();
+        var currentFmt = window.TankoPlayer.utils.fmtTime(s.timeSec);
+        var input = prompt('Go to time (e.g. 1:23:45 or 83):', currentFmt);
+        if (!input) return;
+        input = input.trim();
+        var seconds = 0;
+        var parts = input.split(':');
+        if (parts.length === 3) {
+          seconds = parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseFloat(parts[2]);
+        } else if (parts.length === 2) {
+          seconds = parseInt(parts[0], 10) * 60 + parseFloat(parts[1]);
+        } else {
+          seconds = parseFloat(input);
+        }
+        if (isFinite(seconds) && seconds >= 0) {
+          adapter.seekTo(seconds);
+          window.TankoPlayer.hud.show();
+          window.TankoPlayer.hud.armAutoHide();
+        }
+      }
+
+      // ── Aspect ratio cycle ──
+
+      function cycleAspect() {
+        currentAspectIdx = (currentAspectIdx + 1) % aspectPresets.length;
+        var aspect = aspectPresets[currentAspectIdx];
+        if (adapter) adapter.setAspectRatio(aspect);
+        var label = aspect === 'auto' ? '\u25AD \u21BA' : '\u25AD ' + aspect;
+        window.TankoPlayer.toast.show(label);
+      }
+
+      // ── Screenshot (canvas capture) ──
+
+      function takeScreenshot() {
+        var videoEl = document.getElementById('videoSurface');
+        if (!videoEl || !videoEl.videoWidth) {
+          window.TankoPlayer.toast.show('No video to capture');
+          return;
+        }
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = videoEl.videoWidth;
+          canvas.height = videoEl.videoHeight;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          var dataUrl = canvas.toDataURL('image/png');
+
+          var s = window.TankoPlayer.state.get();
+          var filename = 'screenshot_' + Date.now() + '.png';
+          if (s.filePath) {
+            var name = s.filePath.replace(/\\/g, '/').split('/').pop().replace(/\.[^.]+$/, '');
+            var timeStr = window.TankoPlayer.utils.fmtTime(s.timeSec).replace(/:/g, '-');
+            filename = name + '_' + timeStr + '.png';
+          }
+
+          if (window.PlayerBridge && window.PlayerBridge.saveScreenshot) {
+            window.PlayerBridge.saveScreenshot(dataUrl, filename).then(function (result) {
+              if (result && result.ok) {
+                window.TankoPlayer.toast.show('Screenshot saved');
+              } else {
+                window.TankoPlayer.toast.show('Screenshot failed');
+              }
+            });
+          } else {
+            window.TankoPlayer.toast.show('Screenshot: bridge not available');
+          }
+        } catch (e) {
+          window.TankoPlayer.toast.show('Screenshot failed: ' + e.message);
+        }
+      }
+
+      // Expose helpers for context menu + chip buttons
+      window.TankoPlayer._cycleSpeed = cycleSpeed;
+      window.TankoPlayer._setSpeed = setSpeed;
+      window.TankoPlayer._goToTime = goToTime;
+      window.TankoPlayer._cycleAspect = cycleAspect;
+      window.TankoPlayer._takeScreenshot = takeScreenshot;
+
+      // ── Keyboard shortcuts ──
+
+      document.addEventListener('keydown', function (e) {
+        if (!adapter) return;
+        var s = window.TankoPlayer.state.get();
+        if (!s.fileLoaded) return;
+
+        var key = e.key;
+
+        // Play/pause: Space or K
+        if (key === ' ' || key === 'k' || key === 'K') {
+          e.preventDefault();
+          adapter.togglePlay();
+          return;
+        }
+
+        // Seek: Left/Right ±10s, Shift+Left/Right ±30s
+        if (key === 'ArrowLeft') {
+          e.preventDefault();
+          doSeek(e.shiftKey ? -30 : -10);
+          return;
+        }
+        if (key === 'ArrowRight') {
+          e.preventDefault();
+          doSeek(e.shiftKey ? 30 : 10);
+          return;
+        }
+
+        // J/L: seek ±10s (mpv-style)
+        if (key === 'j' || key === 'J') {
+          e.preventDefault();
+          doSeek(-10);
+          return;
+        }
+        if (key === 'l' || key === 'L') {
+          e.preventDefault();
+          doSeek(10);
+          return;
+        }
+
+        // Volume: Up/Down ±5%
+        if (key === 'ArrowUp') {
+          e.preventDefault();
+          changeVolume(5);
+          return;
+        }
+        if (key === 'ArrowDown') {
+          e.preventDefault();
+          changeVolume(-5);
+          return;
+        }
+
+        // Mute: M
+        if (key === 'm' || key === 'M') {
+          e.preventDefault();
+          toggleMute();
+          return;
+        }
+
+        // Fullscreen: F or Enter
+        if (key === 'f' || key === 'F' || key === 'Enter') {
+          e.preventDefault();
+          if (window.PlayerBridge && window.PlayerBridge.toggleFullscreen) {
+            window.PlayerBridge.toggleFullscreen();
+          }
+          return;
+        }
+
+        // Escape: exit fullscreen
+        if (key === 'Escape') {
+          var st = window.TankoPlayer.state.get();
+          if (st.fullscreen && window.PlayerBridge && window.PlayerBridge.toggleFullscreen) {
+            e.preventDefault();
+            window.PlayerBridge.toggleFullscreen();
+          }
+          return;
+        }
+
+        // Speed: C/] increase, X/[ decrease, Z/\ reset
+        if (key === 'c' || key === 'C' || key === ']') {
+          e.preventDefault();
+          cycleSpeed(+1);
+          return;
+        }
+        if (key === 'x' || key === 'X' || key === '[') {
+          e.preventDefault();
+          cycleSpeed(-1);
+          return;
+        }
+        if (key === 'z' || key === 'Z' || key === '\\') {
+          e.preventDefault();
+          setSpeed(1.0);
+          return;
+        }
+
+        // Go-to-time: G
+        if (key === 'g' || key === 'G') {
+          e.preventDefault();
+          goToTime();
+          return;
+        }
+
+        // Playlist navigation: N next, P previous; Shift+N/P: chapter nav
+        if (key === 'n' || key === 'N') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+          } else {
+            window.TankoPlayer.playlist.nextEpisode();
+          }
+          return;
+        }
+        if (key === 'p' || key === 'P') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+          } else {
+            window.TankoPlayer.playlist.prevEpisode();
+          }
+          return;
+        }
+
+        // Tracks drawer: T
+        if (key === 't' || key === 'T') {
+          e.preventDefault();
+          window.TankoPlayer.tracksDrawer.toggle();
+          return;
+        }
+
+        // Diagnostics overlay: I
+        if (key === 'i' || key === 'I') {
+          e.preventDefault();
+          window.TankoPlayer.diagnostics.toggle();
+          return;
+        }
+
+        // Screenshot: S
+        if (key === 's' || key === 'S') {
+          e.preventDefault();
+          takeScreenshot();
+          return;
+        }
+
+        // Aspect ratio cycle: A
+        if (key === 'a' || key === 'A') {
+          e.preventDefault();
+          cycleAspect();
+          return;
+        }
+
+        // Subtitle delay: > +0.1, < -0.1, / reset
+        if (key === '>') {
+          e.preventDefault();
+          if (window.TankoPlayer.tracksDrawer.nudgeSubtitleDelay) {
+            window.TankoPlayer.tracksDrawer.nudgeSubtitleDelay(0.1);
+          }
+          return;
+        }
+        if (key === '<') {
+          e.preventDefault();
+          if (window.TankoPlayer.tracksDrawer.nudgeSubtitleDelay) {
+            window.TankoPlayer.tracksDrawer.nudgeSubtitleDelay(-0.1);
+          }
+          return;
+        }
+        if (key === '/') {
+          e.preventDefault();
+          if (window.TankoPlayer.tracksDrawer.setSubtitleDelay) {
+            window.TankoPlayer.tracksDrawer.setSubtitleDelay(0);
+          }
+          return;
+        }
+
+        // Back/quit: Backspace
+        if (key === 'Backspace') {
+          e.preventDefault();
+          if (window.PlayerBridge && window.PlayerBridge.quit) {
+            window.PlayerBridge.quit();
+          }
+          return;
+        }
+      });
+
+      // ── Double-click: toggle fullscreen ──
+
+      document.getElementById('playerStage').addEventListener('dblclick', function (e) {
+        if (e.button !== 0) return; // left button only
+        if (window.PlayerBridge && window.PlayerBridge.toggleFullscreen) {
+          window.PlayerBridge.toggleFullscreen();
+        }
+      });
+
+      // ── Mouse wheel: volume ±5% ──
+
+      document.getElementById('playerStage').addEventListener('wheel', function (e) {
+        if (!adapter) return;
+        var s = window.TankoPlayer.state.get();
+        if (!s.fileLoaded) return;
+        e.preventDefault();
+        changeVolume(e.deltaY < 0 ? 5 : -5);
+      }, { passive: false });
+
+      // ── Check for --file launch argument ──
+
+      if (window.PlayerBridge && window.PlayerBridge.getLaunchArgs) {
+        window.PlayerBridge.getLaunchArgs().then(function (args) {
+          if (args && args.file) {
+            loadFile(args.file);
+          }
+        });
+      }
+
+      // ── Fullscreen state sync ──
+
+      if (window.PlayerBridge && window.PlayerBridge.onFullscreenChange) {
+        window.PlayerBridge.onFullscreenChange(function (isFs) {
+          window.TankoPlayer.state.set({ fullscreen: isFs });
+          document.body.classList.toggle('fullscreen', isFs);
+        });
+      }
+
+      // Expose for debugging
+      window._adapter = adapter;
+      window._loadFile = loadFile;
+    })();
+  </script>
+</body>
+</html>

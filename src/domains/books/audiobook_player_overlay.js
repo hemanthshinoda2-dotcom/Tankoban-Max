@@ -305,7 +305,7 @@
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
-  function open(audiobook) {
+  function open(audiobook, startOpts) {
     if (!audiobook || !audiobook.chapters || !audiobook.chapters.length) {
       console.warn('[AB Overlay] No chapters in audiobook');
       return;
@@ -323,7 +323,27 @@
     updateOverlayInfo();
     if (el.overlay) el.overlay.classList.remove('hidden');
 
-    // Check for saved progress
+    var opts = (startOpts && typeof startOpts === 'object') ? startOpts : null;
+
+    // If explicit chapter requested (e.g. from detail view "Play from this chapter")
+    if (opts && typeof opts.chapterIndex === 'number' && isFinite(opts.chapterIndex)) {
+      var startIdx = Math.max(0, Math.min(opts.chapterIndex, audiobook.chapters.length - 1));
+      var startPos = (typeof opts.position === 'number' && isFinite(opts.position) && opts.position > 0) ? opts.position : 0;
+      loadChapter(startIdx);
+      if (startPos > 0) {
+        var onMetaStart = function () {
+          _audio.removeEventListener('loadedmetadata', onMetaStart);
+          _audio.currentTime = startPos;
+          play();
+        };
+        _audio.addEventListener('loadedmetadata', onMetaStart);
+      } else {
+        play();
+      }
+      return;
+    }
+
+    // Default: resume from saved progress
     var resumeIndex = 0;
     var resumePos = 0;
     if (api) {
@@ -334,7 +354,6 @@
         }
         loadChapter(resumeIndex);
         if (resumePos > 0) {
-          // Wait for metadata then seek
           var onMeta = function () {
             _audio.removeEventListener('loadedmetadata', onMeta);
             _audio.currentTime = resumePos;

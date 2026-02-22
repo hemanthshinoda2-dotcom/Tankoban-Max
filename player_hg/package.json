@@ -1,0 +1,12 @@
+{
+  "name": "tankoban-player-hg",
+  "version": "0.1.0",
+  "description": "Standalone video player — holy grail UI rebuild",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^40.6.0"
+  }
+}

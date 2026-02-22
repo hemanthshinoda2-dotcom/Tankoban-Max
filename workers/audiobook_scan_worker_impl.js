@@ -170,8 +170,9 @@ async function buildAudiobooksIndex() {
   const ignoreCfg = makeIgnoreConfig(ignore);
   const roots = Array.isArray(audiobookRootFolders) ? audiobookRootFolders : [];
 
-  // Phase 1: Discover all audiobook directories
+  // Phase 1: Discover all audiobook directories (dedup by normalized path)
   const candidates = [];
+  const seenPaths = new Set();
   for (let ri = 0; ri < roots.length; ri++) {
     const rootPath = roots[ri];
     const rootId = rootIdForPath(rootPath);
@@ -184,7 +185,13 @@ async function buildAudiobooksIndex() {
     });
 
     const found = walkForAudiobooks(rootPath, rootId, ignoreCfg);
-    for (const c of found) candidates.push(c);
+    for (const c of found) {
+      const norm = c.folderPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      if (!seenPaths.has(norm)) {
+        seenPaths.add(norm);
+        candidates.push(c);
+      }
+    }
   }
 
   // Phase 2: Build audiobook records (with duration extraction)

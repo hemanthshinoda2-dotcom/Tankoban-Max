@@ -15,6 +15,9 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PAUSE, function (e, payload) { return d.pauseDownload(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_RESUME, function (e, payload) { return d.resumeDownload(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_CANCEL, function (e, payload) { return d.cancelDownload(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PICK_FOLDER, function (e, payload) { return d.pickDestinationFolder(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PICKER_LIST_FOLDERS, function (e, payload) { return d.listDestinationFolders(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PICKER_RESOLVE, function (e, payload) { return d.resolveDestinationPicker(ctx, e, payload); });
 
   // Set up download handler for the webview partition
   d.setupDownloadHandler(ctx);

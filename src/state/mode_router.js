@@ -49,15 +49,9 @@
     if (videoLibraryView) videoLibraryView.classList.toggle('hidden', !isVideos);
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
-    // Hide browser overlay and WebContentsViews on mode switch
+    // Hide browser overlay on mode switch
     var webBrowserView = qs('webBrowserView');
     if (webBrowserView) webBrowserView.classList.add('hidden');
-    try {
-      var _api = window.Tanko && window.Tanko.api;
-      if (_api && _api.webTabs && typeof _api.webTabs.hideAll === 'function') {
-        _api.webTabs.hideAll();
-      }
-    } catch (e) {}
 
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
