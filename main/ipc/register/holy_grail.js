@@ -3,6 +3,7 @@
 module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.HG_PROBE, (e, ...args) => domains.holyGrailDomain.probe(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_INIT, (e, ...args) => domains.holyGrailDomain.initGpu(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.HG_RESIZE, (e, ...args) => domains.holyGrailDomain.resizeSurface(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_LOAD, (e, ...args) => domains.holyGrailDomain.loadFile(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_START_FRAME_LOOP, (e, ...args) => domains.holyGrailDomain.startFrameLoop(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_STOP_FRAME_LOOP, (e, ...args) => domains.holyGrailDomain.stopFrameLoop(ctx, e, ...args));

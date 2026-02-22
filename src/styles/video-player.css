@@ -312,7 +312,8 @@ body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
 /* Build 56B: fullscreen polish — hide cursor when controls fade (YouTube-like). */
 .videoStage.hideCursor{ cursor:none; }
 .videoStage.hideCursor *{ cursor:none; }
-body.inVideoPlayer .videoStage{ height:calc(100vh - 120px); }
+body.inVideoPlayer:not(.videoFullscreen) .videoStage{ height:calc(100vh - 120px); }
+body.inVideoPlayer.videoFullscreen .videoStage{ height:100vh !important; }
 
 /* Build 52 — Canvas-only overlay HUD (VLC-ish). Hidden until mouse/keyboard activity. */
 /* BUILD 66: Minimal timeline (ultra-thin, cinema mode) */
@@ -691,6 +692,9 @@ body.videoUiHidden .videoToast{
 .tracksToggle{ grid-column:2 / -1; display:flex; align-items:center; gap:10px; font-size:12px; opacity:0.9; user-select:none; }
 .tracksToggle input{ accent-color: #4aa3ff; }
 .tracksHint{ grid-column:2 / -1; font-size:11px; opacity:0.65; margin-top:-6px; }
+.tracksRangeRow{ grid-column:2 / -1; display:flex; align-items:center; gap:10px; }
+.tracksRange{ width:100%; accent-color:#4aa3ff; }
+.tracksRangeValue{ min-width:56px; text-align:right; font-size:12px; opacity:0.9; }
 
 /* Tankoban Plus Build 5.4B — Delay controls (mpv only)
    INTENT: Quick sync nudges with a tiny, consistent control group. */

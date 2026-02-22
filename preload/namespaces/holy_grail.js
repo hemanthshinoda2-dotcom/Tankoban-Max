@@ -56,6 +56,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
     holyGrail: {
       probe: () => invoke(CHANNEL.HG_PROBE),
       initGpu: (opts) => invoke(CHANNEL.HG_INIT, (opts && typeof opts === 'object') ? opts : {}),
+      resizeSurface: (opts) => invoke(CHANNEL.HG_RESIZE, (opts && typeof opts === 'object') ? opts : {}),
       loadFile: (filePath) => invoke(CHANNEL.HG_LOAD, String(filePath || '')),
       startFrameLoop: () => invoke(CHANNEL.HG_START_FRAME_LOOP),
       stopFrameLoop: () => invoke(CHANNEL.HG_STOP_FRAME_LOOP),

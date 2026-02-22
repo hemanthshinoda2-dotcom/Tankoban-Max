@@ -85,6 +85,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       aspectRatio: 'auto',
       crop: 'none',
       renderQuality: 'auto',
+      subtitleHudLiftPx: 40,
       trackList: [],
       chapterList: [],
     };
@@ -127,13 +128,20 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     let destroyed = false;
     let gpuInitialized = false;
     let pendingStartSeekSec = 0;
+    let currentFilePath = '';
     let lastSubtitleTrackId = null;
     let readyEmitted = false;
     let loadedMetaEmitted = false;
+    let resizeDebounceTimer = null;
+    let resizeInFlight = false;
+    let resizeFailureStreak = 0;
+    let lastResizeWidth = 0;
+    let lastResizeHeight = 0;
 
     let canvas = null;
     let ctx2d = null;
     let resizeObserver = null;
+    let hudObserver = null;
     let statePollTimer = null;
     const cleanupFns = [];
 
@@ -147,9 +155,37 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       sourceWidth: 0,
       sourceHeight: 0,
     };
+    let respectSubtitleStyles = true;
 
     function emit(eventName, payload) {
       emitter.emit(eventName, payload);
+    }
+
+    function isHudVisible() {
+      try {
+        const stage = document && document.getElementById ? document.getElementById('videoStage') : null;
+        return !!(stage && stage.classList && stage.classList.contains('showHud'));
+      } catch {
+        return false;
+      }
+    }
+
+    async function applySubtitleSafeMargin() {
+      const hudLift = clamp(toFiniteNumber(state.subtitleHudLiftPx, 40), 0, 300);
+      const controlsVisible = isHudVisible();
+      const margin = controlsVisible ? Math.round(90 + hudLift) : 28;
+      const clampedMargin = clamp(margin, 0, 400);
+      const hostHeight = Math.max(1, Math.round(toFiniteNumber((hostEl && hostEl.clientHeight) || 0, 720)));
+      const coverPct = controlsVisible ? ((90 + hudLift) / hostHeight) * 100 : 5;
+      const subPos = clamp(Math.round(100 - coverPct), 55, 98);
+      const assMode = controlsVisible ? 'force' : (respectSubtitleStyles ? 'no' : 'strip');
+
+      await safeInvoke(hg, 'setProperty', 'sub-ass-force-margins', 'yes');
+      await safeInvoke(hg, 'setProperty', 'sub-use-margins', 'yes');
+      await safeInvoke(hg, 'setProperty', 'sub-ass-override', assMode);
+      await safeInvoke(hg, 'setProperty', 'sub-margin-y', String(clampedMargin));
+      await safeInvoke(hg, 'setProperty', 'sub-pos', String(subPos));
+      return { ok: true };
     }
 
     function setCanvasSizeFromHost() {
@@ -181,14 +217,28 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (typeof ResizeObserver === 'function') {
         resizeObserver = new ResizeObserver(() => {
           setCanvasSizeFromHost();
+          void requestSurfaceResize('host-resize');
         });
         resizeObserver.observe(hostEl);
       } else {
-        const onResize = () => setCanvasSizeFromHost();
+        const onResize = () => {
+          setCanvasSizeFromHost();
+          void requestSurfaceResize('window-resize');
+        };
         window.addEventListener('resize', onResize);
         cleanupFns.push(() => {
           try { window.removeEventListener('resize', onResize); } catch {}
         });
+      }
+
+      if (typeof MutationObserver === 'function') {
+        const stage = document && document.getElementById ? document.getElementById('videoStage') : null;
+        if (stage) {
+          hudObserver = new MutationObserver(() => {
+            void applySubtitleSafeMargin();
+          });
+          hudObserver.observe(stage, { attributes: true, attributeFilter: ['class'] });
+        }
       }
     }
 
@@ -263,9 +313,10 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       }
 
       if (prop === 'eof-reached') {
+        const was = !!state.eofReached;
         const next = !!value;
         state.eofReached = next;
-        if (next) emit('ended', { eof: true });
+        if (!was && next) emit('ended', { eof: true });
         return;
       }
 
@@ -368,7 +419,13 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const t0 = performance.now();
       ctx2d.fillStyle = '#000';
       ctx2d.fillRect(0, 0, dstW, dstH);
-      ctx2d.drawImage(videoFrame, dx, dy, drawW, drawH);
+      // SharedTexture -> VideoFrame arrives inverted on this pipeline.
+      // Flip vertically so embedded playback matches expected orientation.
+      ctx2d.save();
+      ctx2d.translate(0, dstH);
+      ctx2d.scale(1, -1);
+      ctx2d.drawImage(videoFrame, dx, dstH - dy - drawH, drawW, drawH);
+      ctx2d.restore();
       const drawMs = performance.now() - t0;
 
       renderStats.frameCount += 1;
@@ -458,8 +515,108 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       }
 
       gpuInitialized = true;
+      lastResizeWidth = canvas ? canvas.width : 0;
+      lastResizeHeight = canvas ? canvas.height : 0;
       await observeDefaultProperties();
       return { ok: true };
+    }
+
+    async function restorePlaybackStateAfterReinit() {
+      if (!currentFilePath) return { ok: false, error: 'missing_file_path' };
+      const st = getState();
+      const seekSec = Math.max(0, toFiniteNumber(st.timeSec, 0));
+      const paused = !!st.paused;
+      const volume = clamp(toFiniteNumber(st.volume, 1), 0, 1);
+      const muted = !!st.muted;
+      const speed = clamp(toFiniteNumber(st.speed, 1), 0.1, 8);
+      const audioDelay = toFiniteNumber(st.audioDelaySec, 0);
+      const subDelay = toFiniteNumber(st.subtitleDelaySec, 0);
+      const audioTrackId = st.audioTrackId == null ? null : String(st.audioTrackId);
+      const subtitleTrackId = st.subtitleTrackId == null ? null : String(st.subtitleTrackId);
+      const subtitlesVisible = !!st.subtitlesVisible;
+
+      const loadRes = await safeInvoke(hg, 'loadFile', currentFilePath);
+      if (!loadRes || loadRes.ok === false) return { ok: false, error: loadRes && loadRes.error ? String(loadRes.error) : 'reload_failed' };
+      const loopRes = await safeInvoke(hg, 'startFrameLoop');
+      if (!loopRes || loopRes.ok === false) return { ok: false, error: loopRes && loopRes.error ? String(loopRes.error) : 'restart_loop_failed' };
+
+      if (seekSec > 0.25) await safeInvoke(hg, 'command', ['seek', String(seekSec), 'absolute', 'exact']);
+      await safeInvoke(hg, 'setProperty', 'pause', paused ? 'yes' : 'no');
+      await safeInvoke(hg, 'setProperty', 'volume', String(volume * 100));
+      await safeInvoke(hg, 'setProperty', 'mute', muted ? 'yes' : 'no');
+      await safeInvoke(hg, 'setProperty', 'speed', String(speed));
+      await safeInvoke(hg, 'setProperty', 'audio-delay', String(audioDelay));
+      await safeInvoke(hg, 'setProperty', 'sub-delay', String(subDelay));
+      if (audioTrackId) await safeInvoke(hg, 'command', ['set', 'aid', audioTrackId]);
+      if (subtitleTrackId && subtitlesVisible) {
+        await safeInvoke(hg, 'command', ['set', 'sid', subtitleTrackId]);
+      } else {
+        await safeInvoke(hg, 'command', ['set', 'sid', 'no']);
+      }
+      await refreshStateSnapshot();
+      await refreshTrackList();
+      await applySubtitleSafeMargin();
+      return { ok: true };
+    }
+
+    async function forceReinitForResize() {
+      try { await safeInvoke(hg, 'stopFrameLoop'); } catch {}
+      try { await safeInvoke(hg, 'destroy'); } catch {}
+      gpuInitialized = false;
+      const initRes = await ensureGpuInitialized();
+      if (!initRes || initRes.ok === false) return { ok: false, error: initRes && initRes.error ? String(initRes.error) : 'reinit_failed' };
+      return restorePlaybackStateAfterReinit();
+    }
+
+    async function requestSurfaceResize(reason, { force = false } = {}) {
+      if (destroyed) return { ok: false, error: 'adapter_destroyed' };
+      if (!gpuInitialized) return { ok: true, skipped: true, reason: 'not_initialized' };
+      if (resizeInFlight) return { ok: true, skipped: true, reason: 'resize_in_flight' };
+
+      if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = null;
+      }
+
+      return new Promise((resolve) => {
+        resizeDebounceTimer = setTimeout(async () => {
+          resizeDebounceTimer = null;
+          if (destroyed || !gpuInitialized) return resolve({ ok: true, skipped: true });
+
+          setCanvasSizeFromHost();
+          const width = Math.max(16, canvas ? canvas.width : 0);
+          const height = Math.max(16, canvas ? canvas.height : 0);
+          if (!force && width === lastResizeWidth && height === lastResizeHeight) {
+            return resolve({ ok: true, unchanged: true });
+          }
+
+          resizeInFlight = true;
+          try {
+            const res = await safeInvoke(hg, 'resizeSurface', { width, height, reason: String(reason || '') });
+            if (res && res.ok !== false) {
+              lastResizeWidth = width;
+              lastResizeHeight = height;
+              resizeFailureStreak = 0;
+              void applySubtitleSafeMargin();
+              return resolve({ ok: true, width, height, resized: true });
+            }
+            resizeFailureStreak += 1;
+            if (resizeFailureStreak >= 3) {
+              const retry = await forceReinitForResize();
+              if (retry && retry.ok) {
+                resizeFailureStreak = 0;
+                lastResizeWidth = width;
+                lastResizeHeight = height;
+                void applySubtitleSafeMargin();
+                return resolve({ ok: true, width, height, reinit: true });
+              }
+            }
+            return resolve({ ok: false, error: res && res.error ? String(res.error) : 'resize_failed' });
+          } finally {
+            resizeInFlight = false;
+          }
+        }, 80);
+      });
     }
 
     async function applyPendingStartSeek() {
@@ -475,6 +632,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const fp = String(filePath || '');
       if (!fp) return { ok: false, error: 'missing_file_path' };
       if (destroyed) return { ok: false, error: 'adapter_destroyed' };
+      currentFilePath = fp;
 
       const initRes = await ensureGpuInitialized();
       if (!initRes.ok) {
@@ -506,16 +664,23 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       }
 
       startStatePoll();
+      await requestSurfaceResize('post-load', { force: true });
       await refreshStateSnapshot();
       await refreshTrackList();
+      await applySubtitleSafeMargin();
       return { ok: true };
     }
 
     async function unload() {
       pendingStartSeekSec = 0;
+      currentFilePath = '';
       state.ready = false;
       state.eofReached = false;
       stopStatePoll();
+      if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = null;
+      }
       await safeInvoke(hg, 'stopFrameLoop');
       await safeInvoke(hg, 'destroy');
       gpuInitialized = false;
@@ -527,6 +692,10 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       destroyed = true;
 
       stopStatePoll();
+      if (resizeDebounceTimer) {
+        clearTimeout(resizeDebounceTimer);
+        resizeDebounceTimer = null;
+      }
       await safeInvoke(hg, 'stopFrameLoop');
       await safeInvoke(hg, 'destroy');
 
@@ -538,6 +707,10 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (resizeObserver) {
         try { resizeObserver.disconnect(); } catch {}
         resizeObserver = null;
+      }
+      if (hudObserver) {
+        try { hudObserver.disconnect(); } catch {}
+        hudObserver = null;
       }
 
       if (canvas && canvas.parentNode === hostEl) {
@@ -743,30 +916,54 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         volume: clamp(toFiniteNumber(state.volume, 1), 0, 1),
         muted: !!state.muted,
         speed: clamp(toFiniteNumber(state.speed, 1), 0.1, 8),
+        eofReached: !!state.eofReached,
         audioDelaySec: toFiniteNumber(state.audioDelaySec, 0),
         subtitleDelaySec: toFiniteNumber(state.subtitleDelaySec, 0),
         subtitlesVisible: !!state.subtitlesVisible,
         subtitleTrackId: state.subtitleTrackId == null ? null : String(state.subtitleTrackId),
         audioTrackId: state.audioTrackId == null ? null : String(state.audioTrackId),
+        subtitleHudLiftPx: toFiniteNumber(state.subtitleHudLiftPx, 40),
       };
     }
 
     function setBounds() {
       setCanvasSizeFromHost();
+      void requestSurfaceResize('set-bounds');
       return { ok: true };
     }
 
     function setRenderQuality(mode) {
       const m = String(mode || '').trim().toLowerCase();
       state.renderQuality = (m === 'auto' || m === 'high' || m === 'extreme') ? m : 'balanced';
+      void (async () => {
+        await safeInvoke(hg, 'command', ['apply-profile', 'gpu-hq']);
+        if (state.renderQuality === 'high' || state.renderQuality === 'extreme') {
+          await safeInvoke(hg, 'setProperty', 'scale', 'ewa_lanczossharp');
+        }
+        if (state.renderQuality === 'extreme') {
+          await safeInvoke(hg, 'setProperty', 'cscale', 'ewa_lanczossharp');
+        }
+      })();
       return { ok: true };
     }
 
     async function setRespectSubtitleStyles(enabled) {
-      // Respect styles: sub-ass-override=no. Clean style mode: force.
-      const target = enabled ? 'no' : 'force';
-      const res = await safeInvoke(hg, 'setProperty', 'sub-ass-override', target);
-      return res && res.ok === false ? res : { ok: true };
+      respectSubtitleStyles = !!enabled;
+      await applySubtitleSafeMargin();
+      return { ok: true };
+    }
+
+    async function setSubtitleHudLift(px) {
+      const next = clamp(toFiniteNumber(px, state.subtitleHudLiftPx), 0, 300);
+      state.subtitleHudLiftPx = next;
+      await applySubtitleSafeMargin();
+      return { ok: true, value: next };
+    }
+
+    async function takeScreenshot() {
+      const res = await safeInvoke(hg, 'command', ['screenshot']);
+      if (!res || res.ok === false) return { ok: false, error: res && res.error ? String(res.error) : 'screenshot_failed' };
+      return { ok: true };
     }
 
     function getRenderStats() {
@@ -906,13 +1103,16 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         void refreshStateSnapshot();
         void refreshTrackList();
         void applyPendingStartSeek();
+        void applySubtitleSafeMargin();
       }));
     }
 
     if (typeof hg.onEof === 'function') {
       cleanupFns.push(hg.onEof(() => {
-        state.eofReached = true;
-        emit('ended', { eof: true });
+        if (!state.eofReached) {
+          state.eofReached = true;
+          emit('ended', { eof: true });
+        }
       }));
     }
 
@@ -937,6 +1137,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         delays: true,
         transforms: true,
         externalSubtitles: true,
+        screenshots: true,
       },
 
       on: emitter.on,
@@ -965,6 +1166,8 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       setBounds,
       setRenderQuality,
       getRenderStats,
+      takeScreenshot,
+      setSubtitleHudLift,
 
       getAudioTracks,
       getSubtitleTracks,

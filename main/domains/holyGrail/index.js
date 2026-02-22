@@ -398,6 +398,25 @@ async function loadFile(ctx, evt, filePath) {
   }
 }
 
+async function resizeSurface(ctx, evt, args) {
+  try {
+    setOwnerFromEvent(ctx, evt);
+    if (!__state.addon || !__state.initialized) return { ok: false, error: 'not_initialized' };
+    if (typeof __state.addon.resizeSurface !== 'function') return { ok: false, error: 'resize_not_supported' };
+
+    const a = (args && typeof args === 'object') ? args : {};
+    const width = Number.isFinite(Number(a.width)) ? Math.max(16, Number(a.width)) : 0;
+    const height = Number.isFinite(Number(a.height)) ? Math.max(16, Number(a.height)) : 0;
+    if (!width || !height) return { ok: false, error: 'invalid_size' };
+
+    const res = __state.addon.resizeSurface({ width, height });
+    if (res && typeof res === 'object') return res;
+    return { ok: !!res, width, height };
+  } catch (err) {
+    return { ok: false, error: toErrorString(err) };
+  }
+}
+
 async function startFrameLoop(ctx, evt) {
   try {
     setOwnerFromEvent(ctx, evt);
@@ -508,6 +527,7 @@ async function destroyAll(_ctx, _evt) {
 module.exports = {
   probe,
   initGpu,
+  resizeSurface,
   loadFile,
   startFrameLoop,
   stopFrameLoop,

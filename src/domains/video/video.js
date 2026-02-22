@@ -198,6 +198,8 @@ videoProgress IPC calls
     videoAudioTrackSelect: qs('videoAudioTrackSelect'),
     videoSubtitleTrackSelect: qs('videoSubtitleTrackSelect'),
     videoRespectSubStylesToggle: qs('videoRespectSubStylesToggle'),
+    videoSubtitleHudLift: qs('videoSubtitleHudLift'),
+    videoSubtitleHudLiftValue: qs('videoSubtitleHudLiftValue'),
     videoLoadSubtitleBtn: qs('videoLoadSubtitleBtn'),
     // Tankoban Plus Build 5.4B: delay controls (mpv only)
     videoAudioDelayControls: qs('videoAudioDelayControls'),
@@ -351,6 +353,8 @@ videoProgress IPC calls
       preferredAudioLanguage: null,
       preferredSubtitleLanguage: null,
       autoAdvance: true,
+      respectSubtitleStyles: true,
+      subtitleHudLiftPx: 40,
 
       // Build 33: UI hidden state is session-scoped (not persisted)
       uiHidden: false,
@@ -1408,7 +1412,7 @@ saveNow(true); } catch {}
     // Tankoban Pro V2: Optional external Qt player (file-based progress bridge).
     // Enable by setting localStorage key: tankobanUseQtPlayer = '1'
     try {
-      const useQt = (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1');
+      const useQt = getQtPlayerPreference();
       const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
       if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
         const sessionId = String(Date.now());
@@ -2089,6 +2093,7 @@ async function refreshTransformsFromPlayer(){
     setTransformsUiVisible(showTransforms);
 
     try { if (el.videoRespectSubStylesToggle) el.videoRespectSubStylesToggle.checked = !!state.settings.respectSubtitleStyles; } catch {}
+    syncSubtitleHudLiftUi();
 
     try {
       const eLabel = el.videoTracksPanel?.querySelector?.('label[for="videoLoadSubtitleBtn"]');
@@ -2665,6 +2670,7 @@ function closeTracksPanel(){
               state.holyGrailAvailError = (hgResult && typeof hgResult === 'object' && hgResult.error) ? String(hgResult.error) : '';
               state.libmpvAvailable = state.holyGrailAvailable;
               state.libmpvAvailError = state.holyGrailAvailError;
+              updateQtToggleUi();
 
               // Apply mpv availability
               state.mpvAvailable = false;
@@ -2784,6 +2790,9 @@ if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
 
     // Build 56A: subtitle style preference (UI only; mpv wiring comes later)
     if (typeof s.respectSubtitleStyles === 'boolean') state.settings.respectSubtitleStyles = s.respectSubtitleStyles;
+    if (Number.isFinite(Number(s.subtitleHudLiftPx))) {
+      state.settings.subtitleHudLiftPx = clamp(Number(s.subtitleHudLiftPx), 0, 300);
+    }
 
     if (typeof s.renderQuality === 'string') {
       const q = String(s.renderQuality || '').trim().toLowerCase();
@@ -2907,6 +2916,20 @@ function saveSetting(key, value){
     if (el.videoMuteBtn) el.videoMuteBtn.textContent = state.settings.muted ? '🔇' : '🔊';
     setSpeedLabels(state.settings.speed);
     setQualityLabels(state.settings.renderQuality);
+    syncSubtitleHudLiftUi();
+  }
+
+  function syncSubtitleHudLiftUi() {
+    const lift = clamp(Number(state.settings.subtitleHudLiftPx || 40), 0, 300);
+    if (el.videoSubtitleHudLift) el.videoSubtitleHudLift.value = String(Math.round(lift));
+    if (el.videoSubtitleHudLiftValue) el.videoSubtitleHudLiftValue.textContent = `${Math.round(lift)} px`;
+  }
+
+  function applySubtitleHudLiftToPlayer({ persist = false } = {}) {
+    const lift = clamp(Number(state.settings.subtitleHudLiftPx || 40), 0, 300);
+    try { state.player?.setSubtitleHudLift?.(lift); } catch {}
+    if (persist) persistVideoSettings({ subtitleHudLiftPx: lift });
+    syncSubtitleHudLiftUi();
   }
 
   function setSpeedLabels(sp){
@@ -4779,6 +4802,28 @@ function getEpisodeById(epId){
 
 // ══════ SECTION: Player Launch & Playback ══════
 
+  function buildPlaybackOpts(ep, mode) {
+    const opts = {};
+    const p = (ep && ep.id && state.progress) ? (state.progress[ep.id] || null) : null;
+    const fromStart = String(mode || '') === 'start';
+    if (fromStart) {
+      opts.suppressResumePromptOnce = true;
+      opts.resumeOverridePosSec = 0;
+      state._suppressResumePromptOnce = true;
+      state._resumeOverridePosSec = 0;
+      return opts;
+    }
+
+    const pos = Number(p && p.positionSec);
+    if (p && !p.finished && Number.isFinite(pos) && pos >= 10) {
+      opts.suppressResumePromptOnce = true;
+      opts.resumeOverridePosSec = pos;
+      state._suppressResumePromptOnce = true;
+      state._resumeOverridePosSec = pos;
+    }
+    return opts;
+  }
+
   function openShowContextMenu(e, show){
     const sid = show && show.id ? String(show.id) : '';
     const eps = sid ? (state.episodesByShowId?.get?.(sid) || []) : [];
@@ -4793,16 +4838,7 @@ function getEpisodeById(epId){
         onClick: () => {
           const ep = pickResumeEpisode(sid) || eps[0];
           if (!ep) return;
-          const p = state.progress?.[ep.id] || null;
-          const pos = Number(p?.positionSec);
-          if (p && !p.finished && Number.isFinite(pos) && pos >= 10) {
-            state._suppressResumePromptOnce = true;
-            state._resumeOverridePosSec = pos;
-          }
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume')));
         },
       },
       {
@@ -4811,12 +4847,25 @@ function getEpisodeById(epId){
         onClick: () => {
           const ep = eps[0];
           if (!ep) return;
-          state._suppressResumePromptOnce = true;
-          state._resumeOverridePosSec = 0;
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
+        },
+      },
+      {
+        label: 'Open with Embedded',
+        disabled: eps.length === 0,
+        onClick: () => {
+          const ep = pickResumeEpisode(sid) || eps[0];
+          if (!ep) return;
+          safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume')));
+        },
+      },
+      {
+        label: 'Open with Qt',
+        disabled: eps.length === 0,
+        onClick: () => {
+          const ep = pickResumeEpisode(sid) || eps[0];
+          if (!ep) return;
+          safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume')));
         },
       },
       { separator: true },
@@ -4901,6 +4950,25 @@ function getEpisodeById(epId){
         },
       },
       {
+        label: 'Open with Embedded',
+        disabled: eps.length === 0,
+        onClick: () => {
+          const ep = pickResumeEpisode(sid) || eps[0];
+          if (!ep) return;
+          safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume')));
+        },
+      },
+      {
+        label: 'Open with Qt',
+        disabled: eps.length === 0,
+        onClick: () => {
+          const ep = pickResumeEpisode(sid) || eps[0];
+          if (!ep) return;
+          safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume')));
+        },
+      },
+      { separator: true },
+      {
         label: 'Rescan this show',
         onClick: async () => {
           try {
@@ -4952,27 +5020,22 @@ function getEpisodeById(epId){
       {
         label: 'Play / Continue',
         onClick: () => {
-          const pos = Number(p?.positionSec);
-          if (p && !p.finished && Number.isFinite(pos) && pos >= 10) {
-            state._suppressResumePromptOnce = true;
-            state._resumeOverridePosSec = pos;
-          }
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume')));
         },
       },
       {
         label: 'Play from beginning',
         onClick: () => {
-          state._suppressResumePromptOnce = true;
-          state._resumeOverridePosSec = 0;
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
         },
+      },
+      {
+        label: 'Open with Embedded',
+        onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); },
+      },
+      {
+        label: 'Open with Qt',
+        onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); },
       },
       { separator: true },
       {
@@ -5028,27 +5091,22 @@ function getEpisodeById(epId){
       {
         label: 'Play / Continue',
         onClick: () => {
-          const pos = Number(p?.positionSec);
-          if (p && !p.finished && Number.isFinite(pos) && pos >= 10) {
-            state._suppressResumePromptOnce = true;
-            state._resumeOverridePosSec = pos;
-          }
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume')));
         },
       },
       {
         label: 'Play from beginning',
         onClick: () => {
-          state._suppressResumePromptOnce = true;
-          state._resumeOverridePosSec = 0;
-          safe(() => playViaShell(ep, {
-            suppressResumePromptOnce: !!state._suppressResumePromptOnce,
-            resumeOverridePosSec: Number(state._resumeOverridePosSec || 0),
-          }));
+          safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
         },
+      },
+      {
+        label: 'Open with Embedded',
+        onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); },
+      },
+      {
+        label: 'Open with Qt',
+        onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); },
       },
       { separator: true },
       {
@@ -5793,6 +5851,19 @@ function getEpisodeById(epId){
       el.videoFolderContinue.appendChild(titleRow);
       el.videoFolderContinue.appendChild(bar);
       el.videoFolderContinue.appendChild(hint);
+      el.videoFolderContinue.oncontextmenu = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        try { selectEpisode(ep.id); } catch {}
+        openCtxMenu(ev, [
+          { label: 'Play / Continue', onClick: () => { safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume'))); } },
+          { label: 'Play from beginning', onClick: () => { safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start'))); } },
+          { label: 'Open with Embedded', onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); } },
+          { label: 'Open with Qt', onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); } },
+          { separator: true },
+          { label: 'Clear from Continue Watching', onClick: () => { safe(() => clearContinueShow(String(ep.showId || ''), ep.id)); } },
+        ]);
+      };
       requestAnimationFrame(() => {
         placeFolderContinueCard();
         setTimeout(placeFolderContinueCard, 80);
@@ -6075,6 +6146,7 @@ function getEpisodeById(epId){
       });
       try { applyRenderQuality(state.settings.renderQuality, { persist: false, announce: false }); } catch {}
       try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
+      try { state.player?.setSubtitleHudLift?.(Number(state.settings.subtitleHudLiftPx || 40)); } catch {}
     } catch (e) {
       setEngineUi(false, false);
       toast(`Canvas player failed to start${e && e.message ? ': ' + e.message : ''}`);
@@ -6151,6 +6223,8 @@ function getEpisodeById(epId){
     state.player.setVolume(state.settings.volume);
     state.player.setMuted(state.settings.muted);
     state.player.setSpeed(state.settings.speed);
+    try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
+    applySubtitleHudLiftToPlayer({ persist: false });
     syncHudFromSettings();
   }
 
@@ -6158,6 +6232,18 @@ function getEpisodeById(epId){
 async function playViaShell(v, extra) {
   if (!v || !v.path) return;
   return openVideo(v, extra && typeof extra === 'object' ? extra : {});
+}
+
+async function playViaEmbedded(v, extra) {
+  if (!v || !v.path) return;
+  const opts = (extra && typeof extra === 'object') ? { ...extra, forceEmbedded: true } : { forceEmbedded: true };
+  return openVideo(v, opts);
+}
+
+async function playViaQt(v, extra) {
+  if (!v || !v.path) return;
+  const opts = (extra && typeof extra === 'object') ? { ...extra, forceQt: true } : { forceQt: true };
+  return openVideoQtFallback(v, opts);
 }
 
 let playlistPanelOpen = false;
@@ -6319,7 +6405,54 @@ function syncPlaylistNavButtons() {
   if (el.videoNextHudBtn) el.videoNextHudBtn.disabled = !next;
 }
 
+async function navigateChapter(direction) {
+  if (!state.player || !Number.isFinite(Number(direction)) || Number(direction) === 0) return;
+  const dir = Number(direction) > 0 ? 1 : -1;
+  try { await refreshChaptersFromPlayer(); } catch {}
+  const chapters = Array.isArray(state.videoChapters) ? state.videoChapters : [];
+  if (!chapters.length) {
+    hudNotice('No chapters');
+    return;
+  }
+  const st = (typeof state.player.getState === 'function') ? state.player.getState() : {};
+  const cur = Number(st && st.timeSec);
+  const curSec = Number.isFinite(cur) ? cur : 0;
+  const eps = 0.75;
+  let target = null;
+  if (dir > 0) {
+    target = chapters.find((ch) => Number(ch && ch.timeSec) > (curSec + eps));
+  } else {
+    for (let i = chapters.length - 1; i >= 0; i -= 1) {
+      const t = Number(chapters[i] && chapters[i].timeSec);
+      if (Number.isFinite(t) && t < (curSec - eps)) { target = chapters[i]; break; }
+    }
+  }
+  if (!target) {
+    hudNotice(dir > 0 ? 'No next chapter' : 'No previous chapter');
+    return;
+  }
+  const t = Number(target.timeSec);
+  if (!Number.isFinite(t)) return;
+  await state.player.seekTo(t);
+  hudNotice(`${dir > 0 ? 'Next' : 'Previous'} chapter`);
+}
+
+function isLikelyPlaybackEnded() {
+  try {
+    const st = (state.player && typeof state.player.getState === 'function') ? state.player.getState() : null;
+    if (st && st.eofReached === true) return true;
+    const pos = Number(st && st.timeSec);
+    const dur = Number(st && st.durationSec);
+    if (Number.isFinite(dur) && dur > 0) {
+      if (!Number.isFinite(pos)) return false;
+      return pos >= Math.max(0, dur - 2.0);
+    }
+  } catch {}
+  return false;
+}
+
 function maybeAutoAdvanceOnFinish() {
+  if (!isLikelyPlaybackEnded()) return;
   if (!state.settings.autoAdvance) return;
   if (state._manualStop) return;
 
@@ -6437,9 +6570,13 @@ async function openVideo(v, opts = {}) {
   if (!v || !v.path) return;
 
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
-  const forceQt = (() => {
-    try { return typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1'; } catch { return false; }
-  })();
+  const forceQt = !!(
+    (opts && typeof opts === 'object' && opts.forceQt === true)
+    || (
+      !(opts && typeof opts === 'object' && opts.forceEmbedded === true)
+      && getQtPlayerPreference()
+    )
+  );
 
   const canHolyGrail = !!(!forceQt
     && state.holyGrailAvailable
@@ -7560,7 +7697,17 @@ function adjustVolume(delta){
       });
       state.player.on('play', () => { updateHudFromPlayer(); hideHudSoon(); });
       state.player.on('pause', () => { updateHudFromPlayer(); showHud(); saveNow(true); });
-      state.player.on('ended', () => { updateHudFromPlayer(); showHud(); state._vpEndedOnceForId = (state.now && state.now.id) ? state.now.id : null; saveNow(true); maybeAutoAdvanceOnFinish(); });
+      state.player.on('ended', () => {
+        updateHudFromPlayer();
+        showHud();
+        if (isLikelyPlaybackEnded()) {
+          state._vpEndedOnceForId = (state.now && state.now.id) ? state.now.id : null;
+          maybeAutoAdvanceOnFinish();
+        } else {
+          state._vpEndedOnceForId = null;
+        }
+        saveNow(true);
+      });
       state.player.on('shutdown', () => { updateHudFromPlayer(); stopProgressPoll(); saveNow(true); safe(() => teardownMpvPlayer()); });
       state.player.on('loadedmetadata', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
       state.player.on('duration', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
@@ -8087,7 +8234,15 @@ function adjustVolume(delta){
       
       if (act === 'screenshot') {
         try {
-          await Tanko.api.window.takeScreenshot?.();
+          if (state.player && typeof state.player.takeScreenshot === 'function') {
+            const r = await state.player.takeScreenshot();
+            if (r && r.ok === false) throw new Error(String(r.error || 'screenshot_failed'));
+          } else if (state.player && typeof state.player.command === 'function') {
+            const r = await state.player.command(['screenshot']);
+            if (r && r.ok === false) throw new Error(String(r.error || 'screenshot_failed'));
+          } else {
+            throw new Error('screenshot_not_supported');
+          }
           hudNotice('Screenshot saved');
           showHud();
         } catch (err) {
@@ -8619,6 +8774,20 @@ function adjustVolume(delta){
       persistVideoSettings({ respectSubtitleStyles: on });
       toast(on ? 'Subtitle styles: embedded' : 'Subtitle styles: clean');
       try { state.player?.setRespectSubtitleStyles?.(on); } catch {}
+      showHud();
+    });
+
+    el.videoSubtitleHudLift?.addEventListener('input', () => {
+      const v = clamp(Number(el.videoSubtitleHudLift.value || 40), 0, 300);
+      state.settings.subtitleHudLiftPx = v;
+      syncSubtitleHudLiftUi();
+      try { state.player?.setSubtitleHudLift?.(v); } catch {}
+      showHud();
+    });
+
+    el.videoSubtitleHudLift?.addEventListener('change', () => {
+      applySubtitleHudLiftToPlayer({ persist: true });
+      toast(`Subtitle lift: ${Math.round(state.settings.subtitleHudLiftPx)} px`);
       showHud();
     });
 
@@ -9179,12 +9348,12 @@ function bindKeyboard(){
         if (key === '/') { e.preventDefault(); e.stopPropagation(); await resetSubtitleDelayHotkey(); showHud(); return; }
       }
 
-      if (key === ' ') {
+      if (key === ' ' || lower === 'k') {
         e.preventDefault();
         e.stopPropagation();
         
         // BUILD63: Cancel auto-advance countdown if active
-        if (state._autoAdvanceCountdownTimer || state._autoAdvancePlayTimer) {
+        if (key === ' ' && (state._autoAdvanceCountdownTimer || state._autoAdvancePlayTimer)) {
           if (state._autoAdvanceCountdownTimer) {
             clearInterval(state._autoAdvanceCountdownTimer);
             state._autoAdvanceCountdownTimer = null;
@@ -9262,8 +9431,21 @@ function bindKeyboard(){
       if (lower === 'j') { e.preventDefault(); e.stopPropagation(); seekBy(-10); return; }
       if (lower === 'l') { e.preventDefault(); e.stopPropagation(); seekBy(+10); return; }
 
-      // BUILD62: Playlist navigation (N = next episode, P = previous episode)
+      // Qt strict semantics:
+      // Shift+N/P => chapter next/prev, N/P => episode next/prev
       if (!e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.shiftKey && lower === 'n') {
+          e.preventDefault(); e.stopPropagation();
+          await navigateChapter(+1);
+          showHud();
+          return;
+        }
+        if (e.shiftKey && lower === 'p') {
+          e.preventDefault(); e.stopPropagation();
+          await navigateChapter(-1);
+          showHud();
+          return;
+        }
         if (lower === 'n') {
           e.preventDefault(); e.stopPropagation();
           const { next } = getPrevNextEpisodes();
@@ -9318,16 +9500,47 @@ function bindKeyboard(){
     }, { passive: true });
   }
 
-    function updateQtToggleUi() {
-      // QT_ONLY: Embedded player is retired. Keep the UI indicator, but disable toggling.
+    function getQtPlayerPreference(){
+      // If no toggle control exists in this build, ignore stale Qt preference so
+      // videos can still open in the in-app embedded path.
+      if (!el.qtPlayerToggleBtn) return false;
+      try { return (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1'); } catch { return false; }
+    }
+
+    function setQtPlayerPreference(useQt){
       try {
-        if (el.qtPlayerToggleBtn) {
-          el.qtPlayerToggleBtn.classList.add('active');
-          el.qtPlayerToggleBtn.textContent = 'Qt';
-          el.qtPlayerToggleBtn.title = 'Qt player (always on)';
-          try { el.qtPlayerToggleBtn.setAttribute('disabled', 'disabled'); } catch {}
-          try { el.qtPlayerToggleBtn.style.pointerEvents = 'none'; } catch {}
+        if (typeof localStorage === 'undefined') return;
+        if (useQt) localStorage.setItem('tankobanUseQtPlayer', '1');
+        else localStorage.removeItem('tankobanUseQtPlayer');
+      } catch {}
+    }
+
+    function updateQtToggleUi() {
+      try {
+        const btn = el.qtPlayerToggleBtn;
+        if (!btn) return;
+
+        const hgReady = !!state.holyGrailAvailable;
+        const useQt = getQtPlayerPreference();
+
+        if (!hgReady) {
+          btn.classList.add('active');
+          btn.textContent = 'Qt';
+          btn.title = state.holyGrailAvailError
+            ? `Embedded unavailable: ${state.holyGrailAvailError}`
+            : 'Embedded unavailable';
+          try { btn.setAttribute('disabled', 'disabled'); } catch {}
+          try { btn.style.pointerEvents = 'none'; } catch {}
+          return;
         }
+
+        try { btn.removeAttribute('disabled'); } catch {}
+        try { btn.style.pointerEvents = ''; } catch {}
+        btn.classList.toggle('active', useQt);
+        btn.textContent = useQt ? 'Qt' : 'In-App';
+        btn.title = useQt
+          ? 'Using Qt player. Click to switch to in-app embedded player.'
+          : 'Using in-app embedded player. Click to force Qt player.';
       } catch {}
     }
 
@@ -9388,8 +9601,20 @@ function bindKeyboard(){
     el.modeBooksBtn?.addEventListener('click', () => setMode('books'));
     el.modeVideosBtn?.addEventListener('click', () => setMode('videos'));
 
-    // QT_ONLY: toggle disabled (embedded player retired)
     updateQtToggleUi();
+    el.qtPlayerToggleBtn?.addEventListener('click', () => {
+      const canEmbed = !!state.holyGrailAvailable;
+      if (!canEmbed) {
+        try { toast(state.holyGrailAvailError ? `Embedded unavailable: ${state.holyGrailAvailError}` : 'Embedded unavailable', 2600); } catch {}
+        updateQtToggleUi();
+        return;
+      }
+
+      const nextUseQt = !getQtPlayerPreference();
+      setQtPlayerPreference(nextUseQt);
+      updateQtToggleUi();
+      try { toast(nextUseQt ? 'Player mode: Qt' : 'Player mode: In-App', 1300); } catch {}
+    });
 
     // Video library UI bindings (BUILD 97)
     // BUILD 111 FIX: All add/restore handlers return { ok, state: snap }, not { idx }.
@@ -9581,7 +9806,7 @@ function bindKeyboard(){
           // Enable by setting localStorage key: tankobanUseQtPlayer = '1'
           // NOTE: This handler is not async; do not use await here.
           try {
-            const useQt = (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1');
+            const useQt = getQtPlayerPreference();
             const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
             if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
               const sessionId = String(Date.now());

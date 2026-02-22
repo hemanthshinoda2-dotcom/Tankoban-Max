@@ -398,6 +398,7 @@
     holyGrail: {
       probe: (...a) => ea.holyGrail?.probe ? ea.holyGrail.probe(...a) : undefined,
       initGpu: (...a) => ea.holyGrail?.initGpu ? ea.holyGrail.initGpu(...a) : undefined,
+      resizeSurface: (...a) => ea.holyGrail?.resizeSurface ? ea.holyGrail.resizeSurface(...a) : undefined,
       loadFile: (...a) => ea.holyGrail?.loadFile ? ea.holyGrail.loadFile(...a) : undefined,
       startFrameLoop: (...a) => ea.holyGrail?.startFrameLoop ? ea.holyGrail.startFrameLoop(...a) : undefined,
       stopFrameLoop: (...a) => ea.holyGrail?.stopFrameLoop ? ea.holyGrail.stopFrameLoop(...a) : undefined,

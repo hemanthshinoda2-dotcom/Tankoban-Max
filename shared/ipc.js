@@ -635,6 +635,9 @@ const CHANNEL = {
   /** Initialize holy grail GPU pipeline. Args: { width?, height? }. Returns: { ok, error?, width?, height? } */
   HG_INIT: 'holyGrail:init',
 
+  /** Resize holy grail GPU surface. Args: { width, height }. Returns: { ok, error?, width?, height?, unchanged? } */
+  HG_RESIZE: 'holyGrail:resize',
+
   /** Load file in holy grail player. Args: filePath. Returns: { ok, error? } */
   HG_LOAD: 'holyGrail:load',
 

@@ -10,6 +10,13 @@ All follow-up phases, fixes, and parity work should be planned and committed on 
 - Phases 0-2 are integrated into the main app codebase.
 - Packaging support for Holy Grail native artifacts is wired into release prep.
 - Qt playback remains as the fallback path when Holy Grail is unavailable.
+- Phase 3 + 4C work is in progress on `master`:
+  - native live surface resize is wired (`HG_RESIZE` end-to-end),
+  - embedded fullscreen/resize now resizes the native render surface instead of canvas-only scaling,
+  - Qt strict key semantics are being aligned (`K`, `Shift+N/P`, `N/P`),
+  - auto-advance is gated by true end-state checks,
+  - embedded screenshot path uses mpv command flow,
+  - subtitle HUD lift + margin behavior is now exposed in embedded player settings.
 
 ## Context
 

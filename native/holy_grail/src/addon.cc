@@ -562,6 +562,90 @@ static const char* InitAngle(uint32_t width, uint32_t height) {
     return nullptr;
 }
 
+// Recreate ANGLE render surface + shared textures for a new size while preserving
+// the active mpv/render context instance.
+static const char* ResizeAngleSurface(uint32_t width, uint32_t height) {
+    if (!g_device || !g_context)
+        return "D3D11 device not initialized";
+    if (g_eglDisplay == EGL_NO_DISPLAY || !g_eglConfig)
+        return "EGL display/config not initialized";
+
+    if (width < 16 || height < 16)
+        return "Invalid surface size";
+
+    if (g_eglSurface != EGL_NO_SURFACE) {
+        p_eglDestroySurface(g_eglDisplay, g_eglSurface);
+        g_eglSurface = EGL_NO_SURFACE;
+    }
+    if (g_ntHandle) {
+        CloseHandle(g_ntHandle);
+        g_ntHandle = nullptr;
+    }
+    g_sharedHandle = nullptr;
+    g_externalTex.Reset();
+    g_internalTex.Reset();
+
+    D3D11_TEXTURE2D_DESC intDesc = {};
+    intDesc.Width            = width;
+    intDesc.Height           = height;
+    intDesc.MipLevels        = 1;
+    intDesc.ArraySize        = 1;
+    intDesc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM;
+    intDesc.SampleDesc.Count = 1;
+    intDesc.Usage            = D3D11_USAGE_DEFAULT;
+    intDesc.BindFlags        = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    intDesc.MiscFlags        = D3D11_RESOURCE_MISC_SHARED;
+
+    HRESULT hr = g_device->CreateTexture2D(&intDesc, nullptr, &g_internalTex);
+    if (FAILED(hr))
+        return "Failed to recreate internal D3D11 texture";
+
+    ComPtr<IDXGIResource> dxgiRes;
+    g_internalTex.As(&dxgiRes);
+    hr = dxgiRes->GetSharedHandle(&g_sharedHandle);
+    if (FAILED(hr))
+        return "GetSharedHandle failed on resized internal texture";
+
+    D3D11_TEXTURE2D_DESC extDesc = intDesc;
+    extDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    extDesc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_NTHANDLE
+                      | D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
+
+    hr = g_device->CreateTexture2D(&extDesc, nullptr, &g_externalTex);
+    if (FAILED(hr))
+        return "Failed to recreate external D3D11 texture";
+
+    ComPtr<IDXGIResource1> dxgiRes1;
+    g_externalTex.As(&dxgiRes1);
+    hr = dxgiRes1->CreateSharedHandle(nullptr,
+        DXGI_SHARED_RESOURCE_READ | DXGI_SHARED_RESOURCE_WRITE,
+        nullptr, &g_ntHandle);
+    if (FAILED(hr))
+        return "CreateSharedHandle (NT) failed on resized external texture";
+
+    const EGLint surfaceAttribs[] = {
+        EGL_WIDTH,  (EGLint)width,
+        EGL_HEIGHT, (EGLint)height,
+        EGL_TEXTURE_FORMAT, EGL_TEXTURE_RGBA,
+        EGL_TEXTURE_TARGET, EGL_TEXTURE_2D,
+        EGL_NONE,
+    };
+
+    g_eglSurface = p_eglCreatePbufferFromClientBuffer(
+        g_eglDisplay,
+        EGL_D3D_TEXTURE_2D_SHARE_HANDLE_ANGLE,
+        (EGLClientBuffer)g_sharedHandle,
+        g_eglConfig,
+        surfaceAttribs);
+    if (g_eglSurface == EGL_NO_SURFACE)
+        return "eglCreatePbufferFromClientBuffer failed on resize";
+
+    g_width = width;
+    g_height = height;
+    g_frameReady.store(false, std::memory_order_release);
+    return nullptr;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // § 8. MPV INITIALIZATION
 // ═══════════════════════════════════════════════════════════════════
@@ -650,6 +734,51 @@ Napi::Value InitGpu(const Napi::CallbackInfo& info) {
     if (err) { Napi::Error::New(env, err).ThrowAsJavaScriptException(); return env.Undefined(); }
 
     return Napi::Boolean::New(env, true);
+}
+
+// Resize backing render surface without tearing down mpv.
+Napi::Value ResizeSurface(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    auto out = Napi::Object::New(env);
+
+    if (!g_mpv || !g_mpvGl || !g_device || g_eglDisplay == EGL_NO_DISPLAY) {
+        out.Set("ok", false);
+        out.Set("error", "not_initialized");
+        return out;
+    }
+
+    uint32_t w = g_width > 0 ? g_width : 1920;
+    uint32_t h = g_height > 0 ? g_height : 1080;
+    if (info.Length() > 0 && info[0].IsObject()) {
+        auto cfg = info[0].As<Napi::Object>();
+        if (cfg.Has("width")) w = cfg.Get("width").As<Napi::Number>().Uint32Value();
+        if (cfg.Has("height")) h = cfg.Get("height").As<Napi::Number>().Uint32Value();
+    } else {
+        if (info.Length() > 0 && info[0].IsNumber()) w = info[0].As<Napi::Number>().Uint32Value();
+        if (info.Length() > 1 && info[1].IsNumber()) h = info[1].As<Napi::Number>().Uint32Value();
+    }
+
+    w = w < 16 ? 16 : w;
+    h = h < 16 ? 16 : h;
+    if (w == g_width && h == g_height) {
+        out.Set("ok", true);
+        out.Set("width", g_width);
+        out.Set("height", g_height);
+        out.Set("unchanged", true);
+        return out;
+    }
+
+    const char* err = ResizeAngleSurface(w, h);
+    if (err) {
+        out.Set("ok", false);
+        out.Set("error", err);
+        return out;
+    }
+
+    out.Set("ok", true);
+    out.Set("width", g_width);
+    out.Set("height", g_height);
+    return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -1060,6 +1189,7 @@ Napi::Value Destroy(const Napi::CallbackInfo& info) {
 
 Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
     exports.Set("initGpu",          Napi::Function::New(env, InitGpu));
+    exports.Set("resizeSurface",    Napi::Function::New(env, ResizeSurface));
     exports.Set("loadFile",         Napi::Function::New(env, LoadFile));
     exports.Set("renderFrame",      Napi::Function::New(env, RenderFrame));
     exports.Set("command",          Napi::Function::New(env, MpvCommand));
