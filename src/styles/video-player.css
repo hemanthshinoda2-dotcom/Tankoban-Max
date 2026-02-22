@@ -273,14 +273,14 @@ body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
   user-select:none;
 }
 .videoEngineBadge[data-engine="embedded"]{
-  border-color:rgba(110,205,140,0.48);
-  background:rgba(110,205,140,0.15);
-  color:rgba(190,255,210,0.98);
+  border-color:rgba(var(--chrome-rgb),0.20);
+  background:rgba(var(--chrome-rgb),0.06);
+  color:rgba(var(--chrome-rgb),0.86);
 }
 .videoEngineBadge[data-engine="qt"]{
-  border-color:rgba(230,177,89,0.48);
-  background:rgba(230,177,89,0.14);
-  color:rgba(255,228,184,0.98);
+  border-color:rgba(230,177,89,0.34);
+  background:rgba(230,177,89,0.10);
+  color:rgba(255,228,184,0.90);
 }
 .videoEngineBadge[data-engine="none"]{
   opacity:0.74;

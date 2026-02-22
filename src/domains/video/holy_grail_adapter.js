@@ -973,6 +973,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const elapsedSec = Math.max(1, (Date.now() - renderStats.createdAtMs) / 1000);
       const avgDraw = renderStats.frameCount > 0 ? (renderStats.drawTimeTotalMs / renderStats.frameCount) : 0;
       return {
+        frameCount: renderStats.frameCount,
         quality: state.renderQuality,
         sharedBufferEnabled: true,
         surfaceWidth: canvas ? canvas.width : 0,

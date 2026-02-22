@@ -957,6 +957,9 @@ async function refreshChaptersFromPlayer(){
     if (el.videoEngineBadge) {
       el.videoEngineBadge.dataset.engine = nextEngine;
       el.videoEngineBadge.dataset.reason = routeReason;
+      const isDefaultEmbedded = (nextEngine === 'embedded' && routeReason === 'default_embedded');
+      const showBadge = (!isDefaultEmbedded && nextEngine !== 'none');
+      el.videoEngineBadge.classList.toggle('hidden', !showBadge);
       if (nextEngine === 'embedded') {
         el.videoEngineBadge.textContent = 'Embedded (HG)';
         el.videoEngineBadge.title = routeReason === 'default_embedded'
@@ -3262,7 +3265,8 @@ function ensureContinueEpisodesLoaded() {
     const missing = [];
     for (const id of unique) {
       const have = (haveMap && typeof haveMap.get === 'function') ? haveMap.get(String(id)) : null;
-      if (!have) missing.push(String(id));
+      const havePath = !!(have && typeof have.path === 'string' && String(have.path).trim());
+      if (!have || !havePath) missing.push(String(id));
     }
     if (!missing.length) return;
 
@@ -3283,18 +3287,34 @@ function ensureContinueEpisodesLoaded() {
         const all = Array.isArray(state.videos) ? state.videos : [];
         const seenIds = new Set(all.map(v => String(v && v.id || '')));
         let addedAny = false;
+        let patchedAny = false;
 
         for (const ep of eps) {
           const id = String(ep && ep.id || '');
-          if (!id || seenIds.has(id)) continue;
+          if (!id) continue;
+
+          const existing = (state.episodeById && typeof state.episodeById.get === 'function')
+            ? state.episodeById.get(id)
+            : null;
+          if (existing && typeof existing === 'object') {
+            const beforePath = String(existing.path || '');
+            Object.assign(existing, ep);
+            const afterPath = String(existing.path || '');
+            if (beforePath !== afterPath || !beforePath) patchedAny = true;
+            continue;
+          }
+
+          if (seenIds.has(id)) continue;
           all.push(ep);
           seenIds.add(id);
           addedAny = true;
         }
 
-        if (addedAny) {
-          state.videos = all;
-          state.episodes = state.videos;
+        if (addedAny || patchedAny) {
+          if (addedAny) {
+            state.videos = all;
+            state.episodes = state.videos;
+          }
           buildEpisodesByShowId();
           if (window.__tankoVideoSearch) window.__tankoVideoSearch.rebuildVideoSearchIndex();
           rebuildVideoProgressSummaryCache();
@@ -3938,7 +3958,7 @@ function getContinueVideos() {
     titleWrap.appendChild(title);
     tile.appendChild(titleWrap);
 
-    tile.onclick = () => safe(() => playViaShell(ep));
+    tile.onclick = () => safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume')));
     tile.addEventListener('contextmenu', (e) => openContinueShowContextMenu(e, show, ep));
 
     // Build 23: optional drag-and-drop poster on Continue Watching tiles too.
@@ -6382,20 +6402,71 @@ function getEpisodeById(epId){
 
 
 async function playViaShell(v, extra) {
-  if (!v || !v.path) return;
-  return openVideo(v, extra && typeof extra === 'object' ? extra : {});
+  const target = await resolvePlayableEpisode(v);
+  if (!target || !target.path) {
+    toast('Episode metadata is still loading. Try again.', 1800);
+    return;
+  }
+  return openVideo(target, extra && typeof extra === 'object' ? extra : {});
 }
 
 async function playViaEmbedded(v, extra) {
-  if (!v || !v.path) return;
+  const target = await resolvePlayableEpisode(v);
+  if (!target || !target.path) {
+    toast('Episode metadata is still loading. Try again.', 1800);
+    return;
+  }
   const opts = (extra && typeof extra === 'object') ? { ...extra, forceEmbedded: true } : { forceEmbedded: true };
-  return openVideo(v, opts);
+  return openVideo(target, opts);
 }
 
 async function playViaQt(v, extra) {
-  if (!v || !v.path) return;
+  const target = await resolvePlayableEpisode(v);
+  if (!target || !target.path) {
+    toast('Episode metadata is still loading. Try again.', 1800);
+    return;
+  }
   const opts = (extra && typeof extra === 'object') ? { ...extra, forceQt: true } : { forceQt: true };
-  return openVideoQtFallback(v, opts);
+  return openVideoQtFallback(target, opts);
+}
+
+async function resolvePlayableEpisode(v) {
+  if (!v) return null;
+  if (v.path) return v;
+
+  const id = String((v && v.id) || '');
+  if (!id) return null;
+
+  try {
+    const local = getEpisodeById(id);
+    if (local && local.path) return local;
+  } catch {}
+
+  try {
+    const api = Tanko?.api?.video;
+    if (typeof api?.getEpisodesByIds === 'function') {
+      const res = await api.getEpisodesByIds([id]);
+      const list = (res && typeof res === 'object' && Array.isArray(res.episodes)) ? res.episodes : [];
+      const fetched = list.find((ep) => String((ep && ep.id) || '') === id) || list[0];
+      if (fetched && fetched.path) {
+        try {
+          const existing = getEpisodeById(id);
+          if (existing && typeof existing === 'object') {
+            Object.assign(existing, fetched);
+          } else {
+            state.videos = Array.isArray(state.videos) ? state.videos : [];
+            state.videos.push(fetched);
+            state.episodes = state.videos;
+            buildEpisodesByShowId();
+            if (window.__tankoVideoSearch) window.__tankoVideoSearch.rebuildVideoSearchIndex();
+          }
+        } catch {}
+        return fetched;
+      }
+    }
+  } catch {}
+
+  return null;
 }
 
 let playlistPanelOpen = false;
@@ -6695,7 +6766,12 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
   const frameCount = () => {
     try {
       const stats = player.getRenderStats?.();
-      const n = Number(stats && stats.frameCount);
+      const n = Number(stats && (stats.frameCount ?? stats.framesDrawn));
+      if (Number.isFinite(n)) return n;
+      const drawsPerSecond = Number(stats && stats.drawsPerSecond);
+      if (Number.isFinite(drawsPerSecond) && drawsPerSecond > 0.05) return 1;
+      const lastDrawTimeMs = Number(stats && stats.lastDrawTimeMs);
+      if (Number.isFinite(lastDrawTimeMs) && lastDrawTimeMs > 0) return 1;
       return Number.isFinite(n) ? n : 0;
     } catch {
       return 0;
@@ -6718,8 +6794,10 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
           if (frameCount() > 0) return clearEmbeddedFirstFrameWatch();
 
           const forceEmbedded = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
-          if (forceEmbedded) {
-            toast('Embedded render stalled (no frame).', 2800);
+          const allowNoFrameQtFallback = !!(opts && typeof opts === 'object' && opts.allowNoFrameQtFallback === true);
+          if (!allowNoFrameQtFallback || forceEmbedded) {
+            toast('Embedded render is still initializing.', 1800);
+            clearEmbeddedFirstFrameWatch();
             return;
           }
 
