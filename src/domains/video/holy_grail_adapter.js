@@ -132,6 +132,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     let lastSubtitleTrackId = null;
     let readyEmitted = false;
     let loadedMetaEmitted = false;
+    let suppressEofSignals = true;
     let resizeDebounceTimer = null;
     let resizeInFlight = false;
     let resizeFailureStreak = 0;
@@ -315,6 +316,10 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (prop === 'eof-reached') {
         const was = !!state.eofReached;
         const next = !!value;
+        if (suppressEofSignals) {
+          state.eofReached = false;
+          return;
+        }
         state.eofReached = next;
         if (!was && next) emit('ended', { eof: true });
         return;
@@ -643,6 +648,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       pendingStartSeekSec = Math.max(0, toFiniteNumber(opts.startSeconds, 0));
       readyEmitted = false;
       loadedMetaEmitted = false;
+      suppressEofSignals = true;
       state.ready = false;
       state.eofReached = false;
       state.chapterList = [];
@@ -674,6 +680,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     async function unload() {
       pendingStartSeekSec = 0;
       currentFilePath = '';
+      suppressEofSignals = true;
       state.ready = false;
       state.eofReached = false;
       stopStatePoll();
@@ -690,6 +697,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     async function destroy() {
       if (destroyed) return { ok: true };
       destroyed = true;
+      suppressEofSignals = true;
 
       stopStatePoll();
       if (resizeDebounceTimer) {
@@ -1099,6 +1107,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       cleanupFns.push(hg.onFileLoaded(() => {
         state.ready = true;
         state.eofReached = false;
+        suppressEofSignals = false;
         if (!readyEmitted) {
           readyEmitted = true;
           emit('ready', { ok: true });
@@ -1113,6 +1122,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
 
     if (typeof hg.onEof === 'function') {
       cleanupFns.push(hg.onEof(() => {
+        if (suppressEofSignals || !state.ready) return;
         if (!state.eofReached) {
           state.eofReached = true;
           emit('ended', { eof: true });

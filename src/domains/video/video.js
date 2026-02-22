@@ -387,6 +387,7 @@ videoProgress IPC calls
     pendingResumePos: null,
     playlist: { showId: null, episodes: [], currentKey: null },
     _autoAdvanceTriggeredForKey: null,
+    _autoAdvanceBlockUntilMs: 0,
     _autoAdvanceCountdownTimer: null,  // BUILD63: countdown interval
     _autoAdvancePlayTimer: null,       // BUILD63: delayed play timeout
     _manualStop: false,
@@ -6663,10 +6664,26 @@ async function navigateChapter(direction) {
 function isLikelyPlaybackEnded({ requireEof = false } = {}) {
   try {
     const st = (state.player && typeof state.player.getState === 'function') ? state.player.getState() : null;
-    if (st && st.eofReached === true) return true;
-    if (requireEof) return false;
     const pos = Number(st && st.timeSec);
     const dur = Number(st && st.durationSec);
+    const hasDur = Number.isFinite(dur) && dur > 0;
+    const nearEnd = (() => {
+      if (!hasDur || !Number.isFinite(pos)) return false;
+      const tailSec = Math.min(12, Math.max(1.5, dur * 0.02));
+      return pos >= Math.max(0, dur - tailSec);
+    })();
+
+    if (st && st.eofReached === true) {
+      if (requireEof) {
+        if (nearEnd) return true;
+        // Fallback for streams where duration may not be known.
+        if (!hasDur && Number.isFinite(pos) && pos >= 4) return true;
+        return false;
+      }
+      if (nearEnd) return true;
+    }
+
+    if (requireEof) return false;
     if (Number.isFinite(dur) && dur > 0) {
       if (!Number.isFinite(pos)) return false;
       return pos >= Math.max(0, dur - 2.0);
@@ -6679,6 +6696,8 @@ function maybeAutoAdvanceOnFinish() {
   if (!isLikelyPlaybackEnded({ requireEof: true })) return;
   if (!state.settings.autoAdvance) return;
   if (state._manualStop) return;
+  if (!state._vpCanSave) return;
+  if (Date.now() < Number(state._autoAdvanceBlockUntilMs || 0)) return;
 
   const curKey = state.playlist.currentKey;
   if (curKey && state._autoAdvanceTriggeredForKey === curKey) return;
@@ -6830,6 +6849,7 @@ async function openVideo(v, opts = {}) {
 
   if (!v || !v.path) return;
   clearEmbeddedFirstFrameWatch();
+  state._autoAdvanceBlockUntilMs = Date.now() + 2500;
 
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
   const explicitQt = !!(opts && typeof opts === 'object' && opts.forceQt === true);
@@ -6994,6 +7014,7 @@ async function openVideo(v, opts = {}) {
     state._vpResumeInProgressForId = null;
     state._vpResumeCompletedForId = episodeId || null;
     state._vpResumeCompletedAt = Date.now();
+    state._autoAdvanceBlockUntilMs = Math.max(Number(state._autoAdvanceBlockUntilMs || 0), Date.now() + 800);
   }, 900);
 
   state._suppressResumePromptOnce = false;
@@ -8022,6 +8043,7 @@ function adjustVolume(delta){
       state.player.on('file-loaded', () => {
         console.log('[BUILD89 CHAPTERS] file-loaded event received');
         updateHudFromPlayer();
+        state._autoAdvanceBlockUntilMs = Math.max(Number(state._autoAdvanceBlockUntilMs || 0), Date.now() + 1200);
         safe(() => {
           // Small delay to let mpv finish loading all metadata
           setTimeout(() => {
