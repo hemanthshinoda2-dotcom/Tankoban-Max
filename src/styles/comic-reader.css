@@ -161,7 +161,7 @@ body.inPlayer .playerFooter #playBtn.ytIcon{
   z-index: 60;
   padding: 6px 10px;
   font-size: 12px;
-  font-weight: 850;
+  font-weight: 800;
   border: 1px solid rgba(255,255,255,.18);
   background: rgba(0,0,0,.45);
   color: rgba(255,255,255,.92);
@@ -174,7 +174,7 @@ body.inPlayer .playerFooter #playBtn.ytIcon{
 body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .cornerPrefsBtn:hover{ background: rgba(0,0,0,.58); }
 .cornerPrefsBtn:active{ background: rgba(0,0,0,.68); transform: scale(.98); }
-.cornerPrefsBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.cornerPrefsBtn:focus-visible{ outline: 2px solid rgba(var(--ink-rgb),.46); outline-offset: 2px; }
 .manualScrollerTrack::after{
   content:"";
   position:absolute;
@@ -344,7 +344,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .speedSliderValue{
   font-size: 11px;
   font-weight: 900;
-  color: rgba(229,231,235,.95);
+  color: rgba(var(--ink-rgb),.95);
 }
 .speedSliderTrack{
   position: relative;
@@ -374,7 +374,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   width: 16px;
   height: 16px;
   border-radius: 999px;
-  background: rgba(229,231,235,.95);
+  background: rgba(var(--ink-rgb),.95);
   box-shadow: 0 10px 22px rgba(0,0,0,.35);
 }
 
@@ -464,7 +464,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 }
 .playerFooter .scrubActionBtn:hover{ background: rgba(0,0,0,.45); }
 .playerFooter .scrubActionBtn:active{ background: rgba(0,0,0,.58); transform: scale(.98); }
-.playerFooter .scrubActionBtn:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.playerFooter .scrubActionBtn:focus-visible{ outline: 2px solid rgba(var(--ink-rgb),.46); outline-offset: 2px; }
 
 /* Build 5: Two-Page (Scroll) row gap control (only visible in that mode). */
 .playerFooter .twoPageScrollRowGapWrap{
@@ -561,7 +561,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: rgba(229,231,235,.95);
+  background: rgba(var(--ink-rgb),.95);
   box-shadow: 0 8px 18px rgba(0,0,0,.28);
   opacity: 0;
   transition: opacity .12s ease;
@@ -576,7 +576,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   padding: 4px 8px;
   border-radius: 999px;
   font-size: 12px;
-  color: rgba(229,231,235,.95);
+  color: rgba(var(--ink-rgb),.95);
   white-space:nowrap;
   opacity: 0;
   transition: opacity .12s ease;
@@ -677,7 +677,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .megaTitle{
   font-weight: 900;
   font-size: 13px;
-  color: rgba(229,231,235,.92);
+  color: rgba(var(--ink-rgb),.92);
   padding: 6px 8px 8px;
 }
 .megaRow{
@@ -696,13 +696,13 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 }
 .megaRow:hover{ background: rgba(255,255,255,.08); }
 .megaRow:active{ background: rgba(255,255,255,.12); }
-.megaRow:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaRow:focus-visible{ outline: 2px solid rgba(var(--ink-rgb),.46); outline-offset: 2px; }
 .megaLeft{ font-weight: 800; font-size: 13px; }
 .megaRight{
   display:flex;
   align-items:center;
   gap:8px;
-  color: rgba(229,231,235,.78);
+  color: rgba(var(--ink-rgb),.78);
   font-size: 13px;
 }
 .megaValue{
@@ -733,7 +733,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
 .megaSubTitle{
   font-weight: 900;
   font-size: 13px;
-  color: rgba(229,231,235,.92);
+  color: rgba(var(--ink-rgb),.92);
 }
 .megaSubList{
   display:flex;
@@ -772,7 +772,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   pointer-events: none;
 }
 
-.megaOption:focus-visible{ outline: 2px solid rgba(229,231,235,.46); outline-offset: 2px; }
+.megaOption:focus-visible{ outline: 2px solid rgba(var(--ink-rgb),.46); outline-offset: 2px; }
 .megaCheck{
   color: rgba(var(--accent-rgb),.95);
   font-weight: 900;
@@ -781,7 +781,7 @@ body:not(.inPlayer) .cornerPrefsBtn{ display:none; }
   display:flex;
   align-items:center;
   gap:10px;
-  color: rgba(229,231,235,.78);
+  color: rgba(var(--ink-rgb),.78);
   font-size: 13px;
 }
 

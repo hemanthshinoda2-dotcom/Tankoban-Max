@@ -12,8 +12,6 @@
     return DARK_READER_THEMES.indexOf(String(theme || 'light')) !== -1;
   }
   var INVERT_DARK_IMAGES_STYLE_ID = 'books-reader-invert-dark-images-style';
-  // Prompt 2: exact theme list requested for automatic dark-theme image inversion.
-  var INVERT_DARK_IMAGE_THEMES = ['dark', 'contrast1', 'contrast2', 'contrast3', 'contrast4', 'nord', 'gruvbox', 'gruvboxDark', 'solarized'];
 
   function clampFontWeight(v) {
     var n = Number(v);
@@ -120,7 +118,7 @@
 
   function shouldInvertImagesForTheme(theme) {
     var t = String(theme || 'light');
-    return isInvertDarkImagesEnabled() && isDarkReaderTheme(t) && INVERT_DARK_IMAGE_THEMES.indexOf(t) !== -1;
+    return isInvertDarkImagesEnabled() && isDarkReaderTheme(t);
   }
 
   function collectReaderIframeDocs() {

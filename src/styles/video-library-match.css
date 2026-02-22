@@ -32,7 +32,7 @@ body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
 
 /* Ensure video show cards match comic series cards exactly */
 #videoShowsGrid .seriesCard {
-  border: 1px solid rgba(255,255,255,.125) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.125) !important;
   background: transparent !important;
   border-radius: var(--lib-radius-sm) !important;
   padding: 6px !important;
@@ -44,7 +44,7 @@ body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
 #videoShowsGrid .seriesCard:hover {
   background: var(--lib-hover) !important;
   transform: scale(1.01) !important;
-  border-color: rgba(255,255,255,.16) !important;
+  border-color: rgba(var(--chrome-rgb),.16) !important;
 }
 
 /* Match comic library cover styling */
@@ -58,7 +58,7 @@ body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
   width: 100% !important;
   height: auto !important;
   aspect-ratio: 65 / 100 !important;
-  border: 1px solid rgba(255,255,255,.188) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.188) !important;
   border-radius: 10px !important;
   overflow: hidden !important;
   background: rgba(0,0,0,.35) !important;
@@ -114,7 +114,7 @@ body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
 }
 
 #videoShowsGrid .seriesTitle {
-  font-weight: 650 !important;
+  font-weight: 600 !important;
   font-size: 11px !important;
 }
 
@@ -223,9 +223,9 @@ body:not(.inPlayer) .homeView{
   grid-template-columns: 42px minmax(360px, 3fr) 90px 110px 90px 92px 132px !important;
   gap: 10px !important;
   padding: 6px 10px !important;
-  background: rgba(229,231,235,.08) !important;
-  color: rgba(229,231,235,.84) !important;
-  border-bottom: 1px solid rgba(255,255,255,.20) !important;
+  background: rgba(var(--ink-rgb),.08) !important;
+  color: rgba(var(--ink-rgb),.84) !important;
+  border-bottom: 1px solid rgba(var(--chrome-rgb),.20) !important;
   font-weight: 800 !important;
   font-size: 11px !important;
   user-select: none !important;
@@ -247,13 +247,13 @@ body:not(.inPlayer) .homeView{
   padding: 4px 10px !important;
   align-items: center !important;
   cursor: default !important;
-  border-bottom: 1px solid rgba(255,255,255,.12) !important;
+  border-bottom: 1px solid rgba(var(--chrome-rgb),.12) !important;
   min-height: 34px !important;
   transition: background 90ms ease-out !important;
 }
 
 #videoEpisodesGrid .volTrow:hover {
-  background: rgba(255,255,255,.04) !important;
+  background: rgba(var(--chrome-rgb),.04) !important;
 }
 
 #videoEpisodesGrid .volTrow.sel {
@@ -283,7 +283,7 @@ body:not(.inPlayer) .homeView{
 
 /* Date column */
 #videoEpisodesGrid .volTrow .cell.date {
-  color: rgba(229,231,235,.6) !important;
+  color: rgba(var(--ink-rgb),.6) !important;
   font-size: 10px !important;
 }
 
@@ -295,13 +295,13 @@ body:not(.inPlayer) .homeView{
   background: rgba(10,12,20,.46) !important;
   backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%) !important;
   -webkit-backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%) !important;
-  border-right: 1px solid rgba(255,255,255,.10) !important;
+  border-right: 1px solid rgba(var(--chrome-rgb),.10) !important;
   width: 240px !important;
   flex-shrink: 0 !important;
 }
 
 #videoLibraryView .navHeader {
-  color: rgba(255,255,255,.86) !important;
+  color: rgba(var(--chrome-rgb),.86) !important;
   font-size: 12px !important;
   letter-spacing: .35px !important;
   text-transform: uppercase !important;
@@ -311,8 +311,8 @@ body:not(.inPlayer) .homeView{
 
 #videoLibraryView .navBtn {
   border-radius: 12px !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-  background: rgba(255,255,255,.05) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.12) !important;
+  background: rgba(var(--chrome-rgb),.05) !important;
   padding: 8px 12px !important;
   font-size: 12px !important;
   cursor: pointer !important;
@@ -321,9 +321,9 @@ body:not(.inPlayer) .homeView{
 }
 
 #videoLibraryView .navBtn:hover {
-  background: rgba(255,255,255,.09) !important;
+  background: rgba(var(--chrome-rgb),.09) !important;
   box-shadow: 0 12px 26px -22px rgba(0,0,0,.85) !important;
-  border-color: rgba(255,255,255,.16) !important;
+  border-color: rgba(var(--chrome-rgb),.16) !important;
 }
 
 /* ===================================
@@ -347,7 +347,7 @@ body:not(.inPlayer) .homeView{
 }
 
 #videoLibraryView .folderItem:hover {
-  background: rgba(255,255,255,.08) !important;
+  background: rgba(var(--chrome-rgb),.08) !important;
 }
 
 #videoLibraryView .folderItem.active {
@@ -361,18 +361,18 @@ body:not(.inPlayer) .homeView{
   margin-left: 6px !important;
   padding: 2px 8px !important;
   border-radius: 10px !important;
-  border: 1px solid rgba(255,255,255,.10) !important;
-  background: rgba(255,255,255,.04) !important;
-  color: rgba(229,231,235,.70) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.10) !important;
+  background: rgba(var(--chrome-rgb),.04) !important;
+  color: rgba(var(--ink-rgb),.70) !important;
   font-size: 11px !important;
-  font-weight: 650 !important;
+  font-weight: 600 !important;
   cursor: pointer !important;
   flex: 0 0 auto !important;
 }
 #videoLibraryView .videoRootRemove:hover{
-  background: rgba(255,255,255,.07) !important;
-  border-color: rgba(255,255,255,.14) !important;
-  color: rgba(229,231,235,.86) !important;
+  background: rgba(var(--chrome-rgb),.07) !important;
+  border-color: rgba(var(--chrome-rgb),.14) !important;
+  color: rgba(var(--ink-rgb),.86) !important;
 }
 
 /* ===================================
@@ -407,16 +407,16 @@ body:not(.inPlayer) .homeView{
 #videoShowDetailPanel .panelTitle {
   font-weight: 700 !important;
   font-size: 14px !important;
-  color: rgba(229,231,235,.92) !important;
+  color: rgba(var(--ink-rgb),.92) !important;
 }
 
 #videoLibraryView .iconBtn {
   width: 32px !important;
   height: 32px !important;
   border-radius: 12px !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
-  background: rgba(255,255,255,.06) !important;
-  color: rgba(255,255,255,.92) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.12) !important;
+  background: rgba(var(--chrome-rgb),.06) !important;
+  color: rgba(var(--chrome-rgb),.92) !important;
   box-shadow: 0 10px 22px -18px rgba(0,0,0,.85) !important;
   cursor: pointer !important;
   display: flex !important;
@@ -426,7 +426,7 @@ body:not(.inPlayer) .homeView{
 }
 
 #videoLibraryView .iconBtn:hover {
-  background: rgba(255,255,255,.10) !important;
+  background: rgba(var(--chrome-rgb),.10) !important;
   box-shadow: 0 12px 26px -18px rgba(0,0,0,.85), 0 0 0 1px rgba(var(--vx-accent-rgb),.08) inset !important;
   transform: scale(1.05) !important;
 }
@@ -512,13 +512,13 @@ body:not(.inPlayer) .homeView{
   padding: 6px 12px !important;
   font-size: 11px !important;
   border-radius: 12px !important;
-  background: rgba(255,255,255,.06) !important;
-  border: 1px solid rgba(255,255,255,.12) !important;
+  background: rgba(var(--chrome-rgb),.06) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.12) !important;
 }
 
 #videoScanText {
   font-weight: 600 !important;
-  color: rgba(255,255,255,.85) !important;
+  color: rgba(var(--chrome-rgb),.85) !important;
 }
 
 #videoScanCancel {
@@ -527,9 +527,9 @@ body:not(.inPlayer) .homeView{
   padding: 0 !important;
   display: grid !important;
   place-items: center !important;
-  border: 1px solid rgba(255,255,255,.16) !important;
+  border: 1px solid rgba(var(--chrome-rgb),.16) !important;
   background: rgba(0,0,0,.35) !important;
-  color: rgba(229,231,235,.9) !important;
+  color: rgba(var(--ink-rgb),.9) !important;
   border-radius: 6px !important;
   cursor: pointer !important;
   font-weight: 900 !important;
@@ -570,13 +570,13 @@ body:not(.inPlayer) .homeView{
 #videoShowsGrid::-webkit-scrollbar-track,
 .videoContinueRow::-webkit-scrollbar-track,
 #videoEpisodesGrid::-webkit-scrollbar-track {
-  background: rgba(255,255,255,.04);
+  background: rgba(var(--chrome-rgb),.04);
 }
 
 #videoShowsGrid::-webkit-scrollbar-thumb,
 .videoContinueRow::-webkit-scrollbar-thumb,
 #videoEpisodesGrid::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,.10);
+  background: rgba(var(--chrome-rgb),.10);
   border: 3px solid rgba(0,0,0,0);
   background-clip: padding-box;
   border-radius: 8px;
@@ -585,6 +585,6 @@ body:not(.inPlayer) .homeView{
 #videoShowsGrid::-webkit-scrollbar-thumb:hover,
 .videoContinueRow::-webkit-scrollbar-thumb:hover,
 #videoEpisodesGrid::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,.15);
+  background: rgba(var(--chrome-rgb),.15);
   background-clip: padding-box;
 }

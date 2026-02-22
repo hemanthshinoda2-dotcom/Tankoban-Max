@@ -174,6 +174,7 @@ SECTION INDEX (search: ══════ SECTION:)
 
     // Hidden series (Build 45D)
     tileDensityBtn: $('#tileDensityBtn'),
+    themeToggleBtn: $('#themeToggleBtn'),
     hiddenSeriesBtn: $('#hiddenSeriesBtn'),
     hiddenSeriesOverlay: $('#hiddenSeriesOverlay'),
     hiddenSeriesClose: $('#hiddenSeriesClose'),
