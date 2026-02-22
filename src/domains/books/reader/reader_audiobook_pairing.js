@@ -51,6 +51,75 @@
     return null;
   }
 
+
+  function normalizeHref(href) {
+    var h = String(href || '');
+    h = h.replace(/^\.\//, '');
+    var hashIdx = h.indexOf('#');
+    if (hashIdx >= 0) h = h.substring(0, hashIdx);
+    try { h = decodeURIComponent(h); } catch (_) {}
+    return h.toLowerCase().trim();
+  }
+
+  function buildMappingIndex() {
+    var out = Object.create(null);
+    for (var i = 0; i < _mappings.length; i++) {
+      var m = _mappings[i] || {};
+      var key = normalizeHref(m.bookChapterHref || '');
+      if (!key) continue;
+      var idx = parseInt(m.abChapterIndex, 10);
+      if (!isFinite(idx) || idx < 0) continue;
+      out[key] = idx;
+    }
+    return out;
+  }
+
+  function getCurrentReaderChapterHref() {
+    try {
+      var eng = RS && RS.state && RS.state.engine;
+      var detail = eng && eng.lastRelocate ? eng.lastRelocate : null;
+      var href = detail && detail.tocItem && detail.tocItem.href ? detail.tocItem.href : '';
+      return normalizeHref(href);
+    } catch (_) { return ''; }
+  }
+
+  function getMappedAudiobookChapterIndexForCurrentReaderChapter() {
+    var href = getCurrentReaderChapterHref();
+    if (!href) return null;
+    var mappingIdx = buildMappingIndex();
+    return Object.prototype.hasOwnProperty.call(mappingIdx, href) ? mappingIdx[href] : null;
+  }
+
+  function syncAudiobookToCurrentReaderChapter(opts) {
+    opts = (opts && typeof opts === 'object') ? opts : {};
+    if (!_savedPairing || !_selectedAb || !_selectedAbId) return;
+    var abPlayer = window.booksReaderAudiobook;
+    if (!abPlayer) return;
+
+    var mappedIndex = getMappedAudiobookChapterIndexForCurrentReaderChapter();
+    if (mappedIndex == null) return;
+
+    var currentAb = (typeof abPlayer.getAudiobook === 'function') ? abPlayer.getAudiobook() : null;
+    var sameAudiobookLoaded = !!(currentAb && currentAb.id === _selectedAbId && abPlayer.isLoaded && abPlayer.isLoaded());
+
+    if (!sameAudiobookLoaded) {
+      autoLoadPairedAudiobook({ forceChapterIndex: mappedIndex });
+      return;
+    }
+
+    var currentChapter = (typeof abPlayer.getCurrentChapterIndex === 'function')
+      ? abPlayer.getCurrentChapterIndex()
+      : (((abPlayer.getProgress && abPlayer.getProgress()) || {}).chapterIndex);
+
+    if (currentChapter === mappedIndex && !opts.force) return;
+
+    if (typeof abPlayer.setChapterIndex === 'function') {
+      abPlayer.setChapterIndex(mappedIndex, { preservePlayState: true });
+    } else if (typeof abPlayer.loadAudiobook === 'function') {
+      abPlayer.loadAudiobook(_selectedAb, { chapterIndex: mappedIndex, position: 0 });
+    }
+  }
+
   // ── Load audiobooks list ───────────────────────────────────────────────────
   function loadAudiobooksList() {
     if (!api || !api.audiobooks) return Promise.resolve();
@@ -101,23 +170,33 @@
   }
 
   // ── Auto-load paired audiobook into the reader player ──────────────────────
-  function autoLoadPairedAudiobook() {
+  function autoLoadPairedAudiobook(options) {
     if (!_savedPairing || !_selectedAb) return;
     var abPlayer = window.booksReaderAudiobook;
     if (!abPlayer || !abPlayer.loadAudiobook) return;
-    // Load with resume from saved audiobook progress
+    var optsIn = (options && typeof options === 'object') ? options : {};
+    var forcedChapterIndex = (typeof optsIn.forceChapterIndex === 'number' && isFinite(optsIn.forceChapterIndex))
+      ? Math.max(0, Math.floor(optsIn.forceChapterIndex))
+      : null;
+
+    // Load with resume from saved audiobook progress, but let book↔audio pairing win on chapter selection.
     if (api && api.audiobooks) {
       api.audiobooks.getProgress(_selectedAb.id).then(function (prog) {
-        var opts = null;
-        if (prog && prog.chapterIndex != null) {
-          opts = { chapterIndex: prog.chapterIndex, position: prog.position || 0 };
+        var resume = null;
+        var progressChapter = (prog && prog.chapterIndex != null) ? parseInt(prog.chapterIndex, 10) : null;
+        var progressPos = (prog && prog.position != null) ? (prog.position || 0) : 0;
+        var startChapter = (forcedChapterIndex != null) ? forcedChapterIndex : progressChapter;
+        if (startChapter != null && isFinite(startChapter)) {
+          resume = { chapterIndex: startChapter, position: (progressChapter === startChapter ? progressPos : 0) };
         }
-        abPlayer.loadAudiobook(_selectedAb, opts);
+        abPlayer.loadAudiobook(_selectedAb, resume);
       }).catch(function () {
-        abPlayer.loadAudiobook(_selectedAb, null);
+        var fallback = (forcedChapterIndex != null) ? { chapterIndex: forcedChapterIndex, position: 0 } : null;
+        abPlayer.loadAudiobook(_selectedAb, fallback);
       });
     } else {
-      abPlayer.loadAudiobook(_selectedAb, null);
+      var fallback2 = (forcedChapterIndex != null) ? { chapterIndex: forcedChapterIndex, position: 0 } : null;
+      abPlayer.loadAudiobook(_selectedAb, fallback2);
     }
   }
 
@@ -250,6 +329,8 @@
       updateStatus('Saved: ' + (_selectedAb ? _selectedAb.title : ''));
       // Auto-load the paired audiobook into the reader player
       autoLoadPairedAudiobook();
+      // Then snap to the mapped chapter for the current reader location (if present)
+      syncAudiobookToCurrentReaderChapter({ force: true });
     }).catch(function (err) {
       console.error('[AB Pairing] save error:', err);
     });
@@ -306,6 +387,11 @@
     if (bus) {
       bus.on('toc:updated', function () {
         renderMappings();
+        // If the paired audiobook opened before TOC/relocate settled, sync now.
+        syncAudiobookToCurrentReaderChapter();
+      });
+      bus.on('reader:relocated', function () {
+        syncAudiobookToCurrentReaderChapter();
       });
     }
   }
@@ -323,10 +409,16 @@
     loadAudiobooksList().then(function () {
       return loadSavedPairing();
     }).then(function () {
-      // If there's a saved pairing, auto-load the audiobook into the player
+      // If there's a saved pairing, auto-load the audiobook into the player.
+      // If current reader chapter is already known, load directly into its mapped chapter.
       if (_savedPairing && _selectedAb) {
-        autoLoadPairedAudiobook();
+        var mappedIndex = getMappedAudiobookChapterIndexForCurrentReaderChapter();
+        if (mappedIndex != null) autoLoadPairedAudiobook({ forceChapterIndex: mappedIndex });
+        else autoLoadPairedAudiobook();
       }
+    }).then(function () {
+      // One more sync pass after async player load; harmless if not ready yet.
+      syncAudiobookToCurrentReaderChapter();
     }).catch(function () {
       updateStatus('No audiobook linked');
     });

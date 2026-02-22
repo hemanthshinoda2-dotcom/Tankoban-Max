@@ -6,12 +6,30 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
 
       onUpdated: (cb) => {
         if (typeof cb !== 'function') return;
-        ipcRenderer.on(EVENT.AUDIOBOOK_UPDATED, (_evt, state) => cb(state));
+        const handler = (_evt, state) => {
+          try {
+            if (cb.length >= 2) cb(_evt, state);
+            else cb(state);
+          } catch (_) {}
+        };
+        ipcRenderer.on(EVENT.AUDIOBOOK_UPDATED, handler);
+        return () => {
+          try { ipcRenderer.removeListener(EVENT.AUDIOBOOK_UPDATED, handler); } catch (_) {}
+        };
       },
 
       onScanStatus: (cb) => {
         if (typeof cb !== 'function') return;
-        ipcRenderer.on(EVENT.AUDIOBOOK_SCAN_STATUS, (_evt, s) => cb(s));
+        const handler = (_evt, s) => {
+          try {
+            if (cb.length >= 2) cb(_evt, s);
+            else cb(s);
+          } catch (_) {}
+        };
+        ipcRenderer.on(EVENT.AUDIOBOOK_SCAN_STATUS, handler);
+        return () => {
+          try { ipcRenderer.removeListener(EVENT.AUDIOBOOK_SCAN_STATUS, handler); } catch (_) {}
+        };
       },
 
       scan: () => ipcRenderer.invoke(CHANNEL.AUDIOBOOK_SCAN),

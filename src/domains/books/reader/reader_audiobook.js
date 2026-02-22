@@ -1,6 +1,6 @@
 // FEAT-AUDIOBOOK: In-reader audiobook playback module
-// Registered in reader_core.js module array. Shares HTMLAudioElement with the
-// standalone overlay (audiobook_player_overlay.js) — only one plays at a time.
+// Registered in reader_core.js module array. Uses its own HTMLAudioElement and coordinates with the
+// standalone overlay (audiobook_player_overlay.js) so only one player is active at a time.
 // Provides transport bar inside the reading area + TTS mutual exclusion.
 (function () {
   'use strict';
@@ -106,6 +106,53 @@
     updateChapterLabel();
     updateTimeDisplay(0, 0);
     bus.emit('audiobook:chapter-changed', { index: index, title: ch.title, total: _audiobook.chapters.length });
+  }
+
+  function setChapterIndex(index, opts) {
+    if (!_audiobook || !_audiobook.chapters || !_audiobook.chapters.length) return false;
+    var nextIdx = parseInt(index, 10);
+    if (!isFinite(nextIdx) || nextIdx < 0 || nextIdx >= _audiobook.chapters.length) return false;
+
+    opts = (opts && typeof opts === 'object') ? opts : {};
+    var sameChapter = (_chapterIndex === nextIdx);
+    var wasPlaying = !!_playing;
+    var shouldPlay = (typeof opts.autoplay === 'boolean') ? opts.autoplay : ((opts.preservePlayState !== false) ? wasPlaying : false);
+    var seekPos = (typeof opts.position === 'number' && isFinite(opts.position) && opts.position >= 0) ? opts.position : null;
+
+    if (!sameChapter) {
+      loadChapter(nextIdx);
+    }
+
+    if (_audio) {
+      var applySeek = function () {
+        try {
+          if (seekPos != null) _audio.currentTime = seekPos;
+        } catch (_) {}
+        if (shouldPlay) play();
+        else pause();
+      };
+
+      if (seekPos != null) {
+        if (isFinite(_audio.duration) && _audio.duration > 0) applySeek();
+        else {
+          var onMetaForSeek = function () {
+            try { _audio.removeEventListener('loadedmetadata', onMetaForSeek); } catch (_) {}
+            applySeek();
+          };
+          _audio.addEventListener('loadedmetadata', onMetaForSeek);
+        }
+      } else if (shouldPlay) {
+        play();
+      } else if (!sameChapter) {
+        pause();
+      }
+    }
+
+    return true;
+  }
+
+  function getCurrentChapterIndex() {
+    return _chapterIndex;
   }
 
   function play() {
@@ -309,6 +356,12 @@
 
     // Mutual exclusion: stop TTS
     if (isTTSActive()) stopTTS();
+    // Mutual exclusion: close standalone audiobook overlay if open
+    try {
+      if (window.booksAudiobookOverlay && window.booksAudiobookOverlay.isOpen && window.booksAudiobookOverlay.isOpen()) {
+        window.booksAudiobookOverlay.close();
+      }
+    } catch (_) {}
 
     _audiobook = audiobook;
     _loaded = true;
@@ -448,6 +501,8 @@
     prevChapter: prevChapter,
     setRate: setRate,
     setVolume: setVolume,
+    setChapterIndex: setChapterIndex,
+    getCurrentChapterIndex: getCurrentChapterIndex,
   };
 
 })();

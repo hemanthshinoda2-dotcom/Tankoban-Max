@@ -3153,16 +3153,39 @@ function getBookProgress(bookId) {
     });
 
     // FEAT-AUDIOBOOK: live-update when audiobook scan completes or folders change
-    api.audiobooks.onUpdated(function (_evt, snap) {
-      applyAudiobookSnapshot(snap);
+    api.audiobooks.onUpdated(function (arg1, arg2) {
+      var snap = (arg2 && typeof arg2 === 'object') ? arg2 : arg1;
+      applyAudiobookSnapshot(snap || {});
+      // Refresh progress so audiobook shelf badges stay in sync after scans/changes.
+      loadAudiobookProgress().then(function () {
+        renderAudiobooks();
+      }).catch(function () {});
     });
+
+    // FEAT-AUDIOBOOK: scan lifecycle updates for audiobook shelf
+    if (api.audiobooks.onScanStatus) {
+      api.audiobooks.onScanStatus(function (arg1, arg2) {
+        var s = (arg2 && typeof arg2 === 'object') ? arg2 : arg1;
+        if (!s || typeof s !== 'object') return;
+        state.audiobookSnap = state.audiobookSnap || { audiobooks: [], audiobookRootFolders: [], scanning: false };
+        state.audiobookSnap.scanning = !!s.scanning;
+        renderAudiobooks();
+        renderAudiobookSidebar();
+      });
+    }
 
     // FEAT-AUDIOBOOK: add audiobook root folder button
     if (el.addAudiobookRootBtn) {
       el.addAudiobookRootBtn.addEventListener('click', async function () {
         try {
           var result = await api.audiobooks.addRootFolder();
-          if (result && result.added) {
+          if (result && result.state) {
+            applyAudiobookSnapshot(result.state);
+          } else {
+            // Fallback for older IPC responses
+            refreshAudiobookState().catch(function () {});
+          }
+          if (result && result.ok) {
             toast('Audiobook folder added — scanning...');
           }
         } catch (err) {

@@ -1,6 +1,6 @@
 // FEAT-AUDIOBOOK: Standalone audiobook player overlay
 // Shows full-screen player when clicking an audiobook tile from the library.
-// Uses its own HTMLAudioElement for playback. Manages chapter list, seek, speed, volume.
+// Uses its own HTMLAudioElement for playback and closes the in-reader audiobook bar on open. Manages chapter list, seek, speed, volume.
 (function () {
   'use strict';
 
@@ -311,6 +311,12 @@
       return;
     }
     ensureEls();
+    // Mutual exclusion: close in-reader audiobook player before standalone overlay starts
+    try {
+      if (window.booksReaderAudiobook && window.booksReaderAudiobook.isLoaded && window.booksReaderAudiobook.isLoaded()) {
+        window.booksReaderAudiobook.closeAudiobook();
+      }
+    } catch (_) {}
     _audiobook = audiobook;
     _open = true;
 
