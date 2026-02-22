@@ -313,6 +313,8 @@ videoProgress IPC calls
     _progressPollIntervalMs: 4000,
     player: null,
     mpvAvailable: false,
+    holyGrailAvailable: false,
+    holyGrailAvailError: '',
     // BUILD31: native embedded libmpv availability (separate from mpv.exe path)
     libmpvAvailable: false,
     libmpvAvailError: '',
@@ -2607,13 +2609,15 @@ function closeTracksPanel(){
               const loadStart = Date.now();
               console.log('[video-load] Starting video library and player bootstrap');
 
-              // Load library data + progress + settings + mpv capability checks in parallel
-              const [idxRes, progRes, vs, uiState, libmpvResult, mpvResult, dnRes] = await Promise.all([
+              // Load library data + progress + settings + playback capability checks in parallel
+              const [idxRes, progRes, vs, uiState, hgResult, mpvResult, dnRes] = await Promise.all([
                 Tanko.api.video.getState().catch(() => ({ idx: { roots: [], shows: [], episodes: [] } })),
                 Tanko.api.videoProgress.getAll().catch(() => ({})),
                 Tanko.api.videoSettings.get?.().catch(() => ({})),
                 Tanko.api.videoUi.getState?.().catch(() => ({})),
-                Promise.resolve({ ok: false, error: 'embedded_disabled' }),
+                (Tanko.api.holyGrail && typeof Tanko.api.holyGrail.probe === 'function')
+                  ? Tanko.api.holyGrail.probe().catch((e) => ({ ok: false, error: String((e && e.message) || e || 'probe_failed') }))
+                  : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
                 Promise.resolve({ available: false, error: 'embedded_disabled' }),
                 Tanko.api.videoDisplayNames?.getAll?.().catch(() => ({})),
               ]);
@@ -2656,9 +2660,11 @@ function closeTracksPanel(){
               // Apply display names (RENAME-VIDEO)
               state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
 
-              // Apply libmpv availability
-              state.libmpvAvailable = !!(libmpvResult && typeof libmpvResult === 'object' ? libmpvResult.ok : libmpvResult);
-              state.libmpvAvailError = (libmpvResult && typeof libmpvResult === 'object' && libmpvResult.error) ? String(libmpvResult.error) : '';
+              // Apply holy grail availability (also mirrored into legacy libmpv flags for existing UI checks).
+              state.holyGrailAvailable = !!(hgResult && typeof hgResult === 'object' ? hgResult.ok : hgResult);
+              state.holyGrailAvailError = (hgResult && typeof hgResult === 'object' && hgResult.error) ? String(hgResult.error) : '';
+              state.libmpvAvailable = state.holyGrailAvailable;
+              state.libmpvAvailError = state.holyGrailAvailError;
 
               // Apply mpv availability
               state.mpvAvailable = false;
@@ -2677,11 +2683,11 @@ function closeTracksPanel(){
                 state.mpvAvailable = !!mpvResult;
               }
 
-              // Warn only if nothing is available (libmpv is preferred anyway).
+              // Warn only if in-app playback is unavailable.
               const _useQt = true; // Qt-only line: embedded backends deprecated
-              if (!_useQt && !state.libmpvAvailable && !state.mpvAvailable) {
-                const msg = state.libmpvAvailError
-                  ? `libmpv not available: ${state.libmpvAvailError}`
+              if (!_useQt && !state.holyGrailAvailable && !state.mpvAvailable) {
+                const msg = state.holyGrailAvailError
+                  ? `Holy Grail not available: ${state.holyGrailAvailError}`
                   : `mpv not available${state.mpvAvailError ? ': ' + state.mpvAvailError : ''}`;
                 toast(msg);
               }
@@ -6007,10 +6013,9 @@ function getEpisodeById(epId){
     // Track panel should never survive engine swaps.
     closeTracksPanel();
 
-    // Build 52: Canvas-only libmpv. Embedded/native child-window and mpv.exe paths are disabled.
-    const canLibMpv = !!(state.libmpvAvailable
-      && window.videoPlayerAdapters?.createLibMpvCanvasVideoAdapter
-      && Tanko.api?.libmpv);
+    const canHolyGrail = !!(state.holyGrailAvailable
+      && typeof window.createHolyGrailAdapter === 'function'
+      && Tanko.api?.holyGrail);
 
     const setEngineUi = (isMpv, isCanvas) => {
       const mpvOn = !!isMpv;
@@ -6035,15 +6040,15 @@ function getEpisodeById(epId){
       el.mpvHost?.classList.remove('hidden');
     };
 
-    if (!canLibMpv) {
+    if (!canHolyGrail) {
       setEngineUi(false, false);
-      toast(state.libmpvAvailError ? `libmpv not available: ${state.libmpvAvailError}` : 'libmpv not available');
+      toast(state.holyGrailAvailError ? `Holy Grail not available: ${state.holyGrailAvailError}` : 'Holy Grail not available');
       return null;
     }
 
     const requestedRenderMode = 'canvas';
 
-    // Reuse an existing player if it's already libmpv+canvas.
+    // Reuse an existing player if it's already embedded holy grail.
     if (state.player && state.player.kind === 'mpv') {
       const wm = String(state.player.windowMode || '');
       const lastRenderMode = String(state._activeRenderMode || '');
@@ -6063,7 +6068,11 @@ function getEpisodeById(epId){
     state._playerEventsBoundFor = null;
 
     try {
-      state.player = window.videoPlayerAdapters.createLibMpvCanvasVideoAdapter({ hostEl: el.mpvHost || null, renderQuality: state.settings.renderQuality, videoSyncDisplayResample: !!state.settings.videoSyncDisplayResample });
+      state.player = window.createHolyGrailAdapter({
+        hostEl: el.mpvHost || null,
+        renderQuality: state.settings.renderQuality,
+        videoSyncDisplayResample: !!state.settings.videoSyncDisplayResample,
+      });
       try { applyRenderQuality(state.settings.renderQuality, { persist: false, announce: false }); } catch {}
       try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
     } catch (e) {
@@ -6385,7 +6394,200 @@ function tryStartPendingShellPlay() {
   safe(() => openVideo(v, p));
 }
 
+function hideResumePrompt() {
+  try { el.videoResumePrompt?.classList.add('hidden'); } catch {}
+  state.pendingResumePos = null;
+}
+
+function resumeChoice(choice) {
+  const c = String(choice || '').toLowerCase();
+  if (c === 'restart') {
+    state._resumeOverridePosSec = 0;
+  }
+  hideResumePrompt();
+}
+
+function resolveStartSeconds(v, opts = {}) {
+  let start = 0;
+  try {
+    const override = (opts && Number.isFinite(Number(opts.resumeOverridePosSec))) ? Number(opts.resumeOverridePosSec) : 0;
+    if (override > 0) return override;
+
+    const gp = getProgressForEpisode(v);
+    const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
+    if (p && !isProgressFinished(p)) {
+      const pos = Number(p.positionSec);
+      const maxPos = Number(p.maxPositionSec);
+      const cand = (Number.isFinite(pos) && pos > 2) ? pos : ((Number.isFinite(maxPos) && maxPos > 2) ? maxPos : 0);
+      start = Number.isFinite(cand) ? cand : 0;
+    }
+  } catch {}
+  return start;
+}
+
 async function openVideo(v, opts = {}) {
+  // Apply one-shot overrides if provided (e.g., Play from beginning / Continue Watching).
+  try {
+    if (opts && typeof opts === 'object') {
+      if (opts.suppressResumePromptOnce) state._suppressResumePromptOnce = true;
+      if (Number.isFinite(Number(opts.resumeOverridePosSec))) state._resumeOverridePosSec = Number(opts.resumeOverridePosSec);
+    }
+  } catch {}
+
+  if (!v || !v.path) return;
+
+  const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
+  const forceQt = (() => {
+    try { return typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1'; } catch { return false; }
+  })();
+
+  const canHolyGrail = !!(!forceQt
+    && state.holyGrailAvailable
+    && api
+    && api.holyGrail
+    && typeof window.createHolyGrailAdapter === 'function');
+
+  if (!canHolyGrail) {
+    try { await state.player?.destroy?.(); } catch {}
+    state.player = null;
+    state._playerEventsBoundFor = null;
+    document.body.classList.remove('mpvEngine');
+    document.body.classList.remove('mpvDetached');
+    return openVideoQtFallback(v, opts);
+  }
+
+  // If play is requested from outside Videos mode, switch first (best-effort).
+  try {
+    if (!IS_VIDEO_SHELL && state.mode !== 'videos') setMode('videos');
+  } catch {}
+
+  const player = ensurePlayer();
+  if (!player) {
+    return openVideoQtFallback(v, opts);
+  }
+
+  // Enter in-app player view.
+  try { closeAllToolPanels(); } catch {}
+  try { clearRetryToast(); } catch {}
+  closePlaylistPanel();
+  closeTracksPanel();
+  hideResumePrompt();
+  stopProgressPoll();
+
+  if (el.videoLibraryView) el.videoLibraryView.classList.add('hidden');
+  if (el.videoPlayerView) el.videoPlayerView.classList.remove('hidden');
+  document.body.classList.add('inVideoPlayer');
+  document.body.classList.remove('videoFullscreen');
+  document.body.classList.remove('videoUiHidden');
+
+  state._manualStop = false;
+  state.videoUiHidden = false;
+  try { state.settings.uiHidden = false; } catch {}
+  state._autoAdvanceTriggeredForKey = null;
+  state.now = v;
+  if (el.videoNowTitle) {
+    el.videoNowTitle.textContent = String((v && (v.title || v.name)) || basename(v && v.path ? v.path : '') || 'Now Playing');
+  }
+  rebuildPlaylistForEpisode(v);
+  syncPlaylistNavButtons();
+
+  // Progress save guards during initial load/resume.
+  state._vpCanSave = false;
+  state._vpResumeInProgressForId = String((v && v.id) || '');
+  state._vpResumeCompletedForId = null;
+  state._vpResumeCompletedAt = 0;
+  state._vpFirstPollTickLoggedForId = null;
+  state._vpFirstNonForceCallLoggedForId = null;
+  state._vpFirstSavedLoggedForId = null;
+  state._vpEndedOnceForId = null;
+
+  const start = resolveStartSeconds(v, opts);
+  state.pendingResumePos = start > 2 ? start : null;
+  try {
+    const gp = getProgressForEpisode(v);
+    const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
+    state._vpLoadedProgressForId = String((v && v.id) || '');
+    state._vpLoadedProgress = p || null;
+  } catch {
+    state._vpLoadedProgressForId = null;
+    state._vpLoadedProgress = null;
+  }
+
+  // If a previous file is loaded in the same adapter instance, tear it down first.
+  try { await player.unload?.(); } catch {}
+
+  const loadRes = await player.load(String(v.path), {
+    startSeconds: start,
+    videoId: String((v && v.id) || ''),
+    showId: String((v && v.showId) || ''),
+    renderQuality: state.settings.renderQuality,
+    videoSyncDisplayResample: !!state.settings.videoSyncDisplayResample,
+  });
+
+  if (!loadRes || loadRes.ok === false) {
+    const err = String((loadRes && loadRes.error) || 'unknown_error');
+    try { toast(`Holy Grail load failed: ${err}`, 3200); } catch {}
+    try { await player.destroy?.(); } catch {}
+    state.player = null;
+    state._playerEventsBoundFor = null;
+    if (el.videoPlayerView) el.videoPlayerView.classList.add('hidden');
+    if (el.videoLibraryView && state.mode === 'videos') el.videoLibraryView.classList.remove('hidden');
+    document.body.classList.remove('inVideoPlayer');
+    document.body.classList.remove('mpvEngine');
+    document.body.classList.remove('mpvDetached');
+    return openVideoQtFallback(v, opts);
+  }
+
+  applySettingsToPlayer();
+  updateHudFromPlayer();
+  showHud();
+  hideHudSoon();
+  startProgressPoll();
+
+  // Keep existing preference pipeline active with first-pass safe timing.
+  const episodeId = String((v && v.id) || '');
+  setTimeout(() => {
+    safe(async () => {
+      try {
+        const p = (episodeId && state.progress && state.progress[episodeId]) ? state.progress[episodeId] : state._vpLoadedProgress;
+        if (p && typeof p === 'object') {
+          if (p.selectedAudioTrackId != null && typeof state.player?.setAudioTrack === 'function') {
+            await state.player.setAudioTrack(p.selectedAudioTrackId);
+          }
+          if (typeof state.player?.setSubtitleTrack === 'function') {
+            if (p.selectedSubtitleTrackId === 'no' || p.selectedSubtitleTrackId == null) await state.player.setSubtitleTrack(null);
+            else await state.player.setSubtitleTrack(p.selectedSubtitleTrackId);
+          }
+          if (Number.isFinite(Number(p.audioDelaySec)) && typeof state.player?.setAudioDelay === 'function') {
+            await state.player.setAudioDelay(Number(p.audioDelaySec));
+          }
+          if (Number.isFinite(Number(p.subtitleDelaySec)) && typeof state.player?.setSubtitleDelay === 'function') {
+            await state.player.setSubtitleDelay(Number(p.subtitleDelaySec));
+          }
+        } else if (episodeId) {
+          scheduleApplyPreferredTracksForVideo(episodeId);
+        }
+      } catch {}
+      safe(() => autoEnableSubtitlesIfAvailable(v));
+      safe(() => refreshTracksFromPlayer());
+      safe(() => refreshDelaysFromPlayer());
+      safe(() => refreshTransformsFromPlayer());
+      safe(() => refreshChaptersFromPlayer());
+    });
+  }, 650);
+
+  setTimeout(() => {
+    state._vpCanSave = true;
+    state._vpResumeInProgressForId = null;
+    state._vpResumeCompletedForId = episodeId || null;
+    state._vpResumeCompletedAt = Date.now();
+  }, 900);
+
+  state._suppressResumePromptOnce = false;
+  state._resumeOverridePosSec = null;
+}
+
+async function openVideoQtFallback(v, opts = {}) {
   // QT_ONLY: Videos always open in the external Python/Qt player.
   // The Electron window may hide during playback and will be restored by the main process.
 
@@ -6425,22 +6627,7 @@ async function openVideo(v, opts = {}) {
 
   const sessionId = String(Date.now());
 
-  // Start time: explicit override > library progress (best-effort).
-  let start = 0;
-  try {
-    const override = (opts && Number.isFinite(Number(opts.resumeOverridePosSec))) ? Number(opts.resumeOverridePosSec) : 0;
-    if (override > 0) start = override;
-    else {
-      const gp = getProgressForEpisode(v);
-      const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
-      if (p && !isProgressFinished(p)) {
-        const pos = Number(p.positionSec);
-        const maxPos = Number(p.maxPositionSec);
-        const cand = (Number.isFinite(pos) && pos > 2) ? pos : ((Number.isFinite(maxPos) && maxPos > 2) ? maxPos : 0);
-        start = Number.isFinite(cand) ? cand : 0;
-      }
-    }
-  } catch {}
+  const start = resolveStartSeconds(v, opts);
 
   // Build a show-local playlist in library order (best-effort).
   let playlistPaths = null;
@@ -7225,6 +7412,15 @@ function adjustVolume(delta){
     if (el.videoMuteBtn) el.videoMuteBtn.textContent = next ? '🔇' : '🔊';
     persistVideoSettings({ muted: next });
     hudNotice(next ? 'Muted' : 'Unmuted');
+  }
+
+  function togglePlay(){
+    if (!state.player || typeof state.player.togglePlay !== 'function') return;
+    safe(async () => {
+      await state.player.togglePlay();
+      updateHudFromPlayer();
+      showHud();
+    });
   }
   function commitSeekFromScrub(reason) {
     if (!state.player) return;

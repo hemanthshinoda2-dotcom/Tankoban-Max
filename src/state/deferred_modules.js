@@ -78,6 +78,7 @@
         await loadScriptChain([
           './domains/video/video_utils.js',
           './domains/video/build14_state.js',
+          './domains/video/holy_grail_adapter.js',
           './domains/video/video.js',
         ]);
         await loadScriptOnce('./domains/video/video_search.js');
@@ -165,6 +166,8 @@
           './domains/books/reader/reader_sidebar.js',
           './domains/books/reader/reader_ruler.js',
           './domains/books/reader/reader_overlays.js',
+          './domains/books/reader/reader_audiobook.js',
+          './domains/books/reader/reader_audiobook_pairing.js',
           './domains/books/reader/reader_keyboard.js',
         ]);
         // Group 4-5: orchestrator then library (sequential, order matters)
@@ -174,6 +177,8 @@
         await loadScriptOnce('./domains/books/books_web_sources.js');
         // LISTEN_P3: TTS player overlay (mega panel wiring, voice curation, highlight controls)
         await loadScriptOnce('./domains/books/listening_player.js');
+        // FEAT-AUDIOBOOK: Standalone audiobook player overlay
+        await loadScriptOnce('./domains/books/audiobook_player_overlay.js');
 
         window.__tankoBooksModulesLoaded = true;
 

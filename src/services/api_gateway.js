@@ -391,6 +391,28 @@
       setBounds: (...a) => ea.libmpv?.setBounds ? ea.libmpv.setBounds(...a) : ea.libmpvSetBounds(...a),
       setVisible: (...a) => ea.libmpv?.setVisible ? ea.libmpv.setVisible(...a) : ea.libmpvSetVisible(...a),
     },
+
+    // ========================================
+    // holyGrail.*
+    // ========================================
+    holyGrail: {
+      probe: (...a) => ea.holyGrail?.probe ? ea.holyGrail.probe(...a) : undefined,
+      initGpu: (...a) => ea.holyGrail?.initGpu ? ea.holyGrail.initGpu(...a) : undefined,
+      loadFile: (...a) => ea.holyGrail?.loadFile ? ea.holyGrail.loadFile(...a) : undefined,
+      startFrameLoop: (...a) => ea.holyGrail?.startFrameLoop ? ea.holyGrail.startFrameLoop(...a) : undefined,
+      stopFrameLoop: (...a) => ea.holyGrail?.stopFrameLoop ? ea.holyGrail.stopFrameLoop(...a) : undefined,
+      command: (...a) => ea.holyGrail?.command ? ea.holyGrail.command(...a) : undefined,
+      getProperty: (...a) => ea.holyGrail?.getProperty ? ea.holyGrail.getProperty(...a) : undefined,
+      setProperty: (...a) => ea.holyGrail?.setProperty ? ea.holyGrail.setProperty(...a) : undefined,
+      getState: (...a) => ea.holyGrail?.getState ? ea.holyGrail.getState(...a) : undefined,
+      getTrackList: (...a) => ea.holyGrail?.getTrackList ? ea.holyGrail.getTrackList(...a) : undefined,
+      observeProperty: (...a) => ea.holyGrail?.observeProperty ? ea.holyGrail.observeProperty(...a) : undefined,
+      destroy: (...a) => ea.holyGrail?.destroy ? ea.holyGrail.destroy(...a) : undefined,
+      onPropertyChange: (...a) => ea.holyGrail?.onPropertyChange ? ea.holyGrail.onPropertyChange(...a) : undefined,
+      onEof: (...a) => ea.holyGrail?.onEof ? ea.holyGrail.onEof(...a) : undefined,
+      onFileLoaded: (...a) => ea.holyGrail?.onFileLoaded ? ea.holyGrail.onFileLoaded(...a) : undefined,
+      onVideoFrame: (...a) => ea.holyGrail?.onVideoFrame ? ea.holyGrail.onVideoFrame(...a) : undefined,
+    },
     
     // ========================================
     // webSources.* (BUILD_WEB)
@@ -430,6 +452,26 @@
       onUrlUpdated: (...a) => ea.webTabs?.onUrlUpdated ? ea.webTabs.onUrlUpdated(...a) : undefined,
       onLoading: (...a) => ea.webTabs?.onLoading ? ea.webTabs.onLoading(...a) : undefined,
       onNavState: (...a) => ea.webTabs?.onNavState ? ea.webTabs.onNavState(...a) : undefined,
+    },
+
+    // ========================================
+    // audiobooks.* (FEAT-AUDIOBOOK)
+    // ========================================
+    audiobooks: {
+      getState: (...a) => ea.audiobooks?.getState ? ea.audiobooks.getState(...a) : undefined,
+      onUpdated: (cb) => ea.audiobooks?.onUpdated ? ea.audiobooks.onUpdated(cb) : undefined,
+      onScanStatus: (cb) => ea.audiobooks?.onScanStatus ? ea.audiobooks.onScanStatus(cb) : undefined,
+      scan: (...a) => ea.audiobooks?.scan ? ea.audiobooks.scan(...a) : undefined,
+      addRootFolder: (...a) => ea.audiobooks?.addRootFolder ? ea.audiobooks.addRootFolder(...a) : undefined,
+      removeRootFolder: (...a) => ea.audiobooks?.removeRootFolder ? ea.audiobooks.removeRootFolder(...a) : undefined,
+      getProgressAll: (...a) => ea.audiobooks?.getProgressAll ? ea.audiobooks.getProgressAll(...a) : undefined,
+      getProgress: (...a) => ea.audiobooks?.getProgress ? ea.audiobooks.getProgress(...a) : undefined,
+      saveProgress: (...a) => ea.audiobooks?.saveProgress ? ea.audiobooks.saveProgress(...a) : undefined,
+      clearProgress: (...a) => ea.audiobooks?.clearProgress ? ea.audiobooks.clearProgress(...a) : undefined,
+      getPairing: (...a) => ea.audiobooks?.getPairing ? ea.audiobooks.getPairing(...a) : undefined,
+      savePairing: (...a) => ea.audiobooks?.savePairing ? ea.audiobooks.savePairing(...a) : undefined,
+      deletePairing: (...a) => ea.audiobooks?.deletePairing ? ea.audiobooks.deletePairing(...a) : undefined,
+      getPairingAll: (...a) => ea.audiobooks?.getPairingAll ? ea.audiobooks.getPairingAll(...a) : undefined,
     },
 
     // Health check (BUILD 88 FIX 3.2)

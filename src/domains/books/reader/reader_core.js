@@ -23,6 +23,8 @@
     window.booksReaderSidebar,
     window.booksReaderRuler,
     // LISTEN_P0: TTS removed from reader — moved to dedicated Listening mode
+    window.booksReaderAudiobook,        // FEAT-AUDIOBOOK: in-reader audiobook player
+    window.booksReaderAudiobookPairing, // FEAT-AUDIOBOOK: chapter pairing sidebar tab
     window.booksReaderKeyboard,
   ];
 
@@ -849,6 +851,12 @@
       if (!tts) return;
       var st = RS.state;
       if (!st || !st.book) return;
+
+      // FEAT-AUDIOBOOK: mutual exclusion — stop audiobook before TTS starts
+      var abPlayer = window.booksReaderAudiobook;
+      if (abPlayer && abPlayer.isLoaded && abPlayer.isLoaded()) {
+        try { abPlayer.closeAudiobook(); } catch (_) {}
+      }
 
       // Pause/resume active playback without re-initializing (avoids duplicate sessions).
       try {

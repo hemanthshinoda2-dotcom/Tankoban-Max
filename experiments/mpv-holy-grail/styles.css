@@ -1,0 +1,199 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #0a0a0a;
+    color: #e0e0e0;
+    font-family: -apple-system, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    user-select: none;
+}
+
+/* ── Stage ──────────────────────────────────────────────────────── */
+#stage {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+}
+
+#videoCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;           /* shown when video is loaded */
+    transform: scaleY(-1);    /* fix ANGLE→D3D11 vertical coordinate flip */
+}
+
+/* ── Landing ────────────────────────────────────────────────────── */
+.landing {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.landing-content {
+    text-align: center;
+}
+
+.landing-content h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: #fff;
+}
+
+.landing-content p {
+    font-size: 0.9rem;
+    color: #888;
+    margin-bottom: 1.5rem;
+}
+
+.open-btn {
+    padding: 12px 32px;
+    font-size: 1rem;
+    font-weight: 600;
+    background: #e63946;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.open-btn:hover {
+    background: #c1121f;
+}
+
+.status {
+    margin-top: 1.5rem;
+    font-size: 0.8rem;
+    color: #555;
+    font-style: italic;
+}
+
+/* ── HUD overlay ────────────────────────────────────────────────── */
+.hud {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s;
+}
+
+.hud.hidden {
+    opacity: 0;
+}
+
+.hud > * {
+    pointer-events: auto;
+}
+
+.title-bar {
+    padding: 12px 16px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+    font-size: 0.85rem;
+    color: #fff;
+}
+
+.controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+}
+
+.ctrl-btn {
+    width: 36px;
+    height: 36px;
+    background: none;
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ctrl-btn:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.seek-bar {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 2px;
+    cursor: pointer;
+    position: relative;
+}
+
+.seek-fill {
+    height: 100%;
+    width: 0%;
+    background: #e63946;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+}
+
+.time-display {
+    font-size: 0.8rem;
+    color: #ccc;
+    min-width: 100px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── GPU test panel ─────────────────────────────────────────────── */
+.test-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.test-label {
+    font-size: 0.85rem;
+    color: #888;
+    margin-bottom: 0 !important;
+}
+
+.test-btn {
+    padding: 8px 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.test-btn:hover {
+    opacity: 0.8;
+}
+
+.test-red   { background: #e63946; }
+.test-green { background: #2d6a4f; }
+.test-blue  { background: #1d3557; }

@@ -626,6 +626,46 @@ const CHANNEL = {
   LIBMPV_SET_VISIBLE: 'libmpv:setVisible',
 
   // ========================================
+  // Holy Grail (native mpv + sharedTexture bridge)
+  // ========================================
+
+  /** Probe holy grail availability. Returns: { ok, error?, addonPath?, mpvPath?, eglPath?, glesPath?, sharedTexture? } */
+  HG_PROBE: 'holyGrail:probe',
+
+  /** Initialize holy grail GPU pipeline. Args: { width?, height? }. Returns: { ok, error?, width?, height? } */
+  HG_INIT: 'holyGrail:init',
+
+  /** Load file in holy grail player. Args: filePath. Returns: { ok, error? } */
+  HG_LOAD: 'holyGrail:load',
+
+  /** Start holy grail frame loop. Returns: { ok, error?, alreadyRunning? } */
+  HG_START_FRAME_LOOP: 'holyGrail:startFrameLoop',
+
+  /** Stop holy grail frame loop. Returns: { ok } */
+  HG_STOP_FRAME_LOOP: 'holyGrail:stopFrameLoop',
+
+  /** Send mpv command via holy grail. Args: command array. Returns: { ok, error? } */
+  HG_COMMAND: 'holyGrail:command',
+
+  /** Get holy grail mpv property. Args: name. Returns: { ok, value?, error? } */
+  HG_GET_PROPERTY: 'holyGrail:getProperty',
+
+  /** Set holy grail mpv property. Args: name, value. Returns: { ok, error? } */
+  HG_SET_PROPERTY: 'holyGrail:setProperty',
+
+  /** Get holy grail state. Returns: { ok, state?, error? } */
+  HG_GET_STATE: 'holyGrail:getState',
+
+  /** Get holy grail track list. Returns: { ok, tracks?, error? } */
+  HG_GET_TRACK_LIST: 'holyGrail:getTrackList',
+
+  /** Observe holy grail property changes. Args: name. Returns: { ok, id?, error? } */
+  HG_OBSERVE_PROPERTY: 'holyGrail:observeProperty',
+
+  /** Destroy holy grail player instance (keeps process alive). Returns: { ok } */
+  HG_DESTROY: 'holyGrail:destroy',
+
+  // ========================================
   // Player Core (Tankoban Pro)
   // ========================================
 
@@ -761,6 +801,54 @@ const CHANNEL = {
 
   /** Set split view bounds for two tabs. Args: { left: {tabId,bounds}, right: {tabId,bounds} }. Returns: { ok } */
   WEB_TAB_SPLIT_BOUNDS: 'webTab:splitBounds',
+
+  // ========================================
+  // Audiobooks (FEAT-AUDIOBOOK)
+  // ========================================
+
+  /** Get audiobook library state snapshot. Returns: { audiobookRootFolders, audiobooks, scanning, ... } */
+  AUDIOBOOK_GET_STATE: 'audiobook:getState',
+
+  /** Start audiobook library scan. Returns: { ok: boolean } */
+  AUDIOBOOK_SCAN: 'audiobook:scan',
+
+  /** Add audiobook root folder via dialog. Returns: { ok: boolean, state?: object } */
+  AUDIOBOOK_ADD_ROOT_FOLDER: 'audiobook:addRootFolder',
+
+  /** Remove audiobook root folder. Returns: { ok: boolean, state?: object } */
+  AUDIOBOOK_REMOVE_ROOT_FOLDER: 'audiobook:removeRootFolder',
+
+  // ========================================
+  // Audiobook Progress (FEAT-AUDIOBOOK)
+  // ========================================
+
+  /** Get all audiobook progress. Returns: { [abId]: progress } */
+  AUDIOBOOK_PROGRESS_GET_ALL: 'audiobookProgress:getAll',
+
+  /** Get progress for an audiobook. Returns: progress object or null */
+  AUDIOBOOK_PROGRESS_GET: 'audiobookProgress:get',
+
+  /** Save progress for an audiobook. Returns: { ok: boolean } */
+  AUDIOBOOK_PROGRESS_SAVE: 'audiobookProgress:save',
+
+  /** Clear progress for an audiobook. Returns: { ok: boolean } */
+  AUDIOBOOK_PROGRESS_CLEAR: 'audiobookProgress:clear',
+
+  // ========================================
+  // Audiobook Chapter Pairing (FEAT-AUDIOBOOK)
+  // ========================================
+
+  /** Get chapter pairing for a book. Returns: pairing object or null */
+  AUDIOBOOK_PAIRING_GET: 'audiobookPairing:get',
+
+  /** Save chapter pairing for a book. Returns: { ok: boolean } */
+  AUDIOBOOK_PAIRING_SAVE: 'audiobookPairing:save',
+
+  /** Delete chapter pairing for a book. Returns: { ok: boolean } */
+  AUDIOBOOK_PAIRING_DELETE: 'audiobookPairing:delete',
+
+  /** Get all chapter pairings. Returns: { [bookId]: pairing } */
+  AUDIOBOOK_PAIRING_GET_ALL: 'audiobookPairing:getAll',
 };
 
 /**
@@ -817,6 +905,15 @@ const EVENT = {
   /** Folder thumbnail updated. Payload: { folderPath, thumbPath, timestamp } */
   VIDEO_FOLDER_THUMBNAIL_UPDATED: 'video:folderThumbnailUpdated',
 
+  /** Holy grail property change. Payload: { name: string, value: any } */
+  HG_PROPERTY_CHANGE: 'holyGrail:propertyChange',
+
+  /** Holy grail reached EOF. Payload: { ok?: boolean, reason?: string } */
+  HG_EOF: 'holyGrail:eof',
+
+  /** Holy grail file loaded. Payload: { ok?: boolean } */
+  HG_FILE_LOADED: 'holyGrail:fileLoaded',
+
   // ========================================
   // Dynamic/Templated Events
   // ========================================
@@ -858,6 +955,16 @@ const EVENT = {
   WEB_TAB_URL_UPDATED: 'webTab:urlUpdated',
   WEB_TAB_LOADING: 'webTab:loading',
   WEB_TAB_NAV_STATE: 'webTab:navState',
+
+  // ========================================
+  // Audiobook Events (FEAT-AUDIOBOOK)
+  // ========================================
+
+  /** Audiobook library state updated. Payload: audiobook state snapshot */
+  AUDIOBOOK_UPDATED: 'audiobook:updated',
+
+  /** Audiobook scan status update. Payload: { scanning: boolean, progress?: object } */
+  AUDIOBOOK_SCAN_STATUS: 'audiobook:scanStatus',
 
   /**
    * libmpv render update event (dynamic per handle).

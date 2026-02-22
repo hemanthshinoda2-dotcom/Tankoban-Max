@@ -57,7 +57,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       onEvent: (playerId, handler) => {
         if (typeof handler !== 'function') return () => {};
         const pid = String(playerId || '');
-        const channel = EVENT.mpvPlayerEvent(pid);
+        const channel = EVENT.mpvEvent(pid);
         const fn = (_evt, payload) => {
           try { handler(payload); } catch {}
         };
@@ -67,7 +67,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
         };
       },
 
-      probe: async (filePath) => invoke(CHANNEL.MPV_PROBE, String(filePath || '')),
+      probe: async () => invoke(CHANNEL.MPV_IS_AVAILABLE),
     },
 
     libmpv: {

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'">
+    <title>mpv Holy Grail — PoC</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- ── Stage: video renders here ──────────────────────────── -->
+    <div id="stage">
+        <canvas id="videoCanvas"></canvas>
+
+        <!-- Overlay HUD — the whole point of this PoC is that
+             these HTML elements sit on top of the video perfectly -->
+        <div id="hud" class="hud hidden">
+            <div id="titleBar" class="title-bar">
+                <span id="fileName">No file loaded</span>
+            </div>
+            <div id="controls" class="controls">
+                <button id="btnPlayPause" class="ctrl-btn">▶</button>
+                <div id="seekBar" class="seek-bar">
+                    <div id="seekFill" class="seek-fill"></div>
+                </div>
+                <span id="timeDisplay" class="time-display">0:00 / 0:00</span>
+            </div>
+        </div>
+
+        <!-- Landing screen before a video is opened -->
+        <div id="landing" class="landing">
+            <div class="landing-content">
+                <h1>mpv Holy Grail PoC</h1>
+                <p>Zero-copy GPU pipeline: mpv → D3D11 → sharedTexture → WebGL</p>
+                <button id="btnOpen" class="open-btn">Open Video</button>
+
+                <!-- GPU pipeline test buttons — hidden until addon is ready -->
+                <div id="testPanel" class="test-panel" style="display:none">
+                    <p class="test-label">GPU Pipeline Test:</p>
+                    <button id="btnTestRed" class="test-btn test-red">Red</button>
+                    <button id="btnTestGreen" class="test-btn test-green">Green</button>
+                    <button id="btnTestBlue" class="test-btn test-blue">Blue</button>
+                </div>
+
+                <p class="status" id="status">Checking capabilities...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+    "name": "mpv-holy-grail",
+    "version": "0.0.1",
+    "private": true,
+    "description": "PoC: Zero-copy mpv → D3D11 → Electron sharedTexture → WebGL pipeline",
+    "main": "main.js",
+    "scripts": {
+        "build": "node-gyp rebuild",
+        "rebuild": "electron-rebuild -f -w holy_grail",
+        "start": "electron ."
+    },
+    "dependencies": {
+        "node-addon-api": "^8.3.1"
+    },
+    "devDependencies": {
+        "@electron/rebuild": "^3.7.1",
+        "electron": "^40.6.0",
+        "node-gyp": "^10.3.1"
+    }
+}
