@@ -926,9 +926,12 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       };
     }
 
-    function setBounds() {
+    function setBounds(opts = {}) {
+      const o = (opts && typeof opts === 'object') ? opts : {};
+      const force = !!o.force;
+      const reason = o.reason ? String(o.reason) : 'set-bounds';
       setCanvasSizeFromHost();
-      void requestSurfaceResize('set-bounds');
+      void requestSurfaceResize(reason, { force });
       return { ok: true };
     }
 

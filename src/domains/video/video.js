@@ -130,6 +130,7 @@ videoProgress IPC calls
     // Player
     videoBackBtn: qs('videoBackBtn'),
     videoNowTitle: qs('videoNowTitle'),
+    videoEngineBadge: qs('videoEngineBadge'),
     videoStage: qs('videoStage'),
     videoEl: qs('videoEl'),
     mpvHost: qs('mpvHost'),
@@ -389,6 +390,10 @@ videoProgress IPC calls
     _autoAdvanceCountdownTimer: null,  // BUILD63: countdown interval
     _autoAdvancePlayTimer: null,       // BUILD63: delayed play timeout
     _manualStop: false,
+    activePlayerEngine: 'none', // 'embedded' | 'qt' | 'none'
+    lastOpenRoute: { engine: 'none', reason: 'init', atMs: 0 },
+    _lastEnsurePlayerError: '',
+    _hgUi: null,
 
     // Build 41A: progress-resume safety + debug (session-scoped)
     _vpCanSave: true,
@@ -856,6 +861,124 @@ async function refreshChaptersFromPlayer(){
     return bits.join(' • ');
   }
 
+  function ensureHgUiControllers() {
+    if (state._hgUi) return state._hgUi;
+    const ns = (window && window.TankoHgUi) ? window.TankoHgUi : {};
+    const ui = {};
+
+    if (ns && typeof ns.createToastController === 'function') {
+      ui.toast = ns.createToastController({
+        toastElProvider: () => el.videoToast,
+      });
+    }
+    if (ns && typeof ns.createCenterFlashController === 'function') {
+      ui.centerFlash = ns.createCenterFlashController({
+        targetElProvider: () => el.videoCenterFlash,
+      });
+    }
+    if (ns && typeof ns.createVolumeHudController === 'function') {
+      ui.volumeHud = ns.createVolumeHudController({
+        stageElProvider: () => el.videoStage,
+      });
+    }
+    if (ns && typeof ns.createDiagnosticsController === 'function') {
+      ui.diagnostics = ns.createDiagnosticsController({
+        targetElProvider: () => el.videoDiagnostics,
+        intervalMs: 500,
+        renderText: () => {
+          const s = state.player?.getRenderStats?.();
+          if (!s || typeof s !== 'object') return 'Player information unavailable';
+          const qLabel = (s.quality === 'auto') ? 'Auto' : (s.quality === 'high') ? 'High' : (s.quality === 'extreme') ? 'Extreme' : 'Balanced';
+          const lines = [
+            'Render mode: Canvas',
+            `Render quality: ${qLabel}`,
+            `Shared memory buffer: ${s.sharedBufferEnabled ? 'On' : 'Off'}`,
+            `Surface: ${Math.round(Number(s.surfaceWidth) || 0)} x ${Math.round(Number(s.surfaceHeight) || 0)}`,
+            `${(Number(s.sourceWidth) || 0) && (Number(s.sourceHeight) || 0) ? `Source: ${Math.round(Number(s.sourceWidth) || 0)} x ${Math.round(Number(s.sourceHeight) || 0)}` : ''}`,
+            `${Number(s.effectiveMaxPixelsCap) || 0 ? `Effective max pixels: ${Math.round(Number(s.effectiveMaxPixelsCap) || 0)}` : ''}`,
+            `Device pixel ratio: ${(Number(s.devicePixelRatio) || 1).toFixed(2)}`,
+            `Update events per second: ${(Number(s.updatesPerSecond) || 0).toFixed(1)}`,
+            `Draws per second: ${(Number(s.drawsPerSecond) || 0).toFixed(1)}`,
+            `Average draw time: ${(Number(s.averageDrawTimeMs) || 0).toFixed(2)} milliseconds`,
+            `Last draw time: ${(Number(s.lastDrawTimeMs) || 0).toFixed(2)} milliseconds`,
+          ];
+          return lines.filter(Boolean).join('\n');
+        },
+      });
+    }
+    if (ns && typeof ns.createTopStripController === 'function') {
+      ui.topStrip = ns.createTopStripController({
+        badgeElProvider: () => el.videoEngineBadge,
+      });
+    }
+    if (ns && typeof ns.createPlaylistController === 'function') {
+      ui.playlist = ns.createPlaylistController({
+        getAutoAdvance: () => !!state.settings.autoAdvance,
+        getCurrentKey: () => state.playlist && state.playlist.currentKey,
+        getNextEpisode: () => {
+          try { return (getPrevNextEpisodes() || {}).next || null; } catch { return null; }
+        },
+        onOpenEpisode: (ep) => { safe(() => openEpisodeFromPlaylist(ep)); },
+      });
+    }
+    if (ns && typeof ns.createTracksDrawerController === 'function') {
+      ui.tracksDrawer = ns.createTracksDrawerController({
+        panelElProvider: () => el.videoTracksPanel,
+        onOpen: () => { safe(() => refreshTracksFromPlayer()); },
+      });
+    }
+    if (ns && typeof ns.createContextMenuController === 'function') {
+      ui.contextMenu = ns.createContextMenuController({
+        onOpen: (x, y) => { try { openVideoCtxMenu(x, y); } catch {} },
+        onClose: () => { try { closeVideoCtxMenu(); } catch {} },
+      });
+    }
+
+    state._hgUi = ui;
+    return ui;
+  }
+
+  function setActivePlayerEngine(engine, reason) {
+    const nextEngine = (String(engine || '').toLowerCase() === 'qt')
+      ? 'qt'
+      : (String(engine || '').toLowerCase() === 'embedded')
+        ? 'embedded'
+        : 'none';
+    const routeReason = String(reason || (nextEngine === 'embedded' ? 'default_embedded' : 'unknown'));
+    const nowMs = Date.now();
+
+    state.activePlayerEngine = nextEngine;
+    state.lastOpenRoute = { engine: nextEngine, reason: routeReason, atMs: nowMs };
+
+    const ui = ensureHgUiControllers();
+    try { ui && ui.topStrip && ui.topStrip.setEngine(nextEngine, routeReason); } catch {}
+
+    if (el.videoEngineBadge) {
+      el.videoEngineBadge.dataset.engine = nextEngine;
+      el.videoEngineBadge.dataset.reason = routeReason;
+      if (nextEngine === 'embedded') {
+        el.videoEngineBadge.textContent = 'Embedded (HG)';
+        el.videoEngineBadge.title = routeReason === 'default_embedded'
+          ? 'Embedded Holy Grail engine active.'
+          : `Embedded Holy Grail engine active (${routeReason}).`;
+      } else if (nextEngine === 'qt') {
+        el.videoEngineBadge.textContent = 'Qt';
+        el.videoEngineBadge.title = `Qt engine active (${routeReason}).`;
+      } else {
+        el.videoEngineBadge.textContent = 'No Engine';
+        el.videoEngineBadge.title = 'No active engine.';
+      }
+    }
+
+    try {
+      console.log('[video-route]', {
+        engine: nextEngine,
+        reason: routeReason,
+        atMs: nowMs,
+      });
+    } catch {}
+  }
+
   function toast(msg, ms){
     const dur = Number(ms);
     const timeoutMs = Number.isFinite(dur) && dur > 0 ? dur : 900;
@@ -881,6 +1004,12 @@ async function refreshChaptersFromPlayer(){
         }, timeoutMs);
         return;
       } catch {}
+    }
+
+    const ui = ensureHgUiControllers();
+    if (inPlayer && ui && ui.toast && typeof ui.toast.show === 'function') {
+      ui.toast.show(String(msg || ''), timeoutMs);
+      return;
     }
 
     if (!el.videoToast) return;
@@ -1092,6 +1221,13 @@ async function refreshChaptersFromPlayer(){
       } catch {}
     }
     toast(text, timeoutMs);
+  }
+
+  function centerFlash(text, ms) {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.centerFlash && typeof ui.centerFlash.flash === 'function') {
+      ui.centerFlash.flash(String(text || ''), ms);
+    }
   }
 
 // ══════ SECTION: Show Poster Operations ══════
@@ -2189,6 +2325,12 @@ function closeTracksPanel(){
   let diagnosticsTimer = null;
 
   function setDiagnosticsVisible(visible){
+    const ui = ensureHgUiControllers();
+    if (ui && ui.diagnostics && typeof ui.diagnostics.setVisible === 'function') {
+      ui.diagnostics.setVisible(!!visible);
+      return;
+    }
+
     const on = !!visible;
     if (el.videoDiagnostics) el.videoDiagnostics.classList.toggle('hidden', !on);
 
@@ -2485,13 +2627,14 @@ function closeTracksPanel(){
   }
 
   // BUILD37:  // BUILD37: keep embedded libmpv surface bounds in sync when the layout changes.
-  function scheduleMpvBoundsUpdate(){
+  function scheduleMpvBoundsUpdate(opts){
+    const o = (opts && typeof opts === 'object') ? opts : {};
     try {
       if (state.player?.kind !== 'mpv') return;
       if (typeof state.player.setBounds !== 'function') return;
       requestAnimationFrame(() => {
         setTimeout(() => {
-          try { state.player.setBounds(); } catch {}
+          try { state.player.setBounds(o); } catch {}
         }, 0);
       });
     } catch {}
@@ -2568,6 +2711,7 @@ function closeTracksPanel(){
     document.body.classList.toggle('inVideoMode', isVideo);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
+    if (!isVideo) setActivePlayerEngine('none', 'mode_change');
     try {
       if (window.Tanko && window.Tanko.ui && typeof window.Tanko.ui.setModeTheme === 'function') {
         window.Tanko.ui.setModeTheme(state.mode);
@@ -2781,13 +2925,6 @@ function closeTracksPanel(){
     }
     if (typeof s.forceQtPlayer === 'boolean') {
       state.settings.forceQtPlayer = !!s.forceQtPlayer;
-    } else {
-      // One-way migration from legacy localStorage preference.
-      try {
-        if (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1') {
-          state.settings.forceQtPlayer = true;
-        }
-      } catch {}
     }
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.
 if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
@@ -6092,6 +6229,7 @@ function getEpisodeById(epId){
   function ensurePlayer(){
     // Track panel should never survive engine swaps.
     closeTracksPanel();
+    state._lastEnsurePlayerError = '';
 
     const canHolyGrail = !!(state.holyGrailAvailable
       && typeof window.createHolyGrailAdapter === 'function'
@@ -6121,6 +6259,7 @@ function getEpisodeById(epId){
     };
 
     if (!canHolyGrail) {
+      state._lastEnsurePlayerError = state.holyGrailAvailError ? String(state.holyGrailAvailError) : 'probe_failed';
       setEngineUi(false, false);
       toast(state.holyGrailAvailError ? `Holy Grail not available: ${state.holyGrailAvailError}` : 'Holy Grail not available');
       return null;
@@ -6157,10 +6296,13 @@ function getEpisodeById(epId){
       try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
       try { state.player?.setSubtitleHudLift?.(Number(state.settings.subtitleHudLiftPx || 40)); } catch {}
     } catch (e) {
+      state._lastEnsurePlayerError = String((e && e.message) || e || 'init_failed');
       setEngineUi(false, false);
       toast(`Canvas player failed to start${e && e.message ? ': ' + e.message : ''}`);
       return null;
     }
+
+    state._lastEnsurePlayerError = '';
 
     state._activeRenderMode = requestedRenderMode;
 
@@ -6468,51 +6610,22 @@ function maybeAutoAdvanceOnFinish() {
 
   const curKey = state.playlist.currentKey;
   if (curKey && state._autoAdvanceTriggeredForKey === curKey) return;
-  state._autoAdvanceTriggeredForKey = curKey || state._autoAdvanceTriggeredForKey;
+
+  // Immediate EOF-only auto-advance. No countdown overlay in embedded mode.
+  const ui = ensureHgUiControllers();
+  if (ui && ui.playlist && typeof ui.playlist.maybeAdvanceFromEof === 'function') {
+    const advanced = !!ui.playlist.maybeAdvanceFromEof();
+    if (advanced) {
+      state._autoAdvanceTriggeredForKey = curKey || state._autoAdvanceTriggeredForKey;
+      return;
+    }
+  }
 
   const { next } = getPrevNextEpisodes();
   if (!next) return;
 
-  // BUILD63: Show countdown notice with cancel option
-  const countdownSec = 5;
-  let remaining = countdownSec;
-  
-  // Clear any existing countdown
-  if (state._autoAdvanceCountdownTimer) {
-    clearInterval(state._autoAdvanceCountdownTimer);
-    state._autoAdvanceCountdownTimer = null;
-  }
-  if (state._autoAdvancePlayTimer) {
-    clearTimeout(state._autoAdvancePlayTimer);
-    state._autoAdvancePlayTimer = null;
-  }
-  
-  const updateCountdown = () => {
-    if (remaining > 0) {
-      hudNotice(`Next episode in ${remaining}s (Space to cancel)`, 3500);
-      remaining--;
-    }
-  };
-  
-  // Show initial countdown
-  updateCountdown();
-  showHud();
-  
-  // Update countdown every second
-  state._autoAdvanceCountdownTimer = setInterval(() => {
-    updateCountdown();
-    showHud();
-  }, 1000);
-  
-  // Trigger advance after countdown
-  state._autoAdvancePlayTimer = setTimeout(() => {
-    if (state._autoAdvanceCountdownTimer) {
-      clearInterval(state._autoAdvanceCountdownTimer);
-      state._autoAdvanceCountdownTimer = null;
-    }
-    state._autoAdvancePlayTimer = null;
-    safe(() => openEpisodeFromPlaylist(next));
-  }, countdownSec * 1000);
+  state._autoAdvanceTriggeredForKey = curKey || state._autoAdvanceTriggeredForKey;
+  safe(() => openEpisodeFromPlaylist(next));
 }
 
 
@@ -6580,13 +6693,17 @@ async function openVideo(v, opts = {}) {
   if (!v || !v.path) return;
 
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
-  const forceQt = !!(
-    (opts && typeof opts === 'object' && opts.forceQt === true)
-    || (
-      !(opts && typeof opts === 'object' && opts.forceEmbedded === true)
-      && getQtPlayerPreference()
-    )
-  );
+  const explicitQt = !!(opts && typeof opts === 'object' && opts.forceQt === true);
+  const explicitEmbedded = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
+  const userPrefQt = !!(!explicitEmbedded && getQtPlayerPreference());
+  const forceQt = !!(explicitQt || userPrefQt);
+  const requestedReason = explicitQt
+    ? 'explicit_qt'
+    : explicitEmbedded
+      ? 'explicit_embedded'
+      : userPrefQt
+        ? 'user_pref_qt'
+        : 'default_embedded';
 
   const canHolyGrail = !!(!forceQt
     && state.holyGrailAvailable
@@ -6600,7 +6717,9 @@ async function openVideo(v, opts = {}) {
     state._playerEventsBoundFor = null;
     document.body.classList.remove('mpvEngine');
     document.body.classList.remove('mpvDetached');
-    return openVideoQtFallback(v, opts);
+    const routeReason = forceQt ? requestedReason : 'probe_failed';
+    const qtOpts = (opts && typeof opts === 'object') ? { ...opts, _routeReason: routeReason } : { _routeReason: routeReason };
+    return openVideoQtFallback(v, qtOpts);
   }
 
   // If play is requested from outside Videos mode, switch first (best-effort).
@@ -6610,7 +6729,9 @@ async function openVideo(v, opts = {}) {
 
   const player = ensurePlayer();
   if (!player) {
-    return openVideoQtFallback(v, opts);
+    const initReason = state._lastEnsurePlayerError ? `init_failed:${state._lastEnsurePlayerError}` : 'init_failed';
+    const qtOpts = (opts && typeof opts === 'object') ? { ...opts, _routeReason: initReason } : { _routeReason: initReason };
+    return openVideoQtFallback(v, qtOpts);
   }
 
   // Enter in-app player view.
@@ -6682,8 +6803,13 @@ async function openVideo(v, opts = {}) {
     document.body.classList.remove('inVideoPlayer');
     document.body.classList.remove('mpvEngine');
     document.body.classList.remove('mpvDetached');
-    return openVideoQtFallback(v, opts);
+    const qtOpts = (opts && typeof opts === 'object')
+      ? { ...opts, _routeReason: `load_failed:${err}` }
+      : { _routeReason: `load_failed:${err}` };
+    return openVideoQtFallback(v, qtOpts);
   }
+
+  setActivePlayerEngine('embedded', explicitEmbedded ? 'explicit_embedded' : 'default_embedded');
 
   applySettingsToPlayer();
   updateHudFromPlayer();
@@ -6748,9 +6874,17 @@ async function openVideoQtFallback(v, opts = {}) {
 
   if (!v || !v.path) return;
 
+  const fallbackReason = (opts && typeof opts === 'object' && opts._routeReason)
+    ? String(opts._routeReason)
+    : ((opts && typeof opts === 'object' && opts.forceQt === true)
+      ? 'explicit_qt'
+      : (getQtPlayerPreference() ? 'user_pref_qt' : 'probe_failed'));
+  setActivePlayerEngine('qt', fallbackReason);
+
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
   if (!api || !api.player || typeof api.player.launchQt !== 'function') {
     try { toast('Qt player launcher not available (Tanko.api.player.launchQt missing).', 2400); } catch {}
+    setActivePlayerEngine('none', 'qt_unavailable');
     return;
   }
 
@@ -6837,6 +6971,7 @@ async function openVideoQtFallback(v, opts = {}) {
     r = await api.player.launchQt(launchArgs);
   } catch (e) {
     try { toast('Failed to launch Qt player: ' + String(e && e.message ? e.message : e), 3200); } catch {}
+    setActivePlayerEngine('none', 'qt_launch_failed');
     return;
   }
 
@@ -6856,6 +6991,7 @@ async function openVideoQtFallback(v, opts = {}) {
     const lp = (r && r.logPath) ? String(r.logPath) : '';
     const extra = lp ? (' (see ' + lp + ')') : '';
     try { toast('Qt player failed: ' + String(r.error || 'unknown error') + extra, 6200); } catch {}
+    setActivePlayerEngine('none', `qt_failed:${String(r.error || 'unknown')}`);
   }
 }
 
@@ -6875,6 +7011,11 @@ async function openVideoQtFallback(v, opts = {}) {
     if (el.videoPlayerView) el.videoPlayerView.classList.add('hidden');
     // FIX-VID-SIDEBAR: only show video view if we're actually in video mode
     if (el.videoLibraryView && state.mode === 'videos') el.videoLibraryView.classList.remove('hidden');
+
+    setActivePlayerEngine('none', 'library');
+    const ui = ensureHgUiControllers();
+    try { ui && ui.centerFlash && ui.centerFlash.hide && ui.centerFlash.hide(); } catch {}
+    try { ui && ui.volumeHud && ui.volumeHud.hide && ui.volumeHud.hide(); } catch {}
 
     safe(() => state.player?.pause());
     safe(() => state.player?.unload());
@@ -7365,9 +7506,9 @@ async function saveNow(force) {
 
     // Fullscreen/layout changes require a bounds resync for embedded mpv.
     // Do it immediately + a couple delayed passes to catch the final layout (prevents brief blank frames).
-    try { scheduleMpvBoundsUpdate(); } catch {}
-    setTimeout(() => { try { scheduleMpvBoundsUpdate(); } catch {} }, 60);
-    setTimeout(() => { try { scheduleMpvBoundsUpdate(); } catch {} }, 220);
+    try { scheduleMpvBoundsUpdate({ force: true, reason: isFs ? 'fullscreen-enter' : 'fullscreen-exit' }); } catch {}
+    setTimeout(() => { try { scheduleMpvBoundsUpdate({ force: true, reason: isFs ? 'fullscreen-settle-1' : 'windowed-settle-1' }); } catch {} }, 60);
+    setTimeout(() => { try { scheduleMpvBoundsUpdate({ force: true, reason: isFs ? 'fullscreen-settle-2' : 'windowed-settle-2' }); } catch {} }, 220);
   }
 
   async function toggleFullscreen(){
@@ -7405,6 +7546,7 @@ async function saveNow(force) {
       state.settings.speed = nextSpeed;
       setSpeedLabels(nextSpeed);
       hudNotice(`Speed ${nextSpeed}×`);
+      centerFlash(`${nextSpeed}x`, 340);
       persistVideoSettings({ speed: nextSpeed });
     } catch (err) {
       console.error('[video] setSpeed failed', err);
@@ -7428,6 +7570,7 @@ async function saveNow(force) {
         await state.player.setSpeed(next);
         state.settings.speed = next;
         setSpeedLabels(next);
+        centerFlash(`${next}x`, 340);
         persistVideoSettings({ speed: next });
         hudNotice(`Speed ${next}×`);
       } catch (err) {
@@ -7517,6 +7660,12 @@ function adjustVolume(delta){
   // Build 69: Volume OSD indicator for immediate visual feedback
   let volumeOSDTimer = null;
   function showVolumeOSD(volume) {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.volumeHud && typeof ui.volumeHud.show === 'function') {
+      ui.volumeHud.show(Number(volume) || 0);
+      return;
+    }
+
     const volumePct = Math.round(clamp(volume, 0, 1) * 100);
     
     // Create or reuse OSD element
@@ -7566,6 +7715,9 @@ function adjustVolume(delta){
     safe(async () => {
       await state.player.togglePlay();
       updateHudFromPlayer();
+      const st = state.player?.getState?.();
+      if (st && st.paused === true) centerFlash('PAUSE', 420);
+      else centerFlash('PLAY', 360);
       showHud();
     });
   }
@@ -7705,8 +7857,8 @@ function adjustVolume(delta){
         updateHudFromPlayer();
         saveNow(false);
       });
-      state.player.on('play', () => { updateHudFromPlayer(); hideHudSoon(); });
-      state.player.on('pause', () => { updateHudFromPlayer(); showHud(); saveNow(true); });
+      state.player.on('play', () => { updateHudFromPlayer(); hideHudSoon(); centerFlash('PLAY', 360); });
+      state.player.on('pause', () => { updateHudFromPlayer(); showHud(); centerFlash('PAUSE', 420); saveNow(true); });
       state.player.on('ended', (ev) => {
         updateHudFromPlayer();
         showHud();
@@ -7862,7 +8014,12 @@ function adjustVolume(delta){
       showHud();
 
       console.log('[BUILD69 CTX] Calling openVideoCtxMenu at', e.clientX, e.clientY);
-      openVideoCtxMenu(e.clientX || 0, e.clientY || 0);
+      const ui = ensureHgUiControllers();
+      if (ui && ui.contextMenu && typeof ui.contextMenu.open === 'function') {
+        ui.contextMenu.open(e.clientX || 0, e.clientY || 0);
+      } else {
+        openVideoCtxMenu(e.clientX || 0, e.clientY || 0);
+      }
       console.log('[video] Context menu opened at:', e.clientX, e.clientY);
     }
 
@@ -9362,22 +9519,7 @@ function bindKeyboard(){
       if (key === ' ' || lower === 'k') {
         e.preventDefault();
         e.stopPropagation();
-        
-        // BUILD63: Cancel auto-advance countdown if active
-        if (key === ' ' && (state._autoAdvanceCountdownTimer || state._autoAdvancePlayTimer)) {
-          if (state._autoAdvanceCountdownTimer) {
-            clearInterval(state._autoAdvanceCountdownTimer);
-            state._autoAdvanceCountdownTimer = null;
-          }
-          if (state._autoAdvancePlayTimer) {
-            clearTimeout(state._autoAdvancePlayTimer);
-            state._autoAdvancePlayTimer = null;
-          }
-          hudNotice('Auto-advance cancelled');
-          showHud();
-          return;
-        }
-        
+
         await state.player.togglePlay();
         showHud();
         return;
@@ -9554,6 +9696,8 @@ function bindKeyboard(){
 
     function bind() {
     bindModeButtons();
+    ensureHgUiControllers();
+    setActivePlayerEngine(state.activePlayerEngine || 'none', (state.lastOpenRoute && state.lastOpenRoute.reason) || 'init');
     // BUILD14: Listen for player exit event to restore state
     try {
       if (window.Tanko && window.Tanko.on && typeof window.Tanko.on === 'function') {
