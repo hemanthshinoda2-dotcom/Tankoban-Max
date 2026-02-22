@@ -9,8 +9,8 @@
   var clamp = utils.clamp;
 
   function createHolyGrailBackend(opts) {
-    var hg = window.HolyGrailBridge;
-    if (!hg) throw new Error('holy_grail_backend: window.HolyGrailBridge not available');
+    var hg = (opts && opts.bridge) || window.HolyGrailBridge;
+    if (!hg) throw new Error('holy_grail_backend: no HolyGrailBridge available (pass opts.bridge or set window.HolyGrailBridge)');
 
     var hostEl = opts.hostElement || opts.hostEl;
     if (!hostEl) throw new Error('holy_grail_backend: opts.hostElement is required');

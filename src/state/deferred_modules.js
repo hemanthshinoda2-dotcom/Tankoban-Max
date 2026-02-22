@@ -103,6 +103,32 @@
             try { console.warn('[video-loader] optional hg_ui script failed:', path, err); } catch {}
           }
         }
+        // player_hg embedded scripts — full player UI for Shadow DOM embed.
+        // Registers on window.TankoPlayer (no conflict with existing Tanko/TankoHgUi).
+        const playerHgBase = '../player_hg/renderer/';
+        try {
+          await loadScriptChain([
+            playerHgBase + 'utils.js',
+            playerHgBase + 'player_state.js',
+            playerHgBase + 'adapter.js',
+            playerHgBase + 'holy_grail_backend.js',
+          ]);
+          await loadScriptGroup([
+            playerHgBase + 'hud.js',
+            playerHgBase + 'top_strip.js',
+            playerHgBase + 'volume_hud.js',
+            playerHgBase + 'center_flash.js',
+            playerHgBase + 'toast.js',
+            playerHgBase + 'context_menu.js',
+            playerHgBase + 'drawer.js',
+            playerHgBase + 'playlist.js',
+            playerHgBase + 'tracks_drawer.js',
+            playerHgBase + 'diagnostics.js',
+          ]);
+          await loadScriptOnce(playerHgBase + 'boot.js');
+        } catch (err) {
+          try { console.warn('[video-loader] player_hg scripts failed:', err); } catch {}
+        }
         await loadScriptChain([
           './domains/video/video.js',
         ]);

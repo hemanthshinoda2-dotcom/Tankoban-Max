@@ -6378,6 +6378,51 @@ function getEpisodeById(epId){
     return 'file://' + encodeURI(p);
   }
 
+  // ── Shadow DOM embed for player_hg (Session 2 infrastructure — wired in Session 3) ──
+
+  function createPlayerHgEmbed() {
+    const host = el.mpvHost;
+    if (!host) return null;
+
+    const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = ''; // Clear any previous contents
+
+    // Host-level styles — replaces html/body selectors from player.css
+    // (Shadow DOM has no html/body to style; :host is the container.)
+    const hostStyle = document.createElement('style');
+    hostStyle.textContent =
+      ':host { display: block; width: 100%; height: 100%; overflow: hidden; ' +
+      'font-family: "Segoe UI", system-ui, -apple-system, sans-serif; ' +
+      'color: #e0e0e0; user-select: none; -webkit-user-select: none; }';
+    shadow.appendChild(hostStyle);
+
+    // Load player_hg stylesheet
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '../player_hg/styles/player.css';
+    shadow.appendChild(link);
+
+    // Base DOM structure (mirrors player_hg/index.html)
+    const stage = document.createElement('div');
+    stage.id = 'playerStage';
+    shadow.appendChild(stage);
+
+    // Hidden <video> element (unused in HG mode but keeps boot.js happy)
+    const video = document.createElement('video');
+    video.id = 'videoSurface';
+    video.setAttribute('playsinline', '');
+    video.style.display = 'none';
+    stage.appendChild(video);
+
+    return shadow;
+  }
+
+  function destroyPlayerHgEmbed() {
+    const host = el.mpvHost;
+    if (!host || !host.shadowRoot) return;
+    host.shadowRoot.innerHTML = '';
+  }
+
   function ensurePlayer(){
     // Track panel should never survive engine swaps.
     closeTracksPanel();

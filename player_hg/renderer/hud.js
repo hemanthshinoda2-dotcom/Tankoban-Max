@@ -500,7 +500,8 @@
 
   function init(adapterInstance) {
     adapter = adapterInstance;
-    stageEl = document.getElementById('playerStage');
+    var root = window.TankoPlayer._root || document;
+    stageEl = root.getElementById('playerStage');
 
     // Make stage focusable so keyboard shortcuts work after button clicks
     if (!stageEl.hasAttribute('tabindex')) stageEl.setAttribute('tabindex', '-1');
@@ -536,7 +537,7 @@
 
     // Defer top strip hover binding (it inits after us)
     requestAnimationFrame(function () {
-      var topStripEl = document.getElementById('topStrip');
+      var topStripEl = (window.TankoPlayer._root || document).getElementById('topStrip');
       if (topStripEl) {
         topStripEl.addEventListener('mouseenter', onHudMouseEnter);
         topStripEl.addEventListener('mouseleave', onHudMouseLeave);

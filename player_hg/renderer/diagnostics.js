@@ -86,7 +86,8 @@
   }
 
   function init() {
-    var stageEl = document.getElementById('playerStage');
+    var root = window.TankoPlayer._root || document;
+    var stageEl = root.getElementById('playerStage');
     var el = buildDom();
     stageEl.appendChild(el);
   }

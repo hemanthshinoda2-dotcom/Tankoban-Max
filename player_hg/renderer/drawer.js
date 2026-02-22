@@ -13,7 +13,8 @@
   function createDrawer(opts) {
     var id = opts.id || 'drawer';
     var side = opts.side || 'right';
-    var stageEl = document.getElementById('playerStage');
+    var root = window.TankoPlayer._root || document;
+    var stageEl = root.getElementById('playerStage');
 
     var el = document.createElement('div');
     el.id = id;

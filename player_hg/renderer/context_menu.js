@@ -5,6 +5,7 @@
 
   var menuEl = null;
   var backdrop = null;
+  var _stageEl = null;
 
   var SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0];
 
@@ -22,7 +23,9 @@
       e.preventDefault();
       closeMenu();
     });
-    document.body.appendChild(backdrop);
+    // Append to stage (works in both standalone and Shadow DOM)
+    var host = _stageEl || document.body;
+    host.appendChild(backdrop);
 
     menuEl = document.createElement('div');
     menuEl.className = 'ctx-menu';
@@ -172,7 +175,7 @@
     });
 
     // Position menu at click point, clamped to viewport
-    document.body.appendChild(menuEl);
+    host.appendChild(menuEl);
     var mw = menuEl.offsetWidth;
     var mh = menuEl.offsetHeight;
     var vw = window.innerWidth;
@@ -241,7 +244,9 @@
   // ── Init ──
 
   function init() {
-    document.getElementById('playerStage').addEventListener('contextmenu', function (e) {
+    var root = window.TankoPlayer._root || document;
+    _stageEl = root.getElementById('playerStage');
+    _stageEl.addEventListener('contextmenu', function (e) {
       e.preventDefault();
       var s = window.TankoPlayer.state.get();
       if (!s.fileLoaded) return;
