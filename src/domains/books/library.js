@@ -81,6 +81,14 @@ SECTION INDEX (search: ══════ SECTION:)
     booksDownloadsEmpty: qs('booksDownloadsEmpty'),
     booksDownloadsItems: qs('booksDownloadsItems'),
     booksDownloadsHeader: qs('booksDownloadsHeader'),
+
+    // FEAT-AUDIOBOOK: audiobook shelf + sidebar
+    audiobooksPanel: qs('booksAudiobooksPanel'),
+    audiobooksGrid: qs('booksAudiobooksGrid'),
+    audiobooksEmpty: qs('booksAudiobooksEmpty'),
+    audiobooksLabel: qs('booksAudiobooksLabel'),
+    addAudiobookRootBtn: qs('booksAddAudiobookRootBtn'),
+    audiobookFoldersList: qs('booksAudiobookFoldersList'),
   };
 
 // ══════ SECTION: DOM Refs ══════
@@ -108,6 +116,10 @@ SECTION INDEX (search: ══════ SECTION:)
     ttsProgressAll: {},
     // RENAME-BOOK: custom display names keyed by bookId
     displayNames: {},
+
+    // FEAT-AUDIOBOOK: audiobook library state
+    audiobookSnap: { audiobooks: [], audiobookRootFolders: [], scanning: false },
+    audiobookProgressAll: {},
 
     ui: {
       selectedRootId: null,
@@ -774,6 +786,205 @@ function getBookProgress(bookId) {
       state.progressAll = {};
     }
     rebuildShowProgressSummary();
+  }
+
+  // FEAT-AUDIOBOOK: load audiobook progress
+  async function loadAudiobookProgress() {
+    if (!api.audiobooks) return;
+    try {
+      var p = await api.audiobooks.getProgressAll();
+      state.audiobookProgressAll = p && typeof p === 'object' ? p : {};
+    } catch {
+      state.audiobookProgressAll = {};
+    }
+  }
+
+  // FEAT-AUDIOBOOK: fetch audiobook state from main process
+  async function refreshAudiobookState() {
+    if (!api.audiobooks) return;
+    try {
+      var snap = await api.audiobooks.getState();
+      applyAudiobookSnapshot(snap || {});
+    } catch {}
+  }
+
+  function applyAudiobookSnapshot(snap) {
+    var s = snap && typeof snap === 'object' ? snap : {};
+    state.audiobookSnap = {
+      audiobooks: Array.isArray(s.audiobooks) ? s.audiobooks : [],
+      audiobookRootFolders: Array.isArray(s.audiobookRootFolders) ? s.audiobookRootFolders : [],
+      scanning: !!s.scanning,
+    };
+    renderAudiobooks();
+    renderAudiobookSidebar();
+  }
+
+  // FEAT-AUDIOBOOK: format duration as h:mm:ss or m:ss
+  function formatDuration(secs) {
+    var total = Math.floor(secs || 0);
+    if (total <= 0) return '';
+    var h = Math.floor(total / 3600);
+    var m = Math.floor((total % 3600) / 60);
+    var s = total % 60;
+    if (h > 0) return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  // FEAT-AUDIOBOOK: render audiobook tiles in the shelf
+  function renderAudiobooks() {
+    if (!el.audiobooksPanel || !el.audiobooksGrid || !el.audiobooksEmpty) return;
+    var audiobooks = state.audiobookSnap.audiobooks || [];
+    var hasRoots = (state.audiobookSnap.audiobookRootFolders || []).length > 0;
+
+    el.audiobooksPanel.classList.toggle('hidden', !hasRoots && !audiobooks.length);
+    el.audiobooksGrid.textContent = '';
+    el.audiobooksEmpty.classList.toggle('hidden', !!audiobooks.length);
+
+    if (el.audiobooksLabel) {
+      el.audiobooksLabel.textContent = audiobooks.length
+        ? audiobooks.length + ' audiobook' + (audiobooks.length === 1 ? '' : 's')
+        : (hasRoots ? 'Scanning...' : 'No folders added');
+    }
+
+    if (!audiobooks.length) return;
+
+    var frag = document.createDocumentFragment();
+    for (var i = 0; i < audiobooks.length; i++) {
+      frag.appendChild(makeAudiobookCard(audiobooks[i]));
+    }
+    el.audiobooksGrid.appendChild(frag);
+  }
+
+  // FEAT-AUDIOBOOK: build an audiobook tile card
+  function makeAudiobookCard(ab) {
+    var card = document.createElement('div');
+    card.className = 'seriesCard ab-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+
+    var coverWrap = document.createElement('div');
+    coverWrap.className = 'seriesCoverWrap';
+    var thumbWrap = document.createElement('div');
+    thumbWrap.className = 'thumbWrap';
+    var img = document.createElement('img');
+    img.className = 'thumb';
+    img.alt = '';
+
+    if (ab.coverPath) {
+      img.src = 'file://' + ab.coverPath.replace(/\\/g, '/');
+    } else {
+      // Headphones icon as fallback (data URI)
+      img.src = 'data:image/svg+xml,' + encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="%23888"><rect width="64" height="64" fill="%23222" rx="8"/><path d="M32 14c-9.94 0-18 8.06-18 18v12a6 6 0 0 0 6 6h2a2 2 0 0 0 2-2v-12a2 2 0 0 0-2-2h-2v-2c0-6.63 5.37-12 12-12s12 5.37 12 12v2h-2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h2a6 6 0 0 0 6-6V32c0-9.94-8.06-18-18-18z"/></svg>'
+      );
+    }
+    thumbWrap.appendChild(img);
+    coverWrap.appendChild(thumbWrap);
+
+    // Progress bar overlay
+    var prog = state.audiobookProgressAll[ab.id];
+    if (prog && ab.chapters && ab.chapters.length > 0) {
+      var pct = 0;
+      if (ab.totalDuration > 0 && prog.chapterIndex >= 0) {
+        // Time-based progress
+        var elapsed = 0;
+        for (var ci = 0; ci < prog.chapterIndex && ci < ab.chapters.length; ci++) {
+          elapsed += (ab.chapters[ci].duration || 0);
+        }
+        elapsed += (prog.position || 0);
+        pct = Math.min(100, Math.round((elapsed / ab.totalDuration) * 100));
+      } else {
+        // Chapter-based progress
+        pct = Math.min(100, Math.round(((prog.chapterIndex || 0) / ab.chapters.length) * 100));
+      }
+      if (pct > 0) {
+        var bar = document.createElement('div');
+        bar.className = 'listen-continue-bar';
+        var fill = document.createElement('div');
+        fill.className = 'listen-continue-bar-fill';
+        fill.style.width = pct + '%';
+        bar.appendChild(fill);
+        coverWrap.appendChild(bar);
+      }
+    }
+
+    var name = document.createElement('div');
+    name.className = 'seriesName';
+    name.textContent = ab.title || 'Untitled';
+
+    var info = document.createElement('div');
+    info.className = 'seriesInfo';
+    var meta = document.createElement('div');
+    meta.className = 'seriesMeta';
+    var s1 = document.createElement('span');
+    s1.textContent = (ab.chapters ? ab.chapters.length : 0) + ' chapter' + ((ab.chapters && ab.chapters.length === 1) ? '' : 's');
+    var s2 = document.createElement('span');
+    s2.className = 'mono u-ellipsis';
+    s2.textContent = ab.totalDuration > 0 ? formatDuration(ab.totalDuration) : '';
+    meta.appendChild(s1);
+    if (s2.textContent) meta.appendChild(s2);
+    info.appendChild(meta);
+
+    card.appendChild(coverWrap);
+    card.appendChild(name);
+    card.appendChild(info);
+
+    var openFn = function () { openAudiobook(ab); };
+    card.onclick = openFn;
+    card.onkeydown = function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFn(); }
+    };
+
+    return card;
+  }
+
+  // FEAT-AUDIOBOOK: open audiobook in standalone overlay player
+  function openAudiobook(ab) {
+    if (!ab) return;
+    var overlay = window.booksAudiobookOverlay;
+    if (overlay && typeof overlay.open === 'function') {
+      overlay.open(ab);
+    } else {
+      toast('Audiobook player not ready');
+    }
+  }
+
+  // FEAT-AUDIOBOOK: render audiobook root folders in sidebar
+  function renderAudiobookSidebar() {
+    if (!el.audiobookFoldersList) return;
+    el.audiobookFoldersList.textContent = '';
+    var roots = state.audiobookSnap.audiobookRootFolders || [];
+    if (!roots.length) return;
+
+    for (var i = 0; i < roots.length; i++) {
+      (function (rootPath) {
+        var row = document.createElement('div');
+        row.className = 'folderRow';
+        var label = document.createElement('span');
+        label.className = 'folderLabel u-ellipsis';
+        label.title = rootPath;
+        var basename = rootPath.replace(/\\/g, '/').replace(/\/+$/, '').split('/').pop() || rootPath;
+        label.textContent = basename;
+        var removeBtn = document.createElement('button');
+        removeBtn.className = 'folderRemove iconBtn';
+        removeBtn.title = 'Remove';
+        removeBtn.textContent = '\u00d7';
+        removeBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var ok = window.confirm('Remove this audiobook root? Files on disk are not deleted.');
+          if (!ok) return;
+          api.audiobooks.removeRootFolder(rootPath).then(function (res) {
+            if (res && res.state) applyAudiobookSnapshot(res.state);
+            loadAudiobookProgress().then(function () { renderAudiobooks(); });
+            toast('Audiobook root removed');
+          }).catch(function () {});
+        });
+        row.appendChild(label);
+        row.appendChild(removeBtn);
+        el.audiobookFoldersList.appendChild(row);
+      })(roots[i]);
+    }
   }
 
 // ══════ SECTION: Derived Data Rebuilding ══════
@@ -2295,6 +2506,7 @@ function getBookProgress(bookId) {
     renderScan();
     renderSidebar();
     renderContinue();
+    renderAudiobooks();
     renderViews();
     if (!state.readerOpen && state.ui.booksSubView === 'show' && state.ui.selectedShowId) renderShowView();
     else if (!state.readerOpen) renderHome();
@@ -2837,6 +3049,25 @@ function getBookProgress(bookId) {
       scheduleSaveUi();
       renderAll();
     });
+
+    // FEAT-AUDIOBOOK: live-update when audiobook scan completes or folders change
+    api.audiobooks.onUpdated(function (_evt, snap) {
+      applyAudiobookSnapshot(snap);
+    });
+
+    // FEAT-AUDIOBOOK: add audiobook root folder button
+    if (el.addAudiobookRootBtn) {
+      el.addAudiobookRootBtn.addEventListener('click', async function () {
+        try {
+          var result = await api.audiobooks.addRootFolder();
+          if (result && result.added) {
+            toast('Audiobook folder added — scanning...');
+          }
+        } catch (err) {
+          console.error('[Books] addAudiobookRootBtn error:', err);
+        }
+      });
+    }
   }
 
 
@@ -2856,6 +3087,9 @@ function getBookProgress(bookId) {
     // RENAME-BOOK: load custom display names
     try { state.displayNames = (await api.booksDisplayNames.getAll()) || {}; } catch(_e) { state.displayNames = {}; }
     await refreshState();
+    // FEAT-AUDIOBOOK: load audiobook progress + state in parallel with book state
+    await loadAudiobookProgress();
+    await refreshAudiobookState();
     renderAll();
   }
 
@@ -2898,6 +3132,11 @@ function getBookProgress(bookId) {
       if (state.ui.booksSubView === 'show') renderShowView();
       else renderHome();
     },
+    // FEAT-AUDIOBOOK: audiobook accessors for overlay and other modules
+    getAudiobooks: () => (state.audiobookSnap.audiobooks || []).slice(),
+    getAudiobookProgress: () => Object.assign({}, state.audiobookProgressAll),
+    refreshAudiobookState: () => refreshAudiobookState(),
+    openAudiobook: (ab) => openAudiobook(ab),
   };
 
   // Reset to home view when entering books mode from another tab

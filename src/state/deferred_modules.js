@@ -174,6 +174,8 @@
         await loadScriptOnce('./domains/books/books_web_sources.js');
         // LISTEN_P3: TTS player overlay (mega panel wiring, voice curation, highlight controls)
         await loadScriptOnce('./domains/books/listening_player.js');
+        // FEAT-AUDIOBOOK: Standalone audiobook player overlay
+        await loadScriptOnce('./domains/books/audiobook_player_overlay.js');
 
         window.__tankoBooksModulesLoaded = true;
 
