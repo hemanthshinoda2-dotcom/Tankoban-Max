@@ -1,16 +1,23 @@
 // Web browser settings persistence.
 
 const SETTINGS_FILE = 'web_browser_settings.json';
+const ALLOWED_SEARCH_ENGINES = new Set(['yandex', 'google', 'duckduckgo', 'bing', 'brave']);
 const DEFAULT_SETTINGS = {
   defaultSearchEngine: 'yandex',
 };
 
 var cache = null;
 
+function normalizeSearchEngine(value) {
+  var key = String(value || '').trim().toLowerCase();
+  if (!ALLOWED_SEARCH_ENGINES.has(key)) return DEFAULT_SETTINGS.defaultSearchEngine;
+  return key;
+}
+
 function normalizeSettings(input) {
   var src = (input && typeof input === 'object') ? input : {};
   var out = {
-    defaultSearchEngine: String(src.defaultSearchEngine || DEFAULT_SETTINGS.defaultSearchEngine).trim().toLowerCase() || DEFAULT_SETTINGS.defaultSearchEngine,
+    defaultSearchEngine: normalizeSearchEngine(src.defaultSearchEngine || DEFAULT_SETTINGS.defaultSearchEngine),
   };
   return out;
 }
