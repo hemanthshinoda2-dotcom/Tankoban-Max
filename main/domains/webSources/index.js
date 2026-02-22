@@ -22,6 +22,13 @@ var downloadsCache = null; // { downloads: [], updatedAt }
 var activeDownloadItems = new Map(); // id -> DownloadItem
 var activeSpeed = new Map(); // id -> { lastAt, lastBytes, bytesPerSec }
 var activePersist = new Map(); // id -> lastWriteAt (ms)
+var downloadsWriteQueue = Promise.resolve();
+var TERMINAL_DOWNLOAD_STATES = {
+  completed: true,
+  cancelled: true,
+  failed: true,
+  interrupted: true,
+};
 
 function readDownloads(ctx) {
   var p = ctx.storage.dataPath(DOWNLOAD_HISTORY_FILE);
@@ -53,6 +60,53 @@ function emitDownloadsUpdated(ctx) {
       downloads: (ensureDownloadsCache(ctx).downloads || []),
     });
   } catch {}
+}
+
+function isTerminalDownloadState(state) {
+  return !!TERMINAL_DOWNLOAD_STATES[String(state || '')];
+}
+
+function withDownloadsWriteQueue(task) {
+  var next = downloadsWriteQueue.then(function () {
+    return Promise.resolve().then(task);
+  });
+  downloadsWriteQueue = next.catch(function () {});
+  return next;
+}
+
+function updateDownloadEntry(record, patch) {
+  if (!record || !patch) return;
+  var incomingState = patch.state != null ? String(patch.state) : '';
+  var currentTerminal = isTerminalDownloadState(record.state);
+  var incomingTerminal = isTerminalDownloadState(incomingState);
+  if (currentTerminal && !incomingTerminal) return;
+  if (currentTerminal && incomingTerminal && String(record.state) === 'completed' && incomingState !== 'completed') return;
+
+  var keys = Object.keys(patch);
+  for (var i = 0; i < keys.length; i++) {
+    var key = keys[i];
+    if (key === 'state') continue;
+    record[key] = patch[key];
+  }
+
+  if (patch.state != null) {
+    if (incomingState === 'completed') record.state = 'completed';
+    else if (!currentTerminal || incomingTerminal) record.state = incomingState;
+  }
+}
+
+function mutateDownloads(ctx, mutator) {
+  return withDownloadsWriteQueue(async function () {
+    var cfg = ensureDownloadsCache(ctx);
+    var shouldPersist = true;
+    if (typeof mutator === 'function') shouldPersist = mutator(cfg) !== false;
+    if (!shouldPersist) return cfg;
+    cfg.updatedAt = Date.now();
+    capDownloads(cfg);
+    await writeDownloads(ctx, cfg);
+    emitDownloadsUpdated(ctx);
+    return cfg;
+  });
 }
 
 function readConfig(ctx) {
@@ -397,32 +451,29 @@ async function getDownloadHistory(ctx) {
 }
 
 async function clearDownloadHistory(ctx) {
-  var cfg = ensureDownloadsCache(ctx);
-  // Keep active downloads. Clearing should not hide in-progress work.
-  cfg.downloads = (cfg.downloads || []).filter(function (d) { return d && (d.state === 'downloading' || d.state === 'paused'); });
-  cfg.updatedAt = Date.now();
-  capDownloads(cfg);
-  await writeDownloads(ctx, cfg);
-  emitDownloadsUpdated(ctx);
+  await mutateDownloads(ctx, function (cfg) {
+    // Keep active downloads. Clearing should not hide in-progress work.
+    cfg.downloads = (cfg.downloads || []).filter(function (d) { return d && (d.state === 'downloading' || d.state === 'paused'); });
+  });
   return { ok: true };
 }
 
 async function removeDownloadHistory(ctx, _evt, payload) {
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
-  var cfg = ensureDownloadsCache(ctx);
-  var before = (cfg.downloads || []).length;
-  cfg.downloads = (cfg.downloads || []).filter(function (d) {
-    if (!d) return false;
-    if (String(d.id) !== id) return true;
-    // Do not allow removing active downloads.
-    return d.state === 'downloading' || d.state === 'paused';
+  var removed = false;
+  await mutateDownloads(ctx, function (cfg) {
+    var before = (cfg.downloads || []).length;
+    cfg.downloads = (cfg.downloads || []).filter(function (d) {
+      if (!d) return false;
+      if (String(d.id) !== id) return true;
+      // Do not allow removing active downloads.
+      return d.state === 'downloading' || d.state === 'paused';
+    });
+    removed = (cfg.downloads || []).length !== before;
+    return removed;
   });
-  if ((cfg.downloads || []).length === before) return { ok: false, error: 'Not found' };
-  cfg.updatedAt = Date.now();
-  capDownloads(cfg);
-  await writeDownloads(ctx, cfg);
-  emitDownloadsUpdated(ctx);
+  if (!removed) return { ok: false, error: 'Not found' };
   return { ok: true };
 }
 
@@ -438,25 +489,21 @@ function setupDownloadHandler(ctx) {
     var ipc = require('../../../shared/ipc');
 
     // Reconcile persisted history: any lingering "downloading" entries become interrupted.
-    try {
-      var cfgBoot = ensureDownloadsCache(ctx);
+    mutateDownloads(ctx, function (cfgBoot) {
       var changed = false;
       for (var i = 0; i < (cfgBoot.downloads || []).length; i++) {
         var d = cfgBoot.downloads[i];
         if (d && (d.state === 'downloading' || d.state === 'paused')) {
-          d.state = 'interrupted';
-          d.error = d.error || 'Interrupted (app closed)';
-          d.finishedAt = d.finishedAt || Date.now();
+          updateDownloadEntry(d, {
+            state: 'interrupted',
+            error: d.error || 'Interrupted (app closed)',
+            finishedAt: d.finishedAt || Date.now(),
+          });
           changed = true;
         }
       }
-      if (changed) {
-        cfgBoot.updatedAt = Date.now();
-        capDownloads(cfgBoot);
-        writeDownloads(ctx, cfgBoot);
-        emitDownloadsUpdated(ctx);
-      }
-    } catch {}
+      return changed;
+    }).catch(function () {});
 
     ses.on('will-download', function (_event, item, _webContents) {
       var filename = item.getFilename();
@@ -472,27 +519,16 @@ function setupDownloadHandler(ctx) {
       }
 
       function persistRouteFailure(route) {
-        try {
-          var failId = newDlId();
-          var cfgFail = ensureDownloadsCache(ctx);
-          cfgFail.downloads.unshift({
-            id: failId,
-            filename: filename,
-            destination: '',
-            library: '',
-            state: route.cancelled ? 'cancelled' : 'failed',
-            startedAt: Date.now(),
-            finishedAt: Date.now(),
-            error: route.cancelled ? 'Cancelled' : route.error,
-            pageUrl: pageUrl,
-            downloadUrl: downloadUrl,
-            totalBytes: 0,
-          });
-          cfgFail.updatedAt = Date.now();
-          capDownloads(cfgFail);
-          writeDownloads(ctx, cfgFail);
-          emitDownloadsUpdated(ctx);
-        } catch {}
+        pushFailedDownload(ctx, {
+          id: newDlId(),
+          filename: filename,
+          destination: '',
+          library: '',
+          state: route.cancelled ? 'cancelled' : 'failed',
+          error: route.cancelled ? 'Cancelled' : route.error,
+          pageUrl: pageUrl,
+          downloadUrl: downloadUrl,
+        }).catch(function () {});
       }
 
       if (ext === '.torrent') {
@@ -534,9 +570,22 @@ function setupDownloadHandler(ctx) {
         try { totalBytes = item.getTotalBytes ? Number(item.getTotalBytes() || 0) : 0; } catch {}
 
         // Persist a new history entry immediately.
-        try {
-          var cfgStart = ensureDownloadsCache(ctx);
-          cfgStart.downloads.unshift({
+        persistDownloadUpdate(ctx, dlId, function (d) {
+          updateDownloadEntry(d, {
+            state: 'downloading',
+            filename: filename,
+            destination: route.destination,
+            library: route.library,
+            startedAt: startedAt,
+            finishedAt: null,
+            error: '',
+            pageUrl: pageUrl,
+            downloadUrl: downloadUrl,
+            totalBytes: totalBytes,
+            receivedBytes: 0,
+          });
+        }, function () {
+          return {
             id: dlId,
             filename: filename,
             destination: route.destination,
@@ -673,24 +722,13 @@ function setupDownloadHandler(ctx) {
           activePersist.delete(dlId);
 
           // Update persisted history entry.
-          try {
-            var cfgDone = ensureDownloadsCache(ctx);
-            var found = null;
-            for (var i = 0; i < (cfgDone.downloads || []).length; i++) {
-              var d = cfgDone.downloads[i];
-              if (d && String(d.id) === String(dlId)) { found = d; break; }
-            }
-            if (found) {
-              found.state = (doneState === 'completed') ? 'completed' : (doneState === 'cancelled' ? 'cancelled' : (doneState === 'interrupted' ? 'interrupted' : 'failed'));
-              found.finishedAt = Date.now();
-              if (doneState !== 'completed' && doneState !== 'cancelled') found.error = found.error || ('Download ' + doneState);
-              if (doneState === 'cancelled') found.error = '';
-            }
-            cfgDone.updatedAt = Date.now();
-            capDownloads(cfgDone);
-            writeDownloads(ctx, cfgDone);
-            emitDownloadsUpdated(ctx);
-          } catch {}
+          persistDownloadUpdate(ctx, dlId, function (found) {
+            updateDownloadEntry(found, {
+              state: (doneState === 'completed') ? 'completed' : (doneState === 'cancelled' ? 'cancelled' : (doneState === 'interrupted' ? 'interrupted' : 'failed')),
+              finishedAt: Date.now(),
+              error: (doneState === 'cancelled') ? '' : ((doneState !== 'completed' && doneState !== 'cancelled') ? (found.error || ('Download ' + doneState)) : found.error),
+            });
+          }).catch(function () {});
 
           if (doneState === 'completed') {
             if (route.library) triggerLibraryRescan(ctx, route.library);
@@ -801,19 +839,20 @@ function buildSuggestedFilename(payload, res) {
   return sanitizeFilename(base);
 }
 
-async function persistDownloadUpdate(ctx, dlId, mutator) {
+async function persistDownloadUpdate(ctx, dlId, mutator, createEntry) {
   try {
-    var cfg = ensureDownloadsCache(ctx);
-    var found = null;
-    for (var i = 0; i < (cfg.downloads || []).length; i++) {
-      var d = cfg.downloads[i];
-      if (d && String(d.id) === String(dlId)) { found = d; break; }
-    }
-    if (found && typeof mutator === 'function') mutator(found, cfg);
-    cfg.updatedAt = Date.now();
-    capDownloads(cfg);
-    await writeDownloads(ctx, cfg);
-    emitDownloadsUpdated(ctx);
+    await mutateDownloads(ctx, function (cfg) {
+      var found = null;
+      for (var i = 0; i < (cfg.downloads || []).length; i++) {
+        var d = cfg.downloads[i];
+        if (d && String(d.id) === String(dlId)) { found = d; break; }
+      }
+      if (!found && typeof createEntry === 'function') {
+        found = createEntry(cfg) || null;
+        if (found) cfg.downloads.unshift(found);
+      }
+      if (found && typeof mutator === 'function') mutator(found, cfg);
+    });
   } catch {}
 }
 
@@ -838,10 +877,6 @@ async function pushFailedDownload(ctx, info) {
       canResume: !!info.canResume,
       canCancel: (info.canCancel == null) ? true : !!info.canCancel,
     });
-    cfg.updatedAt = Date.now();
-    capDownloads(cfg);
-    await writeDownloads(ctx, cfg);
-    emitDownloadsUpdated(ctx);
   } catch {}
 }
 
@@ -934,9 +969,23 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
   try { totalBytes = Number((res.headers && res.headers.get && res.headers.get('content-length')) || 0) || 0; } catch {}
   var startedAt = Date.now();
 
-  try {
-    var cfgStart = ensureDownloadsCache(ctx);
-    cfgStart.downloads.unshift({
+  await persistDownloadUpdate(ctx, dlId, function (d) {
+    updateDownloadEntry(d, {
+      state: 'downloading',
+      filename: filename,
+      destination: route.destination,
+      library: route.library,
+      startedAt: startedAt,
+      finishedAt: null,
+      error: '',
+      pageUrl: String((payload && payload.referer) || ''),
+      downloadUrl: String(res.url || url),
+      totalBytes: totalBytes,
+      receivedBytes: 0,
+      progress: null,
+    });
+  }, function () {
+    return {
       id: dlId,
       filename: filename,
       destination: route.destination,
@@ -1170,15 +1219,9 @@ async function pauseDownload(ctx, _evt, payload) {
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
-  try {
-    var cfg = ensureDownloadsCache(ctx);
-    for (var i = 0; i < (cfg.downloads || []).length; i++) {
-      var d = cfg.downloads[i];
-      if (d && String(d.id) === id) { d.state = 'paused'; d.updatedAt = Date.now(); break; }
-    }
-    writeDownloads(ctx, cfg);
-    emitDownloadsUpdated(ctx);
-  } catch {}
+  persistDownloadUpdate(ctx, id, function (d) {
+    updateDownloadEntry(d, { state: 'paused', updatedAt: Date.now() });
+  }).catch(function () {});
   return { ok: true };
 }
 
@@ -1194,15 +1237,9 @@ async function resumeDownload(ctx, _evt, payload) {
   }
   try { resumeFn.call(item.item || item); }
   catch (err) { return { ok: false, error: String(err?.message || err) }; }
-  try {
-    var cfg = ensureDownloadsCache(ctx);
-    for (var i = 0; i < (cfg.downloads || []).length; i++) {
-      var d = cfg.downloads[i];
-      if (d && String(d.id) === id) { d.state = 'downloading'; d.updatedAt = Date.now(); break; }
-    }
-    writeDownloads(ctx, cfg);
-    emitDownloadsUpdated(ctx);
-  } catch {}
+  persistDownloadUpdate(ctx, id, function (d) {
+    updateDownloadEntry(d, { state: 'downloading', updatedAt: Date.now() });
+  }).catch(function () {});
   return { ok: true };
 }
 
@@ -1215,21 +1252,14 @@ async function cancelDownload(ctx, _evt, payload) {
   try { if (cancelFn) cancelFn.call(item.item || item); }
   catch (err) { return { ok: false, error: String(err?.message || err) }; }
   // Quick mark; done handler finalizes.
-  try {
-    var cfg = ensureDownloadsCache(ctx);
-    for (var i = 0; i < (cfg.downloads || []).length; i++) {
-      var d = cfg.downloads[i];
-      if (d && String(d.id) === id) {
-        d.state = 'cancelled';
-        d.finishedAt = Date.now();
-        d.error = '';
-        d.updatedAt = Date.now();
-        break;
-      }
-    }
-    writeDownloads(ctx, cfg);
-    emitDownloadsUpdated(ctx);
-  } catch {}
+  persistDownloadUpdate(ctx, id, function (d) {
+    updateDownloadEntry(d, {
+      state: 'cancelled',
+      finishedAt: Date.now(),
+      error: '',
+      updatedAt: Date.now(),
+    });
+  }).catch(function () {});
   return { ok: true };
 }
 
