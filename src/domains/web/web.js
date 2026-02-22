@@ -560,13 +560,23 @@
     try { el.urlDisplay.setAttribute('placeholder', 'Search ' + label + ' or type a URL'); } catch (e) {}
   }
 
+  function isAllowedOmniScheme(raw) {
+    var lower = String(raw || '').trim().toLowerCase();
+    return lower.indexOf('http:') === 0 || lower.indexOf('https:') === 0 || lower === 'about:blank';
+  }
+
   // Chrome-like omnibox: accept URL or search query
   function resolveOmniInputToUrl(input) {
     var raw = String(input || '').trim();
     if (!raw) return '';
 
-    // If it's already a URL with scheme
-    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return raw;
+    // SECURITY: never pass through arbitrary schemes from omnibox text.
+    // Inputs like javascript:/data:/file:/custom protocol can execute code or
+    // access local resources, so we downgrade any non-allowlisted scheme to a search.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
+      if (isAllowedOmniScheme(raw)) return raw;
+      return getSearchQueryUrl(raw);
+    }
 
     // Looks like a domain (no spaces, has a dot)
     if (raw.indexOf(' ') === -1 && raw.indexOf('.') !== -1) {
@@ -2717,6 +2727,9 @@
         if (e.key === 'Enter') {
           var resolved = resolveOmniInputToUrl(el.urlDisplay.value);
           if (!resolved) return;
+          if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = resolved;
+          else el.urlDisplay.textContent = resolved;
+          setOmniIconForUrl(resolved);
           var tab = getActiveTab();
           if (!tab || !tab.mainTabId) {
             var src = {
@@ -3271,4 +3284,3 @@
   } catch (e) {}
 
 })();
-
