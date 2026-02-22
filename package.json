@@ -206,6 +206,7 @@
         "epubjs": "^0.3.93",
         "lucide": "^0.566.0",
         "msedge-tts": "^2.0.4",
+        "music-metadata": "^11.12.1",
         "node-unrar-js": "^2.0.2",
         "pdfjs-dist": "^3.11.174",
         "ws": "^8.18.0"

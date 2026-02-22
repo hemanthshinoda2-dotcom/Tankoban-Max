@@ -27,6 +27,7 @@ const api = Object.assign({},
   require('./namespaces/web')(deps),
   require('./namespaces/progress')(deps),
   require('./namespaces/series')(deps),
+  require('./namespaces/audiobooks')(deps), // FEAT-AUDIOBOOK
 );
 
 // ========================================

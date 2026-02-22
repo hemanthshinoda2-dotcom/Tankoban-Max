@@ -92,6 +92,12 @@ const webSourcesDomain = require('../domains/webSources');
 const webTabsDomain = require('../domains/webTabs');
 __bLog('registerIpc: BUILD_WEB webSourcesDomain + webTabsDomain OK');
 
+// FEAT-AUDIOBOOK: Audiobook domains
+const audiobooksDomain = require('../domains/audiobooks');
+const audiobookProgress = require('../domains/audiobookProgress');
+const audiobookPairing = require('../domains/audiobookPairing');
+__bLog('registerIpc: FEAT-AUDIOBOOK domains OK');
+
 // Phase 4A/4B: Build context object for domain handlers
 // Note: createWindow and createVideoShellWindow are defined below and added to ctx after definition
 // BUILD 111 FIX: win is captured by value at registration time, which may be undefined if registerIpc
@@ -441,6 +447,9 @@ try {
     require('./register/health_check'),
     require('./register/web_sources'), // BUILD_WEB
     require('./register/web_tabs'), // BUILD_WCV
+    require('./register/audiobooks'), // FEAT-AUDIOBOOK
+    require('./register/audiobook_progress'), // FEAT-AUDIOBOOK
+    require('./register/audiobook_pairing'), // FEAT-AUDIOBOOK
   ];
   __bLog('registerIpc: all register modules required OK (' + registerModules.length + ' modules)');
 } catch (e) {
@@ -448,7 +457,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_tabs'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_tabs','audiobooks','audiobook_progress','audiobook_pairing'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -482,6 +491,9 @@ for (let i = 0; i < registerModules.length; i++) {
     seriesSettings,
     webSourcesDomain, // BUILD_WEB
     webTabsDomain, // BUILD_WCV
+    audiobooksDomain, // FEAT-AUDIOBOOK
+    audiobookProgress, // FEAT-AUDIOBOOK
+    audiobookPairing, // FEAT-AUDIOBOOK
     }});
     __bLog('registerIpc: registered ' + (registerModuleNames[i] || i));
   } catch (e) {
