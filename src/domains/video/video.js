@@ -6446,10 +6446,11 @@ async function navigateChapter(direction) {
   hudNotice(`${dir > 0 ? 'Next' : 'Previous'} chapter`);
 }
 
-function isLikelyPlaybackEnded() {
+function isLikelyPlaybackEnded({ requireEof = false } = {}) {
   try {
     const st = (state.player && typeof state.player.getState === 'function') ? state.player.getState() : null;
     if (st && st.eofReached === true) return true;
+    if (requireEof) return false;
     const pos = Number(st && st.timeSec);
     const dur = Number(st && st.durationSec);
     if (Number.isFinite(dur) && dur > 0) {
@@ -6461,7 +6462,7 @@ function isLikelyPlaybackEnded() {
 }
 
 function maybeAutoAdvanceOnFinish() {
-  if (!isLikelyPlaybackEnded()) return;
+  if (!isLikelyPlaybackEnded({ requireEof: true })) return;
   if (!state.settings.autoAdvance) return;
   if (state._manualStop) return;
 
@@ -7706,10 +7707,11 @@ function adjustVolume(delta){
       });
       state.player.on('play', () => { updateHudFromPlayer(); hideHudSoon(); });
       state.player.on('pause', () => { updateHudFromPlayer(); showHud(); saveNow(true); });
-      state.player.on('ended', () => {
+      state.player.on('ended', (ev) => {
         updateHudFromPlayer();
         showHud();
-        if (isLikelyPlaybackEnded()) {
+        const eofFromEvent = !!(ev && typeof ev === 'object' && ev.eof === true);
+        if (eofFromEvent && isLikelyPlaybackEnded({ requireEof: true })) {
           state._vpEndedOnceForId = (state.now && state.now.id) ? state.now.id : null;
           maybeAutoAdvanceOnFinish();
         } else {
