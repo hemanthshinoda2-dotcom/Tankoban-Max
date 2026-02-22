@@ -137,6 +137,36 @@
   border-color: rgba(255,255,255,.3);
 }
 
+.webBookmarkBtn.active {
+  border-color: rgba(255,255,255,.35);
+  background: rgba(255,255,255,.16) !important;
+}
+
+.webFindBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+  background: rgba(255,255,255,.04);
+}
+
+.webFindBar.hidden {
+  display: none !important;
+}
+
+.webFindInput {
+  min-width: 0;
+  flex: 1;
+}
+
+.webFindCount {
+  min-width: 56px;
+  text-align: right;
+  font-size: 12px;
+  opacity: .75;
+}
+
 /* ======================================== */
 /* Tab bar (inside browser view)            */
 /* ======================================== */
@@ -963,4 +993,17 @@
 .webDlBarClose:hover{
   background: rgba(255,255,255,.10);
   color: rgba(255,255,255,.9);
+}
+
+.webHubChecklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.webHubChecklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

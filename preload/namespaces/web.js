@@ -38,6 +38,10 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_DOWNLOADS_UPDATED, (_evt, data) => cb(data));
       },
+      onPopupOpen: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_POPUP_OPEN, (_evt, data) => cb(data));
+      },
       onDestinationPickerRequest: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_DOWNLOAD_PICKER_REQUEST, (_evt, data) => cb(data));
@@ -57,6 +61,62 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       onUpdated: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_HISTORY_UPDATED, (_evt, data) => cb(data));
+      },
+    },
+
+    webSession: {
+      get: () => ipcRenderer.invoke(CHANNEL.WEB_SESSION_GET),
+      save: (payload) => ipcRenderer.invoke(CHANNEL.WEB_SESSION_SAVE, payload),
+      clear: () => ipcRenderer.invoke(CHANNEL.WEB_SESSION_CLEAR),
+      onUpdated: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_SESSION_UPDATED, (_evt, data) => cb(data));
+      },
+    },
+
+    webBookmarks: {
+      list: () => ipcRenderer.invoke(CHANNEL.WEB_BOOKMARKS_LIST),
+      add: (payload) => ipcRenderer.invoke(CHANNEL.WEB_BOOKMARKS_ADD, payload),
+      update: (payload) => ipcRenderer.invoke(CHANNEL.WEB_BOOKMARKS_UPDATE, payload),
+      remove: (payload) => ipcRenderer.invoke(CHANNEL.WEB_BOOKMARKS_REMOVE, payload),
+      toggle: (payload) => ipcRenderer.invoke(CHANNEL.WEB_BOOKMARKS_TOGGLE, payload),
+      onUpdated: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_BOOKMARKS_UPDATED, (_evt, data) => cb(data));
+      },
+    },
+
+    webData: {
+      clear: (payload) => ipcRenderer.invoke(CHANNEL.WEB_CLEAR_BROWSING_DATA, payload),
+      usage: () => ipcRenderer.invoke(CHANNEL.WEB_BROWSING_DATA_USAGE),
+    },
+
+    webPermissions: {
+      list: () => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_LIST),
+      set: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_SET, payload),
+      reset: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_RESET, payload),
+      onUpdated: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_PERMISSIONS_UPDATED, (_evt, data) => cb(data));
+      },
+    },
+
+    webAdblock: {
+      get: () => ipcRenderer.invoke(CHANNEL.WEB_ADBLOCK_GET),
+      setEnabled: (payload) => ipcRenderer.invoke(CHANNEL.WEB_ADBLOCK_SET_ENABLED, payload),
+      updateLists: () => ipcRenderer.invoke(CHANNEL.WEB_ADBLOCK_UPDATE_LISTS),
+      stats: () => ipcRenderer.invoke(CHANNEL.WEB_ADBLOCK_STATS),
+      onUpdated: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_ADBLOCK_UPDATED, (_evt, data) => cb(data));
+      },
+    },
+
+    webFind: {
+      inPage: (payload) => ipcRenderer.invoke(CHANNEL.WEB_FIND_IN_PAGE, payload),
+      onResult: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_FIND_RESULT, (_evt, data) => cb(data));
       },
     },
 

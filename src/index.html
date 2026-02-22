@@ -125,6 +125,11 @@ COMMON ANCHORS
       <div class="webHubSection">
         <button id="webHubTorrentToggle" class="webHubSectionToggle" type="button" data-target="webHubTorrentBody" data-collapse-key="torrentActive">Active Torrent Downloads</button>
         <div id="webHubTorrentBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <input id="webHubMagnetInput" class="search webHubSearch" type="text" placeholder="Paste magnet or .torrent URL..." autocomplete="off" />
+            <button id="webHubMagnetPasteBtn" class="btn btn-ghost btn-sm" type="button">Paste</button>
+            <button id="webHubMagnetStartBtn" class="btn btn-ghost btn-sm" type="button">Start</button>
+          </div>
           <div id="webHubTorrentActiveList" class="webHubList"></div>
           <div id="webHubTorrentActiveEmpty" class="navMuted">No active torrent downloads.</div>
         </div>
@@ -150,6 +155,84 @@ COMMON ANCHORS
           </div>
           <div id="webHubBrowseHistoryList" class="webHubList"></div>
           <div id="webHubBrowseHistoryEmpty" class="navMuted">No browsing history.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubBookmarksToggle" class="webHubSectionToggle" type="button" data-target="webHubBookmarksBody" data-collapse-key="bookmarks">Bookmarks</button>
+        <div id="webHubBookmarksBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <button id="webHubBookmarkCurrentBtn" class="btn btn-ghost btn-sm" type="button">Bookmark current tab</button>
+          </div>
+          <div id="webHubBookmarksList" class="webHubList"></div>
+          <div id="webHubBookmarksEmpty" class="navMuted">No bookmarks yet.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubPrivacyToggle" class="webHubSectionToggle" type="button" data-target="webHubPrivacyBody" data-collapse-key="privacy">Privacy &amp; Data</button>
+        <div id="webHubPrivacyBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <label for="webHubDataRange" class="settingsLabel">Time range</label>
+            <select id="webHubDataRange" class="select">
+              <option value="hour">Last hour</option>
+              <option value="day">Last 24 hours</option>
+              <option value="week">Last 7 days</option>
+              <option value="month">Last 4 weeks</option>
+              <option value="all" selected>All time</option>
+            </select>
+          </div>
+          <div class="webHubChecklist">
+            <label><input id="webHubDataHistory" type="checkbox" checked /> Browsing history</label>
+            <label><input id="webHubDataDownloads" type="checkbox" checked /> Download history</label>
+            <label><input id="webHubDataTorrents" type="checkbox" checked /> Torrent history</label>
+            <label><input id="webHubDataCookies" type="checkbox" /> Cookies/site data</label>
+            <label><input id="webHubDataCache" type="checkbox" /> Cache</label>
+          </div>
+          <div class="webHubSectionActions">
+            <button id="webHubDataUsageBtn" class="btn btn-ghost btn-sm" type="button">Data Usage</button>
+            <button id="webHubDataClearBtn" class="btn btn-ghost btn-sm" type="button">Clear Selected</button>
+          </div>
+          <div id="webHubDataUsageText" class="navMuted">Usage unknown.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubPermissionsToggle" class="webHubSectionToggle" type="button" data-target="webHubPermissionsBody" data-collapse-key="permissions">Site Permissions</button>
+        <div id="webHubPermissionsBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <input id="webHubPermOrigin" class="search webHubSearch" type="text" placeholder="https://example.com" autocomplete="off" />
+          </div>
+          <div class="webHubSectionActions">
+            <select id="webHubPermType" class="select">
+              <option value="notifications">Notifications</option>
+              <option value="geolocation">Geolocation</option>
+              <option value="microphone">Microphone</option>
+              <option value="camera">Camera</option>
+              <option value="clipboard-read">Clipboard Read</option>
+              <option value="fullscreen">Fullscreen</option>
+            </select>
+            <select id="webHubPermDecision" class="select">
+              <option value="allow">Allow</option>
+              <option value="deny" selected>Deny</option>
+              <option value="ask">Ask</option>
+            </select>
+            <button id="webHubPermSaveBtn" class="btn btn-ghost btn-sm" type="button">Save</button>
+          </div>
+          <div id="webHubPermissionsList" class="webHubList"></div>
+          <div id="webHubPermissionsEmpty" class="navMuted">No explicit permission rules.</div>
+        </div>
+      </div>
+
+      <div class="webHubSection">
+        <button id="webHubAdblockToggle" class="webHubSectionToggle" type="button" data-target="webHubAdblockBody" data-collapse-key="adblock">Ad Blocker</button>
+        <div id="webHubAdblockBody" class="webHubSectionBody">
+          <div class="webHubSectionActions">
+            <label><input id="webHubAdblockEnabled" type="checkbox" checked /> Enabled</label>
+            <button id="webHubAdblockUpdateBtn" class="btn btn-ghost btn-sm" type="button">Update Lists</button>
+            <button id="webHubAdblockStatsBtn" class="btn btn-ghost btn-sm" type="button">Stats</button>
+          </div>
+          <div id="webHubAdblockInfo" class="navMuted">Ad blocker status unavailable.</div>
         </div>
       </div>
     </aside>
@@ -1718,8 +1801,17 @@ COMMON ANCHORS
             <option value="bing">Bing</option>
             <option value="brave">Brave</option>
           </select>
+          <button id="webBookmarkBtn" class="iconBtn webDlBtn" title="Toggle bookmark" aria-label="Toggle bookmark">&#9734;</button>
+          <button id="webFindBtn" class="iconBtn webDlBtn" title="Find in page" aria-label="Find in page">&#128269;</button>
           <div id="webDlPill" class="webDlPill hidden" aria-live="polite">Downloading&hellip;</div>
           <button id="webDlBtn" class="iconBtn webDlBtn" title="Downloads" aria-label="Downloads">&#11123;<span id="webDlBadge" class="webDlBadge hidden" aria-hidden="true"></span></button>
+        </div>
+        <div id="webFindBar" class="webFindBar hidden" role="group" aria-label="Find in page">
+          <input id="webFindInput" class="search webFindInput" type="search" placeholder="Find in page..." autocomplete="off" />
+          <div id="webFindCount" class="webFindCount">0 / 0</div>
+          <button id="webFindPrevBtn" class="btn btn-ghost btn-sm" type="button" title="Previous match">Prev</button>
+          <button id="webFindNextBtn" class="btn btn-ghost btn-sm" type="button" title="Next match">Next</button>
+          <button id="webFindCloseBtn" class="btn btn-ghost btn-sm" type="button" title="Close find">Close</button>
         </div>
         <div id="webDlPanel" class="webDlPanel hidden" role="dialog" aria-label="Downloads" aria-hidden="true">
           <div class="webDlPanelTop">

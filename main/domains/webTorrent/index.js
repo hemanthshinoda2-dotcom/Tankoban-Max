@@ -7,6 +7,7 @@ const HISTORY_FILE = 'web_torrent_history.json';
 const MAX_HISTORY = 1000;
 
 var WebTorrentCtor = null;
+var webTorrentCtorPromise = null;
 var client = null;
 var activeById = new Map(); // id -> { torrent, entry, interval? }
 var historyCache = null;
@@ -15,10 +16,21 @@ function getIpc() {
   try { return require('../../../shared/ipc'); } catch { return null; }
 }
 
-function ensureClient() {
+async function ensureClient() {
   if (client) return client;
   if (!WebTorrentCtor) {
-    WebTorrentCtor = require('webtorrent');
+    if (!webTorrentCtorPromise) {
+      webTorrentCtorPromise = (async function loadCtor() {
+        try {
+          var mod = await import('webtorrent');
+          return (mod && (mod.default || mod.WebTorrent)) || mod;
+        } catch (_e) {
+          var legacy = require('webtorrent');
+          return (legacy && (legacy.default || legacy.WebTorrent)) || legacy;
+        }
+      })();
+    }
+    WebTorrentCtor = await webTorrentCtorPromise;
   }
   client = new WebTorrentCtor();
   return client;
@@ -314,7 +326,7 @@ async function startMagnet(ctx, evt, payload) {
     sourceUrl: String(payload && payload.referer || ''),
     destinationRoot: absRoot
   });
-  var cl = ensureClient();
+  var cl = await ensureClient();
   try {
     var torrent = cl.add(magnetUri, { path: buildTorrentTmpPath(ctx, entry.id) });
     bindTorrent(ctx, torrent, entry);
@@ -335,7 +347,7 @@ async function startTorrentUrl(ctx, evt, payload) {
   try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
 
   var entry = createEntry({ sourceUrl: url, destinationRoot: absRoot });
-  var cl = ensureClient();
+  var cl = await ensureClient();
   try {
     var res = await fetch(url, { redirect: 'follow', headers: payload && payload.referer ? { referer: String(payload.referer) } : undefined });
     if (!res.ok) return { ok: false, error: 'HTTP ' + Number(res.status || 0) };

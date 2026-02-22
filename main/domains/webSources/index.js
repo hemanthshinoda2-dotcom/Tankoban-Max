@@ -602,12 +602,8 @@ function setupDownloadHandler(ctx) {
             canPause: true,
             canResume: true,
             canCancel: true,
-          });
-          cfgStart.updatedAt = Date.now();
-          capDownloads(cfgStart);
-          writeDownloads(ctx, cfgStart);
-          emitDownloadsUpdated(ctx);
-        } catch {}
+          };
+        });
 
         activeDownloadItems.set(dlId, {
           transport: 'electron-item',
@@ -1003,12 +999,8 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       canPause: false,
       canResume: false,
       canCancel: true,
-    });
-    cfgStart.updatedAt = Date.now();
-    capDownloads(cfgStart);
-    await writeDownloads(ctx, cfgStart);
-    emitDownloadsUpdated(ctx);
-  } catch {}
+    };
+  });
 
   activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
 

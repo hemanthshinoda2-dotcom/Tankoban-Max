@@ -76,6 +76,11 @@ function ensureWebModeSecurity() {
   try { ses = session.fromPartition('persist:webmode'); } catch {}
   if (!ses) return;
 
+  var webPermissionsDomain = null;
+  var webAdblockDomain = null;
+  try { webPermissionsDomain = require('./domains/webPermissions'); } catch {}
+  try { webAdblockDomain = require('./domains/webAdblock'); } catch {}
+
   const blockedPermissions = new Set([
     'media', 'mediaKeySystem', 'audioCapture', 'videoCapture',
     'camera', 'microphone', 'geolocation', 'notifications',
@@ -83,19 +88,72 @@ function ensureWebModeSecurity() {
     'openExternal', 'clipboard-read', 'clipboard-sanitized-write',
   ]);
 
+  function getPermissionOrigin(wc, details, requestingOrigin) {
+    var origin = String(requestingOrigin || '').trim();
+    if (origin) return origin;
+    try {
+      if (webPermissionsDomain && typeof webPermissionsDomain.safeOriginFromDetails === 'function') {
+        return String(webPermissionsDomain.safeOriginFromDetails(wc, details || {}) || '').trim();
+      }
+    } catch {}
+    try {
+      if (details && details.requestingUrl) return String(details.requestingUrl || '').trim();
+    } catch {}
+    return '';
+  }
+
+  function isPermissionAllowed(wc, permission, details, requestingOrigin) {
+    var key = String(permission || '').trim();
+    if (!key) return false;
+    var origin = getPermissionOrigin(wc, details, requestingOrigin);
+    try {
+      if (webPermissionsDomain && typeof webPermissionsDomain.shouldAllow === 'function') {
+        return !!webPermissionsDomain.shouldAllow(origin, key);
+      }
+    } catch {}
+    // Secure default: denied unless explicitly allowed by per-origin rule.
+    if (blockedPermissions.has(key)) return false;
+    return false;
+  }
+
   try {
-    ses.setPermissionRequestHandler((_wc, permission, callback) => {
-      const key = String(permission || '').trim();
-      if (blockedPermissions.has(key)) return callback(false);
-      return callback(false);
+    if (webAdblockDomain && typeof webAdblockDomain.ensureInitialLists === 'function') {
+      webAdblockDomain.ensureInitialLists();
+    }
+  } catch {}
+
+  // Best-effort list refresh in background; browsing should never block on this.
+  try {
+    if (webAdblockDomain && typeof webAdblockDomain.updateLists === 'function') {
+      setTimeout(function () {
+        try {
+          webAdblockDomain.updateLists({
+            get win() { return win || null; }
+          }).catch(function () {});
+        } catch {}
+      }, 4000);
+    }
+  } catch {}
+
+  try {
+    ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+      var allow = false;
+      try {
+        allow = isPermissionAllowed(wc, permission, details, '');
+      } catch {
+        allow = false;
+      }
+      return callback(allow);
     });
   } catch {}
 
   try {
-    ses.setPermissionCheckHandler((_wc, permission) => {
-      const key = String(permission || '').trim();
-      if (blockedPermissions.has(key)) return false;
-      return false;
+    ses.setPermissionCheckHandler((wc, permission, requestingOrigin, details) => {
+      try {
+        return isPermissionAllowed(wc, permission, details, requestingOrigin);
+      } catch {
+        return false;
+      }
     });
   } catch {}
 
@@ -107,6 +165,16 @@ function ensureWebModeSecurity() {
         if (kind === 'mainFrame' && !isAllowedWebModeTopLevelUrl(url)) {
           callback({ cancel: true });
           return;
+        }
+        if (kind !== 'mainFrame' && webAdblockDomain && typeof webAdblockDomain.shouldBlockRequest === 'function') {
+          var firstParty = '';
+          try {
+            firstParty = String((details && details.initiator) || (details && details.referrer) || '');
+          } catch {}
+          if (webAdblockDomain.shouldBlockRequest(url, firstParty)) {
+            callback({ cancel: true });
+            return;
+          }
         }
       } catch {}
       callback({ cancel: false });
@@ -125,6 +193,19 @@ function ensureWebModeSecurity() {
         contents.setWindowOpenHandler(function (details) {
           const target = details && details.url ? String(details.url) : '';
           if (!isAllowedWebModeTopLevelUrl(target)) return { action: 'deny' };
+          try {
+            const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
+            const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
+            const targetWindow = ownerWindow || win;
+            if (targetWindow && !targetWindow.isDestroyed() && targetWindow.webContents) {
+              targetWindow.webContents.send(EVENT.WEB_POPUP_OPEN, {
+                url: target,
+                disposition: (details && details.disposition) ? String(details.disposition) : 'new-window',
+                sourceUrl: (details && details.referrer) ? String(details.referrer) : '',
+                sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
+              });
+            }
+          } catch {}
           // Popups are handled by renderer tab logic; never spawn native popup windows.
           return { action: 'deny' };
         });

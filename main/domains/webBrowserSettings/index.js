@@ -4,6 +4,9 @@ const SETTINGS_FILE = 'web_browser_settings.json';
 const ALLOWED_SEARCH_ENGINES = new Set(['yandex', 'google', 'duckduckgo', 'bing', 'brave']);
 const DEFAULT_SETTINGS = {
   defaultSearchEngine: 'yandex',
+  parityV1Enabled: true,
+  adblockEnabled: true,
+  restoreLastSession: true,
 };
 
 var cache = null;
@@ -18,6 +21,9 @@ function normalizeSettings(input) {
   var src = (input && typeof input === 'object') ? input : {};
   var out = {
     defaultSearchEngine: normalizeSearchEngine(src.defaultSearchEngine || DEFAULT_SETTINGS.defaultSearchEngine),
+    parityV1Enabled: src.parityV1Enabled !== false,
+    adblockEnabled: src.adblockEnabled !== false,
+    restoreLastSession: src.restoreLastSession !== false,
   };
   return out;
 }

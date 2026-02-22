@@ -813,6 +813,84 @@ const CHANNEL = {
   WEB_HISTORY_REMOVE: 'webHistory:remove',
 
   // ========================================
+  // Web Session
+  // ========================================
+
+  /** Get browser session state. Returns: { ok, state } */
+  WEB_SESSION_GET: 'webSession:get',
+
+  /** Save browser session state. Args: { state }. Returns: { ok, state } */
+  WEB_SESSION_SAVE: 'webSession:save',
+
+  /** Clear browser session state. Returns: { ok } */
+  WEB_SESSION_CLEAR: 'webSession:clear',
+
+  // ========================================
+  // Web Bookmarks
+  // ========================================
+
+  /** List web bookmarks. Returns: { ok, bookmarks } */
+  WEB_BOOKMARKS_LIST: 'webBookmarks:list',
+
+  /** Add a web bookmark. Args: bookmark payload. Returns: { ok, bookmark } */
+  WEB_BOOKMARKS_ADD: 'webBookmarks:add',
+
+  /** Update a web bookmark. Args: { id, ...changes }. Returns: { ok, bookmark } */
+  WEB_BOOKMARKS_UPDATE: 'webBookmarks:update',
+
+  /** Remove a web bookmark. Args: { id }. Returns: { ok } */
+  WEB_BOOKMARKS_REMOVE: 'webBookmarks:remove',
+
+  /** Toggle bookmark by URL. Args: { url, title?, folder? }. Returns: { ok, added, bookmark? } */
+  WEB_BOOKMARKS_TOGGLE: 'webBookmarks:toggle',
+
+  // ========================================
+  // Web Find-In-Page
+  // ========================================
+
+  /** Find in active page. Args: { action: find|next|prev|stop, query? }. Returns: { ok, result? } */
+  WEB_FIND_IN_PAGE: 'webFind:inPage',
+
+  // ========================================
+  // Web Privacy / Data
+  // ========================================
+
+  /** Clear browsing data. Args: { from?, to?, kinds? }. Returns: { ok, cleared } */
+  WEB_CLEAR_BROWSING_DATA: 'webData:clear',
+
+  /** Get browsing data usage. Returns: { ok, usage } */
+  WEB_BROWSING_DATA_USAGE: 'webData:usage',
+
+  // ========================================
+  // Web Permissions
+  // ========================================
+
+  /** List per-origin permission overrides. Returns: { ok, rules } */
+  WEB_PERMISSIONS_LIST: 'webPermissions:list',
+
+  /** Set per-origin permission override. Args: { origin, permission, decision }. Returns: { ok } */
+  WEB_PERMISSIONS_SET: 'webPermissions:set',
+
+  /** Reset permission overrides. Args: { origin?, permission? }. Returns: { ok } */
+  WEB_PERMISSIONS_RESET: 'webPermissions:reset',
+
+  // ========================================
+  // Web Adblock
+  // ========================================
+
+  /** Get adblock status/config. Returns: { ok, ... } */
+  WEB_ADBLOCK_GET: 'webAdblock:get',
+
+  /** Enable/disable adblock. Args: { enabled }. Returns: { ok, enabled } */
+  WEB_ADBLOCK_SET_ENABLED: 'webAdblock:setEnabled',
+
+  /** Update adblock lists now. Returns: { ok, updatedAt, domains } */
+  WEB_ADBLOCK_UPDATE_LISTS: 'webAdblock:updateLists',
+
+  /** Get adblock stats. Returns: { ok, stats } */
+  WEB_ADBLOCK_STATS: 'webAdblock:stats',
+
+  // ========================================
   // WebTorrent
   // ========================================
 
@@ -990,8 +1068,14 @@ const EVENT = {
   WEB_DOWNLOAD_PROGRESS: 'webDownload:progress',
   WEB_DOWNLOAD_COMPLETED: 'webDownload:completed',
   WEB_DOWNLOADS_UPDATED: 'webDownload:listUpdated',
+  WEB_POPUP_OPEN: 'web:popupOpen',
   WEB_DOWNLOAD_PICKER_REQUEST: 'webDownload:pickerRequest',
   WEB_HISTORY_UPDATED: 'webHistory:updated',
+  WEB_SESSION_UPDATED: 'webSession:updated',
+  WEB_BOOKMARKS_UPDATED: 'webBookmarks:updated',
+  WEB_FIND_RESULT: 'webFind:result',
+  WEB_PERMISSIONS_UPDATED: 'webPermissions:updated',
+  WEB_ADBLOCK_UPDATED: 'webAdblock:updated',
   WEB_TORRENT_STARTED: 'webTorrent:started',
   WEB_TORRENT_PROGRESS: 'webTorrent:progress',
   WEB_TORRENT_COMPLETED: 'webTorrent:completed',

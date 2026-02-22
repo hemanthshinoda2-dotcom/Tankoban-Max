@@ -439,6 +439,7 @@
       onDownloadProgress: (...a) => ea.webSources?.onDownloadProgress ? ea.webSources.onDownloadProgress(...a) : undefined,
       onDownloadCompleted: (...a) => ea.webSources?.onDownloadCompleted ? ea.webSources.onDownloadCompleted(...a) : undefined,
       onDownloadsUpdated: (...a) => ea.webSources?.onDownloadsUpdated ? ea.webSources.onDownloadsUpdated(...a) : undefined,
+      onPopupOpen: (...a) => ea.webSources?.onPopupOpen ? ea.webSources.onPopupOpen(...a) : undefined,
       onDestinationPickerRequest: (...a) => ea.webSources?.onDestinationPickerRequest ? ea.webSources.onDestinationPickerRequest(...a) : undefined,
     },
 
@@ -459,6 +460,65 @@
       clear: (...a) => ea.webHistory?.clear ? ea.webHistory.clear(...a) : Promise.resolve({ ok: false }),
       remove: (...a) => ea.webHistory?.remove ? ea.webHistory.remove(...a) : Promise.resolve({ ok: false }),
       onUpdated: (...a) => ea.webHistory?.onUpdated ? ea.webHistory.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webSession.*
+    // ========================================
+    webSession: {
+      get: (...a) => ea.webSession?.get ? ea.webSession.get(...a) : Promise.resolve({ ok: false, state: null }),
+      save: (...a) => ea.webSession?.save ? ea.webSession.save(...a) : Promise.resolve({ ok: false }),
+      clear: (...a) => ea.webSession?.clear ? ea.webSession.clear(...a) : Promise.resolve({ ok: false }),
+      onUpdated: (...a) => ea.webSession?.onUpdated ? ea.webSession.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webBookmarks.*
+    // ========================================
+    webBookmarks: {
+      list: (...a) => ea.webBookmarks?.list ? ea.webBookmarks.list(...a) : Promise.resolve({ ok: false, bookmarks: [] }),
+      add: (...a) => ea.webBookmarks?.add ? ea.webBookmarks.add(...a) : Promise.resolve({ ok: false }),
+      update: (...a) => ea.webBookmarks?.update ? ea.webBookmarks.update(...a) : Promise.resolve({ ok: false }),
+      remove: (...a) => ea.webBookmarks?.remove ? ea.webBookmarks.remove(...a) : Promise.resolve({ ok: false }),
+      toggle: (...a) => ea.webBookmarks?.toggle ? ea.webBookmarks.toggle(...a) : Promise.resolve({ ok: false }),
+      onUpdated: (...a) => ea.webBookmarks?.onUpdated ? ea.webBookmarks.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webData.*
+    // ========================================
+    webData: {
+      clear: (...a) => ea.webData?.clear ? ea.webData.clear(...a) : Promise.resolve({ ok: false }),
+      usage: (...a) => ea.webData?.usage ? ea.webData.usage(...a) : Promise.resolve({ ok: false, usage: {} }),
+    },
+
+    // ========================================
+    // webPermissions.*
+    // ========================================
+    webPermissions: {
+      list: (...a) => ea.webPermissions?.list ? ea.webPermissions.list(...a) : Promise.resolve({ ok: false, rules: [] }),
+      set: (...a) => ea.webPermissions?.set ? ea.webPermissions.set(...a) : Promise.resolve({ ok: false }),
+      reset: (...a) => ea.webPermissions?.reset ? ea.webPermissions.reset(...a) : Promise.resolve({ ok: false }),
+      onUpdated: (...a) => ea.webPermissions?.onUpdated ? ea.webPermissions.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webAdblock.*
+    // ========================================
+    webAdblock: {
+      get: (...a) => ea.webAdblock?.get ? ea.webAdblock.get(...a) : Promise.resolve({ ok: false }),
+      setEnabled: (...a) => ea.webAdblock?.setEnabled ? ea.webAdblock.setEnabled(...a) : Promise.resolve({ ok: false }),
+      updateLists: (...a) => ea.webAdblock?.updateLists ? ea.webAdblock.updateLists(...a) : Promise.resolve({ ok: false }),
+      stats: (...a) => ea.webAdblock?.stats ? ea.webAdblock.stats(...a) : Promise.resolve({ ok: false, stats: {} }),
+      onUpdated: (...a) => ea.webAdblock?.onUpdated ? ea.webAdblock.onUpdated(...a) : undefined,
+    },
+
+    // ========================================
+    // webFind.*
+    // ========================================
+    webFind: {
+      inPage: (...a) => ea.webFind?.inPage ? ea.webFind.inPage(...a) : Promise.resolve({ ok: false }),
+      onResult: (...a) => ea.webFind?.onResult ? ea.webFind.onResult(...a) : undefined,
     },
 
     // ========================================
