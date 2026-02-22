@@ -1679,6 +1679,20 @@ body[data-tile-density="compact"] #booksContinuePanel .contTile{
 body[data-tile-density="compact"] #booksContinuePanel .contCover{
   height: 262px !important;
 }
+#booksAbContinuePanel .contTile{
+  width: 200px !important;
+  height: auto !important;
+}
+#booksAbContinuePanel .contCover{
+  height: 308px !important;
+  flex: 0 0 auto !important;
+}
+body[data-tile-density="compact"] #booksAbContinuePanel .contTile{
+  width: 170px !important;
+}
+body[data-tile-density="compact"] #booksAbContinuePanel .contCover{
+  height: 262px !important;
+}
 
 #booksContinueList{
   display:none !important;
