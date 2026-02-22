@@ -40,6 +40,7 @@
   <script src="renderer/player_state.js"></script>
   <script src="renderer/adapter.js"></script>
   <script src="renderer/html5_backend.js"></script>
+  <script src="renderer/holy_grail_backend.js"></script>
   <script src="renderer/hud.js"></script>
   <script src="renderer/top_strip.js"></script>
   <script src="renderer/volume_hud.js"></script>
@@ -57,18 +58,37 @@
       'use strict';
 
       var videoEl = document.getElementById('videoSurface');
+      var stageEl = document.getElementById('playerStage');
       var idleMessage = document.getElementById('idleMessage');
       var openFileBtn = document.getElementById('openFileBtn');
       var dropZone = document.getElementById('dropZone');
       var adapter = null;
 
+      // Detect Holy Grail availability (preload_hg.js exposes HolyGrailBridge)
+      var useHolyGrail = !!(window.HolyGrailBridge && typeof window.HolyGrailBridge.probe === 'function');
+      if (useHolyGrail) {
+        console.log('[boot] Holy Grail bridge detected — using GPU pipeline');
+      } else {
+        console.log('[boot] No Holy Grail bridge — using HTML5 <video>');
+      }
+
       // ── Create adapter ──
 
       function initAdapter() {
         if (adapter) return adapter;
-        adapter = window.TankoPlayer.createAdapter('html5', {
-          videoElement: videoEl,
-        });
+
+        if (useHolyGrail) {
+          // Holy Grail mode: canvas-based rendering via mpv + D3D11 + sharedTexture
+          videoEl.style.display = 'none'; // Hide HTML5 <video> element
+          adapter = window.TankoPlayer.createAdapter('holy_grail', {
+            hostElement: stageEl,
+          });
+        } else {
+          // HTML5 fallback
+          adapter = window.TankoPlayer.createAdapter('html5', {
+            videoElement: videoEl,
+          });
+        }
 
         // Log adapter events for debugging
         adapter.on('ready', function () { console.log('[boot] adapter ready'); });
@@ -143,9 +163,9 @@
         if (!filePath) return;
         initAdapter();
 
-        // Hide idle message, show video
+        // Hide idle message, show video surface
         idleMessage.classList.add('hidden');
-        videoEl.style.display = '';
+        if (!useHolyGrail) videoEl.style.display = '';
 
         // Set window title to filename
         var filename = filePath.replace(/\\/g, '/').split('/').pop();
@@ -333,6 +353,24 @@
       // ── Screenshot (canvas capture) ──
 
       function takeScreenshot() {
+        // In HG mode, try mpv screenshot command first; fall back to canvas capture
+        if (useHolyGrail && adapter && adapter.takeScreenshot) {
+          adapter.takeScreenshot().then(function (res) {
+            if (res && res.ok) {
+              if (res.dataUrl) {
+                saveScreenshotDataUrl(res.dataUrl);
+              } else {
+                window.TankoPlayer.toast.show('Screenshot saved (mpv)');
+              }
+            } else {
+              // Fallback: capture from the HG canvas
+              captureCanvasScreenshot();
+            }
+          });
+          return;
+        }
+
+        // HTML5 mode: capture from <video> element
         var videoEl = document.getElementById('videoSurface');
         if (!videoEl || !videoEl.videoWidth) {
           window.TankoPlayer.toast.show('No video to capture');
@@ -345,6 +383,30 @@
           var ctx = canvas.getContext('2d');
           ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
           var dataUrl = canvas.toDataURL('image/png');
+          saveScreenshotDataUrl(dataUrl);
+        } catch (e) {
+          window.TankoPlayer.toast.show('Screenshot failed: ' + e.message);
+        }
+        return;
+
+        // ── Helpers ──
+
+        function captureCanvasScreenshot() {
+          // Find the HG render canvas inside the stage
+          var hgCanvas = stageEl.querySelector('canvas');
+          if (!hgCanvas || !hgCanvas.width) {
+            window.TankoPlayer.toast.show('No video to capture');
+            return;
+          }
+          try {
+            var dataUrl = hgCanvas.toDataURL('image/png');
+            saveScreenshotDataUrl(dataUrl);
+          } catch (e) {
+            window.TankoPlayer.toast.show('Screenshot failed: ' + e.message);
+          }
+        }
+
+        function saveScreenshotDataUrl(dataUrl) {
 
           var s = window.TankoPlayer.state.get();
           var filename = 'screenshot_' + Date.now() + '.png';
@@ -365,8 +427,6 @@
           } else {
             window.TankoPlayer.toast.show('Screenshot: bridge not available');
           }
-        } catch (e) {
-          window.TankoPlayer.toast.show('Screenshot failed: ' + e.message);
         }
       }
 
@@ -483,7 +543,20 @@
         if (key === 'n' || key === 'N') {
           e.preventDefault();
           if (e.shiftKey) {
-            window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+            if (adapter.capabilities.tracks) {
+              // Navigate to next chapter
+              var chapters = adapter.getChapters();
+              var s2 = window.TankoPlayer.state.get();
+              for (var ci = 0; ci < chapters.length; ci++) {
+                if (chapters[ci].timeSec > s2.timeSec + 1) {
+                  adapter.seekTo(chapters[ci].timeSec);
+                  window.TankoPlayer.toast.show('Chapter: ' + (chapters[ci].title || (ci + 1)));
+                  break;
+                }
+              }
+            } else {
+              window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+            }
           } else {
             window.TankoPlayer.playlist.nextEpisode();
           }
@@ -492,7 +565,20 @@
         if (key === 'p' || key === 'P') {
           e.preventDefault();
           if (e.shiftKey) {
-            window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+            if (adapter.capabilities.tracks) {
+              // Navigate to previous chapter
+              var chapters2 = adapter.getChapters();
+              var s3 = window.TankoPlayer.state.get();
+              for (var cj = chapters2.length - 1; cj >= 0; cj--) {
+                if (chapters2[cj].timeSec < s3.timeSec - 2) {
+                  adapter.seekTo(chapters2[cj].timeSec);
+                  window.TankoPlayer.toast.show('Chapter: ' + (chapters2[cj].title || (cj + 1)));
+                  break;
+                }
+              }
+            } else {
+              window.TankoPlayer.toast.show('Chapters: requires mpv backend');
+            }
           } else {
             window.TankoPlayer.playlist.prevEpisode();
           }
@@ -513,17 +599,63 @@
           return;
         }
 
-        // Screenshot: S
-        if (key === 's' || key === 'S') {
+        // Toggle subtitle visibility: Alt+H (matches Qt player)
+        if ((key === 'h' || key === 'H') && e.altKey) {
+          e.preventDefault();
+          if (adapter.toggleSubtitles) adapter.toggleSubtitles();
+          return;
+        }
+
+        // Screenshot: Ctrl+S
+        if ((key === 's' || key === 'S') && e.ctrlKey) {
           e.preventDefault();
           takeScreenshot();
           return;
         }
 
-        // Aspect ratio cycle: A
+        // Cycle audio track: A (matches Qt player)
         if (key === 'a' || key === 'A') {
           e.preventDefault();
-          cycleAspect();
+          if (adapter.capabilities && adapter.capabilities.tracks) {
+            adapter.cycleAudioTrack();
+            setTimeout(function () {
+              var tracks = adapter.getAudioTracks ? adapter.getAudioTracks() : [];
+              var cur = adapter.getCurrentAudioTrack ? adapter.getCurrentAudioTrack() : null;
+              for (var ti = 0; ti < tracks.length; ti++) {
+                if (tracks[ti].id === cur) {
+                  window.TankoPlayer.toast.show('\u266A ' + (tracks[ti].label || 'Track ' + tracks[ti].id));
+                  break;
+                }
+              }
+            }, 100);
+          } else {
+            window.TankoPlayer.toast.show('Audio tracks: requires mpv backend');
+          }
+          return;
+        }
+
+        // Cycle subtitle track: S (matches Qt player)
+        if (key === 's' || key === 'S') {
+          e.preventDefault();
+          if (adapter.capabilities && adapter.capabilities.tracks) {
+            adapter.cycleSubtitleTrack();
+            setTimeout(function () {
+              var cur2 = adapter.getCurrentSubtitleTrack ? adapter.getCurrentSubtitleTrack() : null;
+              if (cur2 === null) {
+                window.TankoPlayer.toast.show('CC Off');
+              } else {
+                var tracks2 = adapter.getSubtitleTracks ? adapter.getSubtitleTracks() : [];
+                for (var ti2 = 0; ti2 < tracks2.length; ti2++) {
+                  if (tracks2[ti2].id === cur2) {
+                    window.TankoPlayer.toast.show('CC ' + (tracks2[ti2].label || 'Subtitle ' + tracks2[ti2].id));
+                    break;
+                  }
+                }
+              }
+            }, 100);
+          } else {
+            window.TankoPlayer.toast.show('Subtitles: requires mpv backend');
+          }
           return;
         }
 

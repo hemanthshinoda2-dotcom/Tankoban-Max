@@ -109,11 +109,54 @@
 
     // ── Audio submenu ──
     var audioSub = addSubmenu(menuEl, 'Audio');
-    addItem(audioSub, '(Requires mpv backend)', null, true);
+    var adapter = window._adapter;
+    var hasTrackSupport = adapter && adapter.capabilities && adapter.capabilities.tracks;
+
+    if (hasTrackSupport) {
+      var audioTracks = adapter.getAudioTracks ? adapter.getAudioTracks() : [];
+      var currentAudio = adapter.getCurrentAudioTrack ? adapter.getCurrentAudioTrack() : null;
+      if (!audioTracks.length) {
+        addItem(audioSub, 'No audio tracks', null, true);
+      } else {
+        for (var ai = 0; ai < audioTracks.length; ai++) {
+          (function (track) {
+            var label = track.label || 'Track ' + track.id;
+            if (track.id === currentAudio) label = '\u2713 ' + label;
+            addItem(audioSub, label, function () {
+              if (adapter.setAudioTrack) adapter.setAudioTrack(track.id);
+            });
+          })(audioTracks[ai]);
+        }
+      }
+    } else {
+      addItem(audioSub, '(Requires mpv backend)', null, true);
+    }
 
     // ── Subtitles submenu ──
     var subSub = addSubmenu(menuEl, 'Subtitles');
-    addItem(subSub, '(Requires mpv backend)', null, true);
+
+    if (hasTrackSupport) {
+      var subtitleTracks = adapter.getSubtitleTracks ? adapter.getSubtitleTracks() : [];
+      var currentSub = adapter.getCurrentSubtitleTrack ? adapter.getCurrentSubtitleTrack() : null;
+
+      // "Off" option
+      var offLabel = currentSub === null ? '\u2713 Off' : 'Off';
+      addItem(subSub, offLabel, function () {
+        if (adapter.setSubtitleTrack) adapter.setSubtitleTrack(null);
+      });
+
+      for (var si = 0; si < subtitleTracks.length; si++) {
+        (function (track) {
+          var label = track.label || 'Subtitle ' + track.id;
+          if (track.id === currentSub) label = '\u2713 ' + label;
+          addItem(subSub, label, function () {
+            if (adapter.setSubtitleTrack) adapter.setSubtitleTrack(track.id);
+          });
+        })(subtitleTracks[si]);
+      }
+    } else {
+      addItem(subSub, '(Requires mpv backend)', null, true);
+    }
 
     addSeparator(menuEl);
     addItem(menuEl, 'Go to Time\u2026', function () {

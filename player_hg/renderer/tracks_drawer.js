@@ -98,7 +98,23 @@
     loadSubBtn.textContent = 'Load External Subtitle\u2026';
     loadSubBtn.style.marginTop = '10px';
     loadSubBtn.addEventListener('click', function () {
-      window.TankoPlayer.toast.show('External subtitles: requires mpv backend');
+      var ad = window._adapter;
+      if (ad && ad.capabilities && ad.capabilities.externalSubtitles && ad.addExternalSubtitle) {
+        // Use Electron dialog to pick a subtitle file
+        var bridge = window.PlayerBridge;
+        var dialogFn = bridge && bridge.openSubtitleDialog ? bridge.openSubtitleDialog : (bridge && bridge.openFileDialog ? bridge.openFileDialog : null);
+        if (dialogFn) {
+          dialogFn().then(function (path) {
+            if (path) {
+              ad.addExternalSubtitle(path);
+              window.TankoPlayer.toast.show('Loaded subtitle: ' + path.replace(/\\/g, '/').split('/').pop());
+              setTimeout(refreshTracks, 300);
+            }
+          });
+        }
+      } else {
+        window.TankoPlayer.toast.show('External subtitles: requires mpv backend');
+      }
     });
     contentEl.appendChild(loadSubBtn);
 

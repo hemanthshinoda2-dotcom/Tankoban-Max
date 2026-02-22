@@ -320,9 +320,22 @@ html, body {
   align-items: center;
   padding: 6px 12px;
   gap: 8px;
-  background: rgba(12, 12, 12, 0.45);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(12, 12, 12, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
   z-index: 10;
+
+  /* Fade transition */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-in-out;
+}
+
+#topStrip.hud-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .strip-title {
@@ -392,11 +405,24 @@ html, body {
   left: 0;
   right: 0;
   padding: 6px 10px;
-  background: rgba(10, 10, 10, 0.35);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
   gap: 4px;
+
+  /* Fade transition instead of hard display toggle */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-in-out;
+}
+
+#bottomHud.hud-visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* ── Seek row ── */
@@ -435,7 +461,7 @@ html, body {
     rgba(30, 30, 30, 0.95));
   border: 1px solid rgba(0, 0, 0, 0.7);
   border-radius: 2px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .hud-seek-fill {
@@ -444,6 +470,7 @@ html, body {
   left: 0;
   bottom: 0;
   width: 0%;
+  max-width: 100%;
   background: linear-gradient(to bottom,
     rgba(210, 210, 210, 0.95),
     rgba(140, 140, 140, 0.95));
@@ -466,11 +493,12 @@ html, body {
   pointer-events: none;
 }
 
-/* Hover time bubble — positioned above the slider */
+/* Hover time bubble — positioned above the slider, centered on cursor */
 .hud-seek-bubble {
   position: absolute;
   bottom: 100%;
   left: 0;
+  transform: translateX(-50%);
   margin-bottom: 6px;
   background: rgba(12, 12, 12, 0.78);
   color: #fff;

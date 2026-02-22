@@ -1,0 +1,938 @@
+// Holy Grail adapter backend.
+// Implements the VideoAdapter interface using the mpv + D3D11 + sharedTexture pipeline.
+// Replaces <video> with a <canvas> that receives GPU VideoFrames via the preload bridge.
+(function () {
+  'use strict';
+
+  var utils = window.TankoPlayer.utils;
+  var toFiniteNumber = utils.toFiniteNumber;
+  var clamp = utils.clamp;
+
+  function createHolyGrailBackend(opts) {
+    var hg = window.HolyGrailBridge;
+    if (!hg) throw new Error('holy_grail_backend: window.HolyGrailBridge not available');
+
+    var hostEl = opts.hostElement || opts.hostEl;
+    if (!hostEl) throw new Error('holy_grail_backend: opts.hostElement is required');
+
+    // ── Internal state ──
+
+    var listeners = new Map();
+    var destroyed = false;
+    var gpuInitialized = false;
+    var frameLoopStarted = false;
+    var loadSeq = 0;
+    var firstFrameEmitted = false;
+    var loadStartedAtMs = 0;
+    var suppressEof = false;
+    var lastTrackSig = '';
+    var lastChapterSig = '';
+    var lastSubtitleTrackId = null;
+    var resizeObserver = null;
+    var resizeTimer = null;
+    var lastResizeW = 0;
+    var lastResizeH = 0;
+    var cleanupFns = [];
+
+    var canvas = null;
+    var ctx2d = null;
+    var pendingFrame = null;
+    var framePumpRaf = 0;
+
+    var renderStats = {
+      frameCount: 0,
+      droppedFrames: 0,
+      lastDrawTimeMs: 0,
+      sourceWidth: 0,
+      sourceHeight: 0,
+    };
+
+    var state = {
+      ready: false,
+      paused: true,
+      timeSec: 0,
+      durationSec: 0,
+      volume: 1,
+      muted: false,
+      speed: 1,
+      eofReached: false,
+      subtitlesVisible: true,
+      subtitleTrackId: null,
+      audioTrackId: null,
+      audioDelaySec: 0,
+      subtitleDelaySec: 0,
+      width: 0,
+      height: 0,
+      aspectRatio: 'auto',
+      crop: 'none',
+      renderQuality: 'auto',
+      subtitleHudLiftPx: 40,
+      trackList: [],
+      chapterList: [],
+    };
+
+    // ── Emitter ──
+
+    function on(event, handler) {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event).add(handler);
+      return function off() {
+        var set = listeners.get(event);
+        if (set) set.delete(handler);
+      };
+    }
+
+    function emit(event) {
+      var args = Array.prototype.slice.call(arguments, 1);
+      var set = listeners.get(event);
+      if (!set) return;
+      set.forEach(function (fn) {
+        try { fn.apply(null, args); } catch (e) { console.error('[hg-backend] event error:', event, e); }
+      });
+    }
+
+    // ── Canvas creation & frame rendering ──
+
+    function createCanvas() {
+      if (canvas) return;
+      canvas = document.createElement('canvas');
+      canvas.style.position = 'absolute';
+      canvas.style.inset = '0';
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      canvas.style.display = 'block';
+      canvas.style.background = '#000';
+      canvas.setAttribute('aria-label', 'Video');
+
+      ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: false });
+      if (ctx2d) {
+        ctx2d.imageSmoothingEnabled = true;
+        try { ctx2d.imageSmoothingQuality = 'high'; } catch (e) {}
+      }
+
+      hostEl.appendChild(canvas);
+      syncCanvasSize();
+      setupResizeObserver();
+    }
+
+    function syncCanvasSize() {
+      if (!canvas || !hostEl) return;
+      var rect = hostEl.getBoundingClientRect();
+      var cssW = Math.max(16, Math.round(rect.width || hostEl.clientWidth || 1280));
+      var cssH = Math.max(16, Math.round(rect.height || hostEl.clientHeight || 720));
+      var dpr = Math.max(1, toFiniteNumber(window.devicePixelRatio, 1));
+      var pxW = Math.max(16, Math.round(cssW * dpr));
+      var pxH = Math.max(16, Math.round(cssH * dpr));
+
+      canvas.style.width = cssW + 'px';
+      canvas.style.height = cssH + 'px';
+      if (canvas.width !== pxW) canvas.width = pxW;
+      if (canvas.height !== pxH) canvas.height = pxH;
+    }
+
+    function setupResizeObserver() {
+      if (typeof ResizeObserver !== 'function') {
+        var onResize = function () {
+          syncCanvasSize();
+          requestSurfaceResize();
+        };
+        window.addEventListener('resize', onResize, { passive: true });
+        cleanupFns.push(function () { window.removeEventListener('resize', onResize); });
+        return;
+      }
+      resizeObserver = new ResizeObserver(function () {
+        syncCanvasSize();
+        requestSurfaceResize();
+      });
+      resizeObserver.observe(hostEl);
+    }
+
+    function requestSurfaceResize() {
+      if (!gpuInitialized) return;
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        resizeTimer = null;
+        if (!canvas || destroyed) return;
+        var w = canvas.width;
+        var h = canvas.height;
+        if (w === lastResizeW && h === lastResizeH) return;
+        if (w < 16 || h < 16) return;
+        lastResizeW = w;
+        lastResizeH = h;
+        hg.resizeSurface({ width: w, height: h }).catch(function () {});
+      }, 80);
+    }
+
+    function drawFrame(videoFrame) {
+      if (!videoFrame || !ctx2d || !canvas) return;
+
+      syncCanvasSize();
+
+      var srcW = Math.max(1, toFiniteNumber(videoFrame.displayWidth || videoFrame.codedWidth, 1));
+      var srcH = Math.max(1, toFiniteNumber(videoFrame.displayHeight || videoFrame.codedHeight, 1));
+      var dstW = Math.max(1, canvas.width);
+      var dstH = Math.max(1, canvas.height);
+
+      var scale = Math.min(dstW / srcW, dstH / srcH);
+      var drawW = Math.max(1, Math.round(srcW * scale));
+      var drawH = Math.max(1, Math.round(srcH * scale));
+      var dx = Math.floor((dstW - drawW) / 2);
+      var dy = Math.floor((dstH - drawH) / 2);
+
+      var t0 = performance.now();
+      ctx2d.fillStyle = '#000';
+      ctx2d.fillRect(0, 0, dstW, dstH);
+
+      // SharedTexture → VideoFrame arrives vertically inverted. Flip it.
+      ctx2d.save();
+      ctx2d.translate(0, dstH);
+      ctx2d.scale(1, -1);
+      ctx2d.drawImage(videoFrame, dx, dstH - dy - drawH, drawW, drawH);
+      ctx2d.restore();
+
+      var drawMs = performance.now() - t0;
+      renderStats.frameCount += 1;
+      renderStats.lastDrawTimeMs = drawMs;
+      renderStats.sourceWidth = srcW;
+      renderStats.sourceHeight = srcH;
+
+      state.width = srcW;
+      state.height = srcH;
+
+      if (!firstFrameEmitted && loadSeq > 0) {
+        firstFrameEmitted = true;
+        emit('first-frame', {
+          sinceLoadMs: loadStartedAtMs ? Math.max(0, Date.now() - loadStartedAtMs) : null,
+          frameCount: renderStats.frameCount,
+          sourceWidth: srcW,
+          sourceHeight: srcH,
+        });
+      }
+    }
+
+    function closeFrameSafe(frame) {
+      try { if (frame && typeof frame.close === 'function') frame.close(); } catch (e) {}
+    }
+
+    function scheduleFramePump() {
+      if (framePumpRaf || destroyed) return;
+      framePumpRaf = requestAnimationFrame(function () {
+        framePumpRaf = 0;
+        if (destroyed) {
+          if (pendingFrame) { closeFrameSafe(pendingFrame); pendingFrame = null; }
+          return;
+        }
+        var frame = pendingFrame;
+        pendingFrame = null;
+        if (!frame) return;
+        try {
+          drawFrame(frame);
+        } finally {
+          closeFrameSafe(frame);
+          if (pendingFrame && !destroyed) scheduleFramePump();
+        }
+      });
+    }
+
+    function queueVideoFrame(videoFrame) {
+      if (!videoFrame) return;
+      if (destroyed || !gpuInitialized) {
+        closeFrameSafe(videoFrame);
+        return;
+      }
+      if (pendingFrame) {
+        renderStats.droppedFrames += 1;
+        closeFrameSafe(pendingFrame);
+      }
+      pendingFrame = videoFrame;
+      scheduleFramePump();
+    }
+
+    // ── GPU init ──
+
+    function ensureGpu() {
+      if (gpuInitialized) return Promise.resolve({ ok: true });
+      var w = canvas ? canvas.width : 1920;
+      var h = canvas ? canvas.height : 1080;
+      return hg.initGpu({ width: w, height: h }).then(function (res) {
+        if (res && res.ok) {
+          gpuInitialized = true;
+          lastResizeW = w;
+          lastResizeH = h;
+          applyRenderDefaults();
+          observeProperties();
+        }
+        return res;
+      });
+    }
+
+    function applyRenderDefaults() {
+      // Conservative fidelity defaults matching the old adapter
+      hg.setProperty('scale', 'ewa_lanczossharp').catch(function () {});
+      hg.setProperty('cscale', 'spline36').catch(function () {});
+      hg.setProperty('dscale', 'mitchell').catch(function () {});
+      hg.setProperty('correct-downscaling', 'yes').catch(function () {});
+      hg.setProperty('sigmoid-upscaling', 'yes').catch(function () {});
+      hg.setProperty('deband', 'yes').catch(function () {});
+      hg.setProperty('dither-depth', 'auto').catch(function () {});
+    }
+
+    var propertiesObserved = false;
+    function observeProperties() {
+      if (propertiesObserved) return;
+      propertiesObserved = true;
+      var props = [
+        'time-pos', 'duration', 'pause', 'eof-reached',
+        'volume', 'mute', 'speed', 'audio-delay', 'sub-delay',
+        'sub-visibility', 'track-list', 'chapter-list',
+        'video-aspect-override', 'video-crop',
+      ];
+      for (var i = 0; i < props.length; i++) {
+        hg.observeProperty(props[i]).catch(function () {});
+      }
+    }
+
+    // ── Wire HG events ──
+
+    var offPropertyChange = hg.onPropertyChange(function (data) {
+      if (destroyed) return;
+      var name = (data && data.name) ? String(data.name) : '';
+      var value = data ? data.value : undefined;
+      applyPropertyChange(name, value);
+    });
+
+    var offEof = hg.onEof(function () {
+      if (destroyed || suppressEof) return;
+      state.eofReached = true;
+      state.paused = true;
+      emit('ended', { eof: true });
+      window.TankoPlayer.state.set({ eofReached: true, paused: true });
+    });
+
+    var offFileLoaded = hg.onFileLoaded(function () {
+      if (destroyed) return;
+      state.ready = true;
+      emit('ready');
+      emit('file-loaded');
+      window.TankoPlayer.state.set({ ready: true, fileLoaded: true });
+      console.log('[hg-backend] file loaded');
+    });
+
+    var offVideoFrame = hg.onVideoFrame(function (videoFrame) {
+      queueVideoFrame(videoFrame);
+    });
+
+    // ── Property change dispatch ──
+
+    function applyPropertyChange(name, value) {
+      if (!name) return;
+
+      if (name === 'time-pos') {
+        var t = Math.max(0, toFiniteNumber(value, state.timeSec));
+        if (t !== state.timeSec) {
+          state.timeSec = t;
+          emit('time', t);
+          window.TankoPlayer.state.set({ timeSec: t });
+        }
+        return;
+      }
+
+      if (name === 'duration') {
+        var d = Math.max(0, toFiniteNumber(value, state.durationSec));
+        if (d !== state.durationSec) {
+          state.durationSec = d;
+          emit('duration', d);
+          window.TankoPlayer.state.set({ durationSec: d });
+        }
+        return;
+      }
+
+      if (name === 'pause') {
+        var wasPaused = !!state.paused;
+        var nowPaused = !!value;
+        state.paused = nowPaused;
+        if (wasPaused !== nowPaused) {
+          emit(nowPaused ? 'pause' : 'play');
+          window.TankoPlayer.state.set({ paused: nowPaused });
+        }
+        return;
+      }
+
+      if (name === 'eof-reached') {
+        if (suppressEof) { state.eofReached = false; return; }
+        var was = !!state.eofReached;
+        var next = !!value;
+        state.eofReached = next;
+        if (!was && next) {
+          state.paused = true;
+          emit('ended', { eof: true });
+          window.TankoPlayer.state.set({ eofReached: true, paused: true });
+        }
+        return;
+      }
+
+      if (name === 'volume') {
+        var vol = clamp(toFiniteNumber(value, state.volume * 100), 0, 100) / 100;
+        if (vol !== state.volume) {
+          state.volume = vol;
+          emit('volume', vol, state.muted);
+          window.TankoPlayer.state.set({ volume: vol });
+        }
+        return;
+      }
+
+      if (name === 'mute') {
+        var m = !!value;
+        if (m !== state.muted) {
+          state.muted = m;
+          emit('volume', state.volume, m);
+          window.TankoPlayer.state.set({ muted: m });
+        }
+        return;
+      }
+
+      if (name === 'speed') {
+        var spd = clamp(toFiniteNumber(value, state.speed), 0.1, 8);
+        if (spd !== state.speed) {
+          state.speed = spd;
+          emit('speed', spd);
+          window.TankoPlayer.state.set({ speed: spd });
+        }
+        return;
+      }
+
+      if (name === 'audio-delay') {
+        state.audioDelaySec = toFiniteNumber(value, state.audioDelaySec);
+        emit('delays', { audioDelaySec: state.audioDelaySec, subtitleDelaySec: state.subtitleDelaySec });
+        return;
+      }
+
+      if (name === 'sub-delay') {
+        state.subtitleDelaySec = toFiniteNumber(value, state.subtitleDelaySec);
+        emit('delays', { audioDelaySec: state.audioDelaySec, subtitleDelaySec: state.subtitleDelaySec });
+        return;
+      }
+
+      if (name === 'sub-visibility') {
+        state.subtitlesVisible = !!value;
+        return;
+      }
+
+      if (name === 'track-list') {
+        normalizeAndStoreTrackList(value);
+        return;
+      }
+
+      if (name === 'chapter-list') {
+        normalizeAndStoreChapterList(value);
+        return;
+      }
+
+      if (name === 'video-aspect-override') {
+        var v = String(value == null ? '' : value).trim();
+        state.aspectRatio = (!v || v === 'no' || v === '0' || v === '-1') ? 'auto' : v;
+        emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        return;
+      }
+
+      if (name === '__error__') {
+        console.error('[hg-backend] addon error:', value);
+        emit('error', String(value || 'Unknown error'));
+        return;
+      }
+    }
+
+    // ── Track normalization ──
+
+    function normalizeTrack(raw) {
+      if (!raw || typeof raw !== 'object') return { id: '' };
+      return {
+        id: String(raw.id != null ? raw.id : ''),
+        type: String(raw.type || ''),
+        lang: String(raw.lang || raw.language || ''),
+        title: String(raw.title || ''),
+        codec: String(raw.codec || ''),
+        external: !!raw.external,
+        selected: !!raw.selected,
+      };
+    }
+
+    function normalizeAndStoreTrackList(list) {
+      var tracks = (Array.isArray(list) ? list : []).map(normalizeTrack).filter(function (t) { return !!t.id; });
+      state.trackList = tracks;
+
+      // Update current selections
+      var audioSel = null;
+      var subSel = null;
+      for (var i = 0; i < tracks.length; i++) {
+        if (tracks[i].type === 'audio' && tracks[i].selected) audioSel = tracks[i];
+        if (tracks[i].type === 'sub' && tracks[i].selected) subSel = tracks[i];
+      }
+      state.audioTrackId = audioSel ? String(audioSel.id) : null;
+      state.subtitleTrackId = subSel ? String(subSel.id) : null;
+      if (subSel) lastSubtitleTrackId = String(subSel.id);
+      state.subtitlesVisible = !!subSel;
+
+      var sig = JSON.stringify(tracks.map(function (t) {
+        return { id: t.id, type: t.type, selected: t.selected, lang: t.lang, title: t.title };
+      }));
+      if (sig !== lastTrackSig) {
+        lastTrackSig = sig;
+        emit('tracks', {
+          tracks: tracks.slice(),
+          audioTracks: tracks.filter(function (t) { return t.type === 'audio'; }),
+          subtitleTracks: tracks.filter(function (t) { return t.type === 'sub'; }),
+          audioTrackId: state.audioTrackId,
+          subtitleTrackId: state.subtitleTrackId,
+          subtitlesVisible: state.subtitlesVisible,
+        });
+      }
+    }
+
+    function normalizeAndStoreChapterList(list) {
+      var out = [];
+      var items = Array.isArray(list) ? list : [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var t = toFiniteNumber(item && (item.time != null ? item.time : item.timeSec != null ? item.timeSec : item.start), NaN);
+        if (!isFinite(t)) continue;
+        out.push({
+          timeSec: t,
+          title: String((item && (item.title || item.name)) || ''),
+        });
+      }
+      out.sort(function (a, b) { return a.timeSec - b.timeSec; });
+      state.chapterList = out;
+
+      var sig = JSON.stringify(out.map(function (c) { return { timeSec: c.timeSec, title: c.title }; }));
+      if (sig !== lastChapterSig) {
+        lastChapterSig = sig;
+        emit('chapters', { chapters: out.slice(), count: out.length });
+      }
+    }
+
+    // ── Adapter methods ──
+
+    function load(filePath) {
+      loadSeq += 1;
+      firstFrameEmitted = false;
+      loadStartedAtMs = Date.now();
+      state.ready = false;
+      state.eofReached = false;
+      state.timeSec = 0;
+      state.durationSec = 0;
+      window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: filePath });
+
+      createCanvas();
+
+      suppressEof = true;
+      setTimeout(function () { suppressEof = false; }, 500);
+
+      return ensureGpu().then(function (gpuRes) {
+        if (!gpuRes || !gpuRes.ok) {
+          return { ok: false, error: 'GPU init failed: ' + ((gpuRes && gpuRes.error) || 'unknown') };
+        }
+        return hg.loadFile(filePath);
+      }).then(function (loadRes) {
+        if (!loadRes || !loadRes.ok) {
+          return { ok: false, error: (loadRes && loadRes.error) || 'load failed' };
+        }
+        if (!frameLoopStarted) {
+          frameLoopStarted = true;
+          hg.startFrameLoop().catch(function () {});
+        }
+        // Re-apply volume/mute/speed after GPU init (they may have been set
+        // before the domain was ready, causing silent IPC failures)
+        hg.setProperty('volume', String(Math.round(state.volume * 100))).catch(function () {});
+        hg.setProperty('mute', state.muted ? 'yes' : 'no').catch(function () {});
+        if (state.speed !== 1) {
+          hg.setProperty('speed', String(state.speed)).catch(function () {});
+        }
+        // Request resize to match current canvas
+        requestSurfaceResize();
+        return { ok: true };
+      });
+    }
+
+    function play() {
+      state.paused = false;
+      emit('play');
+      window.TankoPlayer.state.set({ paused: false });
+      return hg.setProperty('pause', 'no').then(function () { return { ok: true }; });
+    }
+
+    function pause() {
+      state.paused = true;
+      emit('pause');
+      window.TankoPlayer.state.set({ paused: true });
+      return hg.setProperty('pause', 'yes').then(function () { return { ok: true }; });
+    }
+
+    function togglePlay() {
+      if (state.paused) return play();
+      return pause();
+    }
+
+    function seekTo(seconds) {
+      var sec = toFiniteNumber(seconds, 0);
+      if (sec < 0) sec = 0;
+      if (state.durationSec > 0 && sec > state.durationSec) sec = state.durationSec;
+      state.eofReached = false;
+      return hg.command(['seek', String(sec), 'absolute']).then(function () { return { ok: true }; });
+    }
+
+    function seekToFast(seconds) {
+      var sec = toFiniteNumber(seconds, 0);
+      if (sec < 0) sec = 0;
+      if (state.durationSec > 0 && sec > state.durationSec) sec = state.durationSec;
+      state.eofReached = false;
+      return hg.command(['seek', String(sec), 'absolute+keyframes']).then(function () { return { ok: true }; });
+    }
+
+    function seekBy(deltaSec) {
+      state.eofReached = false;
+      return hg.command(['seek', String(deltaSec), 'relative']).then(function () { return { ok: true }; });
+    }
+
+    function stop() {
+      return pause().then(function () {
+        return seekTo(0);
+      });
+    }
+
+    function unload() {
+      return hg.command(['stop']).then(function () {
+        state.ready = false;
+        state.timeSec = 0;
+        state.durationSec = 0;
+        window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: null });
+        return { ok: true };
+      });
+    }
+
+    function destroy() {
+      if (destroyed) return;
+      destroyed = true;
+
+      emit('shutdown');
+
+      if (framePumpRaf) { try { cancelAnimationFrame(framePumpRaf); } catch (e) {} }
+      framePumpRaf = 0;
+      if (pendingFrame) { closeFrameSafe(pendingFrame); pendingFrame = null; }
+      if (resizeTimer) clearTimeout(resizeTimer);
+      if (resizeObserver) { try { resizeObserver.disconnect(); } catch (e) {} }
+
+      // Disconnect HG event listeners
+      if (typeof offPropertyChange === 'function') offPropertyChange();
+      if (typeof offEof === 'function') offEof();
+      if (typeof offFileLoaded === 'function') offFileLoaded();
+      if (typeof offVideoFrame === 'function') offVideoFrame();
+
+      // Stop frame loop and destroy HG player
+      hg.stopFrameLoop().catch(function () {});
+      hg.destroy().catch(function () {});
+
+      // Run cleanup functions
+      for (var i = 0; i < cleanupFns.length; i++) {
+        try { cleanupFns[i](); } catch (e) {}
+      }
+      cleanupFns = [];
+
+      // Remove canvas
+      if (canvas && canvas.parentNode) {
+        try { canvas.parentNode.removeChild(canvas); } catch (e) {}
+      }
+      canvas = null;
+      ctx2d = null;
+
+      listeners.clear();
+    }
+
+    // ── Query state ──
+
+    function getState() {
+      return Object.assign({}, state);
+    }
+
+    function getDuration() {
+      return state.durationSec;
+    }
+
+    function getChapters() {
+      return state.chapterList.slice();
+    }
+
+    // ── Volume / Speed ──
+
+    function setVolume(vol) {
+      var v = clamp(toFiniteNumber(vol, 1), 0, 1);
+      state.volume = v;
+      return hg.setProperty('volume', String(Math.round(v * 100))).then(function () { return { ok: true }; });
+    }
+
+    function setMuted(muted) {
+      state.muted = !!muted;
+      return hg.setProperty('mute', muted ? 'yes' : 'no').then(function () { return { ok: true }; });
+    }
+
+    function setSpeed(speed) {
+      var s = clamp(toFiniteNumber(speed, 1), 0.25, 4);
+      state.speed = s;
+      return hg.setProperty('speed', String(s)).then(function () { return { ok: true }; });
+    }
+
+    // ── Tracks ──
+
+    function getAudioTracks() {
+      return state.trackList.filter(function (t) { return t.type === 'audio'; });
+    }
+
+    function getSubtitleTracks() {
+      return state.trackList.filter(function (t) { return t.type === 'sub'; });
+    }
+
+    function getCurrentAudioTrack() {
+      return state.audioTrackId;
+    }
+
+    function getCurrentSubtitleTrack() {
+      return state.subtitleTrackId;
+    }
+
+    function setAudioTrack(id) {
+      return hg.setProperty('aid', String(id)).then(function () {
+        state.audioTrackId = String(id);
+        return { ok: true };
+      });
+    }
+
+    function setSubtitleTrack(id) {
+      if (id === 'off' || id === 'no' || id === false || id === null) {
+        return hg.setProperty('sid', 'no').then(function () {
+          state.subtitleTrackId = null;
+          state.subtitlesVisible = false;
+          return { ok: true };
+        });
+      }
+      return hg.setProperty('sid', String(id)).then(function () {
+        state.subtitleTrackId = String(id);
+        state.subtitlesVisible = true;
+        lastSubtitleTrackId = String(id);
+        return { ok: true };
+      });
+    }
+
+    function cycleAudioTrack() {
+      return hg.command(['cycle', 'audio']).then(function () { return { ok: true }; });
+    }
+
+    function cycleSubtitleTrack() {
+      return hg.command(['cycle', 'sub']).then(function () { return { ok: true }; });
+    }
+
+    function toggleSubtitles() {
+      if (state.subtitlesVisible) {
+        return setSubtitleTrack('no');
+      }
+      // Re-enable last known subtitle track
+      var id = lastSubtitleTrackId || 'auto';
+      return setSubtitleTrack(id);
+    }
+
+    function addExternalSubtitle(path) {
+      return hg.command(['sub-add', String(path)]).then(function () { return { ok: true }; });
+    }
+
+    // ── Delays ──
+
+    function getAudioDelay() { return state.audioDelaySec; }
+
+    function setAudioDelay(sec) {
+      state.audioDelaySec = toFiniteNumber(sec, 0);
+      return hg.setProperty('audio-delay', String(state.audioDelaySec)).then(function () { return { ok: true }; });
+    }
+
+    function getSubtitleDelay() { return state.subtitleDelaySec; }
+
+    function setSubtitleDelay(sec) {
+      state.subtitleDelaySec = toFiniteNumber(sec, 0);
+      return hg.setProperty('sub-delay', String(state.subtitleDelaySec)).then(function () { return { ok: true }; });
+    }
+
+    // ── Transforms ──
+
+    function getAspectRatio() { return state.aspectRatio; }
+
+    function setAspectRatio(value) {
+      var v = String(value || 'auto');
+      if (v === 'auto') v = '-1';
+      state.aspectRatio = value || 'auto';
+      return hg.setProperty('video-aspect-override', v).then(function () {
+        emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        return { ok: true };
+      });
+    }
+
+    function getCrop() { return state.crop; }
+
+    function setCrop(value) {
+      state.crop = String(value || 'none');
+      return hg.setProperty('video-crop', state.crop === 'none' ? '' : state.crop).then(function () {
+        emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        return { ok: true };
+      });
+    }
+
+    function resetVideoTransforms() {
+      state.aspectRatio = 'auto';
+      state.crop = 'none';
+      return Promise.all([
+        hg.setProperty('video-aspect-override', '-1'),
+        hg.setProperty('video-crop', ''),
+      ]).then(function () {
+        emit('transforms', { aspectRatio: 'auto', crop: 'none' });
+        return { ok: true };
+      });
+    }
+
+    // ── Rendering / mpv-only methods ──
+
+    function setBounds() {
+      // Canvas fills hostEl automatically via ResizeObserver; no-op
+      return Promise.resolve({ ok: true });
+    }
+
+    function setRenderQuality(quality) {
+      state.renderQuality = String(quality || 'auto');
+      return Promise.resolve({ ok: true });
+    }
+
+    function getRenderStats() {
+      return {
+        fps: renderStats.frameCount,
+        droppedFrames: renderStats.droppedFrames,
+        lastDrawTimeMs: renderStats.lastDrawTimeMs,
+        sourceWidth: renderStats.sourceWidth,
+        sourceHeight: renderStats.sourceHeight,
+      };
+    }
+
+    function takeScreenshot() {
+      // Capture from mpv directly via command
+      return hg.command(['screenshot-to-file', '', 'video']).then(function (res) {
+        if (res && res.ok) return { ok: true };
+        // Fallback: capture from canvas
+        if (!canvas) return { ok: false, error: 'No canvas' };
+        try {
+          var dataUrl = canvas.toDataURL('image/png');
+          return { ok: true, dataUrl: dataUrl };
+        } catch (e) {
+          return { ok: false, error: e.message };
+        }
+      });
+    }
+
+    function setSubtitleHudLift(px) {
+      state.subtitleHudLiftPx = toFiniteNumber(px, 40);
+      var marginY = Math.max(0, Math.round(state.subtitleHudLiftPx));
+      return hg.setProperty('sub-margin-y', String(marginY)).then(function () { return { ok: true }; });
+    }
+
+    function setRespectSubtitleStyles(respect) {
+      var mode = respect ? 'no' : 'force';
+      return hg.setProperty('sub-ass-override', mode).then(function () { return { ok: true }; });
+    }
+
+    function mpvCommand() {
+      var args = Array.prototype.slice.call(arguments);
+      if (args.length === 1 && Array.isArray(args[0])) args = args[0];
+      return hg.command(args).then(function (res) {
+        return (res && res.ok) ? res : { ok: false, error: (res && res.error) || 'command failed' };
+      });
+    }
+
+    function getProperty(name) {
+      return hg.getProperty(String(name || '')).then(function (res) {
+        return (res && res.ok) ? res.value : null;
+      });
+    }
+
+    function setPropertyRaw(name, value) {
+      return hg.setProperty(String(name || ''), String(value == null ? '' : value)).then(function () {
+        return { ok: true };
+      });
+    }
+
+    // ── Public adapter object ──
+
+    var adapter = {
+      kind: 'mpv',
+      windowMode: 'embedded-libmpv',
+      capabilities: {
+        tracks: true,
+        delays: true,
+        transforms: true,
+        externalSubtitles: true,
+        screenshots: true,
+      },
+
+      on: on,
+
+      load: load,
+      play: play,
+      pause: pause,
+      togglePlay: togglePlay,
+      seekTo: seekTo,
+      seekToFast: seekToFast,
+      seekBy: seekBy,
+      stop: stop,
+      unload: unload,
+      destroy: destroy,
+
+      command: mpvCommand,
+      getProperty: getProperty,
+      setProperty: setPropertyRaw,
+      getState: getState,
+      getDuration: getDuration,
+      getChapters: getChapters,
+
+      setVolume: setVolume,
+      setMuted: setMuted,
+      setSpeed: setSpeed,
+      setBounds: setBounds,
+      setRenderQuality: setRenderQuality,
+      getRenderStats: getRenderStats,
+      takeScreenshot: takeScreenshot,
+      setSubtitleHudLift: setSubtitleHudLift,
+
+      getAudioTracks: getAudioTracks,
+      getSubtitleTracks: getSubtitleTracks,
+      getCurrentAudioTrack: getCurrentAudioTrack,
+      getCurrentSubtitleTrack: getCurrentSubtitleTrack,
+      setAudioTrack: setAudioTrack,
+      setSubtitleTrack: setSubtitleTrack,
+      selectSubtitleTrack: setSubtitleTrack,
+      cycleAudioTrack: cycleAudioTrack,
+      cycleSubtitleTrack: cycleSubtitleTrack,
+      toggleSubtitles: toggleSubtitles,
+      addExternalSubtitle: addExternalSubtitle,
+
+      getAudioDelay: getAudioDelay,
+      setAudioDelay: setAudioDelay,
+      getSubtitleDelay: getSubtitleDelay,
+      setSubtitleDelay: setSubtitleDelay,
+
+      getAspectRatio: getAspectRatio,
+      setAspectRatio: setAspectRatio,
+      getCrop: getCrop,
+      setCrop: setCrop,
+      resetVideoTransforms: resetVideoTransforms,
+      setRespectSubtitleStyles: setRespectSubtitleStyles,
+    };
+
+    return adapter;
+  }
+
+  window.TankoPlayer = window.TankoPlayer || {};
+  window.TankoPlayer.createHolyGrailBackend = createHolyGrailBackend;
+})();

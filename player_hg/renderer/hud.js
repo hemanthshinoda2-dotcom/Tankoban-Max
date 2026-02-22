@@ -54,8 +54,7 @@
     hudEl = document.createElement('div');
     hudEl.id = 'bottomHud';
     hudEl.className = 'overlay';
-    // Start hidden until a file loads
-    hudEl.style.display = 'none';
+    // Starts invisible via CSS (opacity: 0), shown via .hud-visible class
 
     // Seek row
     var seekRow = document.createElement('div');
@@ -184,7 +183,21 @@
 
     var audioChip = makeChip('\u266A', 'Audio Track'); // ♪
     audioChip.addEventListener('click', function () {
-      window.TankoPlayer.toast.show('Audio tracks: requires mpv backend');
+      if (adapter && adapter.capabilities && adapter.capabilities.tracks) {
+        adapter.cycleAudioTrack();
+        setTimeout(function () {
+          var tracks = adapter.getAudioTracks ? adapter.getAudioTracks() : [];
+          var cur = adapter.getCurrentAudioTrack ? adapter.getCurrentAudioTrack() : null;
+          for (var i = 0; i < tracks.length; i++) {
+            if (tracks[i].id === cur) {
+              window.TankoPlayer.toast.show('\u266A ' + (tracks[i].label || 'Track ' + tracks[i].id));
+              break;
+            }
+          }
+        }, 100);
+      } else {
+        window.TankoPlayer.toast.show('Audio tracks: requires mpv backend');
+      }
     });
 
     var aspectChip = makeChip('\u25AD', 'Aspect'); // ▭
@@ -199,7 +212,25 @@
 
     var ccChip = makeChip('CC', 'Subtitles');
     ccChip.addEventListener('click', function () {
-      window.TankoPlayer.toast.show('Subtitles: requires mpv backend');
+      if (adapter && adapter.capabilities && adapter.capabilities.tracks) {
+        adapter.cycleSubtitleTrack();
+        setTimeout(function () {
+          var cur = adapter.getCurrentSubtitleTrack ? adapter.getCurrentSubtitleTrack() : null;
+          if (cur === null) {
+            window.TankoPlayer.toast.show('CC Off');
+          } else {
+            var tracks = adapter.getSubtitleTracks ? adapter.getSubtitleTracks() : [];
+            for (var i = 0; i < tracks.length; i++) {
+              if (tracks[i].id === cur) {
+                window.TankoPlayer.toast.show('CC ' + (tracks[i].label || 'Subtitle ' + tracks[i].id));
+                break;
+              }
+            }
+          }
+        }, 100);
+      } else {
+        window.TankoPlayer.toast.show('Subtitles: requires mpv backend');
+      }
     });
 
     var fsChip = makeChip('\u2922', 'Fullscreen'); // ⤢
@@ -369,7 +400,7 @@
     if (!hudEl) return;
     var s = window.TankoPlayer.state.get();
     if (!s.fileLoaded) return;
-    hudEl.style.display = '';
+    hudEl.classList.add('hud-visible');
     visible = true;
     showCursor();
     // Also show top strip
@@ -378,7 +409,7 @@
 
   function hideHud() {
     if (!hudEl) return;
-    hudEl.style.display = 'none';
+    hudEl.classList.remove('hud-visible');
     visible = false;
     armCursorHide(); // also start cursor hide countdown
     // Also hide top strip
@@ -471,8 +502,22 @@
     adapter = adapterInstance;
     stageEl = document.getElementById('playerStage');
 
+    // Make stage focusable so keyboard shortcuts work after button clicks
+    if (!stageEl.hasAttribute('tabindex')) stageEl.setAttribute('tabindex', '-1');
+    stageEl.style.outline = 'none';
+
     var el = buildDom();
     stageEl.appendChild(el);
+
+    // Blur buttons after click so keyboard shortcuts keep working.
+    // Without this, clicking a HUD button gives it focus and Space/Enter
+    // trigger the button instead of the intended keyboard shortcut.
+    el.addEventListener('click', function () {
+      if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+        document.activeElement.blur();
+      }
+      stageEl.focus();
+    });
 
     // Bind adapter events
     offHandlers.push(adapter.on('time', onTimeEvent));

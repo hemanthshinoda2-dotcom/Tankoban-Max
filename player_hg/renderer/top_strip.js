@@ -12,7 +12,6 @@
     stripEl = document.createElement('div');
     stripEl.id = 'topStrip';
     stripEl.className = 'overlay';
-    stripEl.style.display = 'none';
 
     titleLabel = document.createElement('span');
     titleLabel.className = 'strip-title';
@@ -68,13 +67,13 @@
     if (!stripEl) return;
     var s = window.TankoPlayer.state.get();
     if (!s.fileLoaded) return;
-    stripEl.style.display = '';
+    stripEl.classList.add('hud-visible');
     visible = true;
   }
 
   function hide() {
     if (!stripEl) return;
-    stripEl.style.display = 'none';
+    stripEl.classList.remove('hud-visible');
     visible = false;
   }
 
@@ -86,6 +85,13 @@
     stageEl = document.getElementById('playerStage');
     var el = buildDom();
     stageEl.appendChild(el);
+
+    // Blur buttons after click to keep keyboard shortcuts working
+    el.addEventListener('click', function () {
+      if (document.activeElement && document.activeElement.tagName === 'BUTTON') {
+        document.activeElement.blur();
+      }
+    });
   }
 
   function destroy() {

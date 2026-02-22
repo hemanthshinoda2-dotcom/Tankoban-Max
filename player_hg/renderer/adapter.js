@@ -38,7 +38,9 @@
     if (backendName === 'html5') {
       return window.TankoPlayer.createHtml5Backend(opts);
     }
-    // Future: if (backendName === 'mpv') return window.TankoPlayer.createMpvBackend(opts);
+    if (backendName === 'holy_grail') {
+      return window.TankoPlayer.createHolyGrailBackend(opts);
+    }
     throw new Error('Unknown adapter backend: ' + backendName);
   }
 

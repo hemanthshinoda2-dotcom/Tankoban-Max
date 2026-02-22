@@ -7,6 +7,9 @@ contextBridge.exposeInMainWorld('PlayerBridge', {
   openFileDialog: function () {
     return ipcRenderer.invoke('open-file-dialog');
   },
+  openSubtitleDialog: function () {
+    return ipcRenderer.invoke('open-subtitle-dialog');
+  },
   minimize: function () {
     ipcRenderer.send('minimize-window');
   },
