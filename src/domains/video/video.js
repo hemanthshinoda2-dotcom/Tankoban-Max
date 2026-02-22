@@ -46,7 +46,7 @@ OWNERSHIP (renderer / Videos):
 // AI_STATE_WRITE: video progress persistence boundary. Look for save/load IPC calls 'videoProgress:*'.
 videoProgress IPC calls
 - 
-// QT_ONLY: Embedded/canvas player has been removed. This renderer launches the external Qt player.
+// Embedded Holy Grail player is primary; Qt remains the fallback/override path.
 */
 
 // Tankoban Plus Build 3.3 — Video library navigation (show grid + show view) + existing player adapter
@@ -352,6 +352,7 @@ videoProgress IPC calls
       // Tankoban Plus Build 5.4B: preferred languages for track selection (mpv only)
       preferredAudioLanguage: null,
       preferredSubtitleLanguage: null,
+      forceQtPlayer: false,
       autoAdvance: true,
       respectSubtitleStyles: true,
       subtitleHudLiftPx: 40,
@@ -1409,14 +1410,13 @@ saveNow(true); } catch {}
     const v = (payload && payload.video) ? payload.video : state.now;
     if (!v || !v.path) return;
 
-    // Tankoban Pro V2: Optional external Qt player (file-based progress bridge).
-    // Enable by setting localStorage key: tankobanUseQtPlayer = '1'
+    // Optional Qt override mode for diagnostics/fallback.
     try {
       const useQt = getQtPlayerPreference();
       const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
       if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
         const sessionId = String(Date.now());
-        const start = (opts && Number.isFinite(Number(opts.resumeOverridePosSec))) ? Number(opts.resumeOverridePosSec) : 0;
+        const start = (payload && Number.isFinite(Number(payload.resumePosSec))) ? Number(payload.resumePosSec) : 0;
         try { toast('Opening in Qt player…', 1200); } catch {}
         await api.player.launchQt({ filePath: String(v.path), startSeconds: start, sessionId });
         return;
@@ -2689,9 +2689,8 @@ function closeTracksPanel(){
                 state.mpvAvailable = !!mpvResult;
               }
 
-              // Warn only if in-app playback is unavailable.
-              const _useQt = true; // Qt-only line: embedded backends deprecated
-              if (!_useQt && !state.holyGrailAvailable && !state.mpvAvailable) {
+              // Warn only if no in-app backend is available.
+              if (!state.holyGrailAvailable && !state.mpvAvailable) {
                 const msg = state.holyGrailAvailError
                   ? `Holy Grail not available: ${state.holyGrailAvailError}`
                   : `mpv not available${state.mpvAvailError ? ': ' + state.mpvAvailError : ''}`;
@@ -2779,6 +2778,16 @@ function closeTracksPanel(){
     }
     if (typeof s.preferredSubtitleLanguage === 'string' || s.preferredSubtitleLanguage === null) {
       state.settings.preferredSubtitleLanguage = (typeof s.preferredSubtitleLanguage === 'string' && s.preferredSubtitleLanguage.trim()) ? s.preferredSubtitleLanguage.trim() : null;
+    }
+    if (typeof s.forceQtPlayer === 'boolean') {
+      state.settings.forceQtPlayer = !!s.forceQtPlayer;
+    } else {
+      // One-way migration from legacy localStorage preference.
+      try {
+        if (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1') {
+          state.settings.forceQtPlayer = true;
+        }
+      } catch {}
     }
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.
 if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
@@ -6725,7 +6734,7 @@ async function openVideo(v, opts = {}) {
 }
 
 async function openVideoQtFallback(v, opts = {}) {
-  // QT_ONLY: Videos always open in the external Python/Qt player.
+  // Qt fallback/override path.
   // The Electron window may hide during playback and will be restored by the main process.
 
   // Apply one-shot overrides if provided (e.g., Play from beginning / Continue Watching).
@@ -9501,17 +9510,14 @@ function bindKeyboard(){
   }
 
     function getQtPlayerPreference(){
-      // If no toggle control exists in this build, ignore stale Qt preference so
-      // videos can still open in the in-app embedded path.
-      if (!el.qtPlayerToggleBtn) return false;
-      try { return (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1'); } catch { return false; }
+      return !!state.settings.forceQtPlayer;
     }
 
     function setQtPlayerPreference(useQt){
+      state.settings.forceQtPlayer = !!useQt;
+      persistVideoSettings({ forceQtPlayer: !!state.settings.forceQtPlayer });
       try {
-        if (typeof localStorage === 'undefined') return;
-        if (useQt) localStorage.setItem('tankobanUseQtPlayer', '1');
-        else localStorage.removeItem('tankobanUseQtPlayer');
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('tankobanUseQtPlayer');
       } catch {}
     }
 
@@ -9802,8 +9808,7 @@ function bindKeyboard(){
           const v = (p.video && typeof p.video === 'object') ? p.video : null;
           if (!v || !v.path) return;
 
-          // Tankoban Pro V2: Optional external Qt player (file-based progress bridge).
-          // Enable by setting localStorage key: tankobanUseQtPlayer = '1'
+          // Optional Qt override mode for diagnostics/fallback.
           // NOTE: This handler is not async; do not use await here.
           try {
             const useQt = getQtPlayerPreference();
@@ -9821,7 +9826,6 @@ function bindKeyboard(){
       }
     });
 
-    // QT_ONLY: No embedded player UI wiring.
     bindKeyboard();
   }
 

@@ -17,6 +17,11 @@ All follow-up phases, fixes, and parity work should be planned and committed on 
   - auto-advance is gated by true end-state checks,
   - embedded screenshot path uses mpv command flow,
   - subtitle HUD lift + margin behavior is now exposed in embedded player settings.
+- Phase 5 fallback/cleanup is now applied in mainline:
+  - Qt fallback remains intact and is used automatically when Holy Grail is unavailable,
+  - BUILD14 hide-window flow remains Qt-only,
+  - force-Qt mode is available as a persisted app setting (diagnostics override),
+  - stale Qt-only/deprecated branch framing was removed from active video flow.
 
 ## Context
 
