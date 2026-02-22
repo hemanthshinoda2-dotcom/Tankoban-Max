@@ -466,6 +466,30 @@
   0%, 100% { opacity: 0.5; }
   50% { opacity: 1; }
 }
+/* OPT-TTS-CTRL: Buffering spinner overlay on play/pause button */
+#lpTtsPlayPause.lp-buffering {
+  position: relative;
+  pointer-events: none;
+  opacity: 0.5;
+}
+#lpTtsPlayPause.lp-buffering::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: lp-spin 0.8s linear infinite;
+}
+@keyframes lp-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #lpTtsPlayPause.lp-buffering::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}
 .lp-seek {
   width: 100%;
   height: 20px;
@@ -2999,6 +3023,134 @@ body.inBooksReader .br-reader {
   color: var(--muted);
 }
 .booksTtsMiniSleep:not(:empty) { color: #e8a838; }
+
+/* ══════ FEAT-AUDIOBOOK: In-reader audiobook transport bar ══════ */
+.ab-player-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(var(--surface-rgb, 26, 28, 34), 0.95);
+  border: 1px solid var(--lib-border, rgba(255,255,255,0.16));
+  border-radius: 9px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.28);
+  z-index: 58;
+  max-width: calc(100% - 24px);
+  backdrop-filter: blur(8px);
+  transition: opacity 300ms;
+}
+.ab-player-bar.hidden { display: none; }
+.ab-player-bar.ab-bar-autohide {
+  opacity: 0;
+  pointer-events: none;
+}
+.ab-chapter-label {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted, #8b8fa3);
+  cursor: default;
+}
+.ab-bar-btn { min-width: 24px; font-size: 12px; }
+.ab-bar-play { min-width: 28px; }
+.ab-bar-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, #8b8fa3);
+  min-width: 80px;
+  text-align: center;
+  white-space: nowrap;
+}
+.ab-bar-speed {
+  min-width: 36px;
+  text-align: center;
+  color: var(--muted, #8b8fa3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.ab-bar-vol-icon { opacity: 0.7; flex-shrink: 0; }
+.ab-bar-volume {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 54px;
+  height: 3px;
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.18);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.ab-bar-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary, #eee);
+  border: none;
+  cursor: pointer;
+}
+/* Position inside reading area (same as TTS bar) */
+.br-reading-area > .ab-player-bar { bottom: 16px; }
+
+/* Mobile: stretch full width */
+@media (max-width: 980px) {
+  .ab-player-bar {
+    left: 8px;
+    right: 8px;
+    max-width: none;
+    transform: none;
+  }
+}
+
+/* Light/sepia/paper theme overrides — match TTS bar appearance */
+[data-reader-theme="light"] .ab-player-bar,
+[data-reader-theme="sepia"] .ab-player-bar,
+[data-reader-theme="paper"] .ab-player-bar,
+[data-reader-theme="contrast3"] .ab-player-bar,
+[data-reader-theme="gruvbox"] .ab-player-bar,
+[data-reader-theme="solarized"] .ab-player-bar {
+  background: rgba(var(--br-reader-surface-rgb), 0.94);
+  border-color: rgba(0,0,0,0.12);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+}
+[data-reader-theme="light"] .ab-player-bar .iconBtn,
+[data-reader-theme="sepia"] .ab-player-bar .iconBtn,
+[data-reader-theme="paper"] .ab-player-bar .iconBtn,
+[data-reader-theme="contrast3"] .ab-player-bar .iconBtn,
+[data-reader-theme="gruvbox"] .ab-player-bar .iconBtn,
+[data-reader-theme="solarized"] .ab-player-bar .iconBtn,
+[data-reader-theme="light"] .ab-player-bar .ab-bar-vol-icon,
+[data-reader-theme="sepia"] .ab-player-bar .ab-bar-vol-icon,
+[data-reader-theme="paper"] .ab-player-bar .ab-bar-vol-icon,
+[data-reader-theme="contrast3"] .ab-player-bar .ab-bar-vol-icon,
+[data-reader-theme="gruvbox"] .ab-player-bar .ab-bar-vol-icon,
+[data-reader-theme="solarized"] .ab-player-bar .ab-bar-vol-icon {
+  color: var(--br-reader-text);
+}
+[data-reader-theme="light"] .ab-player-bar .iconBtn:hover,
+[data-reader-theme="sepia"] .ab-player-bar .iconBtn:hover,
+[data-reader-theme="paper"] .ab-player-bar .iconBtn:hover,
+[data-reader-theme="contrast3"] .ab-player-bar .iconBtn:hover,
+[data-reader-theme="gruvbox"] .ab-player-bar .iconBtn:hover,
+[data-reader-theme="solarized"] .ab-player-bar .iconBtn:hover {
+  background: rgba(0,0,0,0.08);
+}
+[data-reader-theme="light"] .ab-chapter-label,
+[data-reader-theme="sepia"] .ab-chapter-label,
+[data-reader-theme="paper"] .ab-chapter-label,
+[data-reader-theme="light"] .ab-bar-time,
+[data-reader-theme="sepia"] .ab-bar-time,
+[data-reader-theme="paper"] .ab-bar-time,
+[data-reader-theme="light"] .ab-bar-speed,
+[data-reader-theme="sepia"] .ab-bar-speed,
+[data-reader-theme="paper"] .ab-bar-speed {
+  color: var(--br-reader-muted, #666);
+}
 
 /* Scrub bubble visibility (for books scrub bar) */
 .scrubBubble.visible {
