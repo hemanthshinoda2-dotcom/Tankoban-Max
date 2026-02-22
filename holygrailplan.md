@@ -1,113 +1,201 @@
 # Holy Grail mpv Integration Plan
 
-## Mainline Status
+## Branching and Ownership
 
-Holy Grail is now a mainline playback path on `master`.
-Embedded playback is the primary target path, and Qt remains a required fallback/override path.
+Holy Grail integration is now mainline work on `master`.
+All follow-up phases, fixes, and parity work should be planned and committed on `master` unless a separate temporary branch is explicitly needed for a scoped task.
 
-## Current Track (Incremental, player_hg-driven)
+## Current Status
 
-This plan is now tracked as incremental convergence work, not a side-branch experiment.
-The goal is practical parity slices that ship usable improvements each pass.
+- Phases 0-2 are integrated into the main app codebase.
+- Packaging support for Holy Grail native artifacts is wired into release prep.
+- Qt playback remains as the fallback path when Holy Grail is unavailable.
+- Phase 3 + 4C work is in progress on `master`:
+  - native live surface resize is wired (`HG_RESIZE` end-to-end),
+  - embedded fullscreen/resize now resizes the native render surface instead of canvas-only scaling,
+  - Qt strict key semantics are being aligned (`K`, `Shift+N/P`, `N/P`),
+  - auto-advance is gated by true end-state checks,
+  - embedded screenshot path uses mpv command flow,
+  - subtitle HUD lift + margin behavior is now exposed in embedded player settings.
+- Phase 5 fallback/cleanup is now applied in mainline:
+  - Qt fallback remains intact and is used automatically when Holy Grail is unavailable,
+  - BUILD14 hide-window flow remains Qt-only,
+  - force-Qt mode is available as a persisted app setting (diagnostics override),
+  - stale Qt-only/deprecated branch framing was removed from active video flow.
 
-### Completed Foundation (Phases 0-2 + Packaging)
+## Context
 
-- Native addon baseline is integrated in `native/holy_grail`.
-- Main-process Holy Grail domain, IPC wiring, preload namespace, and API gateway are integrated.
-- Renderer Holy Grail adapter is integrated and provides in-app frame rendering.
-- Packaged artifact validation/build hooks are integrated (`build:holy-grail`, `validate:holy-grail`, release prep wiring).
+Tankoban Max historically played video via an external Python/Qt subprocess: the Electron window hides, the Qt player takes over, and progress syncs via file-based IPC. The "holy grail" PoC (`experiments/mpv-holy-grail/`) proved that mpv can render GPU-accelerated frames directly into an Electron canvas via ANGLE -> D3D11 -> sharedTexture -> VideoFrame, with zero CPU copies at 60fps. The goal is in-app playback with Qt-level feature parity.
 
-### Active Upgrade Batch (HG-P3R)
+**Reference implementations:**
+- **Build 110** (embedding patterns): Native addon with property observation, track management, bounds management, load-gate pattern
+- **Qt player** (feature target): 25+ keyboard shortcuts, audio/subtitle track switching, speed control, chapter navigation, playlist, subtitle delay/styling, volume OSD, quality modes
 
-1. Routing and preference cleanup
-- Embedded is default when Holy Grail is healthy.
-- Qt only opens on explicit user choice or hard embedded failure.
-- Legacy localStorage forcing (`tankobanUseQtPlayer`) is removed from routing decisions.
+**Key insight**: Tankoban Max already had most infrastructure for embedded playback: IPC channels (`LIBMPV_*`), keyboard hotkeys, HUD styling, progress persistence, and a player adapter pattern in `ensurePlayer()`.
 
-2. Engine truth and diagnostics
-- Runtime engine state is tracked (`embedded`, `qt`, `none`).
-- Last open-route reason is tracked (`explicit_qt`, `explicit_embedded`, `user_pref_qt`, `probe_failed`, `init_failed`, `load_failed`).
-- Player bar shows active engine badge and route reason tooltip.
+---
 
-3. player_hg UI module import (composable layer)
-- `src/domains/video/hg_ui/` is the integration namespace.
-- Modules are loaded in the deferred video chain:
-  - `utils.js`, `drawer.js`, `toast.js`, `center_flash.js`, `volume_hud.js`, `diagnostics.js`, `top_strip.js`, `playlist.js`, `tracks_drawer.js`, `context_menu.js`, `hud.js`.
-- These modules are mounted into the existing Tankoban video shell; no full page replacement.
+## Phase 0 - Addon Hardening (native C++)
 
-4. Behavior convergence
-- Embedded auto-advance is EOF-driven and single-trigger; countdown overlay is removed by default.
-- Fullscreen and major layout changes force native surface resize through the Holy Grail resize path.
-- HUD feedback uses player_hg-style controllers (toast/center-flash/volume overlay/diagnostics) on top of existing controls.
+Extend the proven PoC addon with missing capabilities needed for production use.
 
-5. Progress persistence and cross-engine sync
-- `video_progress.json` remains the single source of truth for resume.
-- Embedded saves on poll/pause/seek/end/unload.
-- Qt and embedded resume behavior remains shared by the same persistence pipeline.
+### 0A: Relocate addon source
+- Copy `experiments/mpv-holy-grail/native/src/addon.cc` -> `native/holy_grail/src/addon.cc`
+- Copy `binding.gyp` alongside it
+- Create `tools/build_holy_grail.bat` -> copies to `D:\hg-build\`, runs electron-rebuild, copies `.node` back
+- Build workaround remains necessary for apostrophes in project path
 
-## Architecture (Authoritative)
+### 0B: Add property observation
+- Load `mpv_observe_property` and `mpv_wait_event` function pointers
+- Add `observeProperty(name)` N-API export -> calls `mpv_observe_property` with typed formats
+- Add `pollEvents()` N-API export -> drains mpv event queue, returns array of property/event changes
+- Called each frame-loop iteration alongside `renderFrame()`
 
-### Native and main process
+### 0C: Add track list querying
+- Load `mpv_free_node_contents` function pointer
+- Add `getPropertyNode(name)` -> calls `mpv_get_property` with `MPV_FORMAT_NODE`, recursively converts `mpv_node` trees to JS objects/arrays
+- Handles `track-list` (id/type/lang/title/codec/etc.)
 
-- Native addon: `native/holy_grail/src/addon.cc`
-- Domain: `main/domains/holyGrail/index.js`
-- IPC channels/events: `shared/ipc.js`, `main/ipc/register/holy_grail.js`
-- Preload namespace: `preload/namespaces/holy_grail.js`
+### 0D: Add reinit support
+- Split `destroy()` -> `destroyPlayer()` (tears down mpv + ANGLE, keeps DLLs loaded) and `destroyAll()` (also frees DLLs, for app quit)
+- `destroyPlayer()` enables loading a new video without restarting the app
 
-### Renderer
+**Files:** `native/holy_grail/src/addon.cc`, `native/holy_grail/binding.gyp`, `tools/build_holy_grail.bat`
 
-- Adapter: `src/domains/video/holy_grail_adapter.js`
-- Video domain: `src/domains/video/video.js`
-- UI module layer: `src/domains/video/hg_ui/*.js`
+---
 
-## Phase Map
+## Phase 1 - Main Process Domain + IPC Wiring
 
-## Phase 3 (Incremental Convergence)
+Wire the addon into Tankoban Max's standard domain/IPC/preload/gateway architecture.
 
-- Route correctness and fallback clarity.
-- Hotkey and interaction convergence.
-- Playlist/tracks/context/HUD behavior alignment with player_hg patterns.
-- Auto-advance reliability and no false next-episode jumps.
+### 1A: `main/domains/holyGrail/index.js`
+- Loads `holy_grail.node`
+- Resolves DLL paths (libmpv from `resources/mpv/windows/`, ANGLE from Electron runtime paths)
+- Manages frame loop (renderFrame -> sharedTexture.import -> sharedTexture.send -> pollEvents -> push property changes to renderer)
+- Exports:
+  - `probe`, `initGpu`, `loadFile`, `startFrameLoop`, `stopFrameLoop`
+  - `command`, `getProperty`, `setProperty`, `getState`, `getTrackList`, `observeProperty`
+  - `destroy`, `destroyAll`
 
-## Phase 4 (Polish and Fidelity)
+### 1B: IPC channels in `shared/ipc.js`
+Add `HG_*` channel block:
+```
+HG_PROBE, HG_INIT, HG_LOAD, HG_START_FRAME_LOOP, HG_STOP_FRAME_LOOP,
+HG_COMMAND, HG_GET_PROPERTY, HG_SET_PROPERTY, HG_GET_STATE,
+HG_GET_TRACK_LIST, HG_OBSERVE_PROPERTY, HG_DESTROY
+```
+Events:
+- `HG_PROPERTY_CHANGE`
+- `HG_EOF`
+- `HG_FILE_LOADED`
 
-- Fullscreen edge-to-edge behavior and resize/reinit stability.
-- Cursor/HUD timing polish.
-- Render-quality and subtitle-safe-margin refinements.
-- Additional UI polish in chips/drawers/feedback states.
+### 1C: `main/ipc/register/holy_grail.js`
+- Standard register module, wired through `main/ipc/index.js`
 
-## Phase 5 (Cleanup and Hardening)
+### 1D: `preload/namespaces/holy_grail.js`
+- IPC invoke wrappers for all `HG_*` channels
+- Configures `sharedTexture.setSharedTextureReceiver()` for `VideoFrame` delivery
+- Exposes `onVideoFrame(cb)` and event listeners (`onPropertyChange`, `onEof`, `onFileLoaded`)
 
-- Keep Qt fallback path intact.
-- Keep optional force-Qt diagnostics override.
-- Remove dead legacy embedded paths only after sustained stability.
+### 1E: API gateway in `src/services/api_gateway.js`
+- Adds `holyGrail` namespace wrappers, following existing gateway patterns
 
-## Verification Checklist
+**Files:** `main/domains/holyGrail/index.js`, `shared/ipc.js`, `main/ipc/register/holy_grail.js`, `main/ipc/index.js`, `preload/namespaces/holy_grail.js`, `preload/index.js`, `src/services/api_gateway.js`
 
-1. Automated
-- `npm run ipc:check`
-- `node tools/validate_holy_grail_artifacts.js`
-- `npm run smoke`
+---
 
-2. Runtime routing and engine truth
-- Embedded opens by default when healthy.
-- Explicit Open with Qt/Open with Embedded both work from show, episode, and continue contexts.
-- Engine badge always matches actual path used.
+## Phase 2 - Renderer Adapter (First Visible Frame)
 
-3. Runtime playback reliability
-- No false "next in X seconds" auto-advance behavior in embedded mode.
-- EOF-only auto-advance occurs once and only when enabled.
-- Fullscreen/windowed transitions stay sharp after resize.
+### 2A: `src/domains/video/holy_grail_adapter.js`
+Creates a player adapter matching what `video.js` expects from `state.player`:
+- Creates and owns canvas in `#mpvHost`
+- Calls `Tanko.api.holyGrail.initGpu()` -> `loadFile()` -> `startFrameLoop()`
+- Draws incoming `VideoFrame`s with `ctx.drawImage(videoFrame)`
+- Listens to `HG_PROPERTY_CHANGE` and maps to adapter state + events
+- Adapter identity:
+  - `kind: 'mpv'`
+  - `windowMode: 'embedded-libmpv'`
+  - `capabilities: { tracks, delays, transforms, externalSubtitles }`
+- Methods:
+  - Core playback: `load`, `play`, `pause`, `togglePlay`, `seekTo`, `seekBy`, `stop`, `unload`, `destroy`, `getState`
+  - Media control: `setVolume`, `setMuted`, `setSpeed`
+  - Tracks/subtitles: `getAudioTracks`, `getSubtitleTracks`, `setAudioTrack`, `setSubtitleTrack`, `cycleAudioTrack`, `cycleSubtitleTrack`, `toggleSubtitles`, `addExternalSubtitle`
+  - Sync/transforms: `setAudioDelay`, `setSubtitleDelay`, `setAspectRatio`, `setCrop`, `resetVideoTransforms`
+- Emits events expected by `video.js`:
+  - `time`, `duration`, `play`, `pause`, `ended`, `volume`, `speed`, `file-loaded`, `ready`, `error`, `delays`, `transforms`
 
-4. Progress sync
-- Embedded save/resume works.
-- Qt close point resumes in embedded.
-- Embedded close point resumes in Qt.
+### 2B: Modify `ensurePlayer()` in `video.js`
+- Probe and prefer `state.holyGrailAvailable`
+- Instantiate `window.createHolyGrailAdapter({ hostEl: el.mpvHost })`
 
-## How To Verify Active Engine
+### 2C: Probe Holy Grail at video bootstrap
+- `await Tanko.api.holyGrail.probe()` -> store in `state.holyGrailAvailable` and error state
 
-- Player bar badge:
-  - `Embedded (HG)` means in-app Holy Grail route is active.
-  - `Qt` means external Qt route is active.
-- Route reason tooltip on the badge explains why that path was selected.
-- Renderer logs include `[video-route]` entries with engine + reason + timestamp.
+### 2D: Modify `openVideo()`
+- If Holy Grail is available: enter in-app player flow
+- Else: fall back to Qt launcher path
+- Keep existing teardown path (`showVideoLibrary()`) authoritative
+
+**Files:** `src/domains/video/holy_grail_adapter.js`, `src/domains/video/video.js`, `src/state/deferred_modules.js`
+
+### Milestone
+Open a video -> in-app playback starts, HUD updates, pause/seek/scrubber/progress flow works, fallback path remains available.
+
+---
+
+## Packaging Support
+
+- Add `tools/validate_holy_grail_artifacts.js` to validate required `.node` artifact before packaging
+- Add scripts in `package.json`:
+  - `build:holy-grail`
+  - `validate:holy-grail`
+- Update `release:prep` to include Holy Grail build/validate alongside existing player prep
+- Add `extraResources` entry so packaged app ships `holy_grail.node`
+- Ensure loader in `main/domains/holyGrail/index.js` checks both dev and packaged locations deterministically
+
+---
+
+## Phase 3 - Feature Parity (follow-up)
+
+Each item maps adapter methods to mpv properties/commands. UI scaffolding already exists.
+
+| Feature | mpv property/command | Existing UI |
+|---------|----------------------|-------------|
+| 3A: Track switching | `aid`, `sid`, `track-list`, `sub-add` | Track panels, A/S hotkeys |
+| 3B: Speed control | `speed` | Speed panel, C/X/Z hotkeys |
+| 3C: Volume | `volume`, `mute` | Arrows, M hotkey, volume OSD |
+| 3D: Audio/sub delay | `audio-delay`, `sub-delay` | Delay controls in tracks panel |
+| 3E: Aspect ratio | `video-aspect-override` | Context menu aspect submenu |
+| 3F: Chapter navigation | `chapter-list`, chapter commands | Shift+N/P, scrubber markers |
+| 3G: Episode next/prev | `loadfile` command | N/P hotkeys, auto-advance |
+| 3H: Screenshots | `screenshot-to-file` command | Context menu |
+| 3I: External subtitles | `sub-add` | File dialog in tracks panel |
+
+---
+
+## Phase 4 - Polish
+
+- 4A: Fullscreen UX polish (`body.videoFullscreen`, F key, button)
+- 4B: Cursor auto-hide tuning (`.hideCursor`)
+- 4C: Canvas responsiveness / reinit policy for major resolution changes
+- 4D: Quality modes (`gpu-hq` and related profiles/options)
+- 4E: Subtitle styling controls (`sub-ass-override`, margins)
+
+---
+
+## Phase 5 - Fallback and Cleanup
+
+- 5A: Keep Qt fallback behind `state.holyGrailAvailable`
+- 5B: Keep BUILD14 hide-window behavior Qt-only
+- 5C: Optional setting to force Qt mode for diagnostics
+- 5D: Remove dead legacy embedded paths after stable parity
+
+---
+
+## Verification Plan
+
+1. Phase 0: Build addon, verify `observeProperty`, `pollEvents`, `getPropertyNode("track-list")`
+2. Phase 1: Renderer console probe returns `{ ok: true }` from `Tanko.api.holyGrail.probe()`
+3. Phase 2: Open video in-app, verify pause/seek/scrubber/progress behavior
+4. Phase 3: Validate each parity feature individually (tracks, speed, delays, chapters, next/prev, external subs)
+5. Phase 4-5: Verify fullscreen/cursor polish and Qt fallback behavior
