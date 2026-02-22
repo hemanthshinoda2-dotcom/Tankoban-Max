@@ -412,6 +412,17 @@
     btn.title = showPause ? 'Pause' : 'Play';
   }
 
+  // OPT-TTS-CTRL: Show/hide buffering spinner on play/pause button
+  function _syncBuffering(buffering) {
+    var btn = qs('lpTtsPlayPause');
+    if (!btn) return;
+    if (buffering) {
+      btn.classList.add('lp-buffering');
+    } else {
+      btn.classList.remove('lp-buffering');
+    }
+  }
+
   // ── Speed display sync ──────────────────────────────────────────────────────
   function syncSpeed() {
     var tts = window.booksTTS;
@@ -1038,6 +1049,7 @@ function updateCard(info) {
       if (_isPlayingLikeStatus(status)) _ttsBarHasPlayed = true;
 
       syncPlayPause(status);
+      _syncBuffering(info && info.buffering);
       syncSpeed();
       syncEngine();
       if (info) updateCard(info);
@@ -1057,6 +1069,7 @@ function updateCard(info) {
       }
     };
     var onProgress = function (info) {
+      _syncBuffering(info && info.buffering);
       updateCard(info);
       var diagEl = qs('lpTtsDiag');
       if (diagEl && !diagEl.classList.contains('hidden')) updateDiag();

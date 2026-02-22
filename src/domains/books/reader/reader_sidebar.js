@@ -104,6 +104,10 @@
       toggleSidebar();
     });
 
+    // Close button at bottom of tab strip
+    var closeBtn = document.getElementById('brSidebarCloseBtn');
+    if (closeBtn) closeBtn.addEventListener('click', function () { closeSidebar(); });
+
     // Tab buttons
     var tabBtns = document.querySelectorAll('.br-sidebar-tab[data-sidebar-tab]');
     for (var i = 0; i < tabBtns.length; i++) {

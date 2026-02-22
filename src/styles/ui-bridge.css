@@ -19,18 +19,18 @@ sl-button.btn-sm::part(base) {
 }
 
 sl-button.btn::part(base) {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--chrome-rgb), 0.16);
+  background: rgba(var(--chrome-rgb), 0.08);
 }
 
 sl-button.btn-ghost::part(base) {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--chrome-rgb), 0.04);
 }
 
 sl-button.navBtn::part(base) {
   width: 100%;
   justify-content: flex-start;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--chrome-rgb), 0.1);
   border-radius: 8px;
   background: rgba(var(--surface-rgb, 18, 18, 18), 0.36);
 }
@@ -45,8 +45,8 @@ sl-button.iconBtn::part(base) {
   min-height: 28px;
   padding: 4px 6px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--chrome-rgb), 0.16);
+  background: rgba(var(--chrome-rgb), 0.06);
 }
 
 sl-button.scanPillBtn::part(base) {
@@ -63,15 +63,15 @@ sl-button.scanPillBtn::part(base) {
 }
 
 sl-button.scanPillBtn:hover::part(base) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--chrome-rgb), 0.08);
 }
 
 sl-input.search::part(base),
 sl-select.select::part(combobox) {
   min-height: 28px;
   border-radius: 8px;
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(var(--chrome-rgb), 0.16);
+  background: rgba(var(--chrome-rgb), 0.04);
   color: var(--ui-text);
 }
 
@@ -114,7 +114,7 @@ sl-button.modeBtn[disabled]::part(base) {
   border-radius: 999px;
   border: 1px solid var(--ui-border);
   color: var(--ui-text);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--chrome-rgb), 0.03);
 }
 
 .topbar .modeSwitch sl-button.modeBtn.active::part(base) {

@@ -1,0 +1,863 @@
+/*
+  Tankoban Light Mode Override Layer
+  Scoped under body[data-app-theme="light"] — overrides the Noir/OLED dark theme.
+  Loaded after overhaul.css so it can win specificity battles.
+*/
+
+/* ── Core palette overrides ── */
+body[data-app-theme="light"]{
+  --ink-rgb: 20,20,24 !important;
+  --chrome-rgb: 0,0,0 !important;
+  --vx-bg0: #f5f5f7 !important;
+  --vx-bg1: #eaeaef !important;
+  --vx-ink: rgba(var(--ink-rgb),.90) !important;
+  --vx-muted: rgba(var(--ink-rgb),.55) !important;
+
+  --vx-glass: rgba(255,255,255,.62) !important;
+  --vx-glass2: rgba(255,255,255,.78) !important;
+  --vx-border: rgba(0,0,0,.10) !important;
+  --vx-border2: rgba(0,0,0,.14) !important;
+
+  --vx-shadow: rgba(0,0,0,.12) !important;
+  --vx-shadow2: rgba(0,0,0,.08) !important;
+
+  --bg: var(--vx-bg0) !important;
+  --bg-rgb: 245,245,247 !important;
+  --text: var(--vx-ink) !important;
+  --muted: var(--vx-muted) !important;
+  --panel: rgba(0,0,0,.04) !important;
+  --panel2: rgba(0,0,0,.06) !important;
+  --border: var(--vx-border) !important;
+  --surface-rgb: 245,245,247 !important;
+
+  --topbar-bg: transparent !important;
+  --topbar-bg2: transparent !important;
+  --topbar-text: var(--vx-ink) !important;
+  --topbar-muted: var(--vx-muted) !important;
+  --topbar-border: rgba(0,0,0,.08) !important;
+  --topbar-border2: rgba(0,0,0,.12) !important;
+  --topbar-shadow: rgba(0,0,0,.10) !important;
+
+  --lib-border: rgba(0,0,0,.10) !important;
+  --lib-hover: rgba(0,0,0,.05) !important;
+  --lib-select: rgba(var(--vx-accent-rgb),.14) !important;
+
+  --ui-surface: #f5f5f7 !important;
+  --ui-text: rgba(20,20,24,.90) !important;
+  --ui-border: rgba(0,0,0,.10) !important;
+  --ui-muted: rgba(20,20,24,.55) !important;
+
+  background: var(--vx-bg0) !important;
+  color: var(--vx-ink) !important;
+}
+
+/* ── Animated background ── */
+body[data-app-theme="light"] .bgFx{
+  background:
+    radial-gradient(1200px 800px at 15% 10%, rgba(var(--vx-accent2-rgb), .10), transparent 60%),
+    radial-gradient(900px 700px at 85% 20%, rgba(var(--vx-accent-rgb), .08), transparent 55%),
+    radial-gradient(1100px 900px at 50% 85%, rgba(251,113,133,.06), transparent 60%),
+    linear-gradient(180deg, var(--vx-bg0) 0%, var(--vx-bg1) 100%) !important;
+  filter: saturate(110%) !important;
+}
+
+body[data-app-theme="light"] .bgFx::after{
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,.012),
+      rgba(0,0,0,.012) 1px,
+      transparent 2px,
+      transparent 4px
+    ) !important;
+  mix-blend-mode: multiply !important;
+}
+
+/* ── Selection ── */
+body[data-app-theme="light"] ::selection{
+  background: rgba(var(--vx-accent-rgb), .18) !important;
+}
+
+/* ── Topbar ── */
+body[data-app-theme="light"] .topbar{
+  background: rgba(255,255,255,.72) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(130%) !important;
+  border-bottom: 1px solid rgba(0,0,0,.08) !important;
+  box-shadow: 0 4px 20px -10px rgba(0,0,0,.10) !important;
+}
+
+body[data-app-theme="light"] .tbTitle{
+  color: var(--vx-ink) !important;
+}
+
+/* ── Mode switch ── */
+body[data-app-theme="light"] .modeSwitch{
+  background: rgba(0,0,0,.05) !important;
+  border-color: rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .modeBtn{
+  color: rgba(20,20,24,.65) !important;
+}
+
+body[data-app-theme="light"] .modeBtn:hover{
+  background: rgba(0,0,0,.05) !important;
+}
+
+body[data-app-theme="light"] .modeBtn.active{
+  background: linear-gradient(135deg, rgba(var(--vx-accent2-rgb), .20), rgba(var(--vx-accent-rgb), .14)) !important;
+  border-color: rgba(var(--vx-accent-rgb), .22) !important;
+  color: rgba(20,20,24,.90) !important;
+  box-shadow: 0 4px 12px -6px rgba(var(--vx-accent-rgb), .30) !important;
+}
+
+/* ── Buttons ── */
+body[data-app-theme="light"] .iconBtn,
+body[data-app-theme="light"] .topbar .iconBtn{
+  border: 1px solid rgba(0,0,0,.10) !important;
+  background: rgba(0,0,0,.04) !important;
+  color: rgba(20,20,24,.75) !important;
+  box-shadow: 0 2px 6px -3px rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .iconBtn:hover{
+  background: rgba(0,0,0,.08) !important;
+  box-shadow: 0 4px 12px -6px rgba(0,0,0,.12) !important;
+}
+
+body[data-app-theme="light"] .btn{
+  border: 1px solid rgba(var(--vx-accent-rgb), .25) !important;
+  background: linear-gradient(135deg, rgba(var(--vx-accent2-rgb), .12), rgba(var(--vx-accent-rgb), .08)) !important;
+  box-shadow: 0 4px 12px -8px rgba(var(--vx-accent-rgb), .25) !important;
+}
+
+body[data-app-theme="light"] .btn:hover{
+  box-shadow: 0 6px 18px -8px rgba(var(--vx-accent-rgb), .35) !important;
+}
+
+body[data-app-theme="light"] .btn-ghost,
+body[data-app-theme="light"] .topbar .btn-ghost{
+  border: 1px solid rgba(0,0,0,.10) !important;
+  background: rgba(0,0,0,.04) !important;
+}
+
+body[data-app-theme="light"] .btn-ghost:hover{
+  background: rgba(0,0,0,.08) !important;
+}
+
+/* ── Inputs / selects ── */
+body[data-app-theme="light"] .search,
+body[data-app-theme="light"] .select,
+body[data-app-theme="light"] .settingsTextArea{
+  border: 1px solid rgba(0,0,0,.12) !important;
+  background: rgba(255,255,255,.70) !important;
+  color: rgba(20,20,24,.88) !important;
+  box-shadow: 0 2px 6px -3px rgba(0,0,0,.06) !important;
+}
+
+body[data-app-theme="light"] .search::placeholder{
+  color: rgba(20,20,24,.35) !important;
+}
+
+/* ── Sidebar ── */
+body[data-app-theme="light"] .libSidebar{
+  background: rgba(255,255,255,.65) !important;
+  backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(130%) !important;
+  border-right: 1px solid rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"]:not(.inPlayer) .libSidebar{
+  border-right: 1px solid rgba(0,0,0,.10) !important;
+  box-shadow: 8px 0 30px -15px rgba(0,0,0,.10) !important;
+}
+
+body[data-app-theme="light"] .navHeader{
+  color: rgba(20,20,24,.60) !important;
+}
+
+body[data-app-theme="light"] .navBtn{
+  border: 1px solid rgba(0,0,0,.08) !important;
+  background: rgba(0,0,0,.03) !important;
+}
+
+body[data-app-theme="light"] .navBtn:hover{
+  background: rgba(0,0,0,.06) !important;
+  box-shadow: 0 4px 12px -8px rgba(0,0,0,.10) !important;
+}
+
+body[data-app-theme="light"] .drawerBackdrop{
+  background: rgba(0,0,0,.18) !important;
+}
+
+/* ── Panels and cards ── */
+body[data-app-theme="light"] .panel{
+  background: rgba(255,255,255,.55) !important;
+  border: 1px solid rgba(0,0,0,.08) !important;
+  box-shadow: 0 4px 16px -8px rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .seriesCard{
+  border: 1px solid rgba(0,0,0,.08) !important;
+  background: rgba(255,255,255,.50) !important;
+  box-shadow: 0 4px 16px -10px rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .seriesCard:hover{
+  box-shadow: 0 8px 28px -14px rgba(0,0,0,.14), 0 0 0 1px rgba(var(--vx-accent-rgb), .08) inset !important;
+}
+
+/* ── Search dropdown ── */
+body[data-app-theme="light"] .searchResults{
+  background: rgba(255,255,255,.92) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(130%) !important;
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(130%) !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+  box-shadow: 0 10px 36px -16px rgba(0,0,0,.16) !important;
+}
+
+body[data-app-theme="light"] .resItem:hover{
+  background: rgba(var(--vx-accent-rgb), .08) !important;
+}
+
+/* ── Volumes table ── */
+body[data-app-theme="light"] .volTableWrap{
+  border: 1px solid rgba(0,0,0,.08) !important;
+  background: rgba(255,255,255,.50) !important;
+}
+
+body[data-app-theme="light"] .volTableHead{
+  background: rgba(0,0,0,.04) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-bottom: 1px solid rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .volRow:hover{
+  background: rgba(0,0,0,.03) !important;
+}
+
+body[data-app-theme="light"] .volRow.active,
+body[data-app-theme="light"] .volRow.selected{
+  background: rgba(var(--vx-accent-rgb), .08) !important;
+  box-shadow: 0 0 0 1px rgba(var(--vx-accent-rgb), .14) inset !important;
+}
+
+/* ── Typography overrides ── */
+body[data-app-theme="light"] .muted{
+  color: rgba(20,20,24,.50) !important;
+}
+
+body[data-app-theme="light"] .panelTitle{
+  color: rgba(20,20,24,.70) !important;
+}
+
+body[data-app-theme="light"] .navHeader{
+  color: rgba(20,20,24,.55) !important;
+}
+
+body[data-app-theme="light"] .seriesMeta{
+  color: rgba(20,20,24,.50) !important;
+}
+
+body[data-app-theme="light"] .resSub{
+  color: rgba(20,20,24,.50) !important;
+}
+
+body[data-app-theme="light"] .volTableHead .cell{
+  color: rgba(20,20,24,.55) !important;
+}
+
+body[data-app-theme="light"] .volTrow .cell{
+  color: rgba(20,20,24,.75) !important;
+}
+
+body[data-app-theme="light"] .cell.file,
+body[data-app-theme="light"] .volTrow .cell.file{
+  color: rgba(20,20,24,.55) !important;
+}
+
+body[data-app-theme="light"] .settingsLabel{
+  color: rgba(20,20,24,.75) !important;
+}
+
+/* ── Overlays / modals ── */
+body[data-app-theme="light"] .settingsOverlay,
+body[data-app-theme="light"] .keysOverlay,
+body[data-app-theme="light"] .videoPrompt{
+  background: rgba(0,0,0,.22) !important;
+}
+
+body[data-app-theme="light"] .settingsCard,
+body[data-app-theme="light"] .keysCard,
+body[data-app-theme="light"] .endCard,
+body[data-app-theme="light"] .videoTracksCard,
+body[data-app-theme="light"] .loadingCard{
+  background: rgba(255,255,255,.88) !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+  box-shadow: 0 16px 48px -24px rgba(0,0,0,.18) !important;
+}
+
+body[data-app-theme="light"] .keysCard,
+body[data-app-theme="light"] .settingsCard,
+body[data-app-theme="light"] .webDlPanel,
+body[data-app-theme="light"] #contextMenu{
+  background: rgba(255,255,255,.88) !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+  box-shadow: 0 12px 40px -16px rgba(0,0,0,.16) !important;
+}
+
+body[data-app-theme="light"] .primaryBtn{
+  border: 1px solid rgba(var(--vx-accent-rgb), .30) !important;
+  background: linear-gradient(135deg, rgba(var(--vx-accent2-rgb), .22), rgba(var(--vx-accent-rgb), .16)) !important;
+  box-shadow: 0 6px 20px -10px rgba(var(--vx-accent-rgb), .30) !important;
+}
+
+/* ── Toast ── */
+body[data-app-theme="light"] .toast{
+  background: rgba(255,255,255,.88) !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+  box-shadow: 0 8px 28px -14px rgba(0,0,0,.16) !important;
+  color: rgba(20,20,24,.85) !important;
+}
+
+/* ── Window controls ── */
+body[data-app-theme="light"] .winCtrl{
+  color: rgba(20,20,24,.65) !important;
+}
+
+body[data-app-theme="light"] .winCtrl:hover{
+  background: rgba(0,0,0,.06) !important;
+}
+
+body[data-app-theme="light"] .winCtrl:active{
+  background: rgba(0,0,0,.12) !important;
+}
+
+body[data-app-theme="light"] .winCtrl--close:hover{
+  background: #e81123 !important;
+  color: #fff !important;
+}
+
+/* ── Scrollbars ── */
+body[data-app-theme="light"] *::-webkit-scrollbar-track{
+  background: rgba(0,0,0,.03) !important;
+}
+
+body[data-app-theme="light"] *::-webkit-scrollbar-thumb{
+  background: rgba(0,0,0,.12) !important;
+  border: 3px solid transparent !important;
+  background-clip: padding-box !important;
+}
+
+body[data-app-theme="light"] *::-webkit-scrollbar-thumb:hover{
+  background: rgba(0,0,0,.18) !important;
+  background-clip: padding-box !important;
+}
+
+/* ── Command palette ── */
+body[data-app-theme="light"] .cmdPalette{
+  background: rgba(0,0,0,.18) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteCard{
+  background: rgba(255,255,255,.92) !important;
+  border: 1px solid rgba(0,0,0,.10) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteInput{
+  color: rgba(20,20,24,.88) !important;
+  border-bottom: 1px solid rgba(0,0,0,.08) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteInput::placeholder{
+  color: rgba(20,20,24,.35) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteItem{
+  color: rgba(20,20,24,.75) !important;
+  border-bottom: 1px solid rgba(0,0,0,.04) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteItem:hover,
+body[data-app-theme="light"] .cmdPaletteItem.active{
+  background: rgba(0,0,0,.05) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteType{
+  background: rgba(0,0,0,.06) !important;
+  color: rgba(20,20,24,.45) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteHint{
+  color: rgba(20,20,24,.30) !important;
+}
+
+body[data-app-theme="light"] .cmdPaletteEmpty{
+  color: rgba(20,20,24,.30) !important;
+}
+
+/* ── Sidebar pin ── */
+body[data-app-theme="light"] .sidebarPinBtn{
+  color: rgba(20,20,24,.40) !important;
+}
+
+body[data-app-theme="light"] .sidebarPinBtn:hover{
+  background: rgba(0,0,0,.06) !important;
+  color: rgba(20,20,24,.70) !important;
+}
+
+/* ── Shortcut editor ── */
+body[data-app-theme="light"] .globalShortcutsList .br-shortcut-label{
+  color: rgba(20,20,24,.70) !important;
+}
+
+body[data-app-theme="light"] .globalShortcutsList .br-shortcut-key-edit{
+  border: 1px solid rgba(0,0,0,.10) !important;
+  background: rgba(0,0,0,.03) !important;
+  color: rgba(20,20,24,.70) !important;
+}
+
+body[data-app-theme="light"] .globalShortcutsList .br-shortcut-key-edit:hover{
+  background: rgba(0,0,0,.06) !important;
+  border-color: rgba(0,0,0,.18) !important;
+}
+
+/* ── Folder tree items ── */
+body[data-app-theme="light"] .folderItem{
+  color: rgba(20,20,24,.75) !important;
+}
+
+body[data-app-theme="light"] .folderItem:hover{
+  background: rgba(0,0,0,.04) !important;
+}
+
+body[data-app-theme="light"] .folderItem.active{
+  background: rgba(var(--vx-accent-rgb), .10) !important;
+}
+
+/* ── Select option backgrounds ── */
+body[data-app-theme="light"] .select option{
+  background: #fff !important;
+  color: rgba(20,20,24,.85) !important;
+}
+
+/* ── Theme toggle icon ── */
+body[data-app-theme="light"] .themeIcon--sun{ display: none !important; }
+body[data-app-theme="light"] .themeIcon--moon{ display: block !important; }
+
+/* ── Scan pill ── */
+body[data-app-theme="light"] .scanPill{
+  background: rgba(0,0,0,.05) !important;
+  border-color: rgba(0,0,0,.10) !important;
+}
+
+/* ── Continue shelf ── */
+body[data-app-theme="light"] .contTile{
+  border-color: rgba(0,0,0,.08) !important;
+}
+
+/* ── Glass overlay (settings, keys, downloads) ── */
+body[data-app-theme="light"] .glass-overlay{
+  background: rgba(255,255,255,.75) !important;
+  border: 1px solid rgba(0,0,0,.08) !important;
+  box-shadow: 0 12px 36px -12px rgba(0,0,0,.12) !important;
+}
+
+/* ── Shoelace component bridge overrides for light mode ── */
+body[data-app-theme="light"] sl-button::part(base){
+  color: rgba(20,20,24,.80) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: Nord — Arctic blue-grey
+   Palette: https://www.nordtheme.com
+   ══════════════════════════════════════════════════════════════ */
+
+body[data-app-theme="nord"]{
+  --ink-rgb: 216,222,233 !important;
+  --chrome-rgb: 216,222,233 !important;
+  --vx-bg0: #2e3440 !important;
+  --vx-bg1: #3b4252 !important;
+  --vx-ink: rgba(var(--ink-rgb),.92) !important;
+  --vx-muted: rgba(var(--ink-rgb),.58) !important;
+
+  --vx-glass: rgba(46,52,64,.52) !important;
+  --vx-glass2: rgba(46,52,64,.68) !important;
+  --vx-border: rgba(216,222,233,.12) !important;
+  --vx-border2: rgba(216,222,233,.18) !important;
+
+  --vx-accent: #88c0d0 !important;
+  --vx-accent-rgb: 136,192,208 !important;
+  --vx-accent2: #81a1c1 !important;
+  --vx-accent2-rgb: 129,161,193 !important;
+  --vx-hot: #bf616a !important;
+
+  --vx-shadow: rgba(0,0,0,.35) !important;
+  --vx-shadow2: rgba(0,0,0,.22) !important;
+
+  --bg: var(--vx-bg0) !important;
+  --bg-rgb: 46,52,64 !important;
+  --text: var(--vx-ink) !important;
+  --muted: var(--vx-muted) !important;
+  --panel: rgba(216,222,233,.06) !important;
+  --panel2: rgba(216,222,233,.08) !important;
+  --border: var(--vx-border) !important;
+  --surface-rgb: 46,52,64 !important;
+  --accent: var(--vx-accent) !important;
+  --accent-rgb: var(--vx-accent-rgb) !important;
+
+  --lib-border: rgba(216,222,233,.10) !important;
+  --lib-hover: rgba(216,222,233,.06) !important;
+  --lib-select: rgba(136,192,208,.16) !important;
+
+  background: var(--vx-bg0) !important;
+  color: var(--vx-ink) !important;
+}
+
+body[data-app-theme="nord"] .bgFx{
+  background:
+    radial-gradient(1200px 800px at 15% 10%, rgba(129,161,193,.18), transparent 60%),
+    radial-gradient(900px 700px at 85% 20%, rgba(136,192,208,.14), transparent 55%),
+    radial-gradient(1100px 900px at 50% 85%, rgba(180,142,173,.10), transparent 60%),
+    linear-gradient(180deg, #2e3440 0%, #3b4252 100%) !important;
+}
+
+body[data-app-theme="nord"] .topbar{
+  background: rgba(46,52,64,.65) !important;
+  border-bottom: 1px solid rgba(216,222,233,.08) !important;
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,.50) !important;
+}
+
+body[data-app-theme="nord"] .libSidebar{
+  background: rgba(46,52,64,.55) !important;
+  border-right: 1px solid rgba(216,222,233,.08) !important;
+}
+
+body[data-app-theme="nord"] .seriesCard{
+  background: rgba(216,222,233,.05) !important;
+  border-color: rgba(216,222,233,.10) !important;
+}
+
+body[data-app-theme="nord"] .searchResults{
+  background: rgba(46,52,64,.92) !important;
+  border-color: rgba(216,222,233,.10) !important;
+}
+
+body[data-app-theme="nord"] .volTableHead{
+  background: rgba(46,52,64,.72) !important;
+}
+
+body[data-app-theme="nord"] .settingsCard,
+body[data-app-theme="nord"] .keysCard,
+body[data-app-theme="nord"] .webDlPanel,
+body[data-app-theme="nord"] #contextMenu{
+  background: rgba(46,52,64,.88) !important;
+  border-color: rgba(216,222,233,.10) !important;
+}
+
+body[data-app-theme="nord"] .toast{
+  background: rgba(46,52,64,.88) !important;
+  border-color: rgba(216,222,233,.12) !important;
+}
+
+body[data-app-theme="nord"] .cmdPaletteCard{
+  background: rgba(46,52,64,.94) !important;
+  border-color: rgba(216,222,233,.10) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: Solarized Dark — Warm teal with amber accents
+   Palette: https://ethanschoonover.com/solarized
+   ══════════════════════════════════════════════════════════════ */
+
+body[data-app-theme="solarized"]{
+  --ink-rgb: 192,207,207 !important;
+  --chrome-rgb: 192,207,207 !important;
+  --vx-bg0: #002b36 !important;
+  --vx-bg1: #073642 !important;
+  --vx-ink: rgba(var(--ink-rgb),.94) !important;
+  --vx-muted: rgba(var(--ink-rgb),.58) !important;
+
+  --vx-glass: rgba(0,43,54,.52) !important;
+  --vx-glass2: rgba(0,43,54,.68) !important;
+  --vx-border: rgba(131,148,150,.12) !important;
+  --vx-border2: rgba(131,148,150,.18) !important;
+
+  --vx-accent: #b58900 !important;
+  --vx-accent-rgb: 181,137,0 !important;
+  --vx-accent2: #268bd2 !important;
+  --vx-accent2-rgb: 38,139,210 !important;
+  --vx-hot: #cb4b16 !important;
+
+  --vx-shadow: rgba(0,0,0,.40) !important;
+  --vx-shadow2: rgba(0,0,0,.25) !important;
+
+  --bg: var(--vx-bg0) !important;
+  --bg-rgb: 0,43,54 !important;
+  --text: var(--vx-ink) !important;
+  --muted: var(--vx-muted) !important;
+  --panel: rgba(131,148,150,.06) !important;
+  --panel2: rgba(131,148,150,.08) !important;
+  --border: var(--vx-border) !important;
+  --surface-rgb: 0,43,54 !important;
+  --accent: var(--vx-accent) !important;
+  --accent-rgb: var(--vx-accent-rgb) !important;
+
+  --lib-border: rgba(131,148,150,.10) !important;
+  --lib-hover: rgba(131,148,150,.06) !important;
+  --lib-select: rgba(181,137,0,.14) !important;
+
+  background: var(--vx-bg0) !important;
+  color: var(--vx-ink) !important;
+}
+
+body[data-app-theme="solarized"] .bgFx{
+  background:
+    radial-gradient(1200px 800px at 15% 10%, rgba(38,139,210,.16), transparent 60%),
+    radial-gradient(900px 700px at 85% 20%, rgba(181,137,0,.12), transparent 55%),
+    radial-gradient(1100px 900px at 50% 85%, rgba(203,75,22,.08), transparent 60%),
+    linear-gradient(180deg, #002b36 0%, #073642 100%) !important;
+}
+
+body[data-app-theme="solarized"] .topbar{
+  background: rgba(0,43,54,.65) !important;
+  border-bottom: 1px solid rgba(131,148,150,.08) !important;
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,.55) !important;
+}
+
+body[data-app-theme="solarized"] .libSidebar{
+  background: rgba(0,43,54,.55) !important;
+  border-right: 1px solid rgba(131,148,150,.08) !important;
+}
+
+body[data-app-theme="solarized"] .seriesCard{
+  background: rgba(131,148,150,.05) !important;
+  border-color: rgba(131,148,150,.10) !important;
+}
+
+body[data-app-theme="solarized"] .searchResults{
+  background: rgba(0,43,54,.92) !important;
+  border-color: rgba(131,148,150,.10) !important;
+}
+
+body[data-app-theme="solarized"] .volTableHead{
+  background: rgba(0,43,54,.72) !important;
+}
+
+body[data-app-theme="solarized"] .settingsCard,
+body[data-app-theme="solarized"] .keysCard,
+body[data-app-theme="solarized"] .webDlPanel,
+body[data-app-theme="solarized"] #contextMenu{
+  background: rgba(0,43,54,.88) !important;
+  border-color: rgba(131,148,150,.10) !important;
+}
+
+body[data-app-theme="solarized"] .toast{
+  background: rgba(0,43,54,.88) !important;
+  border-color: rgba(131,148,150,.12) !important;
+}
+
+body[data-app-theme="solarized"] .cmdPaletteCard{
+  background: rgba(0,43,54,.94) !important;
+  border-color: rgba(131,148,150,.10) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: Gruvbox Dark — Retro warm with orange/yellow accents
+   Palette: https://github.com/morhetz/gruvbox
+   ══════════════════════════════════════════════════════════════ */
+
+body[data-app-theme="gruvbox"]{
+  --ink-rgb: 235,219,178 !important;
+  --chrome-rgb: 235,219,178 !important;
+  --vx-bg0: #282828 !important;
+  --vx-bg1: #3c3836 !important;
+  --vx-ink: rgba(var(--ink-rgb),.92) !important;
+  --vx-muted: rgba(var(--ink-rgb),.58) !important;
+
+  --vx-glass: rgba(40,40,40,.52) !important;
+  --vx-glass2: rgba(40,40,40,.68) !important;
+  --vx-border: rgba(235,219,178,.12) !important;
+  --vx-border2: rgba(235,219,178,.18) !important;
+
+  --vx-accent: #fe8019 !important;
+  --vx-accent-rgb: 254,128,25 !important;
+  --vx-accent2: #fabd2f !important;
+  --vx-accent2-rgb: 250,189,47 !important;
+  --vx-hot: #fb4934 !important;
+
+  --vx-shadow: rgba(0,0,0,.40) !important;
+  --vx-shadow2: rgba(0,0,0,.25) !important;
+
+  --bg: var(--vx-bg0) !important;
+  --bg-rgb: 40,40,40 !important;
+  --text: var(--vx-ink) !important;
+  --muted: var(--vx-muted) !important;
+  --panel: rgba(235,219,178,.06) !important;
+  --panel2: rgba(235,219,178,.08) !important;
+  --border: var(--vx-border) !important;
+  --surface-rgb: 40,40,40 !important;
+  --accent: var(--vx-accent) !important;
+  --accent-rgb: var(--vx-accent-rgb) !important;
+
+  --lib-border: rgba(235,219,178,.10) !important;
+  --lib-hover: rgba(235,219,178,.06) !important;
+  --lib-select: rgba(254,128,25,.14) !important;
+
+  background: var(--vx-bg0) !important;
+  color: var(--vx-ink) !important;
+}
+
+body[data-app-theme="gruvbox"] .bgFx{
+  background:
+    radial-gradient(1200px 800px at 15% 10%, rgba(250,189,47,.14), transparent 60%),
+    radial-gradient(900px 700px at 85% 20%, rgba(254,128,25,.12), transparent 55%),
+    radial-gradient(1100px 900px at 50% 85%, rgba(251,73,52,.08), transparent 60%),
+    linear-gradient(180deg, #282828 0%, #3c3836 100%) !important;
+}
+
+body[data-app-theme="gruvbox"] .topbar{
+  background: rgba(40,40,40,.65) !important;
+  border-bottom: 1px solid rgba(235,219,178,.08) !important;
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,.55) !important;
+}
+
+body[data-app-theme="gruvbox"] .libSidebar{
+  background: rgba(40,40,40,.55) !important;
+  border-right: 1px solid rgba(235,219,178,.08) !important;
+}
+
+body[data-app-theme="gruvbox"] .seriesCard{
+  background: rgba(235,219,178,.05) !important;
+  border-color: rgba(235,219,178,.10) !important;
+}
+
+body[data-app-theme="gruvbox"] .searchResults{
+  background: rgba(40,40,40,.92) !important;
+  border-color: rgba(235,219,178,.10) !important;
+}
+
+body[data-app-theme="gruvbox"] .volTableHead{
+  background: rgba(40,40,40,.72) !important;
+}
+
+body[data-app-theme="gruvbox"] .settingsCard,
+body[data-app-theme="gruvbox"] .keysCard,
+body[data-app-theme="gruvbox"] .webDlPanel,
+body[data-app-theme="gruvbox"] #contextMenu{
+  background: rgba(40,40,40,.88) !important;
+  border-color: rgba(235,219,178,.10) !important;
+}
+
+body[data-app-theme="gruvbox"] .toast{
+  background: rgba(40,40,40,.88) !important;
+  border-color: rgba(235,219,178,.12) !important;
+}
+
+body[data-app-theme="gruvbox"] .cmdPaletteCard{
+  background: rgba(40,40,40,.94) !important;
+  border-color: rgba(235,219,178,.10) !important;
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   THEME: Catppuccin Mocha — Pastel dark with lavender accents
+   Palette: https://catppuccin.com
+   ══════════════════════════════════════════════════════════════ */
+
+body[data-app-theme="catppuccin"]{
+  --ink-rgb: 205,214,244 !important;
+  --chrome-rgb: 205,214,244 !important;
+  --vx-bg0: #1e1e2e !important;
+  --vx-bg1: #313244 !important;
+  --vx-ink: rgba(var(--ink-rgb),.92) !important;
+  --vx-muted: rgba(var(--ink-rgb),.58) !important;
+
+  --vx-glass: rgba(30,30,46,.52) !important;
+  --vx-glass2: rgba(30,30,46,.68) !important;
+  --vx-border: rgba(205,214,244,.12) !important;
+  --vx-border2: rgba(205,214,244,.18) !important;
+
+  --vx-accent: #cba6f7 !important;
+  --vx-accent-rgb: 203,166,247 !important;
+  --vx-accent2: #89b4fa !important;
+  --vx-accent2-rgb: 137,180,250 !important;
+  --vx-hot: #f38ba8 !important;
+
+  --vx-shadow: rgba(0,0,0,.38) !important;
+  --vx-shadow2: rgba(0,0,0,.22) !important;
+
+  --bg: var(--vx-bg0) !important;
+  --bg-rgb: 30,30,46 !important;
+  --text: var(--vx-ink) !important;
+  --muted: var(--vx-muted) !important;
+  --panel: rgba(205,214,244,.06) !important;
+  --panel2: rgba(205,214,244,.08) !important;
+  --border: var(--vx-border) !important;
+  --surface-rgb: 30,30,46 !important;
+  --accent: var(--vx-accent) !important;
+  --accent-rgb: var(--vx-accent-rgb) !important;
+
+  --lib-border: rgba(205,214,244,.10) !important;
+  --lib-hover: rgba(205,214,244,.06) !important;
+  --lib-select: rgba(203,166,247,.14) !important;
+
+  background: var(--vx-bg0) !important;
+  color: var(--vx-ink) !important;
+}
+
+body[data-app-theme="catppuccin"] .bgFx{
+  background:
+    radial-gradient(1200px 800px at 15% 10%, rgba(137,180,250,.16), transparent 60%),
+    radial-gradient(900px 700px at 85% 20%, rgba(203,166,247,.12), transparent 55%),
+    radial-gradient(1100px 900px at 50% 85%, rgba(243,139,168,.08), transparent 60%),
+    linear-gradient(180deg, #1e1e2e 0%, #313244 100%) !important;
+}
+
+body[data-app-theme="catppuccin"] .topbar{
+  background: rgba(30,30,46,.65) !important;
+  border-bottom: 1px solid rgba(205,214,244,.08) !important;
+  box-shadow: 0 10px 30px -18px rgba(0,0,0,.50) !important;
+}
+
+body[data-app-theme="catppuccin"] .libSidebar{
+  background: rgba(30,30,46,.55) !important;
+  border-right: 1px solid rgba(205,214,244,.08) !important;
+}
+
+body[data-app-theme="catppuccin"] .seriesCard{
+  background: rgba(205,214,244,.05) !important;
+  border-color: rgba(205,214,244,.10) !important;
+}
+
+body[data-app-theme="catppuccin"] .searchResults{
+  background: rgba(30,30,46,.92) !important;
+  border-color: rgba(205,214,244,.10) !important;
+}
+
+body[data-app-theme="catppuccin"] .volTableHead{
+  background: rgba(30,30,46,.72) !important;
+}
+
+body[data-app-theme="catppuccin"] .settingsCard,
+body[data-app-theme="catppuccin"] .keysCard,
+body[data-app-theme="catppuccin"] .webDlPanel,
+body[data-app-theme="catppuccin"] #contextMenu{
+  background: rgba(30,30,46,.88) !important;
+  border-color: rgba(205,214,244,.10) !important;
+}
+
+body[data-app-theme="catppuccin"] .toast{
+  background: rgba(30,30,46,.88) !important;
+  border-color: rgba(205,214,244,.12) !important;
+}
+
+body[data-app-theme="catppuccin"] .cmdPaletteCard{
+  background: rgba(30,30,46,.94) !important;
+  border-color: rgba(205,214,244,.10) !important;
+}

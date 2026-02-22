@@ -15,7 +15,7 @@
   width: min(360px, 40%);
   max-width: 380px;
   min-width: 240px;
-  border:1px solid rgba(255,255,255,.18);
+  border:1px solid rgba(var(--chrome-rgb),.18);
   background: rgba(var(--surface-rgb),.42);
   backdrop-filter: blur(10px);
   border-radius: 14px;
@@ -33,7 +33,7 @@
 .videoFolderContinueEp{ font-weight:800; line-height:1.15; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .videoFolderContinueFile{ opacity:.78; font-size: 11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .videoFolderContinueRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
-.videoFolderContinueBar{ height:8px; border-radius:999px; background: rgba(255,255,255,.14); overflow:hidden; }
+.videoFolderContinueBar{ height:8px; border-radius:999px; background: rgba(var(--chrome-rgb),.14); overflow:hidden; }
 .videoFolderContinueBar > div{ height:100%; width:0%; background: rgba(var(--accent-rgb),.78); border-radius:999px; }
 .videoFolderContinueHint{ opacity:.8; font-size: 11px; }
 
@@ -66,26 +66,26 @@
   min-width: 0;
   height: 6px;
   border-radius: 999px;
-  background: rgba(255,255,255,.12);
+  background: rgba(var(--chrome-rgb),.12);
   overflow: hidden;
 }
 #videoEpisodesWrap .videoEpProgressFill{
   height: 100%;
   width: 0%;
-  background: rgba(255,255,255,.65);
+  background: rgba(var(--chrome-rgb),.65);
 }
 #videoEpisodesWrap .videoEpProgressLabel{
   flex: 0 0 auto;
   min-width: 40px;
   text-align: right;
   font-size: 11px;
-  color: rgba(229,231,235,.74);
+  color: rgba(var(--ink-rgb),.74);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 #videoEpisodesWrap .videoEpTitleMain{
-  font-weight: 650;
-  color: rgba(229,231,235,.90);
+  font-weight: 600;
+  color: rgba(var(--ink-rgb),.90);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -93,7 +93,7 @@
 #videoEpisodesWrap .videoEpTitleSub{
   margin-top: 2px;
   font-size: 11px;
-  color: rgba(229,231,235,.58);
+  color: rgba(var(--ink-rgb),.58);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -108,7 +108,7 @@
 /* --- Video episode folder sections (seasons, specials, arcs) --- */
 
 /* Build 5.1B: show subfolders as collapsible sections (seasons, specials, arcs) */
-.vidFolderSection{ border-bottom: 1px solid rgba(255,255,255,.12); }
+.vidFolderSection{ border-bottom: 1px solid rgba(var(--chrome-rgb),.12); }
 .vidFolderHeader{
   width: 100%;
   display: flex;
@@ -116,26 +116,26 @@
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(255,255,255,.06);
+  background: rgba(var(--chrome-rgb),.06);
   border: 0;
-  border-bottom: 1px solid rgba(255,255,255,.12);
-  color: rgba(229,231,235,.92);
+  border-bottom: 1px solid rgba(var(--chrome-rgb),.12);
+  color: rgba(var(--ink-rgb),.92);
   font-weight: 900;
   text-align: left;
   cursor: pointer;
 }
-.vidFolderHeader:hover{ background: rgba(255,255,255,.08); }
+.vidFolderHeader:hover{ background: rgba(var(--chrome-rgb),.08); }
 .vidFolderHeadLeft{ display: flex; align-items: center; gap: 10px; min-width: 0; }
 .vidFolderCaret{ opacity: .9; transform: rotate(0deg); transition: transform .12s ease; }
 .vidFolderTitle{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vidFolderHeadRight{ display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.vidFolderMeta{ color: rgba(229,231,235,.72); font-weight: 700; font-size: 12px; }
+.vidFolderMeta{ color: rgba(var(--ink-rgb),.72); font-weight: 700; font-size: 12px; }
 .vidFolderBar{
   position: relative;
   height: 4px;
   width: 140px;
   border-radius: 999px;
-  background: rgba(255,255,255,.16);
+  background: rgba(var(--chrome-rgb),.16);
   overflow: hidden;
 }
 .vidFolderFill{ height: 100%; width: 0%; background: rgba(var(--accent-rgb), .75); }
@@ -146,19 +146,19 @@
 /* --- Video library sidebar rows --- */
 
 .videoList{ display:flex; flex-direction:column; gap:6px; padding:10px; }
-.videoRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.10); background:rgba(255,255,255,0.04); cursor:pointer; }
-.videoRow:hover{ background:rgba(255,255,255,0.06); }
+.videoRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.10); background:rgba(var(--chrome-rgb),0.04); cursor:pointer; }
+.videoRow:hover{ background:rgba(var(--chrome-rgb),0.06); }
 .videoRowLeft{ min-width:0; flex:1; display:flex; align-items:center; gap:10px; }
-.videoThumb{ width:96px; height:54px; border-radius:10px; object-fit:cover; background:rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.10); flex:0 0 auto; }
+.videoThumb{ width:96px; height:54px; border-radius:10px; object-fit:cover; background:rgba(0,0,0,0.7); border:1px solid rgba(var(--chrome-rgb),0.10); flex:0 0 auto; }
 .videoRowMain{ min-width:0; display:flex; flex-direction:column; gap:2px; }
 .videoRowTitle{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .videoRowMeta{ font-size:11px; opacity:0.75; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .videoRowMetaLines{ display:flex; flex-direction:column; gap:2px; }
-.videoProgressBar{ height:4px; border-radius:999px; background:rgba(255,255,255,0.12); overflow:hidden; margin-top:4px; }
-.videoProgressFill{ height:100%; width:var(--pct, 0%); background:rgba(255,255,255,0.50); }
+.videoProgressBar{ height:4px; border-radius:999px; background:rgba(var(--chrome-rgb),0.12); overflow:hidden; margin-top:4px; }
+.videoProgressFill{ height:100%; width:var(--pct, 0%); background:rgba(var(--chrome-rgb),0.50); }
 .videoRowRight{ display:flex; align-items:center; gap:8px; }
-.videoBadge{ font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.06); opacity:0.9; }
-.videoRemoveBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); cursor:pointer; }
+.videoBadge{ font-size:11px; padding:3px 8px; border-radius:999px; border:1px solid rgba(var(--chrome-rgb),0.16); background:rgba(var(--chrome-rgb),0.06); opacity:0.9; }
+.videoRemoveBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(var(--chrome-rgb),0.14); background:rgba(var(--chrome-rgb),0.06); cursor:pointer; }
 
 /* Build 45 — Videos: sidebar rows align with Comics folder tree (typography + spacing). */
 #videoFoldersList .videoRow{
@@ -168,8 +168,8 @@
   background: transparent;
 }
 #videoFoldersList .videoRow:hover{
-  background: rgba(255,255,255,0.05);
-  border-color: rgba(255,255,255,0.08);
+  background: rgba(var(--chrome-rgb),0.05);
+  border-color: rgba(var(--chrome-rgb),0.08);
 }
 #videoFoldersList .videoRowTitle{ font-size: 12px; font-weight: 600; }
 #videoFoldersList .videoRowMeta{ font-size: 11px; opacity: 0.75; }
@@ -196,7 +196,7 @@
   gap:10px;
   padding:10px 10px;
   border-radius:16px;
-  border:1px solid rgba(255,255,255,0.10);
+  border:1px solid rgba(var(--chrome-rgb),0.10);
   background:rgba(10,10,12,0.78);
   box-shadow: 0 12px 36px rgba(0,0,0,0.45);
   backdrop-filter: blur(14px);
@@ -207,12 +207,12 @@
   width:36px;
   height:36px;
   border-radius:12px;
-  border:1px solid rgba(255,255,255,0.12);
-  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(var(--chrome-rgb),0.12);
+  background:rgba(var(--chrome-rgb),0.04);
   display:grid;
   place-items:center;
 }
-.videoPlayerBar .iconBtn:hover{ background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.16); }
+.videoPlayerBar .iconBtn:hover{ background:rgba(var(--chrome-rgb),0.06); border-color:rgba(var(--chrome-rgb),0.16); }
 .videoPlayerBar .iconBtn:focus-visible{
   outline:none;
   border-color: rgba(220, 185, 120, 0.75);
@@ -250,7 +250,7 @@
    right-click/mousewheel/mousemove (context menu + minimal HUD reveal zone). */
 body.libmpvCanvas .mpvHost *{ pointer-events:none !important; }
 
-.mpvDetachedPlaceholder{ width:100%; height:100%; border-radius:16px; border:1px dashed rgba(255,255,255,0.18); background:rgba(255,255,255,0.03); display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; opacity:0.85; }
+.mpvDetachedPlaceholder{ width:100%; height:100%; border-radius:16px; border:1px dashed rgba(var(--chrome-rgb),0.18); background:rgba(var(--chrome-rgb),0.03); display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; opacity:0.85; }
 .mpvDetachedPlaceholder.hidden{ display:none; }
 body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
 
@@ -260,8 +260,8 @@ body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
 .chipBtn{
   padding:6px 10px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.14);
-  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(var(--chrome-rgb),0.14);
+  background:rgba(var(--chrome-rgb),0.04);
   color:inherit;
   cursor:pointer;
   font-size:12px;
@@ -269,8 +269,8 @@ body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
   opacity:0.92;
 }
 .chipBtn:hover{
-  background:rgba(255,255,255,0.06);
-  border-color: rgba(255,255,255,0.18);
+  background:rgba(var(--chrome-rgb),0.06);
+  border-color: rgba(var(--chrome-rgb),0.18);
 }
 .chipBtn:active{ transform: translateY(0.5px); }
 .chipBtn:focus-visible{
@@ -353,9 +353,9 @@ body.inVideoPlayer .videoStage{ height:calc(100vh - 120px); }
   width:28px;
   height:28px;
   border-radius:8px;
-  border:1px solid rgba(255,255,255,0.18);
+  border:1px solid rgba(var(--chrome-rgb),0.18);
   background:rgba(0,0,0,0.18);
-  color:rgba(255,255,255,0.88);
+  color:rgba(var(--chrome-rgb),0.88);
   font-size:16px;
   line-height:1;
   display:grid;
@@ -383,7 +383,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   width:38px;
   height:38px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.18);
+  border:1px solid rgba(var(--chrome-rgb),0.18);
   background:rgba(0,0,0,0.28);
   color:inherit;
   display:grid;
@@ -391,7 +391,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   margin-right:0;
   backdrop-filter: blur(6px);
 }
-.minimalNavBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalNavBtn:hover{ background:rgba(var(--chrome-rgb),0.08); }
 .minimalNavBtn:focus-visible{
   outline:none;
   border-color: rgba(220, 185, 120, 0.65);
@@ -403,7 +403,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   width:44px;
   height:44px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.20);
+  border:1px solid rgba(var(--chrome-rgb),0.20);
   background:rgba(12,12,14,0.62);
   color:inherit;
   display:grid;
@@ -411,7 +411,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   font-size:16px;
   backdrop-filter: blur(8px);
 }
-.minimalPlayBtn:hover{ background:rgba(255,255,255,0.08); }
+.minimalPlayBtn:hover{ background:rgba(var(--chrome-rgb),0.08); }
 .minimalPlayBtn:active{ transform: translateY(0.5px); }
 .minimalPlayBtn:focus-visible{
   outline:none;
@@ -432,7 +432,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
 .videoScrub--minimal .scrubTrack{
   height:4px;
   border-radius:999px;
-  background:rgba(255,255,255,0.14);
+  background:rgba(var(--chrome-rgb),0.14);
 }
 .videoHud--minimal:hover .videoScrub--minimal .scrubTrack{ height:5px; }
 .videoScrub--minimal .scrubFill{
@@ -445,7 +445,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   width:14px;
   height:14px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.24);
+  border:1px solid rgba(var(--chrome-rgb),0.24);
   background:rgba(10,10,12,0.92);
 }
 .videoHud--minimal:hover .videoScrub--minimal .scrubThumb{
@@ -455,7 +455,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
 .videoScrub--minimal .scrubBubble{
   border-radius:12px;
   padding:5px 8px;
-  border:1px solid rgba(255,255,255,0.16);
+  border:1px solid rgba(var(--chrome-rgb),0.16);
   background:rgba(10,10,12,0.82);
   box-shadow: 0 12px 30px rgba(0,0,0,0.45);
 }
@@ -466,7 +466,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   opacity:0.90;
   padding:4px 8px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.14);
+  border:1px solid rgba(var(--chrome-rgb),0.14);
   background:rgba(0,0,0,0.22);
   backdrop-filter: blur(6px);
 }
@@ -488,7 +488,7 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
   gap:8px;
   border-radius:16px;
   background:rgba(var(--panel2-rgb), 0.72);
-  border:1px solid rgba(255,255,255,0.16);
+  border:1px solid rgba(var(--chrome-rgb),0.16);
   box-shadow: var(--shadow2);
   opacity:0;
   transform: translateY(8px);
@@ -529,7 +529,7 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
   padding:6px;
   border-radius:14px;
   background:rgba(20,20,24,0.94);
-  border:1px solid rgba(255,255,255,0.10);
+  border:1px solid rgba(var(--chrome-rgb),0.10);
   box-shadow:0 18px 60px rgba(0,0,0,0.55);
   backdrop-filter:blur(16px);
 }
@@ -549,7 +549,7 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
   justify-content:space-between;
   gap:16px;
 }
-.videoCtxMenu .ctxItem:hover{ background:rgba(255,255,255,0.08); }
+.videoCtxMenu .ctxItem:hover{ background:rgba(var(--chrome-rgb),0.08); }
 .videoCtxMenu .ctxItem:disabled{
   opacity:0.4;
   cursor:not-allowed;
@@ -560,7 +560,7 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
 .videoCtxMenu .ctxSep{
   height:1px;
   margin:6px 6px;
-  background:rgba(255,255,255,0.12);
+  background:rgba(var(--chrome-rgb),0.12);
   border-radius:1px;
 }
 
@@ -599,7 +599,7 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
   padding:6px;
   border-radius:14px;
   background:rgba(20,20,24,0.94);
-  border:1px solid rgba(255,255,255,0.10);
+  border:1px solid rgba(var(--chrome-rgb),0.10);
   box-shadow:0 18px 60px rgba(0,0,0,0.55);
   backdrop-filter:blur(16px);
 }
@@ -610,7 +610,7 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
 /* Active submenu item highlighting */
 .videoCtxMenu .ctxItem[data-act="speed"].active,
 .videoCtxMenu .ctxItem[data-track-id].active{
-  background:rgba(255,255,255,0.15);
+  background:rgba(var(--chrome-rgb),0.15);
   font-weight:500;
 }
 .videoCtxMenu .ctxItem[data-act="speed"].active::after,
@@ -636,9 +636,9 @@ body.videoUiHidden .videoToast{
   display: none !important;
 }
 .videoHudRow{ display:flex; align-items:center; gap:8px; }
-.hudBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
-.hudBtnWide{ padding:6px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.16); background:rgba(255,255,255,0.08); color:inherit; cursor:pointer; font-size:12px; }
-.hudBtn:hover, .hudBtnWide:hover{ background:rgba(255,255,255,0.12); }
+.hudBtn{ padding:6px 8px; border-radius:10px; border:1px solid rgba(var(--chrome-rgb),0.16); background:rgba(var(--chrome-rgb),0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtnWide{ padding:6px 10px; border-radius:10px; border:1px solid rgba(var(--chrome-rgb),0.16); background:rgba(var(--chrome-rgb),0.08); color:inherit; cursor:pointer; font-size:12px; }
+.hudBtn:hover, .hudBtnWide:hover{ background:rgba(var(--chrome-rgb),0.12); }
 .hudBtn:disabled, .hudBtnWide:disabled{ opacity:0.5; cursor:default; }
 .hudTime{ font-size:12px; opacity:0.85; min-width:52px; text-align:center; }
 .hudSeek{ flex:1; }
@@ -652,7 +652,7 @@ body.videoUiHidden .videoToast{
 
 /* --- Video toasts --- */
 
-.videoToast{ position:absolute; top:12px; left:50%; transform:translateX(-50%); padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.65); border:1px solid rgba(255,255,255,0.18); font-size:12px; opacity:0.95; }
+.videoToast{ position:absolute; top:12px; left:50%; transform:translateX(-50%); padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.65); border:1px solid rgba(var(--chrome-rgb),0.18); font-size:12px; opacity:0.95; }
 .videoToast.hidden{ display:none; }
 .videoLibraryToast{
   position: fixed;
@@ -663,7 +663,7 @@ body.videoUiHidden .videoToast{
   padding: 7px 12px;
   border-radius: 999px;
   background: rgba(0,0,0,0.78);
-  border: 1px solid rgba(255,255,255,0.20);
+  border: 1px solid rgba(var(--chrome-rgb),0.20);
   color: #fff;
   font-size: 12px;
   pointer-events: none;
@@ -678,16 +678,16 @@ body.videoUiHidden .videoToast{
    INTENT: Minimal in-app selectors for audio/subtitle tracks without changing overlay behavior. */
 .videoTracksPanel{ position:absolute; left:0; right:0; bottom:64px; display:flex; align-items:flex-end; justify-content:center; padding:0 10px; pointer-events:none; z-index:30; }
 .videoTracksPanel.hidden{ display:none; }
-.videoTracksCard{ width:min(520px, calc(100% - 24px)); border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); pointer-events:auto; }
-.videoTracksHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid rgba(255,255,255,0.10); }
+.videoTracksCard{ width:min(520px, calc(100% - 24px)); border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(var(--chrome-rgb),0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); pointer-events:auto; }
+.videoTracksHeader{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; border-bottom:1px solid rgba(var(--chrome-rgb),0.10); }
 .videoTracksTitle{ font-size:13px; opacity:0.92; }
 .videoTracksBody{ display:grid; grid-template-columns: 90px 1fr; gap:10px; padding:12px; align-items:center; }
 .tracksLabel{ font-size:12px; opacity:0.8; }
-.tracksSelect{ width:100%; padding:8px 10px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; }
+.tracksSelect{ width:100%; padding:8px 10px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.14); background:rgba(var(--chrome-rgb),0.06); color:inherit; }
 .tracksSelect option{ background:#111; color:#f2f2f2; }
 
 
-.tracksDivider{ grid-column:1 / -1; height:1px; background:rgba(255,255,255,0.08); margin:2px 0; }
+.tracksDivider{ grid-column:1 / -1; height:1px; background:rgba(var(--chrome-rgb),0.08); margin:2px 0; }
 .tracksToggle{ grid-column:2 / -1; display:flex; align-items:center; gap:10px; font-size:12px; opacity:0.9; user-select:none; }
 .tracksToggle input{ accent-color: #4aa3ff; }
 .tracksHint{ grid-column:2 / -1; font-size:11px; opacity:0.65; margin-top:-6px; }
@@ -696,8 +696,8 @@ body.videoUiHidden .videoToast{
    INTENT: Quick sync nudges with a tiny, consistent control group. */
 .delayControls{ display:flex; align-items:center; justify-content:flex-start; gap:10px; }
 .delayControls.hidden{ display:none; }
-.delayBtn{ min-width:34px; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
-.delayBtn:hover{ background:rgba(255,255,255,0.12); }
+.delayBtn{ min-width:34px; height:32px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.14); background:rgba(var(--chrome-rgb),0.06); color:inherit; cursor:pointer; }
+.delayBtn:hover{ background:rgba(var(--chrome-rgb),0.12); }
 .delayValue{ font-size:12px; opacity:0.9; min-width:60px; text-align:center; }
 
 
@@ -705,8 +705,8 @@ body.videoUiHidden .videoToast{
    INTENT: Aspect/crop presets + reset, kept inside the existing tracks panel. */
 .transformsBlock{ display:contents; }
 .transformsBlock.hidden{ display:none; }
-.tracksBtn{ width:100%; height:32px; border-radius:12px; border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.06); color:inherit; cursor:pointer; }
-.tracksBtn:hover{ background:rgba(255,255,255,0.12); }
+.tracksBtn{ width:100%; height:32px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.14); background:rgba(var(--chrome-rgb),0.06); color:inherit; cursor:pointer; }
+.tracksBtn:hover{ background:rgba(var(--chrome-rgb),0.12); }
 
 /* In mpv mode, the HUD is docked below the surface; keep the panel docked too. */
 /* Dock the tracks panel only for native/embedded mpv surfaces (where overlays can be occluded). */
@@ -717,12 +717,12 @@ body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:aut
 
 .videoPrompt{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45); }
 .videoPrompt.hidden{ display:none; }
-.videoPromptCard{ width:min(420px, calc(100% - 24px)); padding:14px; border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(255,255,255,0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); }
+.videoPromptCard{ width:min(420px, calc(100% - 24px)); padding:14px; border-radius:16px; background:rgba(20,20,20,0.95); border:1px solid rgba(var(--chrome-rgb),0.14); box-shadow:0 12px 40px rgba(0,0,0,0.5); }
 .videoPromptTitle{ font-size:14px; margin-bottom:6px; }
 .videoPromptText{ font-size:12px; opacity:0.85; margin-bottom:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .videoPromptActions{ display:flex; gap:10px; justify-content:flex-end; }
-.primaryBtn{ padding:8px 12px; border-radius:12px; border:1px solid rgba(255,255,255,0.18); background:rgba(255,255,255,0.14); color:inherit; cursor:pointer; }
-.primaryBtn:hover{ background:rgba(255,255,255,0.18); }
+.primaryBtn{ padding:8px 12px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.18); background:rgba(var(--chrome-rgb),0.14); color:inherit; cursor:pointer; }
+.primaryBtn:hover{ background:rgba(var(--chrome-rgb),0.18); }
 
 
 /* --- Continue Watching shelf --- */
@@ -755,7 +755,7 @@ body.videoShellMode .videoPlayerShell { height: 100vh !important; }
   transform: translateX(-50%);
   bottom: 64px;
   background: rgba(18, 18, 18, 0.92);
-  border: 1px solid rgba(255,255,255,0.14);
+  border: 1px solid rgba(var(--chrome-rgb),0.14);
   border-radius: 16px;
   box-shadow: 0 14px 44px rgba(0,0,0,0.55);
   overflow: hidden;
@@ -774,7 +774,7 @@ body.mpvEngine:not(.libmpvCanvas) .hudPanel {
 }
 
 #videoPlaylistPanel { width: min(520px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 24px)); }
-#videoPlaylistPanel .panelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.10); }
+#videoPlaylistPanel .panelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(var(--chrome-rgb),0.10); }
 #videoPlaylistPanel .panelTitle { font-weight: 700; }
 #videoPlaylistPanel .panelHeaderActions { display: flex; align-items: center; gap: 10px; }
 #videoPlaylistPanel .panelBody { overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 12px; min-height: 0; }
@@ -782,7 +782,7 @@ body.mpvEngine:not(.libmpvCanvas) .hudPanel {
 
 .videoPlaylistItem { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
 .videoPlaylistItem:hover { filter: brightness(1.08); }
-.videoPlaylistItem.isCurrent { outline: 1px solid rgba(255,255,255,0.18); }
+.videoPlaylistItem.isCurrent { outline: 1px solid rgba(var(--chrome-rgb),0.18); }
 
 .videoPlaylistItem .epName { flex: 1; }
 .videoPlaylistItem .epMeta { opacity: 0.75; font-size: 12px; }
@@ -793,8 +793,8 @@ body.mpvEngine:not(.libmpvCanvas) .hudPanel {
   flex: 1;
   height: 32px;
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(var(--chrome-rgb),0.14);
+  background: rgba(var(--chrome-rgb),0.06);
   color: inherit;
   cursor: pointer;
   padding: 0 10px;
@@ -829,13 +829,13 @@ body.mpvEngine:not(.libmpvCanvas) .hudPanel {
 .speedChip{
   padding:6px 10px;
   border-radius:999px;
-  border:1px solid rgba(255,255,255,0.16);
-  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(var(--chrome-rgb),0.16);
+  background:rgba(var(--chrome-rgb),0.08);
   color:inherit;
   cursor:pointer;
   font-size:12px;
 }
-.speedChip:hover{ background:rgba(255,255,255,0.12); }
+.speedChip:hover{ background:rgba(var(--chrome-rgb),0.12); }
 
 
 /* --- Overlay fixes (toast + center flash positioning) --- */
@@ -936,7 +936,7 @@ body.mpvEngine .videoToast {
 }
 
 .volumeOSDPercent {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--tx-font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif);
   font-size: 24px;
   font-weight: 600;
   color: #fff;

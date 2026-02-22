@@ -32,6 +32,52 @@
     });
   }
 
+  // Theme cycle: dark → light → nord → solarized → gruvbox → catppuccin → dark
+  var APP_THEMES = ['dark', 'light', 'nord', 'solarized', 'gruvbox', 'catppuccin'];
+  var THEME_LABELS = { dark: 'Dark', light: 'Light', nord: 'Nord', solarized: 'Solarized', gruvbox: 'Gruvbox', catppuccin: 'Catppuccin' };
+
+  const applyAppTheme = (theme) => {
+    var t = APP_THEMES.indexOf(theme) >= 0 ? theme : 'dark';
+    try { document.body.dataset.appTheme = t; } catch {}
+    // Shoelace theme: light for "light", dark for everything else
+    try {
+      if (t === 'light') {
+        document.documentElement.classList.remove('sl-theme-dark');
+      } else {
+        document.documentElement.classList.add('sl-theme-dark');
+      }
+    } catch {}
+    try { localStorage.setItem('appTheme', t); } catch {}
+    // Swap icon: sun for dark themes (click = go lighter), moon for light theme
+    if (el.themeToggleBtn) {
+      try {
+        var sunIcon = el.themeToggleBtn.querySelector('.themeIcon--sun');
+        var moonIcon = el.themeToggleBtn.querySelector('.themeIcon--moon');
+        if (sunIcon && moonIcon) {
+          sunIcon.style.display = (t === 'light') ? 'none' : 'block';
+          moonIcon.style.display = (t === 'light') ? 'block' : 'none';
+        }
+      } catch {}
+      var nextIdx = (APP_THEMES.indexOf(t) + 1) % APP_THEMES.length;
+      el.themeToggleBtn.title = THEME_LABELS[t] + ' — click for ' + THEME_LABELS[APP_THEMES[nextIdx]];
+    }
+  };
+  const cycleAppTheme = () => {
+    var cur = document.body.dataset.appTheme || 'dark';
+    var idx = APP_THEMES.indexOf(cur);
+    applyAppTheme(APP_THEMES[(idx + 1) % APP_THEMES.length]);
+  };
+
+  try { applyAppTheme(localStorage.getItem('appTheme') || 'dark'); } catch { applyAppTheme('dark'); }
+
+  if (el.themeToggleBtn) {
+    el.themeToggleBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cycleAppTheme();
+    });
+  }
+
   // Build 10.5: In Videos mode, the existing "Hidden" top-bar button becomes a thumbnails toggle.
   // We bind in CAPTURE phase and stop propagation so the Comics hidden-series overlay wiring remains untouched.
   if (el.hiddenSeriesBtn) {

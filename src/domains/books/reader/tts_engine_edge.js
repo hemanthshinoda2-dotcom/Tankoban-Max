@@ -44,6 +44,8 @@
       onEnd: null,
       onError: null,
       onDiag: null,
+      onBuffering: null,
+      buffering: false,
       lastDiag: {
         code: '',
         detail: '',
@@ -211,6 +213,17 @@
             }
           } catch {}
         }
+      }
+    }
+
+    // OPT-TTS-CTRL: Buffering flag — fires callback so UI can show a loading indicator.
+    // Only set during network synthesis in speak()/speakGapless(), NOT during preload().
+    function _setBuffering(val) {
+      var next = !!val;
+      if (state.buffering === next) return;
+      state.buffering = next;
+      if (typeof state.onBuffering === 'function') {
+        try { state.onBuffering(next); } catch {}
       }
     }
 
@@ -668,6 +681,7 @@
         return;
       }
 
+      _setBuffering(true);
       diag('edge_ws_open_start', '');
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
@@ -722,6 +736,8 @@
         state.playing = false;
         diag('edge_ws_open_fail', String(err3 && err3.message ? err3.message : err3));
         if (typeof state.onError === 'function') state.onError({ error: 'edge_ws_open_fail', stage: 'edge_ws_open', reason: String(err3 && err3.message ? err3.message : err3) });
+      } finally {
+        _setBuffering(false);
       }
     }
 
@@ -801,6 +817,7 @@
         return;
       }
 
+      _setBuffering(true);
       try {
         var api = window.Tanko && window.Tanko.api && window.Tanko.api.booksTtsEdge;
         if (!api || typeof api.synth !== 'function') return;
@@ -824,7 +841,9 @@
         if (signal.aborted || newReqId !== state.requestId) return;
         _lruSet(_lruKey(t), { blob: blob, blobUrl: null, boundaries: res.boundaries || [] });
         _playBlob(newReqId, blob, res.boundaries || [], t);
-      } catch {}
+      } catch {} finally {
+        _setBuffering(false);
+      }
     }
 
     function pause() {
@@ -874,6 +893,7 @@
     }
 
     function cancel() {
+      _setBuffering(false); // OPT-TTS-CTRL: clear buffering on any cancellation
       _bdStop(); // FIX-TTS08: stop boundary poller
       _clearPrepared(); // FIX-TTS-B5 #8
       state._resumeSeekMs = null;
@@ -947,6 +967,7 @@
       set onEnd(fn) { state.onEnd = (typeof fn === 'function') ? fn : null; },
       set onError(fn) { state.onError = (typeof fn === 'function') ? fn : null; },
       set onDiag(fn) { state.onDiag = (typeof fn === 'function') ? fn : null; },
+      set onBuffering(fn) { state.onBuffering = (typeof fn === 'function') ? fn : null; },
     };
   }
 

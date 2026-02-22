@@ -4,6 +4,7 @@
 
   var RS = window.booksReaderState;
   var bus = window.booksReaderBus;
+  var searchSeq = 0;
 
   // PATCH4: Search history + scope toggle + progress indicator (Readest-ish)
   var HISTORY_KEY = 'brSearchHistory:v1';
@@ -86,12 +87,12 @@
       var st3 = document.createElement('style');
       st3.id = 'brSearchMatchOptionsStyle';
       st3.textContent = [
-        '#brOverlaySearch .br-search-row{display:flex;align-items:center;gap:8px;}',
+        '#brOverlaySearch .br-search-row{display:flex;align-items:center;gap:6px;}',
         '#brOverlaySearch .br-search-input{flex:1 1 auto;min-width:0;}',
-        '#brOverlaySearch .br-search-match-toggles{display:flex;gap:6px;align-items:center;}',
-        '#brOverlaySearch .br-search-toggle{min-width:30px;height:30px;padding:0 9px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(0,0,0,0.14);color:inherit;font-size:12px;font-weight:600;letter-spacing:0.2px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}',
-        '#brOverlaySearch .br-search-toggle:hover{background:rgba(255,255,255,0.06);}',
-        '#brOverlaySearch .br-search-toggle.is-active{background:rgba(255,255,255,0.16);border-color:rgba(255,255,255,0.26);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.12);}',
+        '#brOverlaySearch .br-search-match-toggles{display:flex;gap:4px;align-items:center;}',
+        '#brOverlaySearch .br-search-toggle{min-width:24px;height:24px;padding:0 6px;border-radius:4px;border:1px solid transparent;background:transparent;color:inherit;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;opacity:0.4;transition:opacity 0.15s,background 0.15s;}',
+        '#brOverlaySearch .br-search-toggle:hover{opacity:0.7;background:rgba(255,255,255,0.06);}',
+        '#brOverlaySearch .br-search-toggle.is-active{opacity:1;background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.18);}',
       ].join('\n');
       document.head.appendChild(st3);
     }
@@ -134,109 +135,29 @@
 
   function ensureSearchResultsUi() {
     var els = RS.ensureEls();
-    if (!els.overlaySearch) return { root: null, list: null };
+    if (!els.overlaySearch) return { root: null };
 
-    // One-time style injection (keeps patches script-only)
+    // One-time style injection
     if (!document.getElementById('brSearchResultsStyle')) {
       var st = document.createElement('style');
       st.id = 'brSearchResultsStyle';
       st.textContent = [
-        '#brOverlaySearch .br-search-results{margin-top:10px;max-height:45vh;overflow:auto;border-top:1px solid rgba(255,255,255,0.08);padding-top:10px;}',
-        '#brOverlaySearch .br-search-group{margin:10px 0 6px 0;opacity:0.9;font-size:12px;letter-spacing:0.2px;}',
-        '#brOverlaySearch .br-search-item{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:rgba(0,0,0,0.18);margin:6px 0;cursor:pointer;}',
-        '#brOverlaySearch .br-search-item:hover{background:rgba(0,0,0,0.28);}',
-        '#brOverlaySearch .br-search-item.is-active{outline:2px solid rgba(255,255,255,0.25);}',
-        '#brOverlaySearch .br-search-excerpt{font-size:13px;line-height:1.3;opacity:0.95;}',
-        '#brOverlaySearch .br-search-excerpt mark{background:rgba(255,255,255,0.16);color:inherit;padding:0 2px;border-radius:4px;}',
-        '#brOverlaySearch .br-search-meta{font-size:11px;opacity:0.75;margin-top:4px;}',
-        '#brOverlaySearch .br-search-empty{opacity:0.75;font-size:13px;padding:8px 0;}',
+        '#brOverlaySearch .br-search-results{max-height:45vh;overflow:auto;border-top:1px solid rgba(255,255,255,0.08);padding:6px 12px;}',
+        '#brOverlaySearch .br-search-group{margin:8px 0 4px 0;opacity:0.7;font-size:11px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;}',
+        '#brOverlaySearch .br-search-item{display:block;width:100%;text-align:left;padding:6px 8px;border-radius:6px;border:none;background:transparent;margin:2px 0;cursor:pointer;transition:background 0.1s;}',
+        '#brOverlaySearch .br-search-item:hover{background:rgba(255,255,255,0.06);}',
+        '#brOverlaySearch .br-search-item.is-active{background:rgba(255,255,255,0.10);}',
+        '#brOverlaySearch .br-search-excerpt{font-size:12px;line-height:1.4;opacity:0.9;}',
+        '#brOverlaySearch .br-search-excerpt mark{background:rgba(255,255,255,0.18);color:inherit;padding:0 2px;border-radius:3px;}',
+        '#brOverlaySearch .br-search-meta{font-size:10px;opacity:0.5;margin-top:2px;}',
       ].join('\n');
       document.head.appendChild(st);
     }
 
     var body = els.overlaySearch.querySelector('.br-overlay-body');
-    if (!body) return { root: null, list: null };
+    if (!body) return { root: null };
 
     ensureSearchMatchOptionUi();
-
-    // PATCH4: extra controls (scope + history + progress)
-    loadScope();
-    var controls = body.querySelector('.br-search-controls2');
-    if (!controls) {
-      controls = document.createElement('div');
-      controls.className = 'br-search-controls2';
-      controls.innerHTML = '' +
-        '<div class="br-search-scope">' +
-          '<button type="button" class="br-scope-btn" data-scope="book">Book</button>' +
-          '<button type="button" class="br-scope-btn" data-scope="section">Section</button>' +
-        '</div>' +
-        '<div class="br-search-history">' +
-          '<select class="br-search-history-select" title="Recent searches"></select>' +
-        '</div>' +
-        '<div class="br-search-actions">' +
-          '<button type="button" class="br-search-clear" title="Clear">Clear</button>' +
-        '</div>' +
-        '<div class="br-search-progress" aria-live="polite"></div>';
-      body.insertBefore(controls, body.firstChild);
-    }
-    // Ensure style for the new controls
-    if (!document.getElementById('brSearchControlsStyle')) {
-      var st2 = document.createElement('style');
-      st2.id = 'brSearchControlsStyle';
-      st2.textContent = [
-        '#brOverlaySearch .br-search-controls2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:4px;}',
-        '#brOverlaySearch .br-search-scope{display:flex;gap:6px;}',
-        '#brOverlaySearch .br-scope-btn{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
-        '#brOverlaySearch .br-scope-btn.is-active{outline:2px solid rgba(255,255,255,0.20);}',
-        '#brOverlaySearch .br-search-history-select{max-width:240px;padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);color:inherit;font-size:12px;}',
-        '#brOverlaySearch .br-search-clear{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.10);background:rgba(0,0,0,0.18);cursor:pointer;font-size:12px;}',
-        '#brOverlaySearch .br-search-progress{margin-left:auto;opacity:0.8;font-size:12px;min-height:16px;}',
-      ].join('\n');
-      document.head.appendChild(st2);
-    }
-    // Wire controls
-    var scopeBtns = controls.querySelectorAll('.br-scope-btn');
-    for (var sb = 0; sb < scopeBtns.length; sb++) {
-      (function (btn) {
-        btn.classList.toggle('is-active', btn.dataset.scope === getScope());
-        btn.addEventListener('click', function () {
-          setScope(btn.dataset.scope);
-          for (var sb2 = 0; sb2 < scopeBtns.length; sb2++) scopeBtns[sb2].classList.toggle('is-active', scopeBtns[sb2].dataset.scope === getScope());
-          // Re-run search in the new scope if query exists
-          var q2 = (els.utilSearchInput && els.utilSearchInput.value) ? String(els.utilSearchInput.value).trim() : '';
-          if (q2) { try { bus.emit('search:run', q2); } catch (e) {} }
-        });
-      })(scopeBtns[sb]);
-    }
-    var histSel = controls.querySelector('.br-search-history-select');
-    if (histSel) {
-      var h = loadHistory();
-      var cur = (els.utilSearchInput && els.utilSearchInput.value) ? String(els.utilSearchInput.value).trim() : '';
-      var opt0 = document.createElement('option');
-      opt0.value = '';
-      opt0.textContent = h.length ? 'Recent searches…' : 'No recent searches';
-      histSel.innerHTML = '';
-      histSel.appendChild(opt0);
-      for (var hi = 0; hi < h.length; hi++) {
-        var opt = document.createElement('option');
-        opt.value = String(h[hi] || '');
-        opt.textContent = String(h[hi] || '');
-        if (cur && opt.value === cur) opt.selected = true;
-        histSel.appendChild(opt);
-      }
-      histSel.onchange = function () {
-        var v = String(histSel.value || '').trim();
-        if (!v) return;
-        if (els.utilSearchInput) els.utilSearchInput.value = v;
-        try { bus.emit('search:run', v); } catch (e) {}
-        histSel.value = '';
-      };
-    }
-    var clearBtn = controls.querySelector('.br-search-clear');
-    if (clearBtn && !clearBtn._wired) {
-      clearBtn._wired = true;
-      clearBtn.addEventListener('click', function () { bus.emit('search:clear'); });
-    }
 
     var root = body.querySelector('.br-search-results');
     if (!root) {
@@ -247,17 +168,8 @@
     return { root: root };
   }
 
-  function setProgressText(text) {
-    try {
-      var els = RS.ensureEls();
-      if (!els.overlaySearch) return;
-      var body = els.overlaySearch.querySelector('.br-overlay-body');
-      if (!body) return;
-      var controls = body.querySelector('.br-search-controls2');
-      if (!controls) return;
-      var p = controls.querySelector('.br-search-progress');
-      if (p) p.textContent = String(text || '');
-    } catch (e) {}
+  function setProgressText() {
+    // No-op: progress text removed in minimalist redesign
   }
 
   function fmtExcerpt(excerpt) {
@@ -282,13 +194,7 @@
 
     ui.root.innerHTML = '';
 
-    if (!flat.length) {
-      var empty = document.createElement('div');
-      empty.className = 'br-search-empty';
-      empty.textContent = 'No results yet.';
-      ui.root.appendChild(empty);
-      return;
-    }
+    if (!flat.length) return;
 
     // Build an index map for active highlight
     var activeCfi = state.searchHits && state.searchHits[state.searchActiveIndex] ? String(state.searchHits[state.searchActiveIndex]) : '';

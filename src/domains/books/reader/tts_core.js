@@ -45,6 +45,7 @@
 
     lastError: null,
     lastDiag: null,
+    buffering: false, // OPT-TTS-CTRL: true while engine awaits network synthesis
     selectionReason: '',
 
     onStateChange: null,
@@ -315,6 +316,7 @@
       selectionReason: state.selectionReason,
       lastError: state.lastError,
       lastDiag: state.lastDiag,
+      buffering: !!state.buffering,
     };
   }
 
@@ -553,10 +555,11 @@
 
   // TTS-THROTTLE: Coalesce rapid rate/voice changes during active playback.
   // Prevents live engine reconfiguration glitches when dragging controls.
-  var TTS_RECONFIG_THROTTLE_MS = 3000;
+  // OPT-TTS-CTRL: Reduced from 3000ms — only applies to coalescing rapid burst changes.
+  // First change in a burst fires immediately; this window catches follow-up changes.
+  var TTS_RECONFIG_THROTTLE_MS = 1500;
   var _ttsReconfigThrottle = {
     timer: 0,
-    lastExecAt: 0,
     pendingRate: false,
     pendingVoice: false,
   };
@@ -843,6 +846,7 @@
     // FIX-TTS05: Pre-synthesize ahead (multi-chunk lookahead)
     // OPT1: adaptive count based on playback rate
     _preloadAhead(queueIdx + 1, _adaptivePreloadCount());
+    _preloadBehind(queueIdx, 3);
 
     // PATCH3: Use gapless speak when advancing sequentially.
     // This keeps the current audio playing until the next block audio is ready,
@@ -877,6 +881,21 @@
     for (var i = 0; i < count; i++) {
       var idx = startIdx + i;
       if (idx >= _queue.length) break;
+      var item = _queue.items[idx];
+      if (item && item.text) {
+        try { state.engine.preload(item.text); } catch {}
+      }
+    }
+  }
+
+  // OPT-TTS-CTRL: Preload blocks behind current position for instant rewind.
+  // Uses a smaller count (3) since forward preload is more important.
+  // engine.preload() no-ops on cache hits, so no duplicate work.
+  function _preloadBehind(currentIdx, count) {
+    if (!state.engine || typeof state.engine.preload !== 'function') return;
+    for (var i = 1; i <= count; i++) {
+      var idx = currentIdx - i;
+      if (idx < 0) break;
       var item = _queue.items[idx];
       if (item && item.text) {
         try { state.engine.preload(item.text); } catch {}
@@ -1043,6 +1062,14 @@
           at: Date.now(),
         };
         fireProgress();
+      };
+    }
+
+    // OPT-TTS-CTRL: Propagate buffering flag from engine to core state → UI
+    if ('onBuffering' in engine) {
+      engine.onBuffering = function (val) {
+        state.buffering = !!val;
+        fire();
       };
     }
 
@@ -1337,6 +1364,7 @@
     state.wordStart = -1;
     state.wordEnd = -1;
     state.status = IDLE;
+    state.buffering = false;
     state._pauseStartedAt = 0;
     state._cancelFlag = false;
     _txt.segIdx = -1;
@@ -1607,6 +1635,7 @@
       state.engine.speak(item.text);
     }
     _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
+    _preloadBehind(_queue.index, 3);
   }
 
 function _clearReconfigThrottle() {
@@ -1692,10 +1721,8 @@ function _isReconfigPausedStatus(status) {
 }
 
 function _runThrottledRateVoiceChange() {
-  _ttsReconfigThrottle.timer = 0;
   if (!_ttsReconfigThrottle.pendingRate && !_ttsReconfigThrottle.pendingVoice) return;
 
-  _ttsReconfigThrottle.lastExecAt = Date.now();
   _ttsReconfigThrottle.pendingRate = false;
   _ttsReconfigThrottle.pendingVoice = false;
 
@@ -1729,28 +1756,38 @@ function _runThrottledRateVoiceChange() {
 
   if (state.format !== 'txt' && _queue.index >= 0) {
     _preloadAhead(_queue.index + 1, _adaptivePreloadCount());
+    _preloadBehind(_queue.index, 3);
   }
 }
 
+// OPT-TTS-CTRL: Smart throttle — first change fires immediately, rapid follow-ups coalesce.
 function _queueThrottledRateVoiceChange(kind) {
   if (kind === 'rate') _ttsReconfigThrottle.pendingRate = true;
   if (kind === 'voice') _ttsReconfigThrottle.pendingVoice = true;
 
-  var now = Date.now();
-  var dueAt = (_ttsReconfigThrottle.lastExecAt || 0) + TTS_RECONFIG_THROTTLE_MS;
-  var wait = Math.max(0, dueAt - now);
-
+  // If a timer is already pending, a burst is in progress.
+  // Reset the timer to extend the coalesce window — the latest pending
+  // flags will be picked up when the timer fires.
   if (_ttsReconfigThrottle.timer) {
     try { clearTimeout(_ttsReconfigThrottle.timer); } catch {}
-    _ttsReconfigThrottle.timer = 0;
-  }
-
-  if (wait <= 0) {
-    _runThrottledRateVoiceChange();
+    _ttsReconfigThrottle.timer = setTimeout(function () {
+      _ttsReconfigThrottle.timer = 0;
+      _runThrottledRateVoiceChange();
+    }, TTS_RECONFIG_THROTTLE_MS);
     return;
   }
 
-  _ttsReconfigThrottle.timer = setTimeout(_runThrottledRateVoiceChange, wait);
+  // No timer pending — first change in a new burst. Execute immediately.
+  _runThrottledRateVoiceChange();
+
+  // Set a cooldown timer to coalesce any rapid follow-up changes.
+  // If no second change arrives, the timer fires harmlessly (both pending flags are false).
+  _ttsReconfigThrottle.timer = setTimeout(function () {
+    _ttsReconfigThrottle.timer = 0;
+    if (_ttsReconfigThrottle.pendingRate || _ttsReconfigThrottle.pendingVoice) {
+      _runThrottledRateVoiceChange();
+    }
+  }, TTS_RECONFIG_THROTTLE_MS);
 }
 
   var TTS_RATE_MIN = 0.5;
