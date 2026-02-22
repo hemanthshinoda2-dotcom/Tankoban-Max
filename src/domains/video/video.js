@@ -342,7 +342,7 @@ videoProgress IPC calls
       // Build 54: render surface quality preset (caps total pixels)
       renderQuality: 'auto',
       // BUILD110: Optional mpv pacing mode (advanced). When true: video-sync=display-resample.
-      videoSyncDisplayResample: false,
+      videoSyncDisplayResample: true,
       volume: 1,
       muted: false,
       speed: 1,
@@ -6433,25 +6433,20 @@ async function playViaQt(v, extra) {
 
 async function resolvePlayableEpisode(v) {
   if (!v) return null;
-  if (v.path) return v;
 
   const id = String((v && v.id) || '');
-  if (!id) return null;
+  const sid = String((v && v.showId) || '');
 
-  try {
-    const local = getEpisodeById(id);
-    if (local && local.path) return local;
-  } catch {}
-
+  // Canonical lookup first so renamed/migrated episodes don't keep stale paths.
   try {
     const api = Tanko?.api?.video;
-    if (typeof api?.getEpisodesByIds === 'function') {
+    if (id && typeof api?.getEpisodesByIds === 'function') {
       const res = await api.getEpisodesByIds([id]);
       const list = (res && typeof res === 'object' && Array.isArray(res.episodes)) ? res.episodes : [];
       const fetched = list.find((ep) => String((ep && ep.id) || '') === id) || list[0];
       if (fetched && fetched.path) {
         try {
-          const existing = getEpisodeById(id);
+          const existing = getEpisodeById(String((fetched && fetched.id) || id));
           if (existing && typeof existing === 'object') {
             Object.assign(existing, fetched);
           } else {
@@ -6467,6 +6462,49 @@ async function resolvePlayableEpisode(v) {
     }
   } catch {}
 
+  if (id) {
+    try {
+      const local = getEpisodeById(id);
+      if (local && local.path) return local;
+    } catch {}
+  }
+
+  // Show-scope fallback: pick the best current episode if ID lookup failed.
+  try {
+    const api = Tanko?.api?.video;
+    if (sid && typeof api?.getEpisodesForShow === 'function') {
+      const res = await api.getEpisodesForShow(sid);
+      const list = (res && typeof res === 'object' && Array.isArray(res.episodes)) ? res.episodes : [];
+      if (list.length) {
+        let picked = null;
+        let bestAt = -1;
+        for (const ep of list) {
+          if (!ep || !ep.id || !ep.path) continue;
+          const gp = getProgressForEpisode(ep);
+          const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
+          if (!p || isProgressFinished(p)) continue;
+          const pos = Number(p.positionSec);
+          if (!Number.isFinite(pos) || pos < 10) continue;
+          const at = Number(p.updatedAt || 0);
+          if (at > bestAt) { bestAt = at; picked = ep; }
+        }
+        if (!picked) picked = list.find((ep) => !!(ep && ep.path)) || null;
+        if (!picked || !picked.path) return null;
+
+        try {
+          state.videos = Array.isArray(state.videos) ? state.videos : [];
+          const seen = new Set(state.videos.map((x) => String((x && x.id) || '')));
+          if (!seen.has(String(picked.id))) state.videos.push(picked);
+          state.episodes = state.videos;
+          buildEpisodesByShowId();
+          if (window.__tankoVideoSearch) window.__tankoVideoSearch.rebuildVideoSearchIndex();
+        } catch {}
+        return picked;
+      }
+    }
+  } catch {}
+
+  if (v.path) return v;
   return null;
 }
 
@@ -6847,7 +6885,11 @@ async function openVideo(v, opts = {}) {
     }
   } catch {}
 
-  if (!v || !v.path) return;
+  if (!v || !v.path) {
+    const resolved = await resolvePlayableEpisode(v);
+    if (!resolved || !resolved.path) return;
+    v = resolved;
+  }
   clearEmbeddedFirstFrameWatch();
   state._autoAdvanceBlockUntilMs = Date.now() + 2500;
 
@@ -7034,7 +7076,11 @@ async function openVideoQtFallback(v, opts = {}) {
     }
   } catch {}
 
-  if (!v || !v.path) return;
+  if (!v || !v.path) {
+    const resolved = await resolvePlayableEpisode(v);
+    if (!resolved || !resolved.path) return;
+    v = resolved;
+  }
 
   const fallbackReason = (opts && typeof opts === 'object' && opts._routeReason)
     ? String(opts._routeReason)
