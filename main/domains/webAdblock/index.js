@@ -13,6 +13,7 @@ const DEFAULT_LIST_URLS = [
 
 var cfgCache = null;
 var listCache = null;
+var listDomainSet = null;
 var listUpdatePromise = null;
 
 function cfgPath() {
@@ -60,6 +61,7 @@ function ensureLists() {
   } catch {
     listCache = { domains: [], updatedAt: 0, sourceCount: 0 };
   }
+  listDomainSet = new Set(Array.isArray(listCache.domains) ? listCache.domains : []);
   return listCache;
 }
 
@@ -74,6 +76,10 @@ function writeLists() {
   try {
     fs.mkdirSync(path.dirname(listPath()), { recursive: true });
     fs.writeFileSync(listPath(), JSON.stringify(ensureLists(), null, 2), 'utf8');
+  } catch {}
+  try {
+    var lists = ensureLists();
+    listDomainSet = new Set(Array.isArray(lists.domains) ? lists.domains : []);
   } catch {}
 }
 
@@ -144,8 +150,9 @@ function isSiteAllowlisted(firstPartyUrl) {
 function hostMatchesBlocked(hostname) {
   var host = normalizeHost(hostname);
   if (!host) return false;
-  var lists = ensureLists();
-  var set = new Set(Array.isArray(lists.domains) ? lists.domains : []);
+  ensureLists();
+  if (!listDomainSet) listDomainSet = new Set();
+  var set = listDomainSet;
   var probe = host;
   while (probe) {
     if (set.has(probe)) return true;
@@ -203,6 +210,7 @@ async function updateLists(ctx) {
       lists.domains = Array.from(combined);
       lists.updatedAt = Date.now();
       lists.sourceCount = sourceCount;
+      listDomainSet = new Set(lists.domains);
       writeLists();
       cfg.lastListUpdateAt = lists.updatedAt;
       cfg.updatedAt = Date.now();
@@ -291,6 +299,7 @@ function ensureInitialLists() {
   ];
   lists.updatedAt = Date.now();
   lists.sourceCount = 0;
+  listDomainSet = new Set(lists.domains);
   writeLists();
 }
 

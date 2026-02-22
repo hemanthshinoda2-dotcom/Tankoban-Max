@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { session } = require('electron');
 
 const HISTORY_FILE = 'web_torrent_history.json';
 const MAX_HISTORY = 1000;
@@ -57,7 +58,7 @@ function writeHistory(ctx) {
   var c = ensureHistory(ctx);
   if (c.torrents.length > MAX_HISTORY) c.torrents.length = MAX_HISTORY;
   var p = ctx.storage.dataPath(HISTORY_FILE);
-  ctx.storage.writeJSON(p, c);
+  ctx.storage.writeJSONDebounced(p, c, 120);
 }
 
 function emit(ctx, eventName, payload) {
@@ -311,24 +312,20 @@ function buildTorrentTmpPath(ctx, id) {
   return dir;
 }
 
-async function startMagnet(ctx, evt, payload) {
-  var magnetUri = String(payload && payload.magnetUri || '').trim();
-  if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
+function resolveDestinationRoot(payload) {
   var destinationRoot = String(payload && payload.destinationRoot || '').trim();
-  if (!destinationRoot) return { ok: false, error: 'Destination folder required' };
+  if (!destinationRoot) return { ok: false, error: 'Destination folder required', absRoot: '' };
   var absRoot = '';
   try { absRoot = path.resolve(destinationRoot); } catch {}
-  if (!absRoot) return { ok: false, error: 'Invalid destination folder' };
+  if (!absRoot) return { ok: false, error: 'Invalid destination folder', absRoot: '' };
   try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
+  return { ok: true, absRoot: absRoot };
+}
 
-  var entry = createEntry({
-    magnetUri: magnetUri,
-    sourceUrl: String(payload && payload.referer || ''),
-    destinationRoot: absRoot
-  });
+async function addTorrentInput(ctx, entry, input) {
   var cl = await ensureClient();
   try {
-    var torrent = cl.add(magnetUri, { path: buildTorrentTmpPath(ctx, entry.id) });
+    var torrent = cl.add(input, { path: buildTorrentTmpPath(ctx, entry.id) });
     bindTorrent(ctx, torrent, entry);
     return { ok: true, id: entry.id };
   } catch (err) {
@@ -336,29 +333,68 @@ async function startMagnet(ctx, evt, payload) {
   }
 }
 
+async function fetchTorrentBuffer(url, referer) {
+  var headers = { 'user-agent': 'Tankoban-Max/1.0' };
+  var ref = String(referer || '').trim();
+  if (ref) headers.referer = ref;
+  var res = null;
+  var ses = null;
+  try { ses = session.fromPartition('persist:webmode'); } catch {}
+  if (ses && typeof ses.fetch === 'function') {
+    res = await ses.fetch(url, { redirect: 'follow', headers: headers });
+  } else {
+    res = await fetch(url, { redirect: 'follow', headers: headers });
+  }
+  if (!res || !res.ok) {
+    var status = Number(res && res.status || 0);
+    return { ok: false, error: status ? ('HTTP ' + status) : 'Failed to fetch torrent' };
+  }
+  var ab = await res.arrayBuffer();
+  var buf = Buffer.from(ab);
+  if (!buf || !buf.length) return { ok: false, error: 'Empty torrent file' };
+  return { ok: true, buffer: buf };
+}
+
+async function startMagnet(ctx, evt, payload) {
+  var magnetUri = String(payload && payload.magnetUri || '').trim();
+  if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
+  var root = resolveDestinationRoot(payload);
+  if (!root.ok) return { ok: false, error: root.error };
+  var entry = createEntry({
+    magnetUri: magnetUri,
+    sourceUrl: String(payload && payload.referer || ''),
+    destinationRoot: root.absRoot
+  });
+  return addTorrentInput(ctx, entry, magnetUri);
+}
+
 async function startTorrentUrl(ctx, evt, payload) {
   var url = String(payload && payload.url || '').trim();
   if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'Invalid torrent URL' };
-  var destinationRoot = String(payload && payload.destinationRoot || '').trim();
-  if (!destinationRoot) return { ok: false, error: 'Destination folder required' };
-  var absRoot = '';
-  try { absRoot = path.resolve(destinationRoot); } catch {}
-  if (!absRoot) return { ok: false, error: 'Invalid destination folder' };
-  try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
-
-  var entry = createEntry({ sourceUrl: url, destinationRoot: absRoot });
-  var cl = await ensureClient();
+  var root = resolveDestinationRoot(payload);
+  if (!root.ok) return { ok: false, error: root.error };
+  var fetched = null;
   try {
-    var res = await fetch(url, { redirect: 'follow', headers: payload && payload.referer ? { referer: String(payload.referer) } : undefined });
-    if (!res.ok) return { ok: false, error: 'HTTP ' + Number(res.status || 0) };
-    var ab = await res.arrayBuffer();
-    var buf = Buffer.from(ab);
-    var torrent = cl.add(buf, { path: buildTorrentTmpPath(ctx, entry.id) });
-    bindTorrent(ctx, torrent, entry);
-    return { ok: true, id: entry.id };
+    fetched = await fetchTorrentBuffer(url, payload && payload.referer);
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err || 'Failed to start torrent URL') };
+    return { ok: false, error: String((err && err.message) || err || 'Failed to fetch torrent URL') };
   }
+  if (!fetched || !fetched.ok) return { ok: false, error: String((fetched && fetched.error) || 'Failed to fetch torrent URL') };
+
+  var entry = createEntry({ sourceUrl: url, destinationRoot: root.absRoot });
+  return addTorrentInput(ctx, entry, fetched.buffer);
+}
+
+async function startTorrentBuffer(ctx, evt, payload) {
+  var root = resolveDestinationRoot(payload);
+  if (!root.ok) return { ok: false, error: root.error };
+  var input = payload && payload.buffer;
+  if (!Buffer.isBuffer(input) || !input.length) return { ok: false, error: 'Invalid torrent file' };
+  var entry = createEntry({
+    sourceUrl: String(payload && (payload.sourceUrl || payload.referer) || ''),
+    destinationRoot: root.absRoot
+  });
+  return addTorrentInput(ctx, entry, input);
 }
 
 async function pause(ctx, _evt, payload) {
@@ -439,6 +475,7 @@ async function removeHistory(ctx, _evt, payload) {
 module.exports = {
   startMagnet,
   startTorrentUrl,
+  startTorrentBuffer,
   pause,
   resume,
   cancel,

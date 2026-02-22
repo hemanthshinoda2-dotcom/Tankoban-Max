@@ -7,11 +7,23 @@
   var CHANNEL = 'tanko:web-popup';
   var ALLOWED_PROTOCOLS = { 'http:': true, 'https:': true, 'magnet:': true };
   var ipcRenderer = null;
+  var nativeWindowOpen = null;
+  var lastUserNavCandidateUrl = '';
+  var lastUserNavCandidateAt = 0;
+  var USER_NAV_CANDIDATE_TTL_MS = 2000;
 
   try {
     ipcRenderer = require('electron').ipcRenderer;
   } catch (_e) {
     ipcRenderer = null;
+  }
+
+  try {
+    if (typeof window.open === 'function') {
+      nativeWindowOpen = window.open.bind(window);
+    }
+  } catch (_e0) {
+    nativeWindowOpen = null;
   }
 
   function toUrl(raw, baseHref) {
@@ -40,6 +52,20 @@
     try {
       location.assign(target);
     } catch (_e2) {}
+  }
+
+  function rememberUserNavCandidate(url) {
+    var target = String(url || '').trim();
+    if (!target) return;
+    lastUserNavCandidateUrl = target;
+    lastUserNavCandidateAt = Date.now();
+  }
+
+  function getRecentUserNavCandidate() {
+    if (!lastUserNavCandidateUrl) return '';
+    var age = Date.now() - Number(lastUserNavCandidateAt || 0);
+    if (age < 0 || age > USER_NAV_CANDIDATE_TTL_MS) return '';
+    return lastUserNavCandidateUrl;
   }
 
   function createPopupProxy(baseHref) {
@@ -108,8 +134,9 @@
   function interceptAnchorEvent(ev) {
     var anchor = findAnchor(ev && ev.target);
     if (!anchor) return;
-    if (!wantsNewWindow(anchor, ev)) return;
     var url = toUrl((anchor.getAttribute && anchor.getAttribute('href')) || anchor.href || '', location.href);
+    if (url) rememberUserNavCandidate(url);
+    if (!wantsNewWindow(anchor, ev)) return;
     if (!url) return;
     if (ev && ev.cancelable) ev.preventDefault();
     try { ev.stopPropagation(); } catch (_e) {}
@@ -143,9 +170,35 @@
     routeToHost(submitUrl, 'form');
   }, true);
 
-  function patchedWindowOpen(url) {
-    var target = toUrl(url, location.href);
-    if (target) routeToHost(target, 'window-open');
+  function patchedWindowOpen(url, target, features) {
+    var resolvedTargetUrl = toUrl(url, location.href);
+    var targetName = String(target || '').trim().toLowerCase();
+
+    if (targetName === '_self' || targetName === '_top' || targetName === '_parent') {
+      if (resolvedTargetUrl) {
+        try { location.assign(resolvedTargetUrl); } catch (_e0) {}
+        return window;
+      }
+      try {
+        if (nativeWindowOpen) return nativeWindowOpen(url, target, features);
+      } catch (_e1) {}
+      return window;
+    }
+
+    if (targetName && targetName !== '_blank') {
+      if (!resolvedTargetUrl) resolvedTargetUrl = getRecentUserNavCandidate();
+      try {
+        if (nativeWindowOpen) {
+          var opened = nativeWindowOpen(url, target, features);
+          if (opened) return opened;
+        }
+      } catch (_e2) {}
+      if (resolvedTargetUrl) routeToHost(resolvedTargetUrl, 'window-open-named');
+      return createPopupProxy(location.href);
+    }
+
+    if (!resolvedTargetUrl) resolvedTargetUrl = getRecentUserNavCandidate();
+    if (resolvedTargetUrl) routeToHost(resolvedTargetUrl, 'window-open');
     return createPopupProxy(location.href);
   }
 

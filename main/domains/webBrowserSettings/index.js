@@ -39,7 +39,7 @@ function ensureCache(ctx) {
 
 function write(ctx) {
   var p = ctx.storage.dataPath(SETTINGS_FILE);
-  ctx.storage.writeJSON(p, cache || { settings: DEFAULT_SETTINGS, updatedAt: Date.now() });
+  ctx.storage.writeJSONDebounced(p, cache || { settings: DEFAULT_SETTINGS, updatedAt: Date.now() }, 120);
 }
 
 async function get(ctx) {

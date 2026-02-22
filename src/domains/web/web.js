@@ -662,6 +662,20 @@
         return Promise.resolve({ ok: true, tabs: ids });
       },
 
+      findByWebContentsId: function (webContentsId) {
+        var target = Number(webContentsId);
+        if (!isFinite(target) || target <= 0) return null;
+        var found = null;
+        tabs.forEach(function (rec, id) {
+          if (found != null) return;
+          try {
+            var wcid = rec && rec.webview && rec.webview.getWebContentsId ? Number(rec.webview.getWebContentsId()) : 0;
+            if (wcid === target) found = id;
+          } catch (e) {}
+        });
+        return found;
+      },
+
       onTitleUpdated: function (cb) { on('title', cb); },
       onUrlUpdated: function (cb) { on('url', cb); },
       onLoading: function (cb) { on('loading', cb); },
@@ -2424,12 +2438,20 @@
     if (tab._lastHistoryUrl === u && (now - Number(tab._lastHistoryAt || 0) < 3000)) return;
     tab._lastHistoryUrl = u;
     tab._lastHistoryAt = now;
-    api.webHistory.add({
+    var payload = {
       url: u,
       title: String(tab.title || tab.sourceName || ''),
       visitedAt: now,
       sourceTabId: String(tab.id)
-    }).catch(function () {});
+    };
+    api.webHistory.add(payload).catch(function () {
+      var retryKey = u + '|' + String(now);
+      if (tab._lastHistoryRetryKey === retryKey) return;
+      tab._lastHistoryRetryKey = retryKey;
+      setTimeout(function () {
+        api.webHistory.add(payload).catch(function () {});
+      }, 800);
+    });
   }
 
   function normalizeBookmarkEntry(b) {
@@ -2926,6 +2948,15 @@
       if (!(res && res.ok && res.tabId)) {
         throw new Error((res && res.error) ? String(res.error) : 'Failed to create tab');
       }
+      var stillExists = false;
+      for (var si = 0; si < state.tabs.length; si++) {
+        if (state.tabs[si] && state.tabs[si].id === tabId) { stillExists = true; break; }
+      }
+      if (!stillExists) {
+        // Tab was closed before async create resolved; tear down native view.
+        webTabs.close({ tabId: res.tabId }).catch(function () {});
+        return;
+      }
       tab.mainTabId = res.tabId;
       // Activate this tab's view (show it, hide others)
       webTabs.activate({ tabId: res.tabId }).catch(function () {});
@@ -2939,6 +2970,7 @@
         if (state.tabs[i] && state.tabs[i].id === tabId) { idx = i; break; }
       }
       if (idx !== -1) state.tabs.splice(idx, 1);
+      else return;
       state.activeTabId = (prevActiveId != null) ? prevActiveId : (state.tabs[0] ? state.tabs[0].id : null);
       renderTabs();
       renderBrowserHome();
@@ -3354,7 +3386,7 @@
       return;
     }
 
-    if (key === 'F11' || lower === 'f') {
+    if (key === 'F11') {
       // BUILD_WEB_PARITY: toggle fullscreen
       e.preventDefault();
       if (api.window && api.window.toggleFullscreen) api.window.toggleFullscreen();
@@ -4199,6 +4231,9 @@
         var url = info && info.url ? String(info.url) : '';
         if (!url) return;
         var mainTabId = info && info.tabId ? info.tabId : null;
+        if (mainTabId == null && info && info.sourceWebContentsId != null && webTabs.findByWebContentsId) {
+          mainTabId = webTabs.findByWebContentsId(info.sourceWebContentsId);
+        }
         var parent = null;
         if (mainTabId != null) {
           parent = getTabByMainId(mainTabId);
@@ -4362,8 +4397,10 @@
     }
 
     if (api.webTorrent && api.webTorrent.onStarted) {
-      api.webTorrent.onStarted(function () {
+      api.webTorrent.onStarted(function (info) {
         refreshTorrentState();
+        var label = (info && info.name) ? String(info.name) : '';
+        showToast(label ? ('Torrent started: ' + label) : 'Torrent started');
       });
     }
 
@@ -4374,8 +4411,18 @@
     }
 
     if (api.webTorrent && api.webTorrent.onCompleted) {
-      api.webTorrent.onCompleted(function () {
+      api.webTorrent.onCompleted(function (info) {
         refreshTorrentState();
+        var stateName = String(info && info.state || '').toLowerCase();
+        var label = (info && info.name) ? String(info.name) : '';
+        if (stateName === 'completed' || stateName === 'completed_with_errors') {
+          showToast(label ? ('Torrent finished: ' + label) : 'Torrent finished');
+        } else if (stateName === 'cancelled') {
+          showToast(label ? ('Torrent cancelled: ' + label) : 'Torrent cancelled');
+        } else if (stateName) {
+          var err = String(info && info.error || '');
+          showToast(err ? err : 'Torrent failed');
+        }
       });
     }
 

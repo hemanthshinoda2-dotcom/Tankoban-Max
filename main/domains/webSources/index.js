@@ -118,7 +118,7 @@ function readConfig(ctx) {
 
 function writeConfig(ctx, data) {
   var p = ctx.storage.dataPath(CONFIG_FILE);
-  ctx.storage.writeJSON(p, data);
+  ctx.storage.writeJSONDebounced(p, data, 120);
 }
 
 function ensureCache(ctx) {
@@ -532,18 +532,85 @@ function setupDownloadHandler(ctx) {
       }
 
       if (ext === '.torrent') {
-        item.cancel();
-        requestDestinationFolder(ctx, { kind: 'torrent', suggestedFilename: filename, modeHint: 'videos' }, _webContents).then(function (picked) {
-          if (!picked || !picked.ok) return;
+        var torrentTmpPath = '';
+        var torrentFinalized = false;
+        try { if (item.pause) item.pause(); } catch {}
+
+        function finalizeTorrentError(message) {
+          if (torrentFinalized) return;
+          torrentFinalized = true;
+          try { item.cancel(); } catch {}
           try {
-            var webTorrentDomain = require('../webTorrent');
-            webTorrentDomain.startTorrentUrl(ctx, null, {
-              url: downloadUrl,
-              referer: pageUrl,
-              destinationRoot: picked.folderPath,
-            }).catch(function () {});
+            if (torrentTmpPath && fs.existsSync(torrentTmpPath)) fs.unlinkSync(torrentTmpPath);
           } catch {}
-        }).catch(function () {});
+          var msg = String(message || 'Failed to start torrent');
+          persistRouteFailure({
+            cancelled: /^cancelled$/i.test(msg),
+            error: msg,
+          });
+          try {
+            ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+              id: null,
+              filename: filename,
+              error: msg,
+            });
+          } catch {}
+        }
+
+        requestDestinationFolder(ctx, { kind: 'torrent', suggestedFilename: filename, modeHint: 'videos' }, _webContents).then(function (picked) {
+          if (!picked || !picked.ok) {
+            finalizeTorrentError((picked && picked.cancelled) ? 'Cancelled' : String((picked && picked.error) || 'Destination not selected'));
+            return;
+          }
+
+          var tmpRoot = '';
+          try {
+            tmpRoot = ctx.storage.dataPath(path.join('web_torrent_tmp', 'incoming'));
+            fs.mkdirSync(tmpRoot, { recursive: true });
+            torrentTmpPath = ensureUniqueDestination(tmpRoot, filename || 'download.torrent');
+            item.setSavePath(torrentTmpPath);
+          } catch (err) {
+            finalizeTorrentError(String((err && err.message) || err || 'Failed to prepare torrent file'));
+            return;
+          }
+
+          item.once('done', function (_evDone, doneState) {
+            if (torrentFinalized) return;
+            if (doneState !== 'completed') {
+              var stateMsg = String(doneState || 'failed').toLowerCase();
+              finalizeTorrentError(stateMsg === 'cancelled' ? 'Cancelled' : ('Torrent file download ' + stateMsg));
+              return;
+            }
+            var readPromise = fs.promises.readFile(torrentTmpPath);
+            readPromise.then(function (buf) {
+              var webTorrentDomain = require('../webTorrent');
+              if (!webTorrentDomain || typeof webTorrentDomain.startTorrentBuffer !== 'function') {
+                return { ok: false, error: 'Torrent engine unavailable' };
+              }
+              return webTorrentDomain.startTorrentBuffer(ctx, null, {
+                buffer: buf,
+                referer: pageUrl,
+                sourceUrl: downloadUrl,
+                destinationRoot: picked.folderPath,
+              });
+            }).then(function (res) {
+              if (!res || !res.ok) {
+                finalizeTorrentError(String((res && res.error) || 'Failed to start torrent'));
+                return;
+              }
+              torrentFinalized = true;
+              try {
+                if (torrentTmpPath && fs.existsSync(torrentTmpPath)) fs.unlinkSync(torrentTmpPath);
+              } catch {}
+            }).catch(function (err) {
+              finalizeTorrentError(String((err && err.message) || err || 'Failed to start torrent'));
+            });
+          });
+
+          try { if (item.resume) item.resume(); } catch {}
+        }).catch(function (err) {
+          finalizeTorrentError(String((err && err.message) || err || 'Failed to select destination folder'));
+        });
         return;
       }
 
@@ -675,13 +742,7 @@ function setupDownloadHandler(ctx) {
               var nowW = Date.now();
               if (nowW - lastW >= 1000) {
                 activePersist.set(dlId, nowW);
-                var cfgUp = ensureDownloadsCache(ctx);
-                var found = null;
-                for (var i = 0; i < (cfgUp.downloads || []).length; i++) {
-                  var dd = cfgUp.downloads[i];
-                  if (dd && String(dd.id) === String(dlId)) { found = dd; break; }
-                }
-                if (found) {
+                persistDownloadUpdate(ctx, dlId, function (found) {
                   found.state = appState;
                   found.receivedBytes = received;
                   found.totalBytes = total;
@@ -692,9 +753,7 @@ function setupDownloadHandler(ctx) {
                   found.canPause = true;
                   found.canResume = true;
                   found.canCancel = true;
-                  capDownloads(cfgUp);
-                  writeDownloads(ctx, cfgUp);
-                }
+                }).catch(function () {});
               }
             } catch {}
 
@@ -854,24 +913,25 @@ async function persistDownloadUpdate(ctx, dlId, mutator, createEntry) {
 
 async function pushFailedDownload(ctx, info) {
   try {
-    var cfg = ensureDownloadsCache(ctx);
-    cfg.downloads.unshift({
-      id: info.id || newDlId(),
-      filename: String(info.filename || 'download'),
-      destination: String(info.destination || ''),
-      library: String(info.library || ''),
-      state: String(info.state || 'failed'),
-      startedAt: Date.now(),
-      finishedAt: Date.now(),
-      error: String(info.error || (String(info.state || 'failed') === 'cancelled' ? 'Cancelled' : 'Download failed')),
-      pageUrl: String(info.pageUrl || ''),
-      downloadUrl: String(info.downloadUrl || ''),
-      totalBytes: 0,
-      receivedBytes: 0,
-      transport: String(info.transport || 'direct'),
-      canPause: !!info.canPause,
-      canResume: !!info.canResume,
-      canCancel: (info.canCancel == null) ? true : !!info.canCancel,
+    await mutateDownloads(ctx, function (cfg) {
+      cfg.downloads.unshift({
+        id: info.id || newDlId(),
+        filename: String(info.filename || 'download'),
+        destination: String(info.destination || ''),
+        library: String(info.library || ''),
+        state: String(info.state || 'failed'),
+        startedAt: Date.now(),
+        finishedAt: Date.now(),
+        error: String(info.error || (String(info.state || 'failed') === 'cancelled' ? 'Cancelled' : 'Download failed')),
+        pageUrl: String(info.pageUrl || ''),
+        downloadUrl: String(info.downloadUrl || ''),
+        totalBytes: 0,
+        receivedBytes: 0,
+        transport: String(info.transport || 'direct'),
+        canPause: !!info.canPause,
+        canResume: !!info.canResume,
+        canCancel: (info.canCancel == null) ? true : !!info.canCancel,
+      });
     });
   } catch {}
 }
@@ -1225,7 +1285,7 @@ async function resumeDownload(ctx, _evt, payload) {
   var canResume = !!(item && item.canResume);
   var resumeFn = item && (item.resume || (item.item && item.item.resume));
   if (!canResume || typeof resumeFn !== 'function') {
-    return { ok: false, error: 'Pause not supported for direct downloads' };
+    return { ok: false, error: 'Resume not supported for direct downloads' };
   }
   try { resumeFn.call(item.item || item); }
   catch (err) { return { ok: false, error: String(err?.message || err) }; }

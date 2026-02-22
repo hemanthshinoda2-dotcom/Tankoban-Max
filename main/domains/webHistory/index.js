@@ -21,7 +21,7 @@ function write(ctx) {
   var p = ctx.storage.dataPath(HISTORY_FILE);
   var c = ensureCache(ctx);
   if (c.entries.length > MAX_HISTORY) c.entries = c.entries.slice(0, MAX_HISTORY);
-  ctx.storage.writeJSON(p, c);
+  ctx.storage.writeJSONDebounced(p, c, 120);
 }
 
 function emitUpdated(ctx) {

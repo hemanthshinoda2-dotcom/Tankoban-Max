@@ -193,6 +193,12 @@ function ensureWebModeSecurity() {
         contents.setWindowOpenHandler(function (details) {
           const target = details && details.url ? String(details.url) : '';
           if (!isAllowedWebModeTopLevelUrl(target)) return { action: 'deny' };
+          var sourceUrl = '';
+          try {
+            var ref = details && details.referrer;
+            if (typeof ref === 'string') sourceUrl = String(ref);
+            else if (ref && ref.url) sourceUrl = String(ref.url);
+          } catch {}
           try {
             const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
             const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
@@ -201,7 +207,7 @@ function ensureWebModeSecurity() {
               targetWindow.webContents.send(EVENT.WEB_POPUP_OPEN, {
                 url: target,
                 disposition: (details && details.disposition) ? String(details.disposition) : 'new-window',
-                sourceUrl: (details && details.referrer) ? String(details.referrer) : '',
+                sourceUrl: sourceUrl,
                 sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
               });
             }
