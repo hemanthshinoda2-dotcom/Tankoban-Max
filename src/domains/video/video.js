@@ -920,19 +920,82 @@ async function refreshChaptersFromPlayer(){
         getNextEpisode: () => {
           try { return (getPrevNextEpisodes() || {}).next || null; } catch { return null; }
         },
-        onOpenEpisode: (ep) => { safe(() => openEpisodeFromPlaylist(ep)); },
+        getPanelOpen: () => !!playlistPanelOpen,
+        requestRefreshPanel: () => {
+          try {
+            if (!playlistPanelOpen) return;
+            renderPlaylistList();
+            syncPlaylistNavButtons();
+          } catch {}
+        },
+        scrollCurrentIntoView: () => {
+          try {
+            const curEl = el.videoPlaylistList?.querySelector('.videoPlaylistItem.isCurrent');
+            curEl?.scrollIntoView({ block: 'nearest' });
+          } catch {}
+        },
+        showToast: (message) => { try { if (message) toast(String(message)); } catch {} },
+        onOpenEpisode: (ep, meta) => { safe(() => openEpisodeFromPlaylist(ep, meta)); },
       });
     }
     if (ns && typeof ns.createTracksDrawerController === 'function') {
       ui.tracksDrawer = ns.createTracksDrawerController({
         panelElProvider: () => el.videoTracksPanel,
         onOpen: () => { safe(() => refreshTracksFromPlayer()); },
+        refreshFn: () => { safe(() => refreshTracksFromPlayer()); },
+        focusFn: (section) => {
+          try {
+            const s = String(section || '').toLowerCase();
+            if (s === 'subdelay') el.videoSubtitleDelayMinusBtn?.focus();
+            else if (s === 'subs' || s === 'subtitle') el.videoSubtitleTrackSelect?.focus();
+            else if (s === 'audio') el.videoAudioTrackSelect?.focus();
+          } catch {}
+        },
       });
     }
     if (ns && typeof ns.createContextMenuController === 'function') {
       ui.contextMenu = ns.createContextMenuController({
+        menuElProvider: () => el.videoCtxMenu || null,
         onOpen: (x, y) => { try { openVideoCtxMenu(x, y); } catch {} },
+        onReposition: (x, y) => { try { openVideoCtxMenu(x, y); } catch {} },
         onClose: () => { try { closeVideoCtxMenu(); } catch {} },
+      });
+    }
+
+
+    if (ns && typeof ns.createHudController === 'function') {
+      ui.hud = ns.createHudController({
+        stageElProvider: () => el.videoStage || null,
+        hideDelayMs: HIDE_TIMEOUT_MS,
+        revealTopPx: REVEAL_ZONE_HEIGHT,
+        revealBottomPx: REVEAL_ZONE_HEIGHT,
+        hysteresisPx: HYSTERESIS_PX,
+        cursorHideDelayMs: 120,
+        getUiHidden: () => document.body.classList.contains('videoUiHidden'),
+        getIsFullscreen: () => document.body.classList.contains('videoFullscreen'),
+        getIsPlaying: () => {
+          try {
+            const st = state.player?.getState?.();
+            return !!(st && !st.paused);
+          } catch { return false; }
+        },
+        getKeepVisible: () => (
+          document.body.classList.contains('mpvEngine') &&
+          !document.body.classList.contains('libmpvCanvas')
+        ),
+        getHasBlockingOverlay: () => {
+          const diagnosticsOn = !!(el.videoDiagnostics && !el.videoDiagnostics.classList.contains('hidden'));
+          return !!(
+            ctxMenuOpen ||
+            playlistPanelOpen ||
+            tracksPanelOpen ||
+            volPanelOpen ||
+            speedPanelOpen ||
+            diagnosticsOn ||
+            state.seekDragging ||
+            state._pointerOverControls
+          );
+        },
       });
     }
 
@@ -961,7 +1024,12 @@ async function refreshChaptersFromPlayer(){
     state.lastOpenRoute = { engine: nextEngine, reason: routeReason, openReason, atMs: nowMs };
 
     const ui = ensureHgUiControllers();
-    try { ui && ui.topStrip && ui.topStrip.setEngine(nextEngine, routeReason); } catch {}
+    try {
+      if (ui && ui.topStrip) {
+        if (typeof ui.topStrip.setRoute === 'function') ui.topStrip.setRoute(nextEngine, routeReason, openReason);
+        else if (typeof ui.topStrip.setEngine === 'function') ui.topStrip.setEngine(nextEngine, routeReason);
+      }
+    } catch {}
 
     if (el.videoEngineBadge) {
       el.videoEngineBadge.dataset.engine = nextEngine;
@@ -1803,6 +1871,7 @@ saveNow(true); } catch {}
       const panels = el.videoCtxMenu?.querySelectorAll?.('.ctxSubmenuPanel');
       if (panels) panels.forEach((p) => p.classList.add('hidden'));
     } catch {}
+    try { state._hgUi?.contextMenu?.syncClosed?.(); } catch {}
   }
 
   function openVideoCtxMenu(clientX, clientY){
@@ -1851,6 +1920,7 @@ saveNow(true); } catch {}
 
     menu.style.left = `${x}px`;
     menu.style.top = `${y}px`;
+    try { state._hgUi?.contextMenu?.syncOpen?.(x, y); } catch {}
 
     // Enable/disable items based on current state and capabilities
     try {
@@ -2039,6 +2109,21 @@ let cachedCropMode = 'none';
         const selSub = lastSubtitleTracks.find(t => t && t.selected);
         if (selSub && selSub.id != null) lastSubtitleTrackIdForToggle = String(selSub.id);
       } catch {}
+
+      // Track panel auto-refresh: if panel is open, rebuild selects immediately so
+      // switching subtitles/audio reflects in-place without closing/reopening.
+      if (tracksPanelOpen) {
+        try {
+          const aVal = el.videoAudioTrackSelect ? String(el.videoAudioTrackSelect.value || 'auto') : 'auto';
+          const sVal = el.videoSubtitleTrackSelect ? String(el.videoSubtitleTrackSelect.value || 'auto') : 'auto';
+          fillSelect(el.videoAudioTrackSelect, lastAudioTracks, { allowOff: false });
+          fillSelect(el.videoSubtitleTrackSelect, lastSubtitleTracks, { allowOff: true, offLabel: 'Off' });
+          if (el.videoAudioTrackSelect && aVal) el.videoAudioTrackSelect.value = aVal;
+          if (el.videoSubtitleTrackSelect && sVal) el.videoSubtitleTrackSelect.value = sVal;
+        } catch {
+          try { refreshTracksPanel(); } catch {}
+        }
+      }
 
       return { ok: true, audioTracks: lastAudioTracks, subtitleTracks: lastSubtitleTracks };
     } catch (err) {
@@ -2578,6 +2663,13 @@ function closeTracksPanel(){
   function showHud(){
     if (document.body.classList.contains('videoUiHidden')) return;
     if (!el.videoStage) return;
+    try {
+      const ui = ensureHgUiControllers();
+      if (ui && ui.hud && typeof ui.hud.show === 'function') {
+        ui.hud.show({ reason: 'video_showHud' });
+        return;
+      }
+    } catch {}
     el.videoStage.classList.add('showHud');
 
     // YouTube-like: whenever controls are shown, always show the cursor.
@@ -2621,6 +2713,13 @@ function closeTracksPanel(){
 
   function hideHudSoon(){
     if (document.body.classList.contains('videoUiHidden')) return;
+    try {
+      const ui = ensureHgUiControllers();
+      if (ui && ui.hud && typeof ui.hud.scheduleHide === 'function') {
+        ui.hud.scheduleHide({ reason: 'video_hideHudSoon' });
+        return;
+      }
+    } catch {}
     // Non-canvas mpv surfaces can block overlays; keep controls visible in that case.
     if (document.body.classList.contains('mpvEngine') && !document.body.classList.contains('libmpvCanvas')) return;
 
@@ -2647,11 +2746,20 @@ function closeTracksPanel(){
     try {
       if (state.player?.kind !== 'mpv') return;
       if (typeof state.player.setBounds !== 'function') return;
+      const token = Date.now() + Math.random();
+      state._mpvBoundsBurstToken = token;
+      const fire = (extra = {}) => {
+        if (state._mpvBoundsBurstToken !== token) return;
+        try { state.player.setBounds({ ...o, ...extra }); } catch {}
+      };
+      queueMicrotask(() => fire({ reason: `${String(o.reason || 'layout')}:micro` }));
       requestAnimationFrame(() => {
-        setTimeout(() => {
-          try { state.player.setBounds(o); } catch {}
-        }, 0);
+        fire({ reason: `${String(o.reason || 'layout')}:raf1` });
+        requestAnimationFrame(() => fire({ reason: `${String(o.reason || 'layout')}:raf2` }));
       });
+      setTimeout(() => fire({ reason: `${String(o.reason || 'layout')}:t120` }), 120);
+      setTimeout(() => fire({ reason: `${String(o.reason || 'layout')}:t260` }), 260);
+      setTimeout(() => fire({ reason: `${String(o.reason || 'layout')}:t420` }), 420);
     } catch {}
   }
 
@@ -2683,7 +2791,16 @@ function closeTracksPanel(){
   function toggleHudVisibility(){
     if (!el.videoStage) return;
     const isShown = el.videoStage.classList.contains('showHud');
-    
+
+    try {
+      const ui = ensureHgUiControllers();
+      if (ui && ui.hud) {
+        if (isShown && typeof ui.hud.hideNow === 'function') ui.hud.hideNow({ reason: 'toggle' });
+        else if (!isShown && typeof ui.hud.show === 'function') ui.hud.show({ reason: 'toggle' });
+        return;
+      }
+    } catch {}
+
     if (isShown) {
       // Hide the HUD
       el.videoStage.classList.remove('showHud');
@@ -6530,12 +6647,23 @@ function openPlaylistPanel() {
   closeVolPanel();  playlistPanelOpen = true;
   try { el.videoPlaylistPanel?.classList.remove('hidden'); } catch {}
   try { renderPlaylistList(); syncPlaylistNavButtons(); } catch {}
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist) {
+      if (typeof ui.playlist.panelOpened === 'function') ui.playlist.panelOpened();
+      else if (typeof ui.playlist.requestRefreshPanel === 'function') ui.playlist.requestRefreshPanel('panel-open');
+    }
+  } catch {}
   showHud();
 }
 
 function closePlaylistPanel() {
   playlistPanelOpen = false;
   try { el.videoPlaylistPanel?.classList.add('hidden'); } catch {}
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist && typeof ui.playlist.panelClosed === 'function') ui.playlist.panelClosed();
+  } catch {}
 }
 
 function togglePlaylistPanel() {
@@ -6604,6 +6732,21 @@ function rebuildPlaylistForEpisode(ep) {
 
   renderPlaylistList();
   syncPlaylistNavButtons();
+
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist && typeof ui.playlist.notifyPlaylistChanged === 'function') {
+      const currentIndex = getPlaylistIndexByKey(state.playlist.currentKey);
+      const folderLabel = String(el.videoPlaylistFolder?.textContent || '');
+      ui.playlist.notifyPlaylistChanged({
+        showId: state.playlist.showId,
+        playlistLength: Array.isArray(state.playlist.episodes) ? state.playlist.episodes.length : 0,
+        currentKey: state.playlist.currentKey,
+        currentIndex,
+        folderLabel,
+      });
+    }
+  } catch {}
 }
 
 // Helper: Extract folder/file name from path
@@ -6618,14 +6761,19 @@ function renderPlaylistList() {
   if (!el.videoPlaylistList) return;
 
   const cur = state.playlist.currentKey;
+  const eps = Array.isArray(state.playlist.episodes) ? state.playlist.episodes : [];
   el.videoPlaylistList.innerHTML = '';
 
-  for (const ep of (state.playlist.episodes || [])) {
+  for (let i = 0; i < eps.length; i += 1) {
+    const ep = eps[i];
     const key = epKey(ep);
     const row = document.createElement('div');
     row.className = 'videoPlaylistItem' + (key && key === cur ? ' isCurrent' : '');
     row.setAttribute('role', 'option');
     row.setAttribute('tabindex', '0');
+    if (key) row.dataset.epKey = key;
+    row.dataset.index = String(i);
+    row.setAttribute('aria-selected', (key && key === cur) ? 'true' : 'false');
 
     const name = document.createElement('div');
     name.className = 'epName';
@@ -6633,14 +6781,20 @@ function renderPlaylistList() {
 
     const meta = document.createElement('div');
     meta.className = 'epMeta mono';
-    meta.textContent = '';
+    const parts = [];
+    if (eps.length > 1) parts.push(`${i + 1}/${eps.length}`);
+    if (ep && ep.durationSec != null) {
+      const d = Number(ep.durationSec);
+      if (Number.isFinite(d) && d > 0) parts.push(formatTime(Math.round(d)));
+    }
+    meta.textContent = parts.join(' • ');
 
     row.appendChild(name);
     row.appendChild(meta);
 
-    row.onclick = () => safe(() => openEpisodeFromPlaylist(ep));
+    row.onclick = () => safe(() => openEpisodeFromPlaylist(ep, { source: 'playlist-click' }));
     row.onkeydown = (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); safe(() => openEpisodeFromPlaylist(ep)); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); safe(() => openEpisodeFromPlaylist(ep, { source: 'playlist-keyboard' })); }
     };
 
     el.videoPlaylistList.appendChild(row);
@@ -6652,8 +6806,17 @@ function renderPlaylistList() {
   } catch {}
 }
 
-function openEpisodeFromPlaylist(ep) {
+function openEpisodeFromPlaylist(ep, opts = {}) {
   if (!ep) return;
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist) {
+      if (typeof ui.playlist.shouldSuppressEpisodeOpen === 'function' && ui.playlist.shouldSuppressEpisodeOpen(ep, opts)) {
+        return;
+      }
+      if (typeof ui.playlist.recordEpisodeOpenIntent === 'function') ui.playlist.recordEpisodeOpenIntent(ep, opts);
+    }
+  } catch {}
   closePlaylistPanel();
   if (typeof playViaShell === 'function') return playViaShell(ep);
   return openVideo(ep);
@@ -6825,6 +6988,66 @@ function resolveStartSeconds(v, opts = {}) {
   return start;
 }
 
+function logHgParity(tag, payload) {
+  try {
+    if (!state._hgParityLog) state._hgParityLog = [];
+    const entry = {
+      atMs: Date.now(),
+      tag: String(tag || ''),
+      payload: (payload && typeof payload === 'object') ? { ...payload } : payload,
+    };
+    state._hgParityLog.push(entry);
+    if (state._hgParityLog.length > 120) state._hgParityLog.splice(0, state._hgParityLog.length - 120);
+    if (window && window.__TANKO_HG_PARITY_DEBUG__) console.log('[video:hg-parity]', entry);
+  } catch {}
+}
+
+function snapshotHgParity(reason) {
+  try {
+    const p = state.player;
+    if (!p || typeof p.getParitySnapshot !== 'function') return null;
+    const snap = p.getParitySnapshot();
+    state._hgLastParitySnapshot = snap;
+    logHgParity('snapshot', {
+      reason: String(reason || ''),
+      contractVersion: snap && snap.contractVersion ? String(snap.contractVersion) : '',
+      ready: !!(snap && snap.ready),
+    });
+    return snap;
+  } catch (err) {
+    logHgParity('snapshot-error', { reason: String(reason || ''), error: String((err && err.message) || err || '') });
+    return null;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    window.__tankoDumpHgParity = () => ({
+      playerSnapshot: snapshotHgParity('manual-dump'),
+      uiLog: Array.isArray(state._hgParityLog) ? state._hgParityLog.slice() : [],
+    });
+    window.__tankoAuditHgPerf = () => {
+      const snap = snapshotHgParity('manual-perf-audit');
+      const rs = (snap && snap.renderStats) || {};
+      const dropped = Number(rs.droppedFrameCount || 0);
+      const draws = Number(rs.framePumpDrawCount || rs.frameCount || 0);
+      const closeErrors = Number(rs.frameCloseErrorCount || 0);
+      const avg = Number(rs.avgDrawTimeMs || 0);
+      const issues = [];
+      if (!snap || !snap.gpuInitialized) issues.push('gpu-not-initialized');
+      if (closeErrors > 0) issues.push('frame-close-errors');
+      if (dropped > 0 && draws > 0 && (dropped / Math.max(1, draws)) > 0.25) issues.push('high-frame-drop-ratio');
+      if (avg > 18) issues.push('slow-avg-draw');
+      return {
+        ok: issues.length === 0,
+        issues,
+        summary: { droppedFrameCount: dropped, drawCount: draws, frameCloseErrorCount: closeErrors, avgDrawTimeMs: avg },
+        snapshot: snap,
+      };
+    };
+  } catch {}
+}
+
 function clearEmbeddedFirstFrameWatch() {
   state._embeddedFirstFrameWatchToken = null;
 }
@@ -6982,6 +7205,10 @@ async function openVideo(v, opts = {}) {
   try { state.settings.uiHidden = false; } catch {}
   state._autoAdvanceTriggeredForKey = null;
   state.now = v;
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist && typeof ui.playlist.notifyEpisodeOpened === 'function') ui.playlist.notifyEpisodeOpened(v);
+  } catch {}
   if (el.videoNowTitle) {
     el.videoNowTitle.textContent = String((v && (v.title || v.name)) || basename(v && v.path ? v.path : '') || 'Now Playing');
   }
@@ -7896,14 +8123,17 @@ function adjustVolume(delta){
   
   // Build 69: Volume OSD indicator for immediate visual feedback
   let volumeOSDTimer = null;
-  function showVolumeOSD(volume) {
+  function showVolumeOSD(volume, opts) {
+    const payload = (opts && typeof opts === 'object') ? opts : null;
+    const muted = !!(payload && payload.muted);
+    const normalizedVol = clamp(Number(volume), 0, 1);
     const ui = ensureHgUiControllers();
     if (ui && ui.volumeHud && typeof ui.volumeHud.show === 'function') {
-      ui.volumeHud.show(Number(volume) || 0);
+      ui.volumeHud.show({ volume: Number.isFinite(normalizedVol) ? normalizedVol : 0, muted });
       return;
     }
 
-    const volumePct = Math.round(clamp(volume, 0, 1) * 100);
+    const volumePct = Math.round((Number.isFinite(normalizedVol) ? normalizedVol : 0) * 100);
     
     // Create or reuse OSD element
     let osd = document.getElementById('videoVolumeOSD');
@@ -7919,9 +8149,9 @@ function adjustVolume(delta){
     const filledBars = Math.round((volumePct / 100) * barCount);
     const bars = '█'.repeat(filledBars) + '░'.repeat(barCount - filledBars);
     osd.innerHTML = `
-      <div class="volumeOSDIcon">${volumePct === 0 ? '🔇' : volumePct < 50 ? '🔉' : '🔊'}</div>
+      <div class="volumeOSDIcon">${(muted || volumePct === 0) ? '🔇' : volumePct < 50 ? '🔉' : '🔊'}</div>
       <div class="volumeOSDBars">${bars}</div>
-      <div class="volumeOSDPercent">${volumePct}%</div>
+      <div class="volumeOSDPercent">${muted ? `Muted (${volumePct}%)` : `${volumePct}%`}</div>
     `;
     
     // Show with animation
@@ -7944,6 +8174,8 @@ function adjustVolume(delta){
     state.player.setMuted(next);
     if (el.videoMuteBtn) el.videoMuteBtn.textContent = next ? '🔇' : '🔊';
     persistVideoSettings({ muted: next });
+    const baseVol = Number(st && Object.prototype.hasOwnProperty.call(st, 'volume') ? st.volume : state.settings.volume);
+    showVolumeOSD(Number.isFinite(baseVol) ? baseVol : 0, { muted: next });
     hudNotice(next ? 'Muted' : 'Unmuted');
   }
 
@@ -7975,6 +8207,7 @@ function adjustVolume(delta){
     // guard against double-commit (pointerup + lostpointercapture, etc.)
     if (now - (state._seekCommitGuardAt || 0) < 120) {
       state.seekDragging = false;
+      try { ensureHgUiControllers()?.hud?.endScrub?.(); } catch {}
       state.seekPreviewSec = null;
       showHud();
       return;
@@ -7982,7 +8215,9 @@ function adjustVolume(delta){
     state._seekCommitGuardAt = now;
 
     try { (state.player.seekToFast ? state.player.seekToFast(v) : state.player.seekTo(v)); } catch {}
+    try { hudNotice(`Seek: ${fmtTime(v)}`); } catch {}
     state.seekDragging = false;
+    try { ensureHgUiControllers()?.hud?.endScrub?.(); } catch {}
     state.seekPreviewSec = null;
     showHud();
   }
@@ -8066,7 +8301,7 @@ function adjustVolume(delta){
 
     // Update UI instantly (document-like feel)
     setVideoScrubUI(sec, dur);
-    if (el.videoTimeNow) el.videoTimeNow.textContent = fmtTime(sec);
+    if (el.videoTimeNow) el.videoTimeNow.textContent = `${fmtTime(sec)} / ${fmtTime(dur)}`;
     showHud();
 
     // Throttled live seek while dragging (keeps it smooth without spamming mpv)
@@ -8084,6 +8319,80 @@ function adjustVolume(delta){
 
 
 // ══════ SECTION: Volume Management ══════
+
+  function isFreshHgLoadScopedEvent(payload){
+    try {
+      if (!payload || typeof payload !== 'object') return true;
+      if (!Object.prototype.hasOwnProperty.call(payload, 'loadId')) return true;
+      const eventLoadId = Number(payload.loadId);
+      if (!Number.isFinite(eventLoadId) || eventLoadId <= 0) return true;
+      if (!state.player || typeof state.player.getParitySnapshot !== 'function') return true;
+      const snap = state.player.getParitySnapshot();
+      const curLoadId = Number(snap && snap.loadId);
+      if (!Number.isFinite(curLoadId) || curLoadId <= 0) return true;
+      return curLoadId === eventLoadId;
+    } catch {
+      return true;
+    }
+  }
+
+  function scheduleTracksRefreshBurst(reason, payload){
+    if (!isFreshHgLoadScopedEvent(payload)) return;
+    safe(() => refreshTracksFromPlayer());
+    setTimeout(() => {
+      try {
+        if (!state.player) return;
+        if (!isFreshHgLoadScopedEvent(payload)) return;
+        refreshTracksFromPlayer();
+      } catch {}
+    }, 180);
+  }
+
+  function scheduleChaptersRefreshBurst(reason, payload){
+    if (!isFreshHgLoadScopedEvent(payload)) return;
+    safe(() => refreshChaptersFromPlayer());
+    setTimeout(() => {
+      try {
+        if (!state.player) return;
+        if (!isFreshHgLoadScopedEvent(payload)) return;
+        refreshChaptersFromPlayer();
+      } catch {}
+    }, 220);
+  }
+
+  function applyImmediateHudPatchFromEvent(kind, payload){
+    if (!payload || typeof payload !== 'object') return;
+    if (kind === 'volume') {
+      let vv = null;
+      try {
+        if (Object.prototype.hasOwnProperty.call(payload, 'volume')) {
+          vv = clamp(Number(payload.volume), 0, 1);
+          if (el.videoVol && !document.activeElement?.isSameNode(el.videoVol) && Number.isFinite(vv)) {
+            el.videoVol.value = String(Math.round(vv * 100));
+          }
+          if (el.videoVolPct && Number.isFinite(vv)) el.videoVolPct.textContent = `${Math.round(vv * 100)}%`;
+        }
+      } catch {}
+      try {
+        if (el.videoMuteBtn && Object.prototype.hasOwnProperty.call(payload, 'muted')) {
+          el.videoMuteBtn.textContent = payload.muted ? '🔇' : '🔊';
+        }
+      } catch {}
+      try {
+        const hasVol = Object.prototype.hasOwnProperty.call(payload, 'volume');
+        const hasMuted = Object.prototype.hasOwnProperty.call(payload, 'muted');
+        if (hasVol || hasMuted) {
+          const fallbackVol = clamp(Number(state.settings.volume ?? 0), 0, 1);
+          const nextVol = Number.isFinite(vv) ? vv : fallbackVol;
+          showVolumeOSD(nextVol, { muted: !!payload.muted });
+        }
+      } catch {}
+    } else if (kind === 'speed') {
+      try {
+        if (Object.prototype.hasOwnProperty.call(payload, 'speed')) setSpeedLabels(Number(payload.speed));
+      } catch {}
+    }
+  }
 
   function bindPlayerUi(){
     if (!state.player) return;
@@ -8109,26 +8418,69 @@ function adjustVolume(delta){
         saveNow(true);
       });
       state.player.on('shutdown', () => { updateHudFromPlayer(); stopProgressPoll(); saveNow(true); safe(() => teardownMpvPlayer()); });
-      state.player.on('loadedmetadata', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
-      state.player.on('duration', () => { updateHudFromPlayer(); safe(() => refreshChaptersFromPlayer()); });
+      state.player.on('loadedmetadata', () => { updateHudFromPlayer(); scheduleChaptersRefreshBurst('loadedmetadata'); });
+      state.player.on('duration', () => { updateHudFromPlayer(); scheduleChaptersRefreshBurst('duration'); });
       
       // BUILD 89 FIX 2: Also try refreshing chapters on file-loaded with a slight delay
       // to ensure mpv has fully parsed the file metadata
-      state.player.on('file-loaded', () => {
+      state.player.on('file-loaded', (payload) => {
         console.log('[BUILD89 CHAPTERS] file-loaded event received');
+        logHgParity('file-loaded', { loadId: payload && payload.loadId != null ? payload.loadId : null });
+        snapshotHgParity('file-loaded');
         updateHudFromPlayer();
         state._autoAdvanceBlockUntilMs = Math.max(Number(state._autoAdvanceBlockUntilMs || 0), Date.now() + 1200);
         safe(() => {
           // Small delay to let mpv finish loading all metadata
           setTimeout(() => {
             console.log('[BUILD89 CHAPTERS] Delayed chapter refresh after file-loaded');
-            refreshChaptersFromPlayer();
+            scheduleChaptersRefreshBurst('file-loaded-delayed', payload);
           }, 500);
         });
+        try {
+          const ui = ensureHgUiControllers();
+          if (ui && ui.playlist) {
+            if (typeof ui.playlist.notifyEpisodeOpened === 'function') ui.playlist.notifyEpisodeOpened(state.now, { source: 'file-loaded' });
+            if (typeof ui.playlist.requestRefreshPanel === 'function') ui.playlist.requestRefreshPanel('file-loaded');
+            if (typeof ui.playlist.scrollCurrentIntoView === 'function') {
+              setTimeout(() => { try { ui.playlist.scrollCurrentIntoView('file-loaded'); } catch {} }, 80);
+            }
+          }
+        } catch {}
+        try { ensureHgUiControllers()?.tracksDrawer?.notifyPlayerLoaded?.(); } catch {}
       });
       
-      state.player.on('volume', () => { updateHudFromPlayer(); });
-      state.player.on('speed', () => { updateHudFromPlayer(); });
+      state.player.on('volume', (payload) => { applyImmediateHudPatchFromEvent('volume', payload); updateHudFromPlayer(); });
+      state.player.on('speed', (payload) => { applyImmediateHudPatchFromEvent('speed', payload); updateHudFromPlayer(); });
+
+      state.player.on('tracks', (payload) => {
+        logHgParity('tracks', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          count: Array.isArray(payload && payload.tracks) ? payload.tracks.length : null,
+          audioTrackId: payload && Object.prototype.hasOwnProperty.call(payload, 'audioTrackId') ? payload.audioTrackId : null,
+          subtitleTrackId: payload && Object.prototype.hasOwnProperty.call(payload, 'subtitleTrackId') ? payload.subtitleTrackId : null,
+        });
+        scheduleTracksRefreshBurst('tracks-event', payload);
+        try { ensureHgUiControllers()?.tracksDrawer?.notifyTracksChanged?.(); } catch {}
+      });
+
+      state.player.on('chapters', (payload) => {
+        logHgParity('chapters', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          count: payload && payload.count != null ? payload.count : (Array.isArray(payload && payload.chapters) ? payload.chapters.length : null)
+        });
+        scheduleChaptersRefreshBurst('chapters-event', payload);
+      });
+
+      state.player.on('first-frame', (payload) => {
+        clearEmbeddedFirstFrameWatch();
+        logHgParity('first-frame', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          sinceLoadMs: payload && payload.sinceLoadMs != null ? payload.sinceLoadMs : null,
+          sourceWidth: payload && payload.sourceWidth != null ? payload.sourceWidth : null,
+          sourceHeight: payload && payload.sourceHeight != null ? payload.sourceHeight : null,
+        });
+        snapshotHgParity('first-frame');
+      });
 
       // Build 15: clean recovery for mpv failures (early exit / ipc timeout / not-ready).
       state.player.on('error', (info) => {
@@ -8173,7 +8525,7 @@ function adjustVolume(delta){
       });
 
       // Tankoban Plus Build 5.4B: keep delay values fresh when mpv updates them.
-      state.player.on('delays', () => { safe(() => refreshDelaysFromPlayer()); });
+      state.player.on('delays', () => { safe(() => refreshDelaysFromPlayer()); try { ensureHgUiControllers()?.tracksDrawer?.notifyDelaysChanged?.(); } catch {} });
       // Tankoban Plus Build 5.4C: keep transform selectors in sync (mpv only).
       state.player.on('transforms', () => { safe(() => refreshTransformsFromPlayer()); });
       state._playerEventsBoundFor = state.player;
@@ -8253,7 +8605,9 @@ function adjustVolume(delta){
 
       console.log('[BUILD69 CTX] Calling openVideoCtxMenu at', e.clientX, e.clientY);
       const ui = ensureHgUiControllers();
-      if (ui && ui.contextMenu && typeof ui.contextMenu.open === 'function') {
+      if (ui && ui.contextMenu && typeof ui.contextMenu.toggle === 'function') {
+        ui.contextMenu.toggle(e.clientX || 0, e.clientY || 0);
+      } else if (ui && ui.contextMenu && typeof ui.contextMenu.open === 'function') {
         ui.contextMenu.open(e.clientX || 0, e.clientY || 0);
       } else {
         openVideoCtxMenu(e.clientX || 0, e.clientY || 0);
@@ -8759,12 +9113,24 @@ function adjustVolume(delta){
     
     const _updateRevealZone = (e) => {
       if (!el.videoStage) return;
+      try { ensureHgUiControllers()?.hud?.markPointerMove?.(e); } catch {}
       // Build 85: in fullscreen, any mouse movement should immediately reveal the cursor,
       // even if you're not hovering the bottom reveal zone.
       try {
         if (document.body.classList.contains('videoFullscreen')) {
           el.videoStage.classList.remove('hideCursor');
         }
+      } catch {}
+
+      // Holy Grail parity path (top + bottom edge reveal zones + hysteresis)
+      try {
+        const shouldReveal = !!ensureHgUiControllers()?.hud?.shouldRevealFromPointer?.(e);
+        state._revealZoneInZone = shouldReveal;
+        state._revealZoneActive = shouldReveal;
+        state._revealZoneLastMouseY = Number(e && e.clientY) || -1;
+        if (shouldReveal || state._pointerOverControls) showHud();
+        else hideHudSoon();
+        return;
       } catch {}
       
       const rect = el.videoStage.getBoundingClientRect();
@@ -8799,6 +9165,11 @@ function adjustVolume(delta){
     };
     
     el.videoStage?.addEventListener('mousemove', _updateRevealZone);
+    el.videoStage?.addEventListener('pointerenter', (e) => {
+      try { ensureHgUiControllers()?.hud?.markPointerMove?.(e); } catch {}
+      showHud();
+    });
+
     el.videoStage?.addEventListener('mouseleave', () => {
       state._revealZoneInZone = false;
       state._revealZoneActive = false;
@@ -9145,6 +9516,12 @@ function adjustVolume(delta){
       el.videoAutoAdvanceToggle.addEventListener('change', () => {
         state.settings.autoAdvance = !!el.videoAutoAdvanceToggle.checked;
         persistVideoSettings({ autoAdvance: state.settings.autoAdvance });
+        try {
+          const ui = ensureHgUiControllers();
+          if (ui && ui.playlist && typeof ui.playlist.onAutoAdvanceToggled === 'function') {
+            ui.playlist.onAutoAdvanceToggled(!!state.settings.autoAdvance);
+          }
+        } catch {}
       });
     }
 
@@ -9221,6 +9598,7 @@ function adjustVolume(delta){
 
       // Build 58: persist track selection per episode
       schedulePlaybackPreferencesSave();
+      scheduleTracksRefreshBurst('audio-select-change');
     } catch (err) {
       console.error('[video] setAudioTrack failed', err);
       toast('Audio track change failed');
@@ -9257,6 +9635,7 @@ function adjustVolume(delta){
 
       // Build 58: persist track selection per episode
       schedulePlaybackPreferencesSave();
+      scheduleTracksRefreshBurst('subtitle-select-change');
     } catch (err) {
       console.error('[video] setSubtitleTrack failed', err);
       toast('Subtitle track change failed');
@@ -9331,6 +9710,7 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
 
       videoScrubDragging = true;
       state.seekDragging = true;
+      try { ensureHgUiControllers()?.hud?.beginScrub?.(); } catch {}
       state._nudgeSeekPreviewing = false; // cancel key nudge preview
 
       try { el.videoScrub.classList.add('dragging'); } catch {}
@@ -9339,7 +9719,17 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
     });
 
     el.videoScrub?.addEventListener('pointermove', (e) => {
-      if (!videoScrubDragging) return;
+      if (!videoScrubDragging) {
+        if (!state.player) return;
+        const st = state.player.getState();
+        const dur = Number(st && st.durationSec) || 0;
+        if (!dur) return;
+        const sec = videoTimeFromClientX(e.clientX);
+        setVideoScrubUI(sec, dur);
+        if (el.videoTimeNow) el.videoTimeNow.textContent = `${fmtTime(sec)} / ${fmtTime(dur)}`;
+        showHud();
+        return;
+      }
       videoScrubPendingClientX = e.clientX;
       if (videoScrubMoveRaf) return;
       videoScrubMoveRaf = requestAnimationFrame(() => {
@@ -9368,6 +9758,7 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
 
       // cancel: revert HUD sync on next poll
       state.seekDragging = false;
+      try { ensureHgUiControllers()?.hud?.endScrub?.(); } catch {}
       state.seekPreviewSec = null;
       showHud();
     });
@@ -9388,6 +9779,18 @@ el.videoResetTransformsBtn?.addEventListener('click', () => {
     });
 
     // Optional: wheel seeking on the scrub bar
+    el.videoScrub?.addEventListener('pointerleave', () => {
+      if (state.seekDragging) return;
+      if (!state.player) return;
+      const st = state.player.getState();
+      setVideoScrubUI(Number(st.timeSec) || 0, Number(st.durationSec) || 0);
+      if (el.videoTimeNow) {
+        const now = Number(st.timeSec) || 0;
+        const dur = Number(st.durationSec) || 0;
+        el.videoTimeNow.textContent = `${fmtTime(now)} / ${fmtTime(dur)}`;
+      }
+    });
+
     el.videoScrub?.addEventListener('wheel', (e) => {
       if (!state.player) return;
       e.preventDefault();

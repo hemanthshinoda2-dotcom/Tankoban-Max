@@ -10,9 +10,34 @@
       return null;
     }
 
+    function intervalMs() {
+      var v = Number(o.intervalMs);
+      return (isFinite(v) && v > 0) ? v : 500;
+    }
+
     function stopTimer() {
-      if (timer) clearInterval(timer);
+      if (timer) {
+        try { clearInterval(timer); } catch {}
+      }
       timer = null;
+    }
+
+    function renderOnce() {
+      var target = getEl();
+      if (!target) return;
+      try {
+        var text = (typeof o.renderText === 'function') ? o.renderText() : '';
+        target.textContent = String(text || '');
+      } catch {}
+    }
+
+    function startTimer() {
+      if (timer) return;
+      timer = setInterval(function () {
+        var el = getEl();
+        if (!el || el.classList.contains('hidden')) return;
+        renderOnce();
+      }, intervalMs());
     }
 
     function setVisible(visible) {
@@ -24,15 +49,8 @@
         stopTimer();
         return;
       }
-      if (timer) return;
-      timer = setInterval(function () {
-        var target = getEl();
-        if (!target) return;
-        try {
-          var text = (typeof o.renderText === 'function') ? o.renderText() : '';
-          target.textContent = String(text || '');
-        } catch {}
-      }, Number(o.intervalMs) > 0 ? Number(o.intervalMs) : 500);
+      renderOnce();
+      startTimer();
     }
 
     function isVisible() {
@@ -40,14 +58,19 @@
       return !!(el && !el.classList.contains('hidden'));
     }
 
+    function destroy() {
+      stopTimer();
+      var el = getEl();
+      if (el) {
+        try { el.classList.add('hidden'); } catch {}
+      }
+    }
+
     return {
       setVisible: setVisible,
       isVisible: isVisible,
-      destroy: function () {
-        stopTimer();
-        var el = getEl();
-        if (el) el.classList.add('hidden');
-      },
+      refresh: renderOnce,
+      destroy: destroy,
     };
   }
 

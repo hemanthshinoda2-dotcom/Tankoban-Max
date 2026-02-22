@@ -10,6 +10,12 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
 
   const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, Number(n)));
 
+  const HG_PARITY_CONTRACT_VERSION = 'hg-parity-build1';
+  const HG_PARITY_EVENT_NAMES = [
+    'ready', 'file-loaded', 'loadedmetadata', 'duration', 'time', 'play', 'pause', 'ended',
+    'volume', 'speed', 'delays', 'transforms', 'tracks', 'chapters', 'first-frame', 'shutdown', 'error',
+  ];
+
   function toErrorString(err) {
     return String((err && err.message) || err || 'unknown_error');
   }
@@ -143,6 +149,13 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     let resizeFailureStreak = 0;
     let lastResizeWidth = 0;
     let lastResizeHeight = 0;
+    let lastHostCssWidth = 0;
+    let lastHostCssHeight = 0;
+    let lastHostDpr = 1;
+    let resizeQueuedReason = '';
+    let resizeQueuedForce = false;
+    let resizePromiseResolvers = [];
+    let pendingResizeAfterFlight = null;
 
     let canvas = null;
     let ctx2d = null;
@@ -160,10 +173,67 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       lastDrawTimeMs: 0,
       sourceWidth: 0,
       sourceHeight: 0,
+      droppedFrameCount: 0,
+      framePumpDrawCount: 0,
+      lastFrameAtMs: 0,
+      frameCloseErrorCount: 0,
     };
     let respectSubtitleStyles = true;
+    let pendingVideoFrame = null;
+    let framePumpRaf = 0;
+    let framePumpBusy = false;
+
+    const parityTrace = [];
+    const PARITY_TRACE_MAX = 180;
+    let paritySeq = 0;
+    let loadSeq = 0;
+    let currentLoadId = 0;
+    let currentLoadStartedAtMs = 0;
+    let firstFrameEmittedForLoad = false;
+    let lastTrackSignature = '';
+    let lastChapterSignature = '';
+
+    function isParityDebugEnabled() {
+      try {
+        if (window && window.__TANKO_HG_PARITY_DEBUG__) return true;
+        if (window && window.localStorage && window.localStorage.getItem('tanko:hg:parityDebug') === '1') return true;
+      } catch {}
+      return false;
+    }
+
+    function sanitizeParityPayload(payload) {
+      if (payload == null) return null;
+      if (typeof payload !== 'object') return payload;
+      try {
+        return JSON.parse(JSON.stringify(payload, (key, value) => {
+          if (key === 'raw') return undefined;
+          if (typeof value === 'number') return Number.isFinite(value) ? (Math.round(value * 1000) / 1000) : null;
+          if (typeof value === 'string' && value.length > 260) return value.slice(0, 260) + '…';
+          return value;
+        }));
+      } catch {
+        return { note: 'unserializable_payload' };
+      }
+    }
+
+    function pushParityTrace(tag, payload) {
+      const entry = {
+        seq: ++paritySeq,
+        atMs: Date.now(),
+        tag: String(tag || 'event'),
+        loadId: currentLoadId || 0,
+        data: sanitizeParityPayload(payload),
+      };
+      parityTrace.push(entry);
+      if (parityTrace.length > PARITY_TRACE_MAX) parityTrace.splice(0, parityTrace.length - PARITY_TRACE_MAX);
+      if (isParityDebugEnabled()) {
+        try { console.log('[hg-parity]', entry); } catch {}
+      }
+      return entry;
+    }
 
     function emit(eventName, payload) {
+      pushParityTrace(`emit:${String(eventName || '')}`, payload);
       emitter.emit(eventName, payload);
     }
 
@@ -208,17 +278,45 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       return { ok: true, value: on };
     }
 
-    function setCanvasSizeFromHost() {
-      if (!canvas || !hostEl) return;
-      const rect = hostEl.getBoundingClientRect ? hostEl.getBoundingClientRect() : { width: 0, height: 0 };
-      const dpr = Math.max(1, toFiniteNumber(window.devicePixelRatio, 1));
-      const cssW = Math.max(16, Math.round(toFiniteNumber(rect.width, 1280)));
-      const cssH = Math.max(16, Math.round(toFiniteNumber(rect.height, 720)));
-      const pxW = Math.max(16, Math.round(cssW * dpr));
-      const pxH = Math.max(16, Math.round(cssH * dpr));
-      if (canvas.width !== pxW) canvas.width = pxW;
-      if (canvas.height !== pxH) canvas.height = pxH;
-    }
+function readHostSurfaceMetrics({ preserveLastOnHidden = true } = {}) {
+  if (!hostEl) return null;
+  const rect = hostEl.getBoundingClientRect ? hostEl.getBoundingClientRect() : null;
+  const rectW = Math.round(toFiniteNumber(rect && rect.width, 0));
+  const rectH = Math.round(toFiniteNumber(rect && rect.height, 0));
+  const clientW = Math.round(toFiniteNumber(hostEl.clientWidth, 0));
+  const clientH = Math.round(toFiniteNumber(hostEl.clientHeight, 0));
+  const offsetW = Math.round(toFiniteNumber(hostEl.offsetWidth, 0));
+  const offsetH = Math.round(toFiniteNumber(hostEl.offsetHeight, 0));
+  let cssW = Math.max(rectW, clientW, offsetW);
+  let cssH = Math.max(rectH, clientH, offsetH);
+  const dpr = Math.max(1, toFiniteNumber(window.devicePixelRatio, 1));
+  const hidden = cssW <= 1 || cssH <= 1;
+  if (hidden && preserveLastOnHidden && lastHostCssWidth > 1 && lastHostCssHeight > 1) {
+    cssW = lastHostCssWidth;
+    cssH = lastHostCssHeight;
+  }
+  cssW = Math.max(16, Math.round(toFiniteNumber(cssW, 1280)));
+  cssH = Math.max(16, Math.round(toFiniteNumber(cssH, 720)));
+  const pxW = Math.max(16, Math.round(cssW * dpr));
+  const pxH = Math.max(16, Math.round(cssH * dpr));
+  return { cssW, cssH, pxW, pxH, dpr, hidden };
+}
+
+function setCanvasSizeFromHost(opts = {}) {
+  if (!canvas || !hostEl) return null;
+  const metrics = readHostSurfaceMetrics(opts);
+  if (!metrics) return null;
+  const cssWText = `${metrics.cssW}px`;
+  const cssHText = `${metrics.cssH}px`;
+  if (canvas.style.width !== cssWText) canvas.style.width = cssWText;
+  if (canvas.style.height !== cssHText) canvas.style.height = cssHText;
+  if (canvas.width !== metrics.pxW) canvas.width = metrics.pxW;
+  if (canvas.height !== metrics.pxH) canvas.height = metrics.pxH;
+  lastHostCssWidth = metrics.cssW;
+  lastHostCssHeight = metrics.cssH;
+  lastHostDpr = metrics.dpr;
+  return metrics;
+}
 
     async function applyRenderFidelityDefaults() {
       // Keep this conservative: prioritize motion stability/sharpness without forcing risky vo rewrites.
@@ -235,6 +333,8 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       hostEl.innerHTML = '';
       canvas = document.createElement('canvas');
       canvas.className = 'holyGrailCanvas';
+      canvas.style.position = 'absolute';
+      canvas.style.inset = '0';
       canvas.style.width = '100%';
       canvas.style.height = '100%';
       canvas.style.display = 'block';
@@ -247,17 +347,29 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         ctx2d.imageSmoothingEnabled = true;
         try { ctx2d.imageSmoothingQuality = 'high'; } catch {}
       }
-      setCanvasSizeFromHost();
+      setCanvasSizeFromHost({ preserveLastOnHidden: true });
 
       if (typeof ResizeObserver === 'function') {
         resizeObserver = new ResizeObserver(() => {
-          setCanvasSizeFromHost();
-          void requestSurfaceResize('host-resize');
+          const prevCssW = lastHostCssWidth;
+          const prevCssH = lastHostCssHeight;
+          const prevDpr = lastHostDpr;
+          const metrics = setCanvasSizeFromHost({ preserveLastOnHidden: true });
+          if (!metrics) return;
+          const cssChanged = metrics.cssW !== prevCssW || metrics.cssH !== prevCssH;
+          const dprChanged = Math.abs(toFiniteNumber(metrics.dpr, 1) - toFiniteNumber(prevDpr, 1)) > 1e-4;
+          if (metrics.hidden && lastResizeWidth > 0 && lastResizeHeight > 0) {
+            pushParityTrace('resize:observer-hidden', { cssW: metrics.cssW, cssH: metrics.cssH });
+            return;
+          }
+          if (cssChanged || dprChanged || !lastResizeWidth || !lastResizeHeight) {
+            void requestSurfaceResize('host-resize');
+          }
         });
         resizeObserver.observe(hostEl);
       } else {
         const onResize = () => {
-          setCanvasSizeFromHost();
+          setCanvasSizeFromHost({ preserveLastOnHidden: true });
           void requestSurfaceResize('window-resize');
         };
         window.addEventListener('resize', onResize);
@@ -266,6 +378,32 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         });
       }
 
+      const onResizeAlways = () => {
+        setCanvasSizeFromHost({ preserveLastOnHidden: true });
+        void requestSurfaceResize('window-resize-always');
+      };
+      try { window.addEventListener('resize', onResizeAlways, { passive: true }); } catch {}
+      cleanupFns.push(() => { try { window.removeEventListener('resize', onResizeAlways); } catch {} });
+
+      const onVisibilityChange = () => {
+        try {
+          if (document.visibilityState === 'visible') {
+            setCanvasSizeFromHost({ preserveLastOnHidden: true });
+            void requestSurfaceResize('document-visible', { force: true });
+          }
+        } catch {}
+      };
+      try { document.addEventListener('visibilitychange', onVisibilityChange); } catch {}
+      cleanupFns.push(() => { try { document.removeEventListener('visibilitychange', onVisibilityChange); } catch {} });
+
+      const onHostTransitionEnd = (ev) => {
+        const prop = String((ev && ev.propertyName) || '');
+        if (prop && !/width|height|top|left|right|bottom|transform|flex|padding|margin/.test(prop)) return;
+        void requestSurfaceResize('host-transition-end');
+      };
+      try { hostEl.addEventListener('transitionend', onHostTransitionEnd, { passive: true }); } catch {}
+      cleanupFns.push(() => { try { hostEl.removeEventListener('transitionend', onHostTransitionEnd); } catch {} });
+
       if (typeof MutationObserver === 'function') {
         const stage = document && document.getElementById ? document.getElementById('videoStage') : null;
         if (stage) {
@@ -273,6 +411,13 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
             void applySubtitleSafeMargin();
           });
           hudObserver.observe(stage, { attributes: true, attributeFilter: ['class'] });
+          const onStageTransitionEnd = (ev) => {
+            const prop = String((ev && ev.propertyName) || '');
+            if (prop && !/width|height|top|left|right|bottom|transform|flex|padding|margin/.test(prop)) return;
+            void requestSurfaceResize('stage-transition-end');
+          };
+          try { stage.addEventListener('transitionend', onStageTransitionEnd, { passive: true }); } catch {}
+          cleanupFns.push(() => { try { stage.removeEventListener('transitionend', onStageTransitionEnd); } catch {} });
         }
       }
     }
@@ -296,6 +441,26 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const next = (Array.isArray(list) ? list : []).map(normalizeTrack).filter((t) => t.id);
       state.trackList = next;
       normalizeCurrentTrackSelections();
+
+      const sig = JSON.stringify(next.map((t) => ({
+        id: String(t.id || ''),
+        type: String(t.type || ''),
+        selected: !!t.selected,
+        lang: String(t.lang || ''),
+        title: String(t.title || ''),
+      })));
+      if (sig !== lastTrackSignature) {
+        lastTrackSignature = sig;
+        emit('tracks', {
+          loadId: currentLoadId || 0,
+          tracks: next.slice(),
+          audioTracks: next.filter((t) => t.type === 'audio'),
+          subtitleTracks: next.filter((t) => t.type === 'sub'),
+          audioTrackId: state.audioTrackId,
+          subtitleTrackId: state.subtitleTrackId,
+          subtitlesVisible: !!state.subtitlesVisible,
+        });
+      }
     }
 
     function normalizeAndStoreChapterList(list) {
@@ -310,6 +475,12 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       }
       out.sort((a, b) => a.timeSec - b.timeSec);
       state.chapterList = out;
+
+      const sig = JSON.stringify(out.map((c) => ({ timeSec: c.timeSec, title: c.title })));
+      if (sig !== lastChapterSignature) {
+        lastChapterSignature = sig;
+        emit('chapters', { loadId: currentLoadId || 0, chapters: out.slice(), count: out.length });
+      }
     }
 
     function applyPropertyChange(name, value) {
@@ -438,6 +609,71 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       }
     }
 
+
+    function closeVideoFrameSafe(frame, reason) {
+      if (!frame) return;
+      try {
+        if (typeof frame.close === 'function') frame.close();
+      } catch {
+        renderStats.frameCloseErrorCount += 1;
+        pushParityTrace('frame:close-error', { reason: String(reason || 'unknown') });
+      }
+    }
+
+    function flushPendingVideoFrame(reason) {
+      if (!pendingVideoFrame) return;
+      const frame = pendingVideoFrame;
+      pendingVideoFrame = null;
+      closeVideoFrameSafe(frame, reason || 'flush');
+    }
+
+    function stopFramePump(reason) {
+      if (framePumpRaf) {
+        try { cancelAnimationFrame(framePumpRaf); } catch {}
+      }
+      framePumpRaf = 0;
+      framePumpBusy = false;
+      flushPendingVideoFrame(reason || 'stop-frame-pump');
+    }
+
+    function scheduleFramePump() {
+      if (framePumpRaf || framePumpBusy || destroyed) return;
+      framePumpRaf = requestAnimationFrame(() => {
+        framePumpRaf = 0;
+        if (destroyed) {
+          flushPendingVideoFrame('destroyed-before-draw');
+          return;
+        }
+        const frame = pendingVideoFrame;
+        pendingVideoFrame = null;
+        if (!frame) return;
+        framePumpBusy = true;
+        try {
+          drawFrame(frame);
+          renderStats.framePumpDrawCount += 1;
+          renderStats.lastFrameAtMs = Date.now();
+        } finally {
+          closeVideoFrameSafe(frame, 'frame-pump-draw');
+          framePumpBusy = false;
+          if (pendingVideoFrame && !destroyed) scheduleFramePump();
+        }
+      });
+    }
+
+    function queueIncomingVideoFrame(videoFrame) {
+      if (!videoFrame) return;
+      if (destroyed || !gpuInitialized) {
+        closeVideoFrameSafe(videoFrame, destroyed ? 'destroyed' : 'gpu-not-ready');
+        return;
+      }
+      if (pendingVideoFrame) {
+        renderStats.droppedFrameCount += 1;
+        closeVideoFrameSafe(pendingVideoFrame, 'superseded');
+      }
+      pendingVideoFrame = videoFrame;
+      scheduleFramePump();
+    }
+
     function drawFrame(videoFrame) {
       if (!videoFrame) return;
       if (!ctx2d || !canvas) return;
@@ -472,6 +708,21 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       renderStats.lastDrawTimeMs = drawMs;
       renderStats.sourceWidth = srcW;
       renderStats.sourceHeight = srcH;
+
+      if (!firstFrameEmittedForLoad && currentLoadId > 0) {
+        firstFrameEmittedForLoad = true;
+        const sinceLoadMs = currentLoadStartedAtMs ? Math.max(0, Date.now() - currentLoadStartedAtMs) : null;
+        emit('first-frame', {
+          loadId: currentLoadId,
+          sinceLoadMs,
+          frameCount: renderStats.frameCount,
+          sourceWidth: srcW,
+          sourceHeight: srcH,
+          canvasWidth: dstW,
+          canvasHeight: dstH,
+          drawTimeMs: drawMs,
+        });
+      }
       state.width = srcW;
       state.height = srcH;
     }
@@ -597,6 +848,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       await refreshStateSnapshot();
       await refreshTrackList();
       await applySubtitleSafeMargin();
+      pushParityTrace('load:ok', { durationSec: toFiniteNumber(state.durationSec, 0), trackCount: Array.isArray(state.trackList) ? state.trackList.length : 0, chapterCount: Array.isArray(state.chapterList) ? state.chapterList.length : 0 });
       return { ok: true };
     }
 
@@ -609,56 +861,101 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       return restorePlaybackStateAfterReinit();
     }
 
-    async function requestSurfaceResize(reason, { force = false } = {}) {
-      if (destroyed) return { ok: false, error: 'adapter_destroyed' };
-      if (!gpuInitialized) return { ok: true, skipped: true, reason: 'not_initialized' };
-      if (resizeInFlight) return { ok: true, skipped: true, reason: 'resize_in_flight' };
+async function requestSurfaceResize(reason, { force = false } = {}) {
+  if (destroyed) return { ok: false, error: 'adapter_destroyed' };
+  if (!gpuInitialized) return { ok: true, skipped: true, reason: 'not_initialized' };
 
-      if (resizeDebounceTimer) {
-        clearTimeout(resizeDebounceTimer);
-        resizeDebounceTimer = null;
+  const nextReason = String(reason || '');
+  if (resizeInFlight) {
+    const existing = pendingResizeAfterFlight || {};
+    pendingResizeAfterFlight = {
+      reason: nextReason || existing.reason || 'resize-after-flight',
+      force: !!(existing.force || force),
+    };
+    pushParityTrace('resize:queued-inflight', { reason: nextReason, force: !!force });
+    return { ok: true, queued: true, reason: 'resize_in_flight' };
+  }
+
+  if (resizeDebounceTimer) {
+    clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = null;
+  }
+  resizeQueuedReason = nextReason || resizeQueuedReason || 'resize';
+  resizeQueuedForce = !!(resizeQueuedForce || force);
+
+  return new Promise((resolve) => {
+    resizePromiseResolvers.push(resolve);
+    pushParityTrace('resize:queued', { reason: nextReason, force: !!force });
+
+    resizeDebounceTimer = setTimeout(async () => {
+      resizeDebounceTimer = null;
+      const queuedResolvers = resizePromiseResolvers.splice(0, resizePromiseResolvers.length);
+      const queuedReason = resizeQueuedReason || nextReason || 'resize';
+      const queuedForce = !!resizeQueuedForce;
+      resizeQueuedReason = '';
+      resizeQueuedForce = false;
+      const resolveAll = (payload) => { for (const fn of queuedResolvers) { try { fn(payload); } catch {} } };
+
+      if (destroyed || !gpuInitialized) {
+        pushParityTrace('resize:skipped', { reason: queuedReason, destroyed: !!destroyed, gpuInitialized: !!gpuInitialized });
+        return resolveAll({ ok: true, skipped: true, reason: 'not_ready' });
       }
 
-      return new Promise((resolve) => {
-        resizeDebounceTimer = setTimeout(async () => {
-          resizeDebounceTimer = null;
-          if (destroyed || !gpuInitialized) return resolve({ ok: true, skipped: true });
+      const metrics = setCanvasSizeFromHost({ preserveLastOnHidden: true }) || readHostSurfaceMetrics({ preserveLastOnHidden: true });
+      const width = Math.max(16, canvas ? canvas.width : 0);
+      const height = Math.max(16, canvas ? canvas.height : 0);
 
-          setCanvasSizeFromHost();
-          const width = Math.max(16, canvas ? canvas.width : 0);
-          const height = Math.max(16, canvas ? canvas.height : 0);
-          if (!force && width === lastResizeWidth && height === lastResizeHeight) {
-            return resolve({ ok: true, unchanged: true });
-          }
+      if (metrics && metrics.hidden && lastResizeWidth > 0 && lastResizeHeight > 0 && !queuedForce) {
+        pushParityTrace('resize:hidden-skip', { width, height, reason: queuedReason, cssW: metrics.cssW, cssH: metrics.cssH });
+        return resolveAll({ ok: true, skipped: true, reason: 'host_hidden' });
+      }
 
-          resizeInFlight = true;
-          try {
-            const res = await safeInvoke(hg, 'resizeSurface', { width, height, reason: String(reason || '') });
-            if (res && res.ok !== false) {
+      if (!queuedForce && width === lastResizeWidth && height === lastResizeHeight) {
+        pushParityTrace('resize:unchanged', { width, height, reason: queuedReason });
+        return resolveAll({ ok: true, unchanged: true, width, height });
+      }
+
+      resizeInFlight = true;
+      try {
+        const res = await safeInvoke(hg, 'resizeSurface', { width, height, reason: queuedReason });
+        if (res && res.ok !== false) {
+          lastResizeWidth = width;
+          lastResizeHeight = height;
+          resizeFailureStreak = 0;
+          void applySubtitleSafeMargin();
+          pushParityTrace('resize:ok', { width, height, reason: queuedReason, resized: true });
+          resolveAll({ ok: true, width, height, resized: true });
+        } else {
+          resizeFailureStreak += 1;
+          if (resizeFailureStreak >= 3) {
+            const retry = await forceReinitForResize();
+            if (retry && retry.ok) {
+              resizeFailureStreak = 0;
               lastResizeWidth = width;
               lastResizeHeight = height;
-              resizeFailureStreak = 0;
               void applySubtitleSafeMargin();
-              return resolve({ ok: true, width, height, resized: true });
+              pushParityTrace('resize:reinit-ok', { width, height, reason: queuedReason, reinit: true });
+              resolveAll({ ok: true, width, height, reinit: true });
+            } else {
+              pushParityTrace('resize:fail', { width, height, reason: queuedReason, error: res && res.error ? String(res.error) : 'resize_failed' });
+              resolveAll({ ok: false, error: res && res.error ? String(res.error) : 'resize_failed' });
             }
-            resizeFailureStreak += 1;
-            if (resizeFailureStreak >= 3) {
-              const retry = await forceReinitForResize();
-              if (retry && retry.ok) {
-                resizeFailureStreak = 0;
-                lastResizeWidth = width;
-                lastResizeHeight = height;
-                void applySubtitleSafeMargin();
-                return resolve({ ok: true, width, height, reinit: true });
-              }
-            }
-            return resolve({ ok: false, error: res && res.error ? String(res.error) : 'resize_failed' });
-          } finally {
-            resizeInFlight = false;
+          } else {
+            pushParityTrace('resize:fail', { width, height, reason: queuedReason, error: res && res.error ? String(res.error) : 'resize_failed' });
+            resolveAll({ ok: false, error: res && res.error ? String(res.error) : 'resize_failed' });
           }
-        }, 80);
-      });
-    }
+        }
+      } finally {
+        resizeInFlight = false;
+        if (pendingResizeAfterFlight && !destroyed && gpuInitialized) {
+          const pending = pendingResizeAfterFlight;
+          pendingResizeAfterFlight = null;
+          setTimeout(() => { void requestSurfaceResize(pending.reason || 'resize-after-flight', { force: !!pending.force }); }, 0);
+        }
+      }
+    }, 80);
+  });
+}
 
     async function applyPendingStartSeek() {
       if (!pendingStartSeekSec || pendingStartSeekSec <= 0) return;
@@ -674,10 +971,17 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       if (!fp) return { ok: false, error: 'missing_file_path' };
       if (destroyed) return { ok: false, error: 'adapter_destroyed' };
       currentFilePath = fp;
+      currentLoadId = ++loadSeq;
+      currentLoadStartedAtMs = Date.now();
+      firstFrameEmittedForLoad = false;
+      lastTrackSignature = '';
+      lastChapterSignature = '';
+      pushParityTrace('load:start', { filePath: fp, startSeconds: toFiniteNumber(opts.startSeconds, 0) });
 
       const initRes = await ensureGpuInitialized();
       if (!initRes.ok) {
         emit('error', { reason: 'init', message: initRes.error || 'init_failed' });
+        pushParityTrace('load:init-fail', { error: initRes.error || 'init_failed' });
         return initRes;
       }
 
@@ -701,12 +1005,14 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const loadRes = await safeInvoke(hg, 'loadFile', fp);
       if (!loadRes || loadRes.ok === false) {
         emit('error', { reason: 'load', message: loadRes && loadRes.error ? String(loadRes.error) : 'load_failed' });
+        pushParityTrace('load:file-fail', { error: loadRes && loadRes.error ? String(loadRes.error) : 'load_failed' });
         return { ok: false, error: loadRes && loadRes.error ? String(loadRes.error) : 'load_failed' };
       }
 
       const loopRes = await safeInvoke(hg, 'startFrameLoop');
       if (!loopRes || loopRes.ok === false) {
         emit('error', { reason: 'frame_loop', message: loopRes && loopRes.error ? String(loopRes.error) : 'frame_loop_failed' });
+        pushParityTrace('load:frame-loop-fail', { error: loopRes && loopRes.error ? String(loopRes.error) : 'frame_loop_failed' });
         return { ok: false, error: loopRes && loopRes.error ? String(loopRes.error) : 'frame_loop_failed' };
       }
 
@@ -719,12 +1025,14 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
     }
 
     async function unload() {
+      pushParityTrace('unload:start', { filePath: currentFilePath || '' });
       pendingStartSeekSec = 0;
       currentFilePath = '';
       suppressEofSignals = true;
       state.ready = false;
       state.eofReached = false;
       stopStatePoll();
+      stopFramePump('unload');
       if (resizeDebounceTimer) {
         clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = null;
@@ -732,15 +1040,19 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       await safeInvoke(hg, 'stopFrameLoop');
       await safeInvoke(hg, 'destroy');
       gpuInitialized = false;
+      firstFrameEmittedForLoad = false;
+      pushParityTrace('unload:ok', {});
       return { ok: true };
     }
 
     async function destroy() {
       if (destroyed) return { ok: true };
+      pushParityTrace('destroy:start', {});
       destroyed = true;
       suppressEofSignals = true;
 
       stopStatePoll();
+      stopFramePump('destroy');
       if (resizeDebounceTimer) {
         clearTimeout(resizeDebounceTimer);
         resizeDebounceTimer = null;
@@ -768,6 +1080,7 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       canvas = null;
       ctx2d = null;
       emitter.clear();
+      pushParityTrace('destroy:ok', {});
       return { ok: true };
     }
 
@@ -979,7 +1292,11 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       const o = (opts && typeof opts === 'object') ? opts : {};
       const force = !!o.force;
       const reason = o.reason ? String(o.reason) : 'set-bounds';
-      setCanvasSizeFromHost();
+      const metrics = setCanvasSizeFromHost({ preserveLastOnHidden: true });
+      if (metrics && metrics.hidden && !force && lastResizeWidth > 0 && lastResizeHeight > 0) {
+        pushParityTrace('bounds:hidden-skip', { reason, cssW: metrics.cssW, cssH: metrics.cssH });
+        return { ok: true, skipped: true, reason: 'host_hidden' };
+      }
       void requestSurfaceResize(reason, { force });
       return { ok: true };
     }
@@ -1153,7 +1470,8 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
           readyEmitted = true;
           emit('ready', { ok: true });
         }
-        emit('file-loaded', { ok: true });
+        pushParityTrace('hg:file-loaded', {});
+        emit('file-loaded', { ok: true, loadId: currentLoadId });
         void refreshStateSnapshot();
         void refreshTrackList();
         void applyPendingStartSeek();
@@ -1175,16 +1493,43 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
 
     if (typeof hg.onVideoFrame === 'function') {
       cleanupFns.push(hg.onVideoFrame((videoFrame) => {
-        try {
-          drawFrame(videoFrame);
-        } finally {
-          try { if (videoFrame && typeof videoFrame.close === 'function') videoFrame.close(); } catch {}
-        }
+        queueIncomingVideoFrame(videoFrame);
       }));
     }
 
     createCanvasSurface();
     startStatePoll();
+
+    function getRecentEvents(limit) {
+      const n = Math.max(1, Math.min(200, Math.floor(toFiniteNumber(limit, 80))));
+      return parityTrace.slice(-n).map((e) => ({ ...e }));
+    }
+
+    function getParitySnapshot() {
+      const rs = getRenderStats();
+      const st = getState();
+      return {
+        contractVersion: HG_PARITY_CONTRACT_VERSION,
+        eventNames: HG_PARITY_EVENT_NAMES.slice(),
+        kind: 'mpv',
+        windowMode: 'embedded-libmpv',
+        filePath: currentFilePath || '',
+        loadId: currentLoadId || 0,
+        ready: !!state.ready,
+        gpuInitialized: !!gpuInitialized,
+        videoSyncDisplayResample: !!videoSyncResampleEnabled,
+        state: st,
+        renderStats: rs,
+        tracks: {
+          count: Array.isArray(state.trackList) ? state.trackList.length : 0,
+          audioTrackId: state.audioTrackId == null ? null : String(state.audioTrackId),
+          subtitleTrackId: state.subtitleTrackId == null ? null : String(state.subtitleTrackId),
+          subtitlesVisible: !!state.subtitlesVisible,
+        },
+        chapters: { count: Array.isArray(state.chapterList) ? state.chapterList.length : 0 },
+        recentEvents: getRecentEvents(40),
+      };
+    }
 
     const adapter = {
       kind: 'mpv',
@@ -1196,6 +1541,8 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
         externalSubtitles: true,
         screenshots: true,
       },
+      parityContractVersion: HG_PARITY_CONTRACT_VERSION,
+      parityEventNames: HG_PARITY_EVENT_NAMES.slice(),
 
       on: emitter.on,
 
@@ -1225,6 +1572,8 @@ Backed by Tanko.api.holyGrail (main process holy grail domain + sharedTexture).
       getRenderStats,
       takeScreenshot,
       setSubtitleHudLift,
+      getParitySnapshot,
+      getRecentEvents,
 
       getAudioTracks,
       getSubtitleTracks,
