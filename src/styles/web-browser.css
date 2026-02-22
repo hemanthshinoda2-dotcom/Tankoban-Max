@@ -1,8 +1,8 @@
-/* BUILD_WEB + BUILD_WEB_HOME: Web mode styles */
+/* Tankoban Web Browser — Chrome-layout, theme-adaptive */
 
-/* ======================================== */
-/* Browser view — full-screen overlay       */
-/* ======================================== */
+/* ══════════════════════════════════════════
+   Browser view — full-screen overlay
+   ══════════════════════════════════════════ */
 
 .webBrowserView {
   position: fixed;
@@ -11,223 +11,150 @@
   display: flex;
   flex-direction: column;
   background: var(--bg, #1a1a2e);
+  color: inherit;
 }
-
 .webBrowserView.hidden {
   display: none !important;
 }
 
-/* Browser toolbar */
-.webBrowserToolbar {
+
+/* ══════════════════════════════════════════
+   Row 1 — Tab strip (Chrome title bar)
+   ══════════════════════════════════════════ */
+
+.webTabStrip {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 8px;
-  height: 40px;
+  align-items: flex-end;
+  height: 38px;
+  padding: 0 0 0 8px;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,.10);
   position: relative;
+  background: rgba(var(--chrome-rgb), .03);
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .08);
 }
 
-/* FIX-WEB-MODE: drag region so window can be moved from browser toolbar */
-.webToolbarDragRegion {
+/* Drag region — entire tab strip is draggable except interactive children */
+.webTabStripDrag {
   position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
+  inset: 0;
   -webkit-app-region: drag;
   z-index: 0;
 }
-.webBrowserToolbar > *:not(.webToolbarDragRegion) {
+.webTabStrip > *:not(.webTabStripDrag) {
   -webkit-app-region: no-drag;
   position: relative;
   z-index: 1;
 }
 
-.webBackBtn {
-  font-size: 13px;
-  padding: 6px 14px;
-  border-radius: 6px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.12);
+/* Library back button */
+.webLibBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px 5px 8px;
+  margin-right: 4px;
+  border-radius: 8px 8px 0 0;
+  border: none;
+  background: transparent;
   color: inherit;
-  cursor: pointer;
-}
-.webBackBtn:hover {
-  background: rgba(255,255,255,.12);
-  border-color: rgba(255,255,255,.20);
-}
-
-.webToolbarSep {
-  width: 1px;
-  height: 20px;
-  background: rgba(255,255,255,.20);
-  margin: 0 10px;
-  flex-shrink: 0;
-}
-
-.webBrowserTitle {
-  flex: 1;
+  font-size: 12px;
   font-weight: 600;
-  font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
   white-space: nowrap;
-  min-width: 0;
-}
-
-.webBrowserNav {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-/* URL bar row */
-.webUrlBar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(255,255,255,.06);
-  min-height: 40px;
-}
-
-/* Chrome-ish omnibox */
-.webOmni{
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.10);
-}
-.webOmni:focus-within{
-  background: rgba(255,255,255,.08);
-  border-color: rgba(255,255,255,.16);
-}
-.webOmniIcon{
-  width: 14px;
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   flex-shrink: 0;
   opacity: .75;
-  color: rgba(255,255,255,.85);
+  transition: opacity .12s, background .12s;
 }
-.webOmniIcon svg{ width: 14px; height: 14px; display:block; }
-
-.webSearchEngineSelect {
-  height: 30px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.08);
-  color: inherit;
-  padding: 0 10px;
-  font-size: 12px;
-  max-width: 140px;
+.webLibBtn:hover {
+  opacity: 1;
+  background: rgba(var(--chrome-rgb), .08);
+}
+.webLibBtn svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
-.webSearchEngineSelect:focus {
-  outline: none;
-  border-color: rgba(255,255,255,.3);
-}
 
-.webBookmarkBtn.active {
-  border-color: rgba(255,255,255,.35);
-  background: rgba(255,255,255,.16) !important;
-}
-
-.webFindBar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.06);
-  background: rgba(255,255,255,.04);
-}
-
-.webFindBar.hidden {
-  display: none !important;
-}
-
-.webFindInput {
-  min-width: 0;
-  flex: 1;
-}
-
-.webFindCount {
-  min-width: 56px;
-  text-align: right;
-  font-size: 12px;
-  opacity: .75;
-}
-
-/* ======================================== */
-/* Tab bar (inside browser view)            */
-/* ======================================== */
+/* ── Tab bar ── */
 
 .webTabBar {
   display: flex;
-  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  gap: 1px;
+  align-items: flex-end;
   overflow-x: auto;
-  padding: 4px 8px;
-  min-height: 32px;
-  align-items: center;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  padding: 0 4px;
+  scrollbar-width: none;
+}
+.webTabBar::-webkit-scrollbar {
+  display: none;
 }
 
 .webTab {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 4px;
+  gap: 6px;
+  padding: 6px 12px;
+  height: 34px;
+  min-width: 48px;
+  max-width: 200px;
+  flex: 0 1 180px;
+  border-radius: 8px 8px 0 0;
   cursor: pointer;
   font-size: 12px;
   white-space: nowrap;
-  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(var(--chrome-rgb), .04);
+  border: 1px solid transparent;
+  border-bottom: none;
   color: inherit;
   user-select: none;
+  transition: background .12s;
+  position: relative;
 }
 
 .webTab.active {
-  background: rgba(255,255,255,.15);
-  border-color: rgba(255,255,255,.25);
+  background: rgba(var(--chrome-rgb), .10);
+  border-color: rgba(var(--chrome-rgb), .10);
+}
+/* Active tab accent line */
+.webTab.active::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
 }
 
 .webTab:hover:not(.active) {
-  background: rgba(255,255,255,.12);
+  background: rgba(var(--chrome-rgb), .07);
 }
 
-.webTabFavicon{
-  width: 14px;
-  height: 14px;
+.webTabFavicon {
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
   flex-shrink: 0;
-  background: rgba(255,255,255,.12);
   display: block;
 }
-.webTabFaviconImg{
-  width: 14px;
-  height: 14px;
+.webTabFaviconImg {
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
   display: block;
 }
-.webTabFaviconFallback{
-  width: 14px;
-  height: 14px;
+.webTabFaviconFallback {
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
   display: block;
-  background: rgba(255,255,255,.14);
+  background: rgba(var(--chrome-rgb), .12);
 }
 
 .webTabLabel {
@@ -239,44 +166,164 @@
 }
 
 .webTabClose {
-  font-size: 14px;
-  line-height: 1;
+  width: 18px;
+  height: 18px;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
   cursor: pointer;
-  opacity: 0.4;
-  padding: 0 2px;
+  opacity: 0;
+  padding: 0;
   border: none;
   background: none;
+  border-radius: 50%;
   color: inherit;
   flex-shrink: 0;
+  transition: opacity .1s, background .1s;
 }
-
+.webTab:hover .webTabClose {
+  opacity: .5;
+}
 .webTabClose:hover {
-  opacity: 1;
+  opacity: 1 !important;
+  background: rgba(var(--chrome-rgb), .12);
 }
 
-/* ======================================== */
-/* Navigation buttons                       */
-/* ======================================== */
+/* Loading tab — spinner replaces favicon */
+.webTab.loading {
+  opacity: .88;
+}
+.webTab.loading::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(var(--chrome-rgb), .25);
+  border-top-color: rgba(var(--chrome-rgb), .80);
+  display: inline-block;
+  flex-shrink: 0;
+  animation: webTabSpin 700ms linear infinite;
+}
+@keyframes webTabSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
 
-.webNavBtn {
-  font-size: 16px;
-  padding: 2px 6px;
-  min-width: 28px;
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 4px;
+/* New tab button */
+.webTabAdd {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 18px;
   cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 2px;
+  margin-bottom: 3px;
   color: inherit;
+  opacity: .5;
+  transition: opacity .12s, background .12s;
+}
+.webTabAdd:hover {
+  opacity: 1;
+  background: rgba(var(--chrome-rgb), .10);
 }
 
+/* Tab drag reorder */
+.webTab.dragging {
+  opacity: 0.4;
+}
+.webTab.dragOver {
+  border-left: 2px solid var(--vx-accent, rgba(var(--chrome-rgb), .55));
+}
+
+/* Window controls in tab strip inherit from global .winControls/.winCtrl */
+
+
+/* ══════════════════════════════════════════
+   Row 2 — Navigation bar
+   ══════════════════════════════════════════ */
+
+.webNavBar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  height: 40px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .06);
+}
+
+/* Nav buttons (back, forward, reload, home, split) */
+.webNavBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background .12s;
+}
+.webNavBtn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 .webNavBtn:hover:not(:disabled) {
-  background: var(--sl-color-neutral-100);
-  border-color: var(--sl-color-neutral-200);
+  background: rgba(var(--chrome-rgb), .08);
 }
-
+.webNavBtn:active:not(:disabled) {
+  background: rgba(var(--chrome-rgb), .14);
+}
 .webNavBtn:disabled {
   opacity: 0.3;
   cursor: default;
+}
+.webNavBtn.active {
+  color: var(--vx-accent, rgba(var(--chrome-rgb), .85));
+}
+
+/* Omnibox (address bar) */
+.webOmni {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 16px;
+  background: rgba(var(--chrome-rgb), .06);
+  border: 1px solid rgba(var(--chrome-rgb), .06);
+  transition: background .12s, border-color .12s, box-shadow .12s;
+}
+.webOmni:focus-within {
+  background: rgba(var(--chrome-rgb), .10);
+  border-color: rgba(var(--chrome-rgb), .14);
+  box-shadow: 0 1px 6px rgba(0,0,0,.08);
+}
+
+.webOmniIcon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: .6;
+}
+.webOmniIcon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .webUrlDisplay {
@@ -285,18 +332,181 @@
   border: none;
   outline: none;
   background: transparent;
-  color: rgba(255,255,255,.92);
-  font-size: 12.5px;
+  color: inherit;
+  font-size: 13px;
   padding: 0;
 }
-
-.webUrlDisplay::placeholder{
-  color: rgba(255,255,255,.45);
+.webUrlDisplay::placeholder {
+  color: var(--muted, rgba(var(--chrome-rgb), .45));
 }
 
-/* ======================================== */
-/* Webview container                        */
-/* ======================================== */
+/* Search engine select — inside the omnibox, compact */
+.webSearchEngineSelect {
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: rgba(var(--chrome-rgb), .06);
+  color: inherit;
+  padding: 0 6px;
+  font-size: 11px;
+  max-width: 100px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.webSearchEngineSelect:focus {
+  outline: none;
+  border-color: rgba(var(--chrome-rgb), .22);
+}
+
+/* Action buttons in nav bar (bookmark, find, downloads) */
+.webNavAction {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  position: relative;
+  transition: background .12s;
+}
+.webNavAction svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+.webNavAction:hover {
+  background: rgba(var(--chrome-rgb), .08);
+}
+.webNavAction:active {
+  background: rgba(var(--chrome-rgb), .14);
+}
+
+/* Bookmark active state */
+.webNavAction.active svg,
+.webBookmarkBtn.active svg {
+  fill: var(--vx-accent, currentColor);
+  stroke: var(--vx-accent, currentColor);
+}
+
+/* Download badge (dot indicator) */
+.webDlBadge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .85));
+  box-shadow: 0 0 0 2px var(--bg, #1a1a2e);
+}
+.webDlBadge.hidden {
+  display: none;
+}
+
+/* Download pill (inline status) */
+.webDlPill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--chrome-rgb), .14);
+  background: rgba(var(--chrome-rgb), .06);
+  color: var(--muted, inherit);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.webDlPill.hidden {
+  display: none;
+}
+
+
+/* ══════════════════════════════════════════
+   Load bar (thin accent line)
+   ══════════════════════════════════════════ */
+
+.webLoadBar {
+  height: 2px;
+  width: 100%;
+  background: rgba(var(--chrome-rgb), .08);
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.webLoadBar.hidden {
+  display: none !important;
+}
+.webLoadBar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  height: 100%;
+  width: 40%;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  animation: webLoadBarSweep 900ms linear infinite;
+}
+@keyframes webLoadBarSweep {
+  0% { left: -40%; }
+  100% { left: 110%; }
+}
+
+
+/* ══════════════════════════════════════════
+   Find bar (floating top-right over content)
+   ══════════════════════════════════════════ */
+
+.webFindBar {
+  position: absolute;
+  top: 0;
+  right: 16px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 0 0 8px 8px;
+  background: var(--bg, #1a1a2e);
+  border: 1px solid rgba(var(--chrome-rgb), .12);
+  border-top: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,.20);
+}
+.webFindBar.hidden {
+  display: none !important;
+}
+
+.webFindInput {
+  min-width: 0;
+  flex: 1;
+  max-width: 220px;
+}
+
+.webFindCount {
+  min-width: 48px;
+  text-align: right;
+  font-size: 11px;
+  opacity: .65;
+  white-space: nowrap;
+}
+
+
+/* ══════════════════════════════════════════
+   Content area (home panel + webview)
+   ══════════════════════════════════════════ */
+
+.webContentArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
 
 .webViewContainer {
   flex: 1;
@@ -311,21 +521,45 @@
   width: 100%;
   height: 100%;
   border: 0;
-  background: #101014;
+  background: var(--bg, #101014);
 }
-
 .webTabWebview.hidden {
   display: none;
 }
+
+/* Split view */
+.webViewContainer.webSplitActive {
+  display: flex;
+  flex-direction: row;
+}
+.webSplitPane {
+  position: relative;
+  overflow: hidden;
+  min-width: 80px;
+}
+.webSplitDivider {
+  width: 4px;
+  flex-shrink: 0;
+  background: rgba(var(--chrome-rgb), .10);
+  cursor: col-resize;
+  transition: background .12s;
+}
+.webSplitDivider:hover {
+  background: rgba(var(--chrome-rgb), .25);
+}
+
+
+/* ══════════════════════════════════════════
+   Browser home panel (speed dial)
+   ══════════════════════════════════════════ */
 
 .webBrowserHomePanel {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 14px;
-  background: rgba(0, 0, 0, 0.18);
+  padding: 20px;
+  background: transparent;
 }
-
 .webBrowserHomePanel.hidden {
   display: none !important;
 }
@@ -335,11 +569,12 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .webBrowserHomeTitle {
   font-weight: 700;
+  font-size: 14px;
   letter-spacing: 0.2px;
 }
 
@@ -351,30 +586,31 @@
 
 .webBrowserHomeCard {
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
-  padding: 12px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: rgba(var(--chrome-rgb), .04);
+  padding: 14px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: background .12s, border-color .12s, transform .08s;
 }
-
 .webBrowserHomeCard:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--chrome-rgb), .08);
+  border-color: rgba(var(--chrome-rgb), .14);
+  transform: translateY(-1px);
 }
 
 .webBrowserHomeCardIcon {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--chrome-rgb), .08);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
 }
-
 .webBrowserHomeCardIcon img {
   width: 28px;
   height: 28px;
@@ -391,13 +627,13 @@
 
 .webBrowserHomeCardUrl {
   font-size: 11px;
-  opacity: 0.75;
+  opacity: 0.6;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* FIX-WEB-UI: ensure web home view scrolls */
+/* Library home view scrolling */
 #webLibraryView .libContent {
   overflow: hidden;
 }
@@ -406,11 +642,11 @@
   overflow-x: hidden;
 }
 
-/* ======================================== */
-/* Source grid card thumbnails              */
-/* ======================================== */
 
-/* Colored background with centered favicon */
+/* ══════════════════════════════════════════
+   Source grid card thumbnails
+   ══════════════════════════════════════════ */
+
 .webSourceThumb {
   display: flex;
   align-items: center;
@@ -427,7 +663,7 @@
 .webSourceInitial {
   font-size: 48px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--chrome-rgb), .80);
   text-transform: uppercase;
   user-select: none;
   pointer-events: none;
@@ -440,9 +676,21 @@
   display: none;
 }
 
-/* ======================================== */
-/* Continue row tiles (open tabs)           */
-/* ======================================== */
+.webSourceCard {
+  --web-src-color: #7a7a7a;
+}
+.webSourceCard:hover .webSourceThumb {
+  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
+}
+.webSourceCard:focus-visible .webSourceThumb {
+  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
+  outline: none;
+}
+
+
+/* ══════════════════════════════════════════
+   Continue row tiles (open tabs)
+   ══════════════════════════════════════════ */
 
 .webContCover {
   display: flex;
@@ -460,16 +708,17 @@
 .webContInitial {
   font-size: 36px;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(var(--chrome-rgb), .80);
   text-transform: uppercase;
   user-select: none;
   pointer-events: none;
   line-height: 1;
 }
 
-/* ======================================== */
-/* Sidebar source items                     */
-/* ======================================== */
+
+/* ══════════════════════════════════════════
+   Sidebar source items
+   ══════════════════════════════════════════ */
 
 .webSourceItem {
   display: flex;
@@ -480,13 +729,11 @@
   border-radius: 4px;
   font-size: 13px;
 }
-
 .webSourceItem:hover {
-  background: var(--sl-color-neutral-100);
+  background: rgba(var(--chrome-rgb), .06);
 }
-
 .webSourceItem.active {
-  background: var(--sl-color-primary-50);
+  background: rgba(var(--chrome-rgb), .08);
   font-weight: 600;
 }
 
@@ -510,223 +757,350 @@
   word-break: break-all;
 }
 
-/* Sidebar download progress (web home sidebar) */
-.webSidebarDlRow{
+
+/* ══════════════════════════════════════════
+   Sidebar download progress
+   ══════════════════════════════════════════ */
+
+.webSidebarDlRow {
   margin-top: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-.webSidebarDlProgress{
+.webSidebarDlProgress {
   flex: 1;
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
-  background: rgba(255,255,255,.10);
+  background: rgba(var(--chrome-rgb), .10);
   overflow: hidden;
 }
-.webSidebarDlProgressFill{
+.webSidebarDlProgressFill {
   height: 100%;
   width: 0%;
-  background: rgba(255,255,255,.55);
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
   transition: width .15s linear;
 }
-.webSidebarDlPct{
+.webSidebarDlPct {
   width: 40px;
   text-align: right;
   font-size: 11px;
   opacity: .85;
 }
 
-
-/* =========================================
-   BUILD_WEB_PARITY: web polish + parity bits
-   ========================================= */
-
-.webSourceCard{
-  --web-src-color: #7a7a7a;
-}
-.webSourceCard:hover .webSourceThumb{
-  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
-}
-.webSourceCard:focus-visible .webSourceThumb{
-  box-shadow: 0 0 0 2px var(--web-src-color), 0 0 18px rgba(0,0,0,.35);
-  outline: none;
-}
-
-.webSourceItem:hover{
-  background: rgba(255,255,255,.06);
-}
-.webSourceItem.active{
-  background: rgba(255,255,255,.08);
-}
-
-#webSourcesEmpty, #webContinueEmpty{
+#webSourcesEmpty, #webContinueEmpty {
   padding: 14px 12px;
   border-radius: 14px;
-  border: 1px dashed rgba(255,255,255,.18);
-  background: rgba(0,0,0,.10);
+  border: 1px dashed rgba(var(--chrome-rgb), .14);
+  background: rgba(var(--chrome-rgb), .03);
 }
 
-.webDlPill{
-  margin-left: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255,255,255,.18);
-  background: rgba(0,0,0,.24);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1;
-  white-space: nowrap;
-}
 
-.webDlBtn{
-  position: relative;
-  width: 30px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
+/* ══════════════════════════════════════════
+   Downloads panel (floating dropdown)
+   ══════════════════════════════════════════ */
 
-.webDlBadge{
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.85);
-  box-shadow: 0 0 0 2px rgba(0,0,0,.35);
-}
-
-.webDlPanel{
+.webDlPanel {
   position: absolute;
   right: 12px;
-  top: 72px;
+  top: 82px;
   width: 360px;
   max-width: calc(100vw - 24px);
   max-height: 52vh;
   display: flex;
   flex-direction: column;
-  border-radius: 14px;
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(0,0,0,.55);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 10px 30px rgba(0,0,0,.45);
+  border-radius: 12px;
+  border: 1px solid rgba(var(--chrome-rgb), .12);
+  background: var(--bg, rgba(10,12,20,.92));
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  box-shadow: 0 10px 30px rgba(0,0,0,.35);
   z-index: 30;
 }
+.webDlPanel.hidden {
+  display: none !important;
+}
 
-.webDlPanelTop{
+.webDlPanelTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(255,255,255,.10);
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .08);
 }
 
-.webDlPanelTitle{
+.webDlPanelTitle {
   font-size: 13px;
   font-weight: 600;
 }
 
-.webDlList{
+.webDlList {
   overflow: auto;
-  padding: 8px;
+  padding: 6px;
 }
 
-.webDlEmpty{
+.webDlEmpty {
   padding: 10px 12px 14px;
 }
 
-.webDlItem{
+
+/* ══════════════════════════════════════════
+   Download items (shared by panel + home)
+   ══════════════════════════════════════════ */
+
+.webDlItem {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(255,255,255,.04);
-  cursor: pointer;
-  user-select: none;
+  border-radius: 10px;
+  background: rgba(var(--chrome-rgb), .04);
+  border: 1px solid rgba(var(--chrome-rgb), .06);
+  transition: background .12s, border-color .12s, transform .06s;
+}
+.webDlItem + .webDlItem {
+  margin-top: 4px;
+}
+.webDlItem:hover {
+  background: rgba(var(--chrome-rgb), .08);
+  border-color: rgba(var(--chrome-rgb), .10);
+}
+.webDlItem:active {
+  transform: translateY(1px);
+}
+.webDlItem--compact {
+  padding: 6px 10px;
 }
 
-.webDlItem + .webDlItem{
-  margin-top: 8px;
-}
-
-.webDlItem:hover{
-  background: rgba(255,255,255,.07);
-}
-
-.webDlMeta{
-  min-width: 0;
-  flex: 1;
-}
-
-.webDlName{
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.webDlSub{
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.webDlState{
+.webDlIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   flex-shrink: 0;
-  font-size: 12px;
-  opacity: .9;
-}
-
-.webLoadBar{
-  height: 3px;
-  width: 100%;
-  background: rgba(255,255,255,.10);
-  position: relative;
   overflow: hidden;
+  background: rgba(var(--chrome-rgb), .08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.webLoadBar::before{
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -40%;
-  height: 100%;
-  width: 40%;
-  background: rgba(255,255,255,.55);
-  animation: webLoadBarSweep 900ms linear infinite;
+.webDlFavicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: block;
+  image-rendering: auto;
 }
-@keyframes webLoadBarSweep{
-  0%{ left: -40%; }
-  100%{ left: 110%; }
-}
-
-.webTab.loading{
-  opacity: .92;
-}
-.webTab.loading::before{
-  content: "";
+.webDlFaviconFallback {
   width: 10px;
   height: 10px;
   border-radius: 999px;
-  border: 2px solid rgba(255,255,255,.30);
-  border-top-color: rgba(255,255,255,.85);
-  display: inline-block;
-  animation: webTabSpin 800ms linear infinite;
-}
-@keyframes webTabSpin{
-  0%{ transform: rotate(0deg); }
-  100%{ transform: rotate(360deg); }
+  background: rgba(var(--chrome-rgb), .22);
 }
 
-/* Make web toast behave like a global toast */
-#webToast.videoToast{
+.webDlSvg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.webDlSvg svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
+}
+
+.webDlMeta {
+  min-width: 0;
+  flex: 1;
+}
+.webDlName {
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.webDlSub {
+  margin-top: 3px;
+  font-size: 11px;
+  opacity: .65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.webDlProgressWrap {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.webDlProgressBar {
+  height: 4px;
+  flex: 1;
+  background: rgba(var(--chrome-rgb), .10);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.webDlProgressFill {
+  height: 100%;
+  width: 0%;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  transition: width .15s linear;
+}
+.webDlProgressText {
+  font-size: 11px;
+  opacity: .75;
+  min-width: 34px;
+  text-align: right;
+}
+
+.webDlRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.webDlState {
+  font-size: 11px;
+  opacity: .65;
+}
+.webDlState--bad {
+  opacity: .90;
+}
+
+.webDlActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.webDlItem:hover .webDlActions {
+  opacity: 1;
+}
+
+.webDlAction,
+.webDlRemove {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--chrome-rgb), .08);
+  background: rgba(var(--chrome-rgb), .04);
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: background .12s;
+}
+.webDlAction:hover,
+.webDlRemove:hover {
+  background: rgba(var(--chrome-rgb), .10);
+  border-color: rgba(var(--chrome-rgb), .14);
+}
+.webDlAction:active {
+  transform: translateY(1px);
+}
+
+/* Home downloads panel */
+.webHomeDownloadsPanel {
+  margin-top: 14px;
+}
+.webHomeDownloadsList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+
+/* ══════════════════════════════════════════
+   Download bar (Chrome-style bottom shelf)
+   ══════════════════════════════════════════ */
+
+.webDlBar {
+  flex-shrink: 0;
+  width: 100%;
+  background: var(--bg, rgba(20,20,36,.94));
+  border-top: 1px solid rgba(var(--chrome-rgb), .08);
+  z-index: 25;
+}
+.webDlBar.hidden {
+  display: none !important;
+}
+.webDlBarInner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  min-height: 36px;
+}
+.webDlBarIcon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  opacity: .6;
+}
+.webDlBarIcon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.webDlBarText {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: .85;
+}
+.webDlBarProgress {
+  width: 120px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(var(--chrome-rgb), .10);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.webDlBarProgress.hidden {
+  display: none;
+}
+.webDlBarProgressFill {
+  height: 100%;
+  width: 0%;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  border-radius: 999px;
+  transition: width .15s linear;
+}
+.webDlBarClose {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: .5;
+  transition: opacity .12s, background .12s;
+}
+.webDlBarClose:hover {
+  opacity: 1;
+  background: rgba(var(--chrome-rgb), .10);
+}
+
+
+/* ══════════════════════════════════════════
+   Toast + context menu (shared helpers)
+   ══════════════════════════════════════════ */
+
+#webToast.videoToast {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -734,266 +1108,10 @@
   pointer-events: none;
 }
 
-/* ===== MERIDIAN_DRAG: Tab drag reorder ===== */
 
-.webTab.dragging{
-  opacity: 0.45;
-}
-.webTab.dragOver{
-  border-left: 2px solid var(--vx-accent, #c7a76b);
-}
-
-/* ===== MERIDIAN_SPLIT: Split view ===== */
-
-.webViewContainer.webSplitActive{
-  display: flex;
-  flex-direction: row;
-}
-.webSplitPane{
-  position: relative;
-  overflow: hidden;
-  min-width: 80px;
-}
-.webSplitDivider{
-  width: 4px;
-  flex-shrink: 0;
-  background: rgba(255,255,255,.12);
-  cursor: col-resize;
-  transition: background .12s;
-}
-.webSplitDivider:hover{
-  background: rgba(255,255,255,.28);
-}
-.webNavBtn.active{
-  color: var(--vx-accent, #c7a76b);
-}
-
-/* BUILD_WEB_DL_UI: Chrome-like downloads list + home panel */
-.webHomeDownloadsPanel{
-  margin-top: 14px;
-}
-.webHomeDownloadsList{
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.webDlItem{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 10px;
-  border-radius: 10px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.08);
-  transition: background .12s, border-color .12s, transform .06s;
-}
-.webDlItem:hover{
-  background: rgba(255,255,255,.10);
-  border-color: rgba(255,255,255,.14);
-}
-.webDlItem:active{
-  transform: translateY(1px);
-}
-
-.webDlItem--compact{
-  padding: 8px 10px;
-}
-
-.webDlIcon{
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  flex-shrink: 0;
-  overflow: hidden;
-  background: rgba(255,255,255,.10);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.webDlFavicon{
-  width: 18px;
-  height: 18px;
-  image-rendering: auto;
-}
-.webDlFaviconFallback{
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.28);
-}
-
-.webDlMeta{
-  min-width: 0;
-  flex: 1;
-}
-.webDlName{
-  font-size: 13px;
-  line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.webDlSub{
-  margin-top: 3px;
-  font-size: 11px;
-  opacity: .78;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.webDlProgressWrap{
-  margin-top: 7px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.webDlProgressBar{
-  height: 6px;
-  flex: 1;
-  background: rgba(255,255,255,.10);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.webDlProgressFill{
-  height: 100%;
-  width: 0%;
-  background: rgba(255,255,255,.60);
-}
-.webDlProgressText{
-  font-size: 11px;
-  opacity: .85;
-  min-width: 34px;
-  text-align: right;
-}
-
-.webDlRight{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.webDlState{
-  font-size: 11px;
-  opacity: .78;
-}
-.webDlState--bad{
-  opacity: .95;
-}
-.webDlRemove{
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  line-height: 26px;
-  text-align: center;
-  border: 1px solid rgba(255,255,255,.10);
-  background: rgba(0,0,0,.12);
-  color: rgba(255,255,255,.90);
-}
-.webDlRemove:hover{
-  background: rgba(0,0,0,.20);
-  border-color: rgba(255,255,255,.18);
-}
-
-.webDlSvg { display: inline-flex; align-items: center; justify-content: center; }
-.webDlSvg svg { width: 16px; height: 16px; fill: currentColor; display: block; }
-.webDlFavicon { width: 16px; height: 16px; border-radius: 3px; display: block; }
-
-.webDlActions{
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-.webDlItem:hover .webDlActions{ opacity: 1; }
-
-.webDlAction,
-.webDlRemove{
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.04);
-  color: inherit;
-  cursor: pointer;
-  padding: 0;
-}
-.webDlAction:hover{ background: rgba(255,255,255,0.10); }
-.webDlAction:active{ transform: translateY(1px); }
-
-/* FIX-WEB-DL: Chrome-like download bottom bar */
-.webDlBar{
-  flex-shrink: 0;
-  width: 100%;
-  background: rgba(30,30,50,.92);
-  border-top: 1px solid rgba(255,255,255,.10);
-  z-index: 25;
-}
-.webDlBar.hidden{
-  display: none !important;
-}
-.webDlBarInner{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px;
-  min-height: 36px;
-}
-.webDlBarIcon{
-  flex-shrink: 0;
-  font-size: 14px;
-  opacity: .7;
-}
-.webDlBarText{
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: rgba(255,255,255,.85);
-}
-.webDlBarProgress{
-  width: 120px;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.12);
-  overflow: hidden;
-  flex-shrink: 0;
-}
-.webDlBarProgress.hidden{
-  display: none;
-}
-.webDlBarProgressFill{
-  height: 100%;
-  width: 0%;
-  background: rgba(255,255,255,.55);
-  border-radius: 999px;
-  transition: width .15s linear;
-}
-.webDlBarClose{
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: rgba(255,255,255,.6);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.webDlBarClose:hover{
-  background: rgba(255,255,255,.10);
-  color: rgba(255,255,255,.9);
-}
+/* ══════════════════════════════════════════
+   Hub panel checklist (privacy/data section)
+   ══════════════════════════════════════════ */
 
 .webHubChecklist {
   display: flex;
@@ -1001,7 +1119,6 @@
   gap: 6px;
   font-size: 12px;
 }
-
 .webHubChecklist label {
   display: flex;
   align-items: center;

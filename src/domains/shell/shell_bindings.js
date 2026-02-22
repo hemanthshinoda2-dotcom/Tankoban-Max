@@ -217,6 +217,7 @@
       if (!target) continue;
       var collapsed = !!state[key];
       target.classList.toggle('hidden', collapsed);
+      btn.classList.toggle('collapsed', collapsed);
     }
   }
 
@@ -307,6 +308,7 @@
       var target = document.getElementById(targetId);
       if (!target) return;
       var collapsed = target.classList.toggle('hidden');
+      btn.classList.toggle('collapsed', collapsed);
       var state = readWebHubCollapsedState();
       state[key] = collapsed;
       writeWebHubCollapsedState(state);

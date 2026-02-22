@@ -84,6 +84,8 @@
     sourceName: qs('webSourceName'),
     sourceUrl: qs('webSourceUrl'),
     sourceSaveBtn: qs('webSourceSaveBtn'),
+    // Chrome-style kebab menu
+    menuBtn: qs('webMenuBtn'),
     // BUILD_WEB_PARITY
     tipsOverlay: qs('webLibTipsOverlay'),
     tipsClose: qs('webLibTipsClose'),
@@ -1640,7 +1642,7 @@
       html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
         favHtml +
         '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
-        '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">Ã—</button>' +
+        '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>' +
         '</div>';
     }
 
@@ -1788,15 +1790,7 @@
   }
 
   function syncDownloadIndicator() {
-    if (el.dlPill) {
-      var show = state.downloading > 0;
-      el.dlPill.classList.toggle('hidden', !show);
-      if (show) {
-        var label = state.downloadingHasProgress ? 'Downloadingâ€¦' : 'Pausedâ€¦';
-        if (state.downloading > 1) el.dlPill.textContent = label + ' (' + state.downloading + ')';
-        else el.dlPill.textContent = label;
-      }
-    }
+    // DL pill removed — the badge on the download button is sufficient (Chrome-style)
 
     if (el.downloadStatus) {
       if (state.downloading > 0) {
@@ -2203,7 +2197,7 @@
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
           (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
-          '<div class="webHubSectionActions">' +
+          '<div class="webHubItemActions">' +
             pauseResume +
             (x.canCancel ? ('<button class="btn btn-ghost btn-sm" data-direct-action="cancel" data-direct-id="' + escapeHtml(x.id) + '">Cancel</button>') : '') +
           '</div>' +
@@ -2267,7 +2261,7 @@
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
           (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
-          '<div class="webHubSectionActions">' +
+          '<div class="webHubItemActions">' +
             pauseResume +
             '<button class="btn btn-ghost btn-sm" data-torrent-action="cancel" data-torrent-id="' + escapeHtml(x.id) + '">Cancel</button>' +
           '</div>' +
@@ -2345,7 +2339,7 @@
             '<span class="webHubBadge">' + escapeHtml(badge) + '</span>' +
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + (x.error ? (' \u2022 ' + escapeHtml(x.error)) : '') + '</div>' +
-          '<div class="webHubSectionActions">' + removeBtn + '</div>' +
+          '<div class="webHubItemActions">' + removeBtn + '</div>' +
         '</div>';
     }
     el.hubDownloadHistoryList.innerHTML = html;
@@ -2372,7 +2366,7 @@
             '<div class="webHubItemTitle">' + escapeHtml(title) + '</div>' +
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
-          '<div class="webHubSectionActions">' +
+          '<div class="webHubItemActions">' +
             '<button class="btn btn-ghost btn-sm" data-history-remove-id="' + escapeHtml(String(x.id || '')) + '">Remove</button>' +
           '</div>' +
         '</div>';
@@ -2515,7 +2509,7 @@
             '<div class="webHubItemTitle">' + escapeHtml(title) + '</div>' +
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
-          '<div class="webHubSectionActions">' +
+          '<div class="webHubItemActions">' +
             '<button class="btn btn-ghost btn-sm" data-bookmark-edit-id="' + escapeHtml(String(b.id || '')) + '">Edit</button>' +
             '<button class="btn btn-ghost btn-sm" data-bookmark-remove-id="' + escapeHtml(String(b.id || '')) + '">Remove</button>' +
           '</div>' +
@@ -2718,7 +2712,7 @@
             '<span class="webHubBadge">' + escapeHtml(r.decision) + '</span>' +
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(r.permission) + '</div>' +
-          '<div class="webHubSectionActions">' +
+          '<div class="webHubItemActions">' +
             '<button class="btn btn-ghost btn-sm" data-perm-remove-origin="' + escapeHtml(r.origin) + '" data-perm-remove-type="' + escapeHtml(r.permission) + '">Reset</button>' +
           '</div>' +
         '</div>';
@@ -3698,6 +3692,51 @@
       splitBtn.onclick = function (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
         toggleSplit();
+      };
+    }
+
+    // Chrome-style kebab menu
+    if (el.menuBtn) {
+      el.menuBtn.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        var rect = el.menuBtn.getBoundingClientRect();
+        var items = [
+          { label: 'New tab', onClick: function () { openTabPicker(); } },
+          { separator: true },
+          { label: 'History', onClick: function () {
+            var hubBtn = document.getElementById('webHubToggleBtn');
+            if (hubBtn && !document.body.classList.contains('webHubOpen')) hubBtn.click();
+            var historySection = document.querySelector('[data-collapse-key="browsingHistory"]');
+            if (historySection) {
+              var targetId = historySection.getAttribute('data-target');
+              var target = targetId ? document.getElementById(targetId) : null;
+              if (target && target.classList.contains('hidden')) historySection.click();
+              try { historySection.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (err) {}
+            }
+          }},
+          { label: 'Downloads', onClick: function () { toggleDownloadsPanel(); } },
+          { label: 'Bookmarks', onClick: function () {
+            var hubBtn = document.getElementById('webHubToggleBtn');
+            if (hubBtn && !document.body.classList.contains('webHubOpen')) hubBtn.click();
+            var bkSection = document.querySelector('[data-collapse-key="bookmarks"]');
+            if (bkSection) {
+              var targetId = bkSection.getAttribute('data-target');
+              var target = targetId ? document.getElementById(targetId) : null;
+              if (target && target.classList.contains('hidden')) bkSection.click();
+              try { bkSection.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (err) {}
+            }
+          }},
+          { separator: true },
+          { label: 'Split view', onClick: function () { toggleSplit(); } },
+          { label: 'Find in page', onClick: function () { openFindBar(); } },
+          { separator: true },
+          { label: 'Keyboard shortcuts', onClick: function () { toggleTips(); } },
+          { label: 'Hub panel', onClick: function () {
+            var hubBtn = document.getElementById('webHubToggleBtn');
+            if (hubBtn) hubBtn.click();
+          }}
+        ];
+        showContextMenu(items, rect.right - 200, rect.bottom + 4);
       };
     }
 

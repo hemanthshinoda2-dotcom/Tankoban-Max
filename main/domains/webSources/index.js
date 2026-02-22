@@ -614,10 +614,25 @@ function setupDownloadHandler(ctx) {
         return;
       }
 
+      // Set a temporary save path synchronously to prevent Electron's
+      // native Save As dialog from appearing alongside our in-app picker.
+      var tmpDlDir = '';
+      var tempSavePath = '';
+      try {
+        tmpDlDir = ctx.storage.dataPath('web_download_tmp');
+        fs.mkdirSync(tmpDlDir, { recursive: true });
+      } catch {}
+      if (tmpDlDir) {
+        try { tempSavePath = ensureUniqueDestination(tmpDlDir, filename); } catch {}
+      }
+      if (tempSavePath) {
+        item.setSavePath(tempSavePath);
+      }
       try { if (item.pause) item.pause(); } catch {}
       routeDownloadWithPicker(ctx, filename, { webContents: _webContents }).then(function (route) {
         if (!route.ok) {
           item.cancel();
+          try { if (tempSavePath && fs.existsSync(tempSavePath)) fs.unlinkSync(tempSavePath); } catch {}
           persistRouteFailure(route);
           try {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
@@ -629,7 +644,9 @@ function setupDownloadHandler(ctx) {
           return;
         }
 
-        item.setSavePath(route.destination);
+        // Don't call setSavePath again — Electron ignores it after initial set.
+        // File downloads to tempSavePath, then we move it in the 'done' handler.
+        var finalDestination = route.destination;
 
         var dlId = newDlId();
         var startedAt = Date.now();
@@ -641,7 +658,7 @@ function setupDownloadHandler(ctx) {
           updateDownloadEntry(d, {
             state: 'downloading',
             filename: filename,
-            destination: route.destination,
+            destination: finalDestination,
             library: route.library,
             startedAt: startedAt,
             finishedAt: null,
@@ -655,7 +672,7 @@ function setupDownloadHandler(ctx) {
           return {
             id: dlId,
             filename: filename,
-            destination: route.destination,
+            destination: finalDestination,
             library: route.library,
             state: 'downloading',
             startedAt: startedAt,
@@ -690,7 +707,7 @@ function setupDownloadHandler(ctx) {
           ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
             id: dlId,
             filename: filename,
-            destination: route.destination,
+            destination: finalDestination,
             library: route.library,
             state: 'downloading',
             pageUrl: pageUrl,
@@ -760,7 +777,7 @@ function setupDownloadHandler(ctx) {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_PROGRESS, {
               id: dlId,
               filename: filename,
-              destination: route.destination,
+              destination: finalDestination,
               library: route.library,
               state: appState,
               receivedBytes: received,
@@ -775,6 +792,24 @@ function setupDownloadHandler(ctx) {
           activeDownloadItems.delete(dlId);
           activeSpeed.delete(dlId);
           activePersist.delete(dlId);
+
+          // Move file from temp to the user's chosen destination
+          if (doneState === 'completed' && tempSavePath && finalDestination) {
+            try {
+              var destDir = path.dirname(finalDestination);
+              fs.mkdirSync(destDir, { recursive: true });
+              fs.renameSync(tempSavePath, finalDestination);
+            } catch (_mvErr) {
+              // renameSync fails across drives; fall back to copy + delete
+              try {
+                fs.copyFileSync(tempSavePath, finalDestination);
+                fs.unlinkSync(tempSavePath);
+              } catch {}
+            }
+          } else if (tempSavePath) {
+            // Download failed/cancelled — clean up temp file
+            try { if (fs.existsSync(tempSavePath)) fs.unlinkSync(tempSavePath); } catch {}
+          }
 
           // Update persisted history entry.
           persistDownloadUpdate(ctx, dlId, function (found) {
@@ -793,7 +828,7 @@ function setupDownloadHandler(ctx) {
                 ok: true,
                 id: dlId,
                 filename: filename,
-                destination: route.destination,
+                destination: finalDestination,
                 library: route.library,
               });
             } catch {}
