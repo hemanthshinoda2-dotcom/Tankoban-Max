@@ -598,10 +598,28 @@ function setupDownloadHandler(ctx) {
             downloadUrl: downloadUrl,
             totalBytes: totalBytes,
             receivedBytes: 0,
-          };
-        }).catch(function () {});
+            transport: 'electron-item',
+            canPause: true,
+            canResume: true,
+            canCancel: true,
+          });
+          cfgStart.updatedAt = Date.now();
+          capDownloads(cfgStart);
+          writeDownloads(ctx, cfgStart);
+          emitDownloadsUpdated(ctx);
+        } catch {}
 
-        activeDownloadItems.set(dlId, item);
+        activeDownloadItems.set(dlId, {
+          transport: 'electron-item',
+          canPause: true,
+          canResume: true,
+          canCancel: true,
+          item: item,
+          pause: function () { if (item.pause) item.pause(); },
+          resume: function () { if (item.resume) item.resume(); },
+          cancel: function () { if (item.cancel) item.cancel(); },
+          isPaused: function () { return !!(item.isPaused && item.isPaused()); },
+        });
         activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
 
         // BUILD_WEB_PARITY
@@ -615,6 +633,10 @@ function setupDownloadHandler(ctx) {
             pageUrl: pageUrl,
             downloadUrl: downloadUrl,
             totalBytes: totalBytes,
+            transport: 'electron-item',
+            canPause: true,
+            canResume: true,
+            canCancel: true,
           });
         } catch {}
 
@@ -657,16 +679,26 @@ function setupDownloadHandler(ctx) {
               var nowW = Date.now();
               if (nowW - lastW >= 1000) {
                 activePersist.set(dlId, nowW);
-                persistDownloadUpdate(ctx, dlId, function (found) {
-                  updateDownloadEntry(found, {
-                    state: appState,
-                    receivedBytes: received,
-                    totalBytes: total,
-                    progress: pct,
-                    bytesPerSec: (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0,
-                    updatedAt: nowW,
-                  });
-                }).catch(function () {});
+                var cfgUp = ensureDownloadsCache(ctx);
+                var found = null;
+                for (var i = 0; i < (cfgUp.downloads || []).length; i++) {
+                  var dd = cfgUp.downloads[i];
+                  if (dd && String(dd.id) === String(dlId)) { found = dd; break; }
+                }
+                if (found) {
+                  found.state = appState;
+                  found.receivedBytes = received;
+                  found.totalBytes = total;
+                  found.progress = pct;
+                  found.bytesPerSec = (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0;
+                  found.updatedAt = nowW;
+                  found.transport = 'electron-item';
+                  found.canPause = true;
+                  found.canResume = true;
+                  found.canCancel = true;
+                  capDownloads(cfgUp);
+                  writeDownloads(ctx, cfgUp);
+                }
               }
             } catch {}
 
@@ -826,21 +858,24 @@ async function persistDownloadUpdate(ctx, dlId, mutator, createEntry) {
 
 async function pushFailedDownload(ctx, info) {
   try {
-    await mutateDownloads(ctx, function (cfg) {
-      cfg.downloads.unshift({
-        id: info.id || newDlId(),
-        filename: String(info.filename || 'download'),
-        destination: String(info.destination || ''),
-        library: String(info.library || ''),
-        state: String(info.state || 'failed'),
-        startedAt: Date.now(),
-        finishedAt: Date.now(),
-        error: String(info.error || (String(info.state || 'failed') === 'cancelled' ? 'Cancelled' : 'Download failed')),
-        pageUrl: String(info.pageUrl || ''),
-        downloadUrl: String(info.downloadUrl || ''),
-        totalBytes: 0,
-        receivedBytes: 0,
-      });
+    var cfg = ensureDownloadsCache(ctx);
+    cfg.downloads.unshift({
+      id: info.id || newDlId(),
+      filename: String(info.filename || 'download'),
+      destination: String(info.destination || ''),
+      library: String(info.library || ''),
+      state: String(info.state || 'failed'),
+      startedAt: Date.now(),
+      finishedAt: Date.now(),
+      error: String(info.error || (String(info.state || 'failed') === 'cancelled' ? 'Cancelled' : 'Download failed')),
+      pageUrl: String(info.pageUrl || ''),
+      downloadUrl: String(info.downloadUrl || ''),
+      totalBytes: 0,
+      receivedBytes: 0,
+      transport: String(info.transport || 'direct'),
+      canPause: !!info.canPause,
+      canResume: !!info.canResume,
+      canCancel: (info.canCancel == null) ? true : !!info.canCancel,
     });
   } catch {}
 }
@@ -873,7 +908,15 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
 
   var ac = null;
   try { ac = new AbortController(); } catch {}
-  if (ac) activeDownloadItems.set(dlId, { cancel: function () { try { ac.abort(); } catch {} } });
+  if (ac) {
+    activeDownloadItems.set(dlId, {
+      transport: 'direct',
+      canPause: false,
+      canResume: false,
+      canCancel: true,
+      cancel: function () { try { ac.abort(); } catch {} },
+    });
+  }
 
   var res;
   try {
@@ -956,8 +999,16 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       totalBytes: totalBytes,
       receivedBytes: 0,
       progress: null,
-    };
-  });
+      transport: 'direct',
+      canPause: false,
+      canResume: false,
+      canCancel: true,
+    });
+    cfgStart.updatedAt = Date.now();
+    capDownloads(cfgStart);
+    await writeDownloads(ctx, cfgStart);
+    emitDownloadsUpdated(ctx);
+  } catch {}
 
   activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
 
@@ -971,6 +1022,10 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       pageUrl: String((payload && payload.referer) || ''),
       downloadUrl: String(res.url || url),
       totalBytes: totalBytes,
+      transport: 'direct',
+      canPause: false,
+      canResume: false,
+      canCancel: true,
     });
   } catch {}
 
@@ -1011,14 +1066,16 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     if (force || (now - lastPersistAt >= 1000)) {
       lastPersistAt = now;
       persistDownloadUpdate(ctx, dlId, function (d) {
-        updateDownloadEntry(d, {
-          state: 'downloading',
-          receivedBytes: received,
-          totalBytes: totalBytes,
-          progress: pct,
-          bytesPerSec: (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0,
-          updatedAt: now,
-        });
+        d.state = 'downloading';
+        d.receivedBytes = received;
+        d.totalBytes = totalBytes;
+        d.progress = pct;
+        d.bytesPerSec = (sp && sp.bytesPerSec) ? sp.bytesPerSec : 0;
+        d.updatedAt = now;
+        d.transport = 'direct';
+        d.canPause = false;
+        d.canResume = false;
+        d.canCancel = true;
       });
     }
   }
@@ -1031,15 +1088,17 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     activeDownloadItems.delete(dlId);
     activeSpeed.delete(dlId);
     persistDownloadUpdate(ctx, dlId, function (d) {
-      updateDownloadEntry(d, {
-        state: stateName || 'failed',
-        error: String(errMsg || 'Download failed'),
-        finishedAt: Date.now(),
-        receivedBytes: received,
-        totalBytes: totalBytes,
-        progress: totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : null,
-        updatedAt: Date.now(),
-      });
+      d.state = stateName || 'failed';
+      d.error = String(errMsg || 'Download failed');
+      d.finishedAt = Date.now();
+      d.receivedBytes = received;
+      d.totalBytes = totalBytes;
+      d.progress = totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : null;
+      d.updatedAt = Date.now();
+      d.transport = 'direct';
+      d.canPause = false;
+      d.canResume = false;
+      d.canCancel = true;
     });
     try {
       ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
@@ -1060,15 +1119,17 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     activeDownloadItems.delete(dlId);
     activeSpeed.delete(dlId);
     persistDownloadUpdate(ctx, dlId, function (d) {
-      updateDownloadEntry(d, {
-        state: 'completed',
-        error: '',
-        finishedAt: Date.now(),
-        receivedBytes: received,
-        totalBytes: totalBytes,
-        progress: totalBytes > 0 ? 1 : d.progress,
-        updatedAt: Date.now(),
-      });
+      d.state = 'completed';
+      d.error = '';
+      d.finishedAt = Date.now();
+      d.receivedBytes = received;
+      d.totalBytes = totalBytes;
+      d.progress = totalBytes > 0 ? 1 : d.progress;
+      d.updatedAt = Date.now();
+      d.transport = 'direct';
+      d.canPause = false;
+      d.canResume = false;
+      d.canCancel = true;
     });
     triggerLibraryRescan(ctx, route.library);
     try {
@@ -1146,9 +1207,15 @@ async function pauseDownload(ctx, _evt, payload) {
   if (!id) return { ok: false, error: 'Missing id' };
   var item = activeDownloadItems.get(id);
   if (!item) return { ok: false, error: 'Download not active' };
+  var canPause = !!(item && item.canPause);
+  var pauseFn = item && (item.pause || (item.item && item.item.pause));
+  var isPausedFn = item && (item.isPaused || (item.item && item.item.isPaused));
+  if (!canPause || typeof pauseFn !== 'function') {
+    return { ok: false, error: 'Pause not supported for direct downloads' };
+  }
   try {
-    if (item.isPaused && item.isPaused()) return { ok: true };
-    if (item.pause) item.pause();
+    if (isPausedFn && isPausedFn.call(item.item || item)) return { ok: true };
+    pauseFn.call(item.item || item);
   } catch (err) {
     return { ok: false, error: String(err?.message || err) };
   }
@@ -1163,7 +1230,12 @@ async function resumeDownload(ctx, _evt, payload) {
   if (!id) return { ok: false, error: 'Missing id' };
   var item = activeDownloadItems.get(id);
   if (!item) return { ok: false, error: 'Download not active' };
-  try { if (item.resume) item.resume(); }
+  var canResume = !!(item && item.canResume);
+  var resumeFn = item && (item.resume || (item.item && item.item.resume));
+  if (!canResume || typeof resumeFn !== 'function') {
+    return { ok: false, error: 'Pause not supported for direct downloads' };
+  }
+  try { resumeFn.call(item.item || item); }
   catch (err) { return { ok: false, error: String(err?.message || err) }; }
   persistDownloadUpdate(ctx, id, function (d) {
     updateDownloadEntry(d, { state: 'downloading', updatedAt: Date.now() });
@@ -1176,7 +1248,8 @@ async function cancelDownload(ctx, _evt, payload) {
   if (!id) return { ok: false, error: 'Missing id' };
   var item = activeDownloadItems.get(id);
   if (!item) return { ok: false, error: 'Download not active' };
-  try { if (item.cancel) item.cancel(); }
+  var cancelFn = item && (item.cancel || (item.item && item.item.cancel));
+  try { if (cancelFn) cancelFn.call(item.item || item); }
   catch (err) { return { ok: false, error: String(err?.message || err) }; }
   // Quick mark; done handler finalizes.
   persistDownloadUpdate(ctx, id, function (d) {
