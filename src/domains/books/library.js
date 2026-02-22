@@ -89,6 +89,10 @@ SECTION INDEX (search: ══════ SECTION:)
     audiobooksLabel: qs('booksAudiobooksLabel'),
     addAudiobookRootBtn: qs('booksAddAudiobookRootBtn'),
     audiobookFoldersList: qs('booksAudiobookFoldersList'),
+    // FEAT-AUDIOBOOK: continue listening shelf
+    abContinuePanel: qs('booksAbContinuePanel'),
+    abContinueRow: qs('booksAbContinueRow'),
+    abContinueEmpty: qs('booksAbContinueEmpty'),
   };
 
 // ══════ SECTION: DOM Refs ══════
@@ -985,6 +989,103 @@ function getBookProgress(bookId) {
         el.audiobookFoldersList.appendChild(row);
       })(roots[i]);
     }
+  }
+
+  // FEAT-AUDIOBOOK: Render "Continue Listening..." shelf from audiobook progress
+  function renderAbContinue() {
+    if (!el.abContinuePanel || !el.abContinueRow || !el.abContinueEmpty) return;
+    el.abContinueRow.innerHTML = '';
+    var progAll = state.audiobookProgressAll || {};
+    var audiobooks = state.audiobookSnap.audiobooks || [];
+    if (!audiobooks.length) {
+      el.abContinuePanel.classList.add('hidden');
+      return;
+    }
+
+    // Build audiobook lookup
+    var abById = {};
+    for (var a = 0; a < audiobooks.length; a++) abById[audiobooks[a].id] = audiobooks[a];
+
+    // Collect in-progress audiobooks, sorted by most recently updated
+    var items = [];
+    var keys = Object.keys(progAll);
+    for (var k = 0; k < keys.length; k++) {
+      var prog = progAll[keys[k]];
+      if (!prog || prog.finished) continue;
+      var ab = abById[keys[k]];
+      if (!ab) continue;
+      items.push({ audiobook: ab, progress: prog });
+    }
+    items.sort(function (a, b) { return (b.progress.updatedAt || 0) - (a.progress.updatedAt || 0); });
+    items = items.slice(0, 10);
+
+    var hasItems = items.length > 0;
+    el.abContinuePanel.classList.toggle('hidden', !hasItems);
+    el.abContinueRow.classList.toggle('hidden', !hasItems);
+    el.abContinueEmpty.classList.toggle('hidden', hasItems);
+    if (!hasItems) return;
+
+    for (var i = 0; i < items.length; i++) {
+      el.abContinueRow.appendChild(makeAbContinueTile(items[i]));
+    }
+  }
+
+  function makeAbContinueTile(item) {
+    var ab = item.audiobook;
+    var prog = item.progress;
+    var tile = document.createElement('div');
+    tile.className = 'contTile ab-cont-tile';
+
+    var cover = document.createElement('div');
+    cover.className = 'contCover';
+    var img = document.createElement('img');
+    img.className = 'thumb contCoverImg';
+    img.alt = '';
+    if (ab.coverPath) {
+      img.src = 'file://' + ab.coverPath.replace(/\\/g, '/').replace(/#/g, '%23');
+    } else {
+      img.style.display = 'none';
+    }
+    cover.appendChild(img);
+
+    // Progress badge
+    if (prog && prog.totalChapters > 0) {
+      var pctVal = Math.round(((prog.chapterIndex || 0) / prog.totalChapters) * 100);
+      var pctWrap = document.createElement('div');
+      pctWrap.className = 'contPctBadge';
+      var badge = document.createElement('span');
+      badge.className = 'badge';
+      badge.textContent = pctVal + '%';
+      pctWrap.appendChild(badge);
+      cover.appendChild(pctWrap);
+    }
+
+    // Remove button
+    var remove = document.createElement('button');
+    remove.className = 'contRemove';
+    remove.title = 'Clear from Continue Listening';
+    remove.textContent = 'X';
+    remove.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      api.audiobooks.clearProgress(ab.id).then(function () {
+        loadAudiobookProgress().then(renderAbContinue);
+      }).catch(function () {});
+    };
+    cover.appendChild(remove);
+    tile.appendChild(cover);
+
+    var titleWrap = document.createElement('div');
+    titleWrap.className = 'contTitleWrap';
+    var title = document.createElement('div');
+    title.className = 'contTileTitle u-clamp2';
+    title.title = ab.title || '';
+    title.textContent = ab.title || 'Untitled';
+    titleWrap.appendChild(title);
+    tile.appendChild(titleWrap);
+
+    tile.onclick = function () { openAudiobook(ab); };
+    return tile;
   }
 
 // ══════ SECTION: Derived Data Rebuilding ══════
@@ -2507,6 +2608,7 @@ function getBookProgress(bookId) {
     renderSidebar();
     renderContinue();
     renderAudiobooks();
+    renderAbContinue();
     renderViews();
     if (!state.readerOpen && state.ui.booksSubView === 'show' && state.ui.selectedShowId) renderShowView();
     else if (!state.readerOpen) renderHome();
