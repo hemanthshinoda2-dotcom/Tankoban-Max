@@ -532,8 +532,17 @@ function setupDownloadHandler(ctx) {
       }
 
       if (ext === '.torrent') {
-        var torrentTmpPath = '';
         var torrentFinalized = false;
+        // Set temp save path SYNCHRONOUSLY to prevent native Save As dialog
+        var torrentTmpPath = '';
+        try {
+          var torrentTmpRoot = ctx.storage.dataPath(path.join('web_torrent_tmp', 'incoming'));
+          fs.mkdirSync(torrentTmpRoot, { recursive: true });
+          torrentTmpPath = ensureUniqueDestination(torrentTmpRoot, filename || 'download.torrent');
+        } catch {}
+        if (torrentTmpPath) {
+          item.setSavePath(torrentTmpPath);
+        }
         try { if (item.pause) item.pause(); } catch {}
 
         function finalizeTorrentError(message) {
@@ -563,14 +572,9 @@ function setupDownloadHandler(ctx) {
             return;
           }
 
-          var tmpRoot = '';
-          try {
-            tmpRoot = ctx.storage.dataPath(path.join('web_torrent_tmp', 'incoming'));
-            fs.mkdirSync(tmpRoot, { recursive: true });
-            torrentTmpPath = ensureUniqueDestination(tmpRoot, filename || 'download.torrent');
-            item.setSavePath(torrentTmpPath);
-          } catch (err) {
-            finalizeTorrentError(String((err && err.message) || err || 'Failed to prepare torrent file'));
+          // torrentTmpPath + setSavePath already set synchronously above
+          if (!torrentTmpPath) {
+            finalizeTorrentError('Failed to prepare torrent temp path');
             return;
           }
 
