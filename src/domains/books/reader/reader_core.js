@@ -23,7 +23,8 @@
     window.booksReaderSidebar,
     window.booksReaderRuler,
     // LISTEN_P0: TTS removed from reader — moved to dedicated Listening mode
-    window.booksReaderAudiobook,  // FEAT-AUDIOBOOK: in-reader audiobook player
+    window.booksReaderAudiobook,        // FEAT-AUDIOBOOK: in-reader audiobook player
+    window.booksReaderAudiobookPairing, // FEAT-AUDIOBOOK: chapter pairing sidebar tab
     window.booksReaderKeyboard,
   ];
 

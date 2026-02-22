@@ -3152,6 +3152,123 @@ body.inBooksReader .br-reader {
   color: var(--br-reader-muted, #666);
 }
 
+/* ══════ FEAT-AUDIOBOOK: Audio sidebar pane (chapter pairing) ══════ */
+.ab-pair-header {
+  padding: 10px 10px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ab-pair-status {
+  font-size: 12px;
+}
+.ab-pair-select {
+  width: 100%;
+  padding: 5px 8px;
+  font-size: 12px;
+  border-radius: 5px;
+  border: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.15);
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.04);
+  color: var(--text-primary, #eee);
+  outline: none;
+}
+.ab-pair-select:focus {
+  border-color: var(--vx-accent, #7c5cfc);
+}
+.ab-pair-actions {
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px 8px;
+}
+.ab-pair-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.12);
+  border-radius: 4px;
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.04);
+  color: var(--text-primary, #eee);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ab-pair-btn:hover {
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.08);
+}
+.ab-pair-unlink {
+  color: #e05555;
+  border-color: rgba(224, 85, 85, 0.2);
+}
+.ab-pair-unlink:hover {
+  background: rgba(224, 85, 85, 0.08);
+}
+.ab-pair-list {
+  overflow-y: auto;
+  max-height: calc(100vh - 280px);
+}
+.ab-pair-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.06);
+}
+.ab-pair-row:last-child { border-bottom: none; }
+.ab-pair-book-ch {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary, #eee);
+}
+.ab-pair-arrow {
+  color: var(--muted, #8b8fa3);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.ab-pair-ch-select {
+  width: 140px;
+  flex-shrink: 0;
+  padding: 3px 4px;
+  font-size: 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(var(--chrome-rgb, 255,255,255), 0.12);
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.04);
+  color: var(--text-primary, #eee);
+  outline: none;
+}
+.ab-pair-ch-select:focus {
+  border-color: var(--vx-accent, #7c5cfc);
+}
+.ab-pair-empty {
+  padding: 16px 10px;
+  text-align: center;
+}
+
+/* Light theme overrides for pairing pane */
+[data-reader-theme="light"] .ab-pair-select,
+[data-reader-theme="sepia"] .ab-pair-select,
+[data-reader-theme="paper"] .ab-pair-select,
+[data-reader-theme="light"] .ab-pair-ch-select,
+[data-reader-theme="sepia"] .ab-pair-ch-select,
+[data-reader-theme="paper"] .ab-pair-ch-select {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.12);
+  color: var(--br-reader-text);
+}
+[data-reader-theme="light"] .ab-pair-btn,
+[data-reader-theme="sepia"] .ab-pair-btn,
+[data-reader-theme="paper"] .ab-pair-btn {
+  background: rgba(0,0,0,0.03);
+  border-color: rgba(0,0,0,0.10);
+  color: var(--br-reader-text);
+}
+[data-reader-theme="light"] .ab-pair-book-ch,
+[data-reader-theme="sepia"] .ab-pair-book-ch,
+[data-reader-theme="paper"] .ab-pair-book-ch {
+  color: var(--br-reader-text);
+}
+
 /* Scrub bubble visibility (for books scrub bar) */
 .scrubBubble.visible {
   opacity: 1 !important;
