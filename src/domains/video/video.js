@@ -2781,13 +2781,6 @@ function closeTracksPanel(){
     }
     if (typeof s.forceQtPlayer === 'boolean') {
       state.settings.forceQtPlayer = !!s.forceQtPlayer;
-    } else {
-      // One-way migration from legacy localStorage preference.
-      try {
-        if (typeof localStorage !== 'undefined' && localStorage.getItem('tankobanUseQtPlayer') === '1') {
-          state.settings.forceQtPlayer = true;
-        }
-      } catch {}
     }
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.
 if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
