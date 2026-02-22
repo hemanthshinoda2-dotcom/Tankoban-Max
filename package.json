@@ -21,7 +21,9 @@
         "phase8:verify": "node tools/books_phase8_verify.js",
         "build:player": "cd player_qt && build_player.bat",
         "validate:player": "node tools/validate_player_artifacts.js",
-        "release:prep": "npm run build:player && npm run validate:player"
+        "build:holy-grail": "tools\\build_holy_grail.bat",
+        "validate:holy-grail": "node tools/validate_holy_grail_artifacts.js",
+        "release:prep": "npm run build:player && npm run validate:player && npm run build:holy-grail && npm run validate:holy-grail"
     },
     "devDependencies": {
         "electron": "^40.6.0",
@@ -194,6 +196,10 @@
             {
                 "from": "resources/mpv/windows",
                 "to": "mpv/windows"
+            },
+            {
+                "from": "native/holy_grail/build/Release/holy_grail.node",
+                "to": "native/holy_grail/holy_grail.node"
             },
             {
                 "from": "player_qt/dist/TankobanPlayer",

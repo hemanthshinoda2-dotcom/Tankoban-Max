@@ -78,6 +78,7 @@
         await loadScriptChain([
           './domains/video/video_utils.js',
           './domains/video/build14_state.js',
+          './domains/video/holy_grail_adapter.js',
           './domains/video/video.js',
         ]);
         await loadScriptOnce('./domains/video/video_search.js');
