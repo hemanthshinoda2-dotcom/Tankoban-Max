@@ -353,7 +353,7 @@ videoProgress IPC calls
       // Tankoban Plus Build 5.4B: preferred languages for track selection (mpv only)
       preferredAudioLanguage: null,
       preferredSubtitleLanguage: null,
-      forceQtPlayer: false,
+      forceQtPlayer: true,
       autoAdvance: true,
       respectSubtitleStyles: true,
       subtitleHudLiftPx: 40,
@@ -2810,6 +2810,9 @@ function closeTracksPanel(){
                 const s = vs.settings && typeof vs.settings === 'object' ? vs.settings : vs;
                 applyVideoSettings(s);
               }
+              // Current-cycle safety: keep Qt as the default route unless explicitly overridden.
+              state.settings.forceQtPlayer = true;
+              persistVideoSettings({ forceQtPlayer: true });
 
               // Apply display names (RENAME-VIDEO)
               state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
