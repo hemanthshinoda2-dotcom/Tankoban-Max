@@ -390,6 +390,7 @@ videoProgress IPC calls
     _autoAdvanceCountdownTimer: null,  // BUILD63: countdown interval
     _autoAdvancePlayTimer: null,       // BUILD63: delayed play timeout
     _manualStop: false,
+    _embeddedFirstFrameWatchToken: null,
     activePlayerEngine: 'none', // 'embedded' | 'qt' | 'none'
     lastOpenRoute: { engine: 'none', reason: 'init', atMs: 0 },
     _lastEnsurePlayerError: '',
@@ -6681,6 +6682,65 @@ function resolveStartSeconds(v, opts = {}) {
   return start;
 }
 
+function clearEmbeddedFirstFrameWatch() {
+  state._embeddedFirstFrameWatchToken = null;
+}
+
+function armEmbeddedFirstFrameWatch(v, opts, player) {
+  if (!player || typeof player.getRenderStats !== 'function') return;
+  const token = { atMs: Date.now() };
+  state._embeddedFirstFrameWatchToken = token;
+
+  const isStale = () => state._embeddedFirstFrameWatchToken !== token;
+  const frameCount = () => {
+    try {
+      const stats = player.getRenderStats?.();
+      const n = Number(stats && stats.frameCount);
+      return Number.isFinite(n) ? n : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  setTimeout(() => {
+    safe(async () => {
+      if (isStale()) return;
+      if (state.player !== player) return;
+      if (!document.body.classList.contains('inVideoPlayer')) return;
+      if (frameCount() > 0) return clearEmbeddedFirstFrameWatch();
+
+      try { await player.setBounds?.({ force: true, reason: 'first-frame-watchdog' }); } catch {}
+
+      setTimeout(() => {
+        safe(async () => {
+          if (isStale()) return;
+          if (state.player !== player) return;
+          if (frameCount() > 0) return clearEmbeddedFirstFrameWatch();
+
+          const forceEmbedded = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
+          if (forceEmbedded) {
+            toast('Embedded render stalled (no frame).', 2800);
+            return;
+          }
+
+          toast('Embedded render stalled. Falling back to Qt.', 2200);
+          try { await player.destroy?.(); } catch {}
+          state.player = null;
+          state._playerEventsBoundFor = null;
+          document.body.classList.remove('mpvEngine');
+          document.body.classList.remove('mpvDetached');
+          clearEmbeddedFirstFrameWatch();
+
+          const qtOpts = (opts && typeof opts === 'object')
+            ? { ...opts, _routeReason: 'no_frame' }
+            : { _routeReason: 'no_frame' };
+          await openVideoQtFallback(v, qtOpts);
+        });
+      }, 1200);
+    });
+  }, 3500);
+}
+
 async function openVideo(v, opts = {}) {
   // Apply one-shot overrides if provided (e.g., Play from beginning / Continue Watching).
   try {
@@ -6691,6 +6751,7 @@ async function openVideo(v, opts = {}) {
   } catch {}
 
   if (!v || !v.path) return;
+  clearEmbeddedFirstFrameWatch();
 
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
   const explicitQt = !!(opts && typeof opts === 'object' && opts.forceQt === true);
@@ -6810,6 +6871,7 @@ async function openVideo(v, opts = {}) {
   }
 
   setActivePlayerEngine('embedded', explicitEmbedded ? 'explicit_embedded' : 'default_embedded');
+  armEmbeddedFirstFrameWatch(v, opts, player);
 
   applySettingsToPlayer();
   updateHudFromPlayer();
@@ -6863,6 +6925,7 @@ async function openVideo(v, opts = {}) {
 async function openVideoQtFallback(v, opts = {}) {
   // Qt fallback/override path.
   // The Electron window may hide during playback and will be restored by the main process.
+  clearEmbeddedFirstFrameWatch();
 
   // Apply one-shot overrides if provided (e.g., Play from beginning / Continue Watching).
   try {
@@ -6997,6 +7060,7 @@ async function openVideoQtFallback(v, opts = {}) {
 
   function showVideoLibrary() {
     state._manualStop = true;
+    clearEmbeddedFirstFrameWatch();
     try { closeAllToolPanels(); } catch {}
     closePlaylistPanel();
     document.body.classList.remove('inVideoPlayer');
