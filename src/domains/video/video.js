@@ -2946,6 +2946,7 @@ function closeTracksPanel(){
               state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
 
               // Apply holy grail availability (also mirrored into legacy libmpv flags for existing UI checks).
+              console.log('[HG-DIAG] probe result:', hgResult);
               state.holyGrailAvailable = !!(hgResult && typeof hgResult === 'object' ? hgResult.ok : hgResult);
               state.holyGrailAvailError = (hgResult && typeof hgResult === 'object' && hgResult.error) ? String(hgResult.error) : '';
               state.libmpvAvailable = state.holyGrailAvailable;
@@ -6791,7 +6792,7 @@ function renderPlaylistList() {
     if (eps.length > 1) parts.push(`${i + 1}/${eps.length}`);
     if (ep && ep.durationSec != null) {
       const d = Number(ep.durationSec);
-      if (Number.isFinite(d) && d > 0) parts.push(formatTime(Math.round(d)));
+      if (Number.isFinite(d) && d > 0) parts.push(fmtTime(Math.round(d)));
     }
     meta.textContent = parts.join(' • ');
 
@@ -6979,8 +6980,12 @@ function resumeChoice(choice) {
 function resolveStartSeconds(v, opts = {}) {
   let start = 0;
   try {
-    const override = (opts && Number.isFinite(Number(opts.resumeOverridePosSec))) ? Number(opts.resumeOverridePosSec) : 0;
-    if (override > 0) return override;
+    // NOTE: resumeOverridePosSec is allowed to be 0 (explicit "start from beginning").
+    const hasOverride = !!(opts
+      && typeof opts === 'object'
+      && Object.prototype.hasOwnProperty.call(opts, 'resumeOverridePosSec')
+      && Number.isFinite(Number(opts.resumeOverridePosSec)));
+    if (hasOverride) return Math.max(0, Number(opts.resumeOverridePosSec));
 
     const gp = getProgressForEpisode(v);
     const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
@@ -7177,6 +7182,8 @@ async function openVideo(v, opts = {}) {
     && api.holyGrail
     && window.TankoPlayer && typeof window.TankoPlayer.boot === 'function');
 
+  console.log('[HG-DIAG] openVideo canHolyGrail=' + canHolyGrail, { forceQt, holyGrailAvailable: state.holyGrailAvailable, hasApi: !!api, hasHgApi: !!(api && api.holyGrail), hasTankoPlayer: !!(window.TankoPlayer && typeof window.TankoPlayer.boot === 'function') });
+
   if (!canHolyGrail) {
     try { await state.player?.destroy?.(); } catch {}
     state.player = null;
@@ -7273,6 +7280,15 @@ async function openVideo(v, opts = {}) {
     const qtOpts = { ...openOpts, _routeReason: `load_failed:${err}` };
     return openVideoQtFallback(v, qtOpts);
   }
+
+  // Autoplay for non-resume opens.
+  // (Resume seeks intentionally pause before load; the backend unpauses once the seek lands.)
+  try {
+    if (!(start > 2) && typeof player.play === 'function') {
+      const st = (typeof player.getState === 'function') ? player.getState() : null;
+      if (!st || st.paused !== false) await player.play();
+    }
+  } catch {}
 
   setActivePlayerEngine('embedded', explicitEmbedded ? 'explicit_embedded' : 'default_embedded');
   armEmbeddedFirstFrameWatch(v, openOpts, player);

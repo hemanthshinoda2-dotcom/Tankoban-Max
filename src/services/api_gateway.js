@@ -413,6 +413,11 @@
       onEof: (...a) => ea.holyGrail?.onEof ? ea.holyGrail.onEof(...a) : undefined,
       onFileLoaded: (...a) => ea.holyGrail?.onFileLoaded ? ea.holyGrail.onFileLoaded(...a) : undefined,
       onVideoFrame: (...a) => ea.holyGrail?.onVideoFrame ? ea.holyGrail.onVideoFrame(...a) : undefined,
+      setPresentationActive: (...a) => ea.holyGrail?.setPresentationActive ? ea.holyGrail.setPresentationActive(...a) : undefined,
+      getDiagnostics: (...a) => ea.holyGrail?.getDiagnostics ? ea.holyGrail.getDiagnostics(...a) : undefined,
+      setDiagnosticsEnabled: (...a) => ea.holyGrail?.setDiagnosticsEnabled ? ea.holyGrail.setDiagnosticsEnabled(...a) : undefined,
+      resetDiagnostics: (...a) => ea.holyGrail?.resetDiagnostics ? ea.holyGrail.resetDiagnostics(...a) : undefined,
+      onDiagnostics: (...a) => ea.holyGrail?.onDiagnostics ? ea.holyGrail.onDiagnostics(...a) : undefined,
     },
     
     // ========================================

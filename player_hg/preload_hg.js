@@ -145,10 +145,15 @@ contextBridge.exposeInMainWorld('HolyGrailBridge', {
   getTrackList:   function ()     { return invoke(CH.HG_GET_TRACK_LIST); },
   observeProperty: function (name) { return invoke(CH.HG_OBSERVE_PROPERTY, String(name || '')); },
   destroy:        function ()     { return invoke(CH.HG_DESTROY); },
+  setPresentationActive: function (active) { return invoke(CH.HG_SET_PRESENTATION_ACTIVE, !!active); },
+  getDiagnostics:       function ()        { return invoke(CH.HG_GET_DIAGNOSTICS); },
+  setDiagnosticsEnabled: function (enabled) { return invoke(CH.HG_SET_DIAGNOSTICS_ENABLED, !!enabled); },
+  resetDiagnostics:     function ()        { return invoke(CH.HG_RESET_DIAGNOSTICS); },
 
   onPropertyChange: function (handler) { return onEvent(EV.HG_PROPERTY_CHANGE, handler); },
   onEof:            function (handler) { return onEvent(EV.HG_EOF, handler); },
   onFileLoaded:     function (handler) { return onEvent(EV.HG_FILE_LOADED, handler); },
+  onDiagnostics:    function (handler) { return onEvent(EV.HG_DIAGNOSTICS, handler); },
 
   onVideoFrame: function (handler) {
     __frameHandler = (typeof handler === 'function') ? handler : null;

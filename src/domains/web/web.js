@@ -414,6 +414,17 @@
     return null;
   }
 
+  function openOrFocusTorrentTab(torrentId, magnetOrUrl) {
+    var existing = findTorrentTabByTorrentId(torrentId);
+    if (existing) {
+      if ((!existing.url || existing.url === 'about:blank') && magnetOrUrl) existing.url = String(magnetOrUrl || '');
+      if (state.activeTabId !== existing.id) activateTab(existing.id);
+      else renderTorrentTab(existing);
+      return existing;
+    }
+    return createTorrentTab(torrentId, magnetOrUrl);
+  }
+
   function maybeStartTorrentFromUrl(url, referer) {
     var target = String(url || '').trim();
     if (!target || !api || !api.webTorrent) return false;
@@ -427,7 +438,8 @@
         }).then(function (res) {
           if (!res) return;
           if (res && res.ok) {
-            createTorrentTab(res.id, target);
+            openOrFocusTorrentTab(res.id, target);
+            if (res.reused) showToast('Opened active torrent');
             refreshTorrentState();
           } else {
             showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
@@ -449,7 +461,8 @@
         }).then(function (res) {
           if (!res) return;
           if (res && res.ok) {
-            createTorrentTab(res.id, target);
+            openOrFocusTorrentTab(res.id, target);
+            if (res.reused) showToast('Opened active torrent');
             refreshTorrentState();
           } else {
             showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
@@ -4059,6 +4072,7 @@
     } else if (torrentState === 'error') {
       html = '<div class="wtHeader"><div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div></div>' +
         '<div class="wtMeta"><span style="color:#e57373">Error: ' + escapeHtml(entry.error || 'Unknown error') + '</span></div>' +
+        renderTorrentStateNotice(entry) +
         '<div class="wtActions"><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
     } else {
       html = '<div class="wtResolving"><div>Status: ' + escapeHtml(torrentState) + '</div></div>';
@@ -4077,6 +4091,31 @@
       if (dotIdx > 0 && _VIDEO_EXTS.indexOf(name.substring(dotIdx)) !== -1) return true;
     }
     return false;
+  }
+
+  function renderTorrentInlineNotice(kind, title, body) {
+    var border = kind === 'warn' ? 'rgba(255,193,7,.35)' : (kind === 'error' ? 'rgba(229,115,115,.35)' : 'rgba(var(--chrome-rgb),.18)');
+    var bg = kind === 'warn' ? 'rgba(255,193,7,.08)' : (kind === 'error' ? 'rgba(229,115,115,.08)' : 'rgba(var(--chrome-rgb),.035)');
+    return '<div style="margin:10px 0 12px;padding:10px 12px;border:1px solid ' + border + ';background:' + bg + ';border-radius:10px">' +
+      '<div style="font-size:12px;font-weight:600;margin-bottom:4px">' + escapeHtml(title || '') + '</div>' +
+      '<div style="font-size:12px;opacity:.9;line-height:1.35">' + escapeHtml(body || '') + '</div>' +
+      '</div>';
+  }
+
+  function renderTorrentStateNotice(entry) {
+    if (!entry) return '';
+    var s = String(entry.state || '').toLowerCase();
+    if (s === 'metadata_ready') {
+      if (state.torActive) {
+        return renderTorrentInlineNotice('warn', 'Tor is on \u2014 torrent is in cart mode',
+          'You can choose files and destination now, but starting download or streaming to Video Library is blocked until Tor is turned off.');
+      }
+      return '';
+    }
+    if (s === 'paused') return renderTorrentInlineNotice('info', 'Torrent paused', 'Resume when you want the download to continue.');
+    if (s === 'downloading') return '';
+    if (s === 'error' || s === 'failed') return renderTorrentInlineNotice('error', 'Torrent error', entry.error || 'Something went wrong.');
+    return '';
   }
 
   function renderTorrentMetadataReady(tab, entry) {
@@ -4121,11 +4160,14 @@
     html += '</div>';
     html += '</div>';
 
+    html += renderTorrentStateNotice(entry);
+
     // Actions
     var hasVideo = _torrentHasVideoFiles(files);
+    var torBlocks = !!state.torActive;
     html += '<div class="wtActions">' +
-      '<button class="wtBtn primary" data-wt-action="start" id="wtStartBtn">Start Download</button>' +
-      (hasVideo ? '<button class="wtBtn videoLib" data-wt-action="addToVideoLib">Save to Video Library</button>' : '') +
+      '<button class="wtBtn primary" data-wt-action="start" id="wtStartBtn"' + (torBlocks ? ' disabled title="Disable Tor to start torrent downloads"' : '') + '>Start Download</button>' +
+      (hasVideo ? ('<button class="wtBtn videoLib" data-wt-action="addToVideoLib"' + (torBlocks ? ' disabled title="Disable Tor to stream into Video Library"' : '') + '>Save to Video Library</button>') : '') +
       '<button class="wtBtn" data-wt-action="cancel">Cancel</button>' +
       '</div>';
 
@@ -6714,6 +6756,8 @@
             state.torActive = false;
             state.torConnecting = false;
             syncTorButton();
+            var _torTab = getActiveTab();
+            if (_torTab && _torTab.type === 'torrent') renderTorrentTab(_torTab);
             showToast('Tor disconnected');
           }).catch(function () {
             state.torConnecting = false;
@@ -6733,6 +6777,8 @@
             }
             state.torConnecting = false;
             syncTorButton();
+            var _torTab2 = getActiveTab();
+            if (_torTab2 && _torTab2.type === 'torrent') renderTorrentTab(_torTab2);
           }).catch(function (err) {
             state.torConnecting = false;
             syncTorButton();

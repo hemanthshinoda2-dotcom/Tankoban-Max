@@ -20,6 +20,27 @@ var client = null;
 var activeById = new Map(); // id -> { torrent, entry, interval? }
 var historyCache = null;
 
+function findActiveBySource(opts) {
+  var o = opts || {};
+  var magnet = String(o.magnetUri || '').trim();
+  var url = String(o.sourceUrl || '').trim();
+  if (!magnet && !url) return null;
+  var vals = Array.from(activeById.values());
+  for (var i = 0; i < vals.length; i++) {
+    var rec = vals[i];
+    if (!rec || !rec.entry) continue;
+    if (magnet) {
+      var em = String(rec.entry.magnetUri || '').trim();
+      if (em && em === magnet) return rec;
+    }
+    if (url) {
+      var eu = String(rec.entry.sourceUrl || '').trim();
+      if (eu && eu === url) return rec;
+    }
+  }
+  return null;
+}
+
 function getIpc() {
   try { return require('../../../shared/ipc'); } catch { return null; }
 }
@@ -476,6 +497,9 @@ async function startMagnet(ctx, evt, payload) {
   if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
+  // Reuse existing torrent if same magnet is already active
+  var existing = findActiveBySource({ magnetUri: magnetUri });
+  if (existing && existing.entry) return { ok: true, id: existing.entry.id, reused: true };
   // FEAT-TOR: Force empty destination when Tor is on → queues in metadata_ready state
   var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
@@ -491,6 +515,9 @@ async function startTorrentUrl(ctx, evt, payload) {
   if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'Invalid torrent URL' };
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
+  // Reuse existing torrent if same URL is already active
+  var existing = findActiveBySource({ sourceUrl: url });
+  if (existing && existing.entry) return { ok: true, id: existing.entry.id, reused: true };
   var fetched = null;
   try {
     fetched = await fetchTorrentBuffer(url, payload && payload.referer);
@@ -510,10 +537,14 @@ async function startTorrentBuffer(ctx, evt, payload) {
   if (!root.ok) return { ok: false, error: root.error };
   var input = payload && payload.buffer;
   if (!Buffer.isBuffer(input) || !input.length) return { ok: false, error: 'Invalid torrent file' };
+  // Reuse existing torrent if same source URL is already active
+  var sourceUrl = String(payload && (payload.sourceUrl || payload.referer) || '').trim();
+  var existing = findActiveBySource({ sourceUrl: sourceUrl });
+  if (existing && existing.entry) return { ok: true, id: existing.entry.id, reused: true };
   // FEAT-TOR: Force empty destination when Tor is on
   var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
-    sourceUrl: String(payload && (payload.sourceUrl || payload.referer) || ''),
+    sourceUrl: sourceUrl,
     destinationRoot: destRoot
   });
   return addTorrentInput(ctx, entry, input);
@@ -829,12 +860,13 @@ async function addToVideoLibrary(ctx, evt, payload) {
   if (!videoIndices.length) return { ok: false, error: 'No video files found in torrent' };
 
   // Select video files with sequential mode via internal selectFiles call
-  await selectFiles(ctx, evt, {
+  var selectRes = await selectFiles(ctx, evt, {
     id: id,
     selectedIndices: videoIndices,
     destinationRoot: absRoot,
     sequential: true
   });
+  if (!selectRes || !selectRes.ok) return selectRes || { ok: false, error: 'Failed to prepare torrent files' };
 
   // Mark as video library torrent
   entry.videoLibrary = true;

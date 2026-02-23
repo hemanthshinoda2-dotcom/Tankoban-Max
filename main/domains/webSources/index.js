@@ -902,6 +902,12 @@ function extFromMime(type) {
   if (t === 'application/vnd.comicbook+zip' || t === 'application/x-cbz' || t === 'application/zip') return '.cbz';
   if (t === 'text/plain') return '.txt';
   if (t === 'application/x-mobipocket-ebook') return '.mobi';
+  if (t === 'audio/mp4' || t === 'audio/x-m4a') return '.m4a';
+  if (t === 'audio/mpeg') return '.mp3';
+  if (t === 'audio/flac') return '.flac';
+  if (t === 'audio/wav' || t === 'audio/x-wav') return '.wav';
+  if (t === 'video/mp4') return '.mp4';
+  if (t === 'video/x-matroska') return '.mkv';
   return '';
 }
 
