@@ -108,7 +108,13 @@ Renderer (src/) → Preload (preload/) → Main (main/) → Workers (workers/)
 - VS Code sets `ELECTRON_RUN_AS_NODE=1` — must `unset ELECTRON_RUN_AS_NODE` before `npm start`
 
 ## Git
-Commit and push after every verified fix. Tag commits descriptively (e.g. `FIX-TTS03:`, `FEAT-SIDEBAR:`).
+
+### Commit discipline — THIS IS NON-NEGOTIABLE
+- **Commit and push immediately after every change.** The moment code is verified (or the moment a non-UI change is diff-reviewed), commit and push. Not after two changes. Not "in a batch." Not "when we're done."
+- The user should NEVER have to say "commit" or "did you push?" If they do, you have already failed this rule.
+- If a pre-commit hook or push fails, fix the issue and commit again immediately.
+- Tag commits descriptively (e.g. `FIX-TTS03:`, `FEAT-SIDEBAR:`, `BUILD:`).
+- Uncommitted work is invisible work. If the session ends, uncommitted changes vanish.
 
 ## Commands
 `npm start` — dev | `npm run dist` — build | `npm run smoke` — checks
