@@ -1,13 +1,41 @@
+# === Node dependencies ===
 node_modules/
-dist/
-build/
-resources/
+
+# === Build output (electron-builder) ===
+/dist/
+
+# === Runtime binaries (auto-downloaded by ensure_deps_windows.bat) ===
+resources/mpv/
+resources/tor/
+
+# === Qt Player build artifacts (built by npm run build:player) ===
+player_qt/dist/
+player_qt/build/
+player_qt/.venv_build/
+
+# === Holy Grail native addon build intermediates ===
+# Source (binding.gyp, addon.cc) and the pre-built .node are tracked.
+# Ignore node-gyp intermediates (.obj, .sln, etc.) but keep the .node binary.
+native/holy_grail/node_modules/
+native/holy_grail/build/*
+!native/holy_grail/build/Release/
+native/holy_grail/build/Release/*
+!native/holy_grail/build/Release/holy_grail.node
+
+# === Release prep artifact ===
+.release-prep-manifest.json
+
+# === IDE / OS ===
 .claude/
-/Books
-/Books/
-*.log
 .DS_Store
 Thumbs.db
+*.log
 /nul
+
+# === App data directories ===
+/Books
+/Books/
+
+# === Misc ===
 player_hg/player_settings.json
 reference/
