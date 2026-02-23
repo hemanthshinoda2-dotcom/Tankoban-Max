@@ -130,6 +130,18 @@ COMMON ANCHORS
             <button id="webHubMagnetPasteBtn" class="btn btn-ghost btn-sm" type="button">Paste</button>
             <button id="webHubMagnetStartBtn" class="btn btn-ghost btn-sm" type="button">Start</button>
           </div>
+          <div class="webHubSectionActions">
+            <select id="webHubTorrentFilter" class="select" aria-label="Torrent filter">
+              <option value="active" selected>Active</option>
+              <option value="paused">Paused</option>
+              <option value="completed">Completed</option>
+              <option value="errored">Errored</option>
+              <option value="all">All</option>
+            </select>
+            <button id="webHubTorrentPauseAllBtn" class="btn btn-ghost btn-sm" type="button">Pause All</button>
+            <button id="webHubTorrentResumeAllBtn" class="btn btn-ghost btn-sm" type="button">Resume All</button>
+            <button id="webHubTorrentCancelAllBtn" class="btn btn-ghost btn-sm" type="button">Cancel All</button>
+          </div>
           <div id="webHubTorrentActiveList" class="webHubList"></div>
           <div id="webHubTorrentActiveEmpty" class="navMuted">No active torrent downloads.</div>
         </div>
@@ -1820,6 +1832,7 @@ COMMON ANCHORS
               <option value="bing">Bing</option>
               <option value="brave">Brave</option>
             </select>
+            <div id="webOmniSuggest" class="webOmniSuggest hidden" role="listbox" aria-label="Address suggestions"></div>
           </div>
           <button id="webBookmarkBtn" class="webNavAction" title="Toggle bookmark" aria-label="Toggle bookmark">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13.1l.7-4-2.9-2.8 4-.6z"/></svg>

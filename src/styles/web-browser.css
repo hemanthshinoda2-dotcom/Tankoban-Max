@@ -303,6 +303,7 @@
   border-radius: 16px;
   background: rgba(var(--chrome-rgb), .06);
   border: 1px solid rgba(var(--chrome-rgb), .06);
+  position: relative;
   transition: background .12s, border-color .12s, box-shadow .12s;
 }
 .webOmni:focus-within {
@@ -356,6 +357,54 @@
 .webSearchEngineSelect:focus {
   outline: none;
   border-color: rgba(var(--chrome-rgb), .22);
+}
+
+.webOmniSuggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--chrome-rgb), .12);
+  background: var(--bg, rgba(10,12,20,.92));
+  box-shadow: 0 10px 24px rgba(0,0,0,.34);
+  z-index: 40;
+}
+.webOmniSuggest.hidden {
+  display: none !important;
+}
+.webOmniSuggestItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 8px 10px;
+}
+.webOmniSuggestItem:hover,
+.webOmniSuggestItem.active {
+  background: rgba(var(--chrome-rgb), .10);
+}
+.webOmniSuggestMain {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.webOmniSuggestSub {
+  font-size: 11px;
+  opacity: .65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Action buttons in nav bar (bookmark, find, downloads) */
