@@ -1344,6 +1344,34 @@ async function addShowFolder(ctx, evt) {
 }
 
 /**
+ * Add a show folder by path (no dialog).
+ * Used by the torrent → video library feature to programmatically register a folder.
+ */
+async function addShowFolderPath(ctx, _evt, folderPath) {
+  const folder = String(folderPath || '').trim();
+  if (!folder) return { ok: false, reason: 'empty_path' };
+
+  const state = readLibraryConfig(ctx);
+  state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
+
+  // Skip if already covered by an existing show folder
+  const isChildOfExisting = state.videoShowFolders.some(sf => folder.startsWith(sf + path.sep));
+  if (isChildOfExisting) return { ok: false, reason: 'covered' };
+
+  // If this folder is a parent of existing show folders, remove the children
+  state.videoShowFolders = state.videoShowFolders.filter(sf => !sf.startsWith(folder + path.sep));
+
+  if (!state.videoShowFolders.includes(folder)) state.videoShowFolders.unshift(folder);
+  await writeLibraryConfig(ctx, state);
+
+  await ensureVideoIndexLoaded(ctx);
+  const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
+  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+
+  return { ok: true, state: snap };
+}
+
+/**
  * Remove video folder.
  * BUILD 88 FIX 1.1: ensureVideoIndexLoaded is now async.
  * Lifted from Build 78B index.js lines 1440-1454.
@@ -1584,6 +1612,7 @@ module.exports = {
   cancelScan,
   addFolder,
   addShowFolder,
+  addShowFolderPath,
   removeFolder,
   hideShow,
   openFileDialog,

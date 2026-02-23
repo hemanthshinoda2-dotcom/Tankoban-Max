@@ -88,6 +88,7 @@
     sourceSaveBtn: qs('webSourceSaveBtn'),
     // Chrome-style kebab menu
     menuBtn: qs('webMenuBtn'),
+    torBtn: qs('webTorBtn'), // FEAT-TOR
     hubSourcesList: qs('webHubSourcesList'),
     hubSourcesEmpty: qs('webHubSourcesEmpty'),
     // BUILD_WEB_PARITY
@@ -196,6 +197,9 @@
       adblockEnabled: true,
       restoreLastSession: true
     },
+    // FEAT-TOR
+    torActive: false,
+    torConnecting: false,
     browsingHistory: [],
     browsingHistoryQuery: '',
     browseSearchTimer: null,
@@ -469,11 +473,14 @@
 
   function routePopupUrl(target, parentTab, referer) {
     var url = normalizePopupUrl(target);
+    console.log('[DIAG:route] routePopupUrl target=' + target + ' normalized=' + url + ' parentTab=' + (parentTab && parentTab.id));
     if (!url) return false;
     var dedupKey = canonicalPopupDedupKey(url, parentTab || null);
-    if (shouldSkipDuplicatePopup(dedupKey)) return true;
-    if (maybeStartTorrentFromUrl(url, referer || '')) return true;
-    return navigateUrlInTab(parentTab || getActiveTab(), url);
+    if (shouldSkipDuplicatePopup(dedupKey)) { console.log('[DIAG:route] DEDUP skip'); return true; }
+    if (maybeStartTorrentFromUrl(url, referer || '')) { console.log('[DIAG:route] torrent intercept'); return true; }
+    var navResult = navigateUrlInTab(parentTab || getActiveTab(), url);
+    console.log('[DIAG:route] navigateUrlInTab returned ' + navResult);
+    return navResult;
   }
 
   function getParentTabForMainTabId(mainTabId) {
@@ -664,6 +671,7 @@
       // Link actions
       if (linkUrl) {
         items.push({ label: 'Open link', onClick: function () { navigateUrlInTab(parentTab || getActiveTab(), linkUrl); } });
+        items.push({ label: 'Open link in new tab', onClick: function () { openUrlFromOmni(linkUrl, { newTab: true }); } });
         items.push({ label: 'Copy link address', onClick: function () { copyText(linkUrl); showToast('Copied'); } });
         items.push({ separator: true });
       }
@@ -853,8 +861,18 @@
       wv.addEventListener('did-fail-load', handleLoadFail);
       wv.addEventListener('did-fail-provisional-load', handleLoadFail);
 
+      // DIAG: Forward guest-page console logs (incl. preload) to host console
+      wv.addEventListener('console-message', function (ev) {
+        var msg = ev && ev.message ? String(ev.message) : '';
+        if (msg.indexOf('[DIAG') === 0 || msg.indexOf('[POPUP') === 0) {
+          console.log('[guest:' + tabId + '] ' + msg);
+        }
+      });
+
       wv.addEventListener('will-navigate', function (ev) {
         var target = String((ev && ev.url) || '').trim();
+        console.log('[DIAG:webview] will-navigate:', target);
+        showToast('[DIAG] will-navigate: ' + (target || '(empty)').substring(0, 60));
         if (!target) return;
         if (maybeStartTorrentFromUrl(target, safeUrl(wv))) {
           try { ev.preventDefault(); } catch (e) {}
@@ -864,6 +882,8 @@
 
       wv.addEventListener('new-window', function (ev) {
         var target = String((ev && ev.url) || '').trim();
+        console.log('[DIAG:webview] new-window:', target);
+        showToast('[DIAG] new-window: ' + (target || '(empty)').substring(0, 60));
         if (!target) return;
         try { ev.preventDefault(); } catch (e) {}
         routePopupFromMainTab(tabId, target, safeUrl(wv));
@@ -873,6 +893,8 @@
         if (!ev || ev.channel !== WEBVIEW_POPUP_BRIDGE_CHANNEL) return;
         var payload = (ev.args && ev.args.length) ? ev.args[0] : null;
         var target = payload && payload.url ? String(payload.url) : '';
+        console.log('[DIAG:webview] ipc-message popup-bridge:', target, 'reason:', payload && payload.reason);
+        showToast('[DIAG] ipc-msg: ' + (target || '(empty)').substring(0, 60));
         if (!target) return;
         routePopupFromMainTab(tabId, target, safeUrl(wv));
       });
@@ -895,17 +917,28 @@
         // Prevent native Chromium context menu from appearing
         try { ev.preventDefault(); } catch (e) {}
         var params = ev && ev.params ? ev.params : {};
+        var rect = wv.getBoundingClientRect();
+        var dpr = window.devicePixelRatio || 1;
+        // Try both: raw params and DPR-corrected, log which one the user sees
+        var rawVx = (params.x || 0) + rect.left;
+        var rawVy = (params.y || 0) + rect.top;
+        var dprVx = ((params.x || 0) / dpr) + rect.left;
+        var dprVy = ((params.y || 0) / dpr) + rect.top;
         rememberContextGesture({
-          clientX: (params.x || 0) + (wv.getBoundingClientRect ? wv.getBoundingClientRect().left : 0),
-          clientY: (params.y || 0) + (wv.getBoundingClientRect ? wv.getBoundingClientRect().top : 0),
+          clientX: rawVx,
+          clientY: rawVy,
         }, 'webview:' + String(tabId));
         var items = buildWebviewContextMenu(tabId, wv, params);
         if (!items.length) return;
-        // Offset webview-relative coords to viewport coords
-        var rect = wv.getBoundingClientRect();
-        var vx = (params.x || 0) + rect.left;
-        var vy = (params.y || 0) + rect.top;
-        showContextMenu(items, vx, vy);
+        // DIAG: add coords as visible item so user can screenshot it
+        items.unshift({
+          label: 'px=' + (params.x|0) + ',' + (params.y|0) + ' rect=' + (rect.left|0) + ',' + (rect.top|0) + ' dpr=' + dpr,
+          disabled: true
+        });
+        // Use raw (no DPR correction) — if dpr>1, try dpr-corrected
+        var useVx = dpr > 1 ? dprVx : rawVx;
+        var useVy = dpr > 1 ? dprVy : rawVy;
+        showContextMenu(items, useVx, useVy);
       });
     }
 
@@ -2656,6 +2689,8 @@
 
   function syncLoadBar() {
     if (!el.loadBar) return;
+    // FEAT-TOR: Don't hide load bar when Tor indicator is showing
+    if (state.torActive && el.loadBar.classList.contains('tor-indicator')) return;
     var t = getActiveTab();
     var show = !!(state.browserOpen && t && t.loading);
     el.loadBar.classList.toggle('hidden', !show);
@@ -2670,6 +2705,26 @@
     el.navReload.innerHTML = loading ? SVG_STOP : SVG_RELOAD;
     el.navReload.title = loading ? 'Stop loading' : 'Reload';
     el.navReload.setAttribute('aria-label', loading ? 'Stop loading' : 'Reload page');
+  }
+
+  // FEAT-TOR: Sync Tor button visual state
+  function syncTorButton() {
+    if (!el.torBtn) return;
+    el.torBtn.classList.toggle('tor-active', state.torActive && !state.torConnecting);
+    el.torBtn.classList.toggle('tor-connecting', !!state.torConnecting);
+    el.torBtn.title = state.torConnecting ? 'Tor: Connecting\u2026'
+      : state.torActive ? 'Tor Proxy (on) \u2014 click to disconnect'
+      : 'Tor Proxy (off) \u2014 click to connect';
+    // Show persistent purple load bar indicator when Tor is active
+    if (el.loadBar) {
+      if (state.torActive && !state.torConnecting) {
+        el.loadBar.classList.add('tor-indicator');
+        el.loadBar.classList.remove('hidden');
+      } else {
+        el.loadBar.classList.remove('tor-indicator');
+        syncLoadBar(); // restore normal load bar state
+      }
+    }
   }
 
   function syncDownloadIndicator() {
@@ -3168,6 +3223,11 @@
         (isPaused ? '<span style="color:var(--vx-accent,rgba(var(--chrome-rgb),.55))">Paused</span>' : '') +
       '</div></div>';
 
+    // Video library badge
+    if (entry.videoLibrary) {
+      html += '<div class="wtVideoLibBadge">Streaming to Video Library</div>';
+    }
+
     // Overall progress bar
     html += '<div class="wtProgressWrap"><div class="wtProgressFill" style="width:' + pct + '%"></div></div>';
 
@@ -3202,6 +3262,11 @@
       if (entry.ignoredFiles) html += '<span>Ignored: ' + entry.ignoredFiles + '</span>';
       if (entry.failedFiles) html += '<span style="color:#e57373">Failed: ' + entry.failedFiles + '</span>';
       html += '</div>';
+    }
+
+    // Video library badge
+    if (entry.videoLibrary) {
+      html += '<div class="wtVideoLibBadge complete">Available in Video Library</div>';
     }
 
     // Show destination if set
@@ -3452,6 +3517,33 @@
           showToast((res && res.error) ? String(res.error) : 'Failed to set destination');
         }
       }).catch(function () { showToast('Failed to route files'); });
+    } else if (action === 'addToVideoLib') {
+      // Open folder picker, then add torrent to video library
+      var browseApi2 = api.webSources && api.webSources.pickSaveFolder;
+      if (!browseApi2) { showToast('Browse not available'); return; }
+      browseApi2({ defaultPath: _wtDestState.selectedPath || '' }).then(function (res) {
+        if (!res || !res.ok || !res.path) return;
+        var label = (entry && entry.name) ? entry.name : 'Torrent';
+        showToast('Saving to Video Library \u2014 ' + label);
+        api.webTorrent.addToVideoLibrary({
+          id: torrentId,
+          destinationRoot: res.path
+        }).then(function (result) {
+          if (result && result.ok) {
+            showToast('Added to Video Library');
+            if (entry) {
+              entry.state = 'downloading';
+              entry.videoLibrary = true;
+              entry.showFolderPath = result.showPath || '';
+            }
+            state.torrentTabEntries[tab.id] = entry;
+            renderTorrentTab(tab);
+            refreshTorrentState();
+          } else {
+            showToast((result && result.error) ? String(result.error) : 'Failed to add to video library');
+          }
+        }).catch(function (err) { showToast('Failed: ' + (err && err.message || err)); });
+      }).catch(function () {});
     }
   }
 
@@ -5561,6 +5653,46 @@
       };
     }
 
+    // FEAT-TOR: Tor proxy toggle button
+    if (el.torBtn) {
+      el.torBtn.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        if (state.torConnecting) return;
+        if (state.torActive) {
+          state.torConnecting = true;
+          syncTorButton();
+          api.torProxy.stop().then(function (res) {
+            state.torActive = false;
+            state.torConnecting = false;
+            syncTorButton();
+            showToast('Tor disconnected');
+          }).catch(function () {
+            state.torConnecting = false;
+            syncTorButton();
+            showToast('Failed to stop Tor');
+          });
+        } else {
+          state.torConnecting = true;
+          syncTorButton();
+          showToast('Connecting to Tor...');
+          api.torProxy.start().then(function (res) {
+            if (res && res.ok) {
+              state.torActive = true;
+              showToast('Tor connected \u2014 browsing through Tor');
+            } else {
+              showToast((res && res.error) || 'Failed to start Tor');
+            }
+            state.torConnecting = false;
+            syncTorButton();
+          }).catch(function (err) {
+            state.torConnecting = false;
+            syncTorButton();
+            showToast('Failed to start Tor');
+          });
+        }
+      };
+    }
+
     if (el.dlClearBtn) {
       el.dlClearBtn.onclick = function (e) {
         try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
@@ -6456,6 +6588,18 @@
       });
     }
 
+    // FEAT-TOR: Listen for Tor proxy status changes (from main process)
+    if (api.torProxy && api.torProxy.onStatusChanged) {
+      api.torProxy.onStatusChanged(function (data) {
+        state.torActive = !!(data && data.active);
+        state.torConnecting = !!(data && data.connecting);
+        syncTorButton();
+        if (data && data.crashed) {
+          showToast('Tor connection lost');
+        }
+      });
+    }
+
     // BUILD_WCV: ResizeObserver for bounds reporting
     if (el.viewContainer && typeof ResizeObserver !== 'undefined') {
       var _resizeObs = new ResizeObserver(function () {
@@ -6483,6 +6627,13 @@
     loadAdblockState();
     loadDataUsage();
     refreshTorrentState();
+    // FEAT-TOR: Query initial Tor status
+    if (api.torProxy && api.torProxy.getStatus) {
+      api.torProxy.getStatus().then(function (res) {
+        state.torActive = !!(res && res.active);
+        syncTorButton();
+      }).catch(function () {});
+    }
     syncDownloadIndicator();
     updateFindCountLabel();
     renderDownloadsPanel();

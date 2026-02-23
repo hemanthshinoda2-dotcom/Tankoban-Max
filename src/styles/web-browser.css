@@ -1491,6 +1491,30 @@
   cursor: default;
 }
 
+/* Video library button & badge */
+.wtBtn.videoLib {
+  background: #7c4dff;
+  color: #fff;
+  border-color: transparent;
+}
+.wtBtn.videoLib:hover {
+  filter: brightness(1.15);
+}
+.wtVideoLibBadge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(124, 77, 255, .15);
+  color: #b388ff;
+  margin: 8px 0 4px;
+}
+.wtVideoLibBadge.complete {
+  background: rgba(76, 175, 80, .15);
+  color: #81c784;
+}
+
 /* Completed state */
 .wtCompleteIcon {
   color: #4caf50;
@@ -1503,4 +1527,27 @@
   font-size: 12px;
   color: rgba(var(--chrome-rgb), .45);
   margin-bottom: 12px;
+}
+
+/* ============================
+   FEAT-TOR: Tor proxy button
+   ============================ */
+#webTorBtn.tor-connecting {
+  color: #f5a623;
+  animation: tor-pulse 1.2s ease-in-out infinite;
+}
+#webTorBtn.tor-active {
+  color: #7b68ee;
+  background: rgba(123, 104, 238, 0.15);
+  border-radius: 4px;
+}
+@keyframes tor-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+/* Persistent indicator bar when Tor is active */
+.webLoadBar.tor-indicator {
+  background: #7b68ee;
+  height: 2px;
+  opacity: 1;
 }

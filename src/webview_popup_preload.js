@@ -3,6 +3,7 @@
 
   if (globalThis.__tankoWebPopupBridgeInstalled) return;
   globalThis.__tankoWebPopupBridgeInstalled = true;
+  console.log('[DIAG:preload] popup bridge loaded, location=' + (typeof location !== 'undefined' ? location.href : 'N/A'));
 
   var CHANNEL = 'tanko:web-popup';
   var ALLOWED_PROTOCOLS = { 'http:': true, 'https:': true, 'magnet:': true };
@@ -43,11 +44,14 @@
   function routeToHost(url, reason) {
     var target = String(url || '').trim();
     if (!target) return;
+    console.log('[DIAG:preload] routeToHost url=' + target.substring(0, 80) + ' reason=' + reason + ' hasIpc=' + !!(ipcRenderer && typeof ipcRenderer.sendToHost === 'function'));
     if (ipcRenderer && typeof ipcRenderer.sendToHost === 'function') {
       try {
         ipcRenderer.sendToHost(CHANNEL, { url: target, reason: String(reason || '') });
         return;
-      } catch (_e) {}
+      } catch (_e) {
+        console.log('[DIAG:preload] sendToHost FAILED: ' + String(_e));
+      }
     }
     try {
       location.assign(target);

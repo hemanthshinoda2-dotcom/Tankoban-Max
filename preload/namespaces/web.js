@@ -134,6 +134,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       selectFiles: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SELECT_FILES, payload),
       setDestination: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SET_DESTINATION, payload),
       streamFile: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_STREAM_FILE, payload),
+      addToVideoLibrary: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_ADD_TO_VIDEO_LIBRARY, payload),
       onStarted: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENT_STARTED, (_evt, data) => cb(data));
@@ -157,6 +158,17 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       onStreamReady: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENT_STREAM_READY, (_evt, data) => cb(data));
+      },
+    },
+
+    // FEAT-TOR: Tor proxy
+    torProxy: {
+      start: () => ipcRenderer.invoke(CHANNEL.TOR_PROXY_START),
+      stop: () => ipcRenderer.invoke(CHANNEL.TOR_PROXY_STOP),
+      getStatus: () => ipcRenderer.invoke(CHANNEL.TOR_PROXY_GET_STATUS),
+      onStatusChanged: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.TOR_PROXY_STATUS_CHANGED, (_evt, data) => cb(data));
       },
     },
   };

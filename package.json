@@ -204,6 +204,10 @@
             {
                 "from": "player_qt/dist/TankobanPlayer",
                 "to": "player/TankobanPlayer"
+            },
+            {
+                "from": "resources/tor/windows",
+                "to": "tor/windows"
             }
         ]
     },

@@ -40,6 +40,7 @@
     var _pendingSeekIssuedAt = 0;
     var _pendingSeekAttempts = 0;
     var _pendingSeekUnpause = false;
+    var _pendingSeekStartMs = 0;
     var _resumeOverlay = null;
 
     function showResumeOverlay() {
@@ -455,12 +456,15 @@
             var durSec = toFiniteNumber(s.duration, 0);
             var timeSec = toFiniteNumber(s.timePos, 0);
             var readyForSeek = durSec > 0;
+            // Clamp target to duration so we don't seek past the end.
+            if (readyForSeek && tgt > durSec - 2) tgt = Math.max(0, durSec - 5);
             if (readyForSeek && Number.isFinite(tgt)) {
               if (_pendingSeekIssuedAt === 0 || (nowMs - _pendingSeekIssuedAt > 200)) {
                 _pendingSeekIssuedAt = nowMs;
                 _pendingSeekAttempts += 1;
                 hg.command(['seek', String(Math.max(0, tgt)), 'absolute']).catch(function () {});
               }
+              // Seek landed: position is close enough to target.
               if (Number.isFinite(timeSec) && Math.abs(timeSec - tgt) < 1) {
                 var shouldUnpause = _pendingSeekUnpause;
                 _pendingSeekSec = null;
@@ -471,6 +475,19 @@
                 if (shouldUnpause) {
                   hg.setProperty('pause', 'no').catch(function () {});
                 }
+              }
+            }
+            // Safety: if seek hasn't landed after 4s wall-clock, give up
+            // and just unpause wherever we are.
+            if (_pendingSeekSec !== null && _pendingSeekStartMs > 0 && (Date.now() - _pendingSeekStartMs > 4000)) {
+              _pendingSeekSec = null;
+              _pendingSeekStartMs = 0;
+              _pendingSeekIssuedAt = 0;
+              _pendingSeekAttempts = 0;
+              hideResumeOverlay();
+              if (_pendingSeekUnpause) {
+                _pendingSeekUnpause = false;
+                hg.setProperty('pause', 'no').catch(function () {});
               }
             }
           }
@@ -700,6 +717,7 @@
       var startSec = (loadOpts && Number.isFinite(Number(loadOpts.startSeconds)))
         ? Number(loadOpts.startSeconds) : 0;
       _pendingSeekSec = (startSec > 2) ? startSec : null;
+      _pendingSeekStartMs = (startSec > 2) ? Date.now() : 0;
       _pendingSeekIssuedAt = 0;
       _pendingSeekAttempts = 0;
       _pendingSeekUnpause = (startSec > 2);

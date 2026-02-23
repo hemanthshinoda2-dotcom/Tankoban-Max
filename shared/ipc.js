@@ -339,7 +339,10 @@ const CHANNEL = {
 
   /** Add a single show folder (one show) via dialog. Returns: { ok: boolean, state?: object } */
   VIDEO_ADD_SHOW_FOLDER: 'video:addShowFolder',
-  
+
+  /** Add a show folder by path (no dialog). Args: folderPath. Returns: { ok, state? } */
+  VIDEO_ADD_SHOW_FOLDER_PATH: 'video:addShowFolderPath',
+
   /** Remove video folder. Returns: void */
   VIDEO_REMOVE_FOLDER: 'video:removeFolder',
   
@@ -933,8 +936,24 @@ const CHANNEL = {
   /** Stream a torrent file to a destination path. Args: { id, fileIndex, destinationPath }. Returns: { ok, path? } */
   WEB_TORRENT_STREAM_FILE: 'webTorrent:streamFile',
 
+  /** Add torrent to video library. Args: { id, destinationRoot }. Returns: { ok, showPath? } */
+  WEB_TORRENT_ADD_TO_VIDEO_LIBRARY: 'webTorrent:addToVideoLibrary',
+
   /** Open native OS folder picker dialog. Args: { defaultPath? }. Returns: { ok, path? } or { ok:false, cancelled } */
   WEB_PICK_SAVE_FOLDER: 'web:pickSaveFolder',
+
+  // ========================================
+  // Tor Proxy (FEAT-TOR)
+  // ========================================
+
+  /** Start Tor proxy. Returns: { ok, error? } */
+  TOR_PROXY_START: 'torProxy:start',
+
+  /** Stop Tor proxy. Returns: { ok, error? } */
+  TOR_PROXY_STOP: 'torProxy:stop',
+
+  /** Get Tor proxy status. Returns: { ok, active, bootstrapProgress? } */
+  TOR_PROXY_GET_STATUS: 'torProxy:getStatus',
 
   // ========================================
   // Audiobooks (FEAT-AUDIOBOOK)
@@ -1097,6 +1116,10 @@ const EVENT = {
   WEB_TORRENTS_UPDATED: 'webTorrent:listUpdated',
   WEB_TORRENT_METADATA: 'webTorrent:metadata',
   WEB_TORRENT_STREAM_READY: 'webTorrent:streamReady',
+
+  // FEAT-TOR
+  /** Tor proxy status changed. Payload: { active, bootstrapProgress? } */
+  TOR_PROXY_STATUS_CHANGED: 'torProxy:statusChanged',
 
   // ========================================
   // Audiobook Events (FEAT-AUDIOBOOK)

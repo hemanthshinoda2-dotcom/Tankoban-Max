@@ -23,6 +23,7 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.VIDEO_ADD_FOLDER, (e, ...args) => domains.videoDomain.addFolder(ctx, e, ...args));
     // TRACE:IPC_IN ipcMain.handle(CHANNEL.VIDEO_ADD_SHOW_FOLDER, (e, ...args) => domains.videoDomain.addShowFolder(ctx, e, ...args));
   ipcMain.handle(CHANNEL.VIDEO_ADD_SHOW_FOLDER, (e, ...args) => domains.videoDomain.addShowFolder(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.VIDEO_ADD_SHOW_FOLDER_PATH, (e, ...args) => domains.videoDomain.addShowFolderPath(ctx, e, ...args));
     // TRACE:IPC_IN ipcMain.handle(CHANNEL.VIDEO_REMOVE_FOLDER, (e, ...args) => domains.videoDomain.removeFolder(ctx, e, ...args));
   ipcMain.handle(CHANNEL.VIDEO_REMOVE_FOLDER, (e, ...args) => domains.videoDomain.removeFolder(ctx, e, ...args));
     // TRACE:IPC_IN ipcMain.handle(CHANNEL.VIDEO_HIDE_SHOW, (e, ...args) => domains.videoDomain.hideShow(ctx, e, ...args));

@@ -14,4 +14,5 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_TORRENT_SELECT_FILES, function (e, payload) { return d.selectFiles(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_SET_DESTINATION, function (e, payload) { return d.setDestination(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_STREAM_FILE, function (e, payload) { return d.streamFile(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_ADD_TO_VIDEO_LIBRARY, function (e, payload) { return d.addToVideoLibrary(ctx, e, payload); });
 };

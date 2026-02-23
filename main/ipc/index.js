@@ -32,7 +32,7 @@ const __bLog = (() => {
 __bLog('registerIpc: ENTERED, win=' + (win ? 'BrowserWindow' : 'null') + ', windows=' + (windows ? 'Set(size=' + windows.size + ')' : 'undefined'));
 
 // ========== IMPORTS ==========
-const { BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const { fileURLToPath } = require('url');
 const path = require('path');
 const fs = require('fs');
@@ -97,7 +97,8 @@ const webBookmarksDomain = require('../domains/webBookmarks');
 const webPermissionsDomain = require('../domains/webPermissions');
 const webDataDomain = require('../domains/webData');
 const webAdblockDomain = require('../domains/webAdblock');
-__bLog('registerIpc: BUILD_WEB webSourcesDomain + settings/history/torrent domains OK');
+const torProxyDomain = require('../domains/torProxy');
+__bLog('registerIpc: BUILD_WEB webSourcesDomain + settings/history/torrent/torProxy domains OK');
 
 // FEAT-AUDIOBOOK: Audiobook domains
 const audiobooksDomain = require('../domains/audiobooks');
@@ -465,6 +466,7 @@ try {
     require('./register/web_find'),
     require('./register/web_adblock'),
     require('./register/web_torrent'),
+    require('./register/tor_proxy'), // FEAT-TOR
     require('./register/audiobooks'), // FEAT-AUDIOBOOK
     require('./register/audiobook_progress'), // FEAT-AUDIOBOOK
     require('./register/audiobook_pairing'), // FEAT-AUDIOBOOK
@@ -475,7 +477,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_torrent','audiobooks','audiobook_progress','audiobook_pairing'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_torrent','tor_proxy','audiobooks','audiobook_progress','audiobook_pairing'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -517,6 +519,7 @@ for (let i = 0; i < registerModules.length; i++) {
     webDataDomain,
     webAdblockDomain,
     webTorrentDomain,
+    torProxyDomain, // FEAT-TOR
     audiobooksDomain, // FEAT-AUDIOBOOK
     audiobookProgress, // FEAT-AUDIOBOOK
     audiobookPairing, // FEAT-AUDIOBOOK
@@ -528,6 +531,13 @@ for (let i = 0; i < registerModules.length; i++) {
     try { console.error('[ipc] register module failed:', e && e.message ? e.message : e); } catch {}
   }
 }
+
+// FEAT-TOR: Kill Tor process on app quit
+try {
+  app.on('before-quit', function () {
+    try { torProxyDomain.forceKill(); } catch {}
+  });
+} catch {}
 
 __bLog('registerIpc: ALL DONE');
 

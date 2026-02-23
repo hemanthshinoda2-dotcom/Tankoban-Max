@@ -26,6 +26,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       cancelScan: () => ipcRenderer.invoke(CHANNEL.VIDEO_CANCEL_SCAN),
       addFolder: () => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_FOLDER),
       addShowFolder: () => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_SHOW_FOLDER),
+      addShowFolderPath: (folderPath) => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_SHOW_FOLDER_PATH, folderPath),
       removeFolder: (folderPath) => ipcRenderer.invoke(CHANNEL.VIDEO_REMOVE_FOLDER, folderPath),
       hideShow: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_HIDE_SHOW, showId),
       openFileDialog: () => ipcRenderer.invoke(CHANNEL.VIDEO_OPEN_FILE_DIALOG),

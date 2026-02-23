@@ -271,6 +271,13 @@ async function routeCompletedFiles(ctx, rec) {
     relPath = relPath.replace(/^[\\/]+/, '');
     var destination = path.join(root, relPath);
     try {
+      // For video library torrents, skip files already streamed to destination
+      if (entry.videoLibrary) {
+        try {
+          var stat = fs.statSync(destination);
+          if (stat && stat.size >= f.length) { routed += 1; detectLibrariesForPath(ctx, destination).forEach(function (lib) { routedLibraries.add(lib); }); continue; }
+        } catch {}
+      }
       ensureDir(path.dirname(destination));
       await copyTorrentFile(f, destination);
       routed += 1;
@@ -283,6 +290,8 @@ async function routeCompletedFiles(ctx, rec) {
   entry.routedFiles = routed;
   entry.ignoredFiles = ignored;
   entry.failedFiles = failed;
+  // Always trigger video rescan for video library torrents (show folder may not be under a video root)
+  if (entry.videoLibrary) routedLibraries.add('videos');
   routedLibraries.forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
 }
 
@@ -454,15 +463,25 @@ async function fetchTorrentBuffer(url, referer) {
   return { ok: true, buffer: buf };
 }
 
+// FEAT-TOR: Check if Tor proxy is active (cart mode — queue without downloading)
+function isTorActive() {
+  try {
+    var torProxy = require('../torProxy');
+    return torProxy.isActive();
+  } catch { return false; }
+}
+
 async function startMagnet(ctx, evt, payload) {
   var magnetUri = String(payload && payload.magnetUri || '').trim();
   if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
+  // FEAT-TOR: Force empty destination when Tor is on → queues in metadata_ready state
+  var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
     magnetUri: magnetUri,
     sourceUrl: String(payload && payload.referer || ''),
-    destinationRoot: root.absRoot
+    destinationRoot: destRoot
   });
   return addTorrentInput(ctx, entry, magnetUri);
 }
@@ -480,7 +499,9 @@ async function startTorrentUrl(ctx, evt, payload) {
   }
   if (!fetched || !fetched.ok) return { ok: false, error: String((fetched && fetched.error) || 'Failed to fetch torrent URL') };
 
-  var entry = createEntry({ sourceUrl: url, destinationRoot: root.absRoot });
+  // FEAT-TOR: Force empty destination when Tor is on
+  var destRoot = isTorActive() ? '' : root.absRoot;
+  var entry = createEntry({ sourceUrl: url, destinationRoot: destRoot });
   return addTorrentInput(ctx, entry, fetched.buffer);
 }
 
@@ -489,9 +510,11 @@ async function startTorrentBuffer(ctx, evt, payload) {
   if (!root.ok) return { ok: false, error: root.error };
   var input = payload && payload.buffer;
   if (!Buffer.isBuffer(input) || !input.length) return { ok: false, error: 'Invalid torrent file' };
+  // FEAT-TOR: Force empty destination when Tor is on
+  var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
     sourceUrl: String(payload && (payload.sourceUrl || payload.referer) || ''),
-    destinationRoot: root.absRoot
+    destinationRoot: destRoot
   });
   return addTorrentInput(ctx, entry, input);
 }
@@ -747,6 +770,96 @@ async function streamFile(ctx, _evt, payload) {
   return { ok: true, path: absPath };
 }
 
+// ── Video library integration ──
+
+var VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.m2ts'];
+
+function isVideoFile(fileName) {
+  var ext = path.extname(String(fileName || '')).toLowerCase();
+  return VIDEO_EXTS.indexOf(ext) !== -1;
+}
+
+async function addToVideoLibrary(ctx, evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  var rec = activeById.get(id);
+  if (!rec || !rec.torrent || !rec.entry) return { ok: false, error: 'Torrent not active' };
+
+  var entry = rec.entry;
+  var torrent = rec.torrent;
+
+  if (entry.state !== 'metadata_ready') {
+    return { ok: false, error: 'Torrent must be in metadata_ready state (got ' + entry.state + ')' };
+  }
+
+  var dest = String(payload && payload.destinationRoot || '').trim();
+  if (!dest) return { ok: false, error: 'Destination folder required' };
+  var absRoot = '';
+  try { absRoot = path.resolve(dest); } catch {}
+  if (!absRoot) return { ok: false, error: 'Invalid destination folder' };
+  try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
+
+  // Compute the show folder path (destination + torrent name)
+  var torrentName = String(torrent.name || entry.name || 'Torrent');
+  var showPath = path.join(absRoot, torrentName);
+
+  // Identify video file indices
+  var videoIndices = [];
+  var files = entry.files || [];
+  for (var i = 0; i < files.length; i++) {
+    if (isVideoFile(files[i].name || files[i].path || '')) {
+      videoIndices.push(files[i].index != null ? files[i].index : i);
+    }
+  }
+
+  if (!videoIndices.length) return { ok: false, error: 'No video files found in torrent' };
+
+  // Select video files with sequential mode via internal selectFiles call
+  await selectFiles(ctx, evt, {
+    id: id,
+    selectedIndices: videoIndices,
+    destinationRoot: absRoot,
+    sequential: true
+  });
+
+  // Mark as video library torrent
+  entry.videoLibrary = true;
+  entry.showFolderPath = showPath;
+
+  // Stream each video file to the show folder
+  for (var si = 0; si < videoIndices.length; si++) {
+    var fileIdx = videoIndices[si];
+    var tFile = torrent.files[fileIdx];
+    if (!tFile) continue;
+
+    // Build destination path: showPath + relative path within torrent
+    var relPath = String(tFile.path || tFile.name || '').trim();
+    // Strip leading torrent name prefix if present (WebTorrent includes it in file.path)
+    if (relPath.indexOf(torrentName + '/') === 0 || relPath.indexOf(torrentName + '\\') === 0) {
+      relPath = relPath.substring(torrentName.length + 1);
+    }
+    var fileDest = path.join(showPath, relPath);
+
+    await streamFile(ctx, evt, {
+      id: id,
+      fileIndex: fileIdx,
+      destinationPath: fileDest
+    });
+  }
+
+  // Register the show folder in the video library
+  try {
+    var videoDomain = require('../video');
+    await videoDomain.addShowFolderPath(ctx, null, showPath);
+  } catch (err) {
+    wtLog('addToVideoLibrary: video domain error: ' + String(err && err.message || err));
+  }
+
+  upsertHistory(ctx, entry);
+  emitUpdated(ctx);
+  wtLog('addToVideoLibrary: success, showPath=' + showPath + ', videoFiles=' + videoIndices.length);
+  return { ok: true, showPath: showPath };
+}
+
 module.exports = {
   startMagnet,
   startTorrentUrl,
@@ -761,4 +874,5 @@ module.exports = {
   selectFiles,
   setDestination,
   streamFile,
+  addToVideoLibrary,
 };
