@@ -13,6 +13,14 @@ const { EVENT } = require('../../../shared/ipc');
 const DEFAULT_WIDTH = 1920;
 const DEFAULT_HEIGHT = 1080;
 
+// === TEMPORARY DIAGNOSTIC LOGGING ===
+const _HG_LOG_PATH = path.join(require('os').tmpdir(), 'tanko_hg_diag.log');
+function _hgLog(msg) {
+  try { fs.appendFileSync(_HG_LOG_PATH, `[${new Date().toISOString()}] ${msg}\n`); } catch {}
+}
+try { fs.writeFileSync(_HG_LOG_PATH, `=== HG Diagnostic Log Started ${new Date().toISOString()} ===\n`); } catch {}
+// === END TEMPORARY ===
+
 const DEFAULT_OBSERVED_PROPERTIES = [
   'time-pos',
   'duration',
@@ -436,11 +444,18 @@ function stopFrameLoopInternal() {
 }
 
 function loadAddonOrThrow(ctx) {
-  if (__state.addon) return __state.addon;
+  if (__state.addon) { _hgLog('loadAddonOrThrow: already loaded'); return __state.addon; }
   const addonPath = resolveAddonPath(ctx);
+  _hgLog(`loadAddonOrThrow: addonPath=${addonPath || 'NOT FOUND'}`);
   if (!addonPath) throw new Error('holy_grail.node not found');
   __state.addonPath = addonPath;
-  __state.addon = require(addonPath);
+  try {
+    __state.addon = require(addonPath);
+    _hgLog(`loadAddonOrThrow: SUCCESS, addon keys=${Object.keys(__state.addon).join(',')}`);
+  } catch (loadErr) {
+    _hgLog(`loadAddonOrThrow: REQUIRE FAILED: ${loadErr.message}`);
+    throw loadErr;
+  }
   return __state.addon;
 }
 
@@ -605,9 +620,13 @@ async function frameLoopTick(ctx, token) {
   if (token !== __state.frameLoopToken) return;
 
   diagBump('frameLoopTicks');
+  if (__state.diag && (__state.diag.frameLoopTicks <= 5 || __state.diag.frameLoopTicks % 500 === 0)) {
+    _hgLog(`frameLoopTick #${__state.diag.frameLoopTicks}: addon=${!!__state.addon} init=${__state.initialized} presentActive=${__state.presentationActive} inFlight=${__state.frameSendInFlight} produced=${__state.diag.framesProduced || 0} sent=${__state.diag.framesSent || 0} renderNull=${__state.diag.renderFrameNull || 0} readyFalse=${__state.diag.frameReadyFalse || 0}`);
+  }
 
   try {
     if (!__state.addon || !__state.initialized) {
+      _hgLog('frameLoopTick: STOPPED - addon or init missing');
       stopFrameLoopInternal();
       return;
     }
@@ -656,6 +675,9 @@ async function frameLoopTick(ctx, token) {
     }
 
     diagBump('framesProduced');
+    if (__state.diag && __state.diag.framesProduced <= 3) {
+      _hgLog(`frameLoopTick: frame PRODUCED (#${__state.diag.framesProduced}), sharedTex=${!!sharedTexture}, liveFrame=${isLiveFrame(__state.ownerFrame)}`);
+    }
 
     if (sharedTexture && isLiveFrame(__state.ownerFrame)) {
       const size = (__state.addon.getSize && __state.addon.getSize()) || {};
@@ -745,6 +767,9 @@ async function probe(ctx, evt) {
     const hasSharedTexture = !!sharedTexture;
     const ok = !!(addonPath && mpvPath && eglPath && glesPath && hasSharedTexture);
 
+    _hgLog(`probe: ok=${ok} addon=${!!addonPath} mpv=${!!mpvPath} egl=${!!eglPath} gles=${!!glesPath} sharedTex=${hasSharedTexture}`);
+    _hgLog(`probe paths: addon=${addonPath} mpv=${mpvPath} egl=${eglPath} gles=${glesPath}`);
+
     return {
       ok,
       addonPath,
@@ -755,6 +780,7 @@ async function probe(ctx, evt) {
       error: ok ? '' : 'missing_required_component',
     };
   } catch (err) {
+    _hgLog(`probe: EXCEPTION: ${toErrorString(err)}`);
     return {
       ok: false,
       error: toErrorString(err),
@@ -777,6 +803,7 @@ async function initGpu(ctx, evt, args) {
     if (!eglPath) throw new Error('libEGL.dll not found');
     if (!glesPath) throw new Error('libGLESv2.dll not found');
 
+    _hgLog(`initGpu: calling addon.initGpu w=${width} h=${height} mpv=${mpvPath} egl=${eglPath} gles=${glesPath}`);
     addon.initGpu({
       mpvPath,
       eglPath,
@@ -784,6 +811,7 @@ async function initGpu(ctx, evt, args) {
       width,
       height,
     });
+    _hgLog('initGpu: SUCCESS');
 
     __state.initialized = true;
 
@@ -813,12 +841,15 @@ async function loadFile(ctx, evt, filePath) {
   try {
     setOwnerFromEvent(ctx, evt);
     const addon = loadAddonOrThrow(ctx);
-    if (!__state.initialized) return { ok: false, error: 'not_initialized' };
+    if (!__state.initialized) { _hgLog('loadFile: NOT INITIALIZED'); return { ok: false, error: 'not_initialized' }; }
     const target = String(filePath || '');
-    if (!target) return { ok: false, error: 'missing_file_path' };
+    if (!target) { _hgLog('loadFile: MISSING FILE PATH'); return { ok: false, error: 'missing_file_path' }; }
+    _hgLog(`loadFile: loading "${target}"`);
     addon.loadFile(target);
+    _hgLog('loadFile: SUCCESS');
     return { ok: true };
   } catch (err) {
+    _hgLog(`loadFile: EXCEPTION: ${toErrorString(err)}`);
     return { ok: false, error: toErrorString(err) };
   }
 }
@@ -868,11 +899,13 @@ async function startFrameLoop(ctx, evt) {
 
     const frameToken = __state.frameLoopToken;
     const eventToken = __state.eventLoopToken;
+    _hgLog('startFrameLoop: starting frame + event loops');
     void frameLoopTick(ctx, frameToken);
     void eventLoopTick(ctx, eventToken);
 
     return { ok: true };
   } catch (err) {
+    _hgLog(`startFrameLoop: EXCEPTION: ${toErrorString(err)}`);
     return { ok: false, error: toErrorString(err) };
   }
 }

@@ -526,7 +526,13 @@
       });
     }
 
+    var _drawFrameCount = 0;
     function drawFrame(videoFrame) {
+      _drawFrameCount++;
+      if (_drawFrameCount <= 3) {
+        console.log('[HG-DIAG] drawFrame #' + _drawFrameCount + ', canvas=' + !!canvas + ', ctx2d=' + !!ctx2d + ', videoFrame=' + !!videoFrame +
+          (videoFrame ? (' w=' + (videoFrame.displayWidth || videoFrame.codedWidth) + ' h=' + (videoFrame.displayHeight || videoFrame.codedHeight)) : ''));
+      }
       if (!videoFrame) return;
       if (!ctx2d || !canvas) { closeFrameSafe(videoFrame); return; }
 
@@ -615,7 +621,12 @@
       });
     }
 
+    var _queuedFrameCount = 0;
     function queueVideoFrame(videoFrame) {
+      _queuedFrameCount++;
+      if (_queuedFrameCount <= 3 || _queuedFrameCount % 500 === 0) {
+        console.log('[HG-DIAG] queueVideoFrame #' + _queuedFrameCount + ', destroyed=' + destroyed + ', gpuInitialized=' + gpuInitialized);
+      }
       if (!videoFrame) return;
       if (destroyed || !gpuInitialized) {
         closeFrameSafe(videoFrame);
@@ -1145,7 +1156,9 @@
       if (_pendingSeekSec !== null) showResumeOverlay();
       else hideResumeOverlay();
 
+      console.log('[HG-DIAG] load() called, filePath=', filePath);
       return ensureGpu().then(function (gpuRes) {
+        console.log('[HG-DIAG] ensureGpu result:', gpuRes);
         if (!gpuRes || !gpuRes.ok) {
           return { ok: false, error: 'GPU init failed: ' + ((gpuRes && gpuRes.error) || 'unknown') };
         }
@@ -1155,12 +1168,14 @@
         }
         return hg.loadFile(filePath);
       }).then(function (loadRes) {
+        console.log('[HG-DIAG] loadFile result:', loadRes);
         if (!loadRes || !loadRes.ok) {
           return { ok: false, error: (loadRes && loadRes.error) || 'load failed' };
         }
         if (!frameLoopStarted) {
           frameLoopStarted = true;
-          hg.startFrameLoop().catch(function () {});
+          console.log('[HG-DIAG] starting frame loop');
+          hg.startFrameLoop().catch(function (e) { console.error('[HG-DIAG] startFrameLoop failed:', e); });
         }
         // Re-apply volume/mute/speed after GPU init (they may have been set
         // before the domain was ready, causing silent IPC failures)
