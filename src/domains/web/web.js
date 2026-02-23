@@ -33,7 +33,11 @@
     browserView: qs('webBrowserView'),
     browserBackBtn: qs('webBrowserBackBtn'),
     browserTitle: qs('webBrowserTitle'),
+    tabOverflowBtn: qs('webTabOverflowBtn'),
     tabBar: qs('webTabBar'),
+    tabQuickPanel: qs('webTabQuickPanel'),
+    tabQuickSearch: qs('webTabQuickSearch'),
+    tabQuickList: qs('webTabQuickList'),
     navBack: qs('webNavBack'),
     navForward: qs('webNavForward'),
     navReload: qs('webNavReload'),
@@ -227,6 +231,9 @@
     omniSuggestOpen: false,
     omniSuggestItems: [],
     omniSuggestActiveIndex: -1,
+    tabQuickOpen: false,
+    tabQuickQuery: '',
+    tabQuickActiveIndex: -1,
     hubTorrentFilter: 'active',
   };
 
@@ -267,6 +274,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: false
     };
     state.tabs.push(tab);
@@ -566,7 +579,8 @@
       loading: [],
       nav: [],
       find: [],
-      loadFail: []
+      loadFail: [],
+      media: []
     };
 
     function emit(type, payload) {
@@ -788,6 +802,20 @@
     }
 
     function bindWebview(tabId, wv) {
+      var rec = tabs.get(Number(tabId)) || { tabId: tabId, webview: wv };
+
+      function emitMediaState(extra) {
+        var muted = false;
+        try { muted = !!(wv && wv.isAudioMuted && wv.isAudioMuted()); } catch (e0) {}
+        emit('media', {
+          tabId: tabId,
+          audible: !!(rec && rec.audible),
+          muted: muted,
+          mediaDetected: !!(rec && rec.mediaDetected),
+          reason: extra || ''
+        });
+      }
+
       function emitBestTitle() {
         var t = safeTitle(wv);
         if (!t) {
@@ -912,6 +940,19 @@
         routePopupFromMainTab(tabId, target, safeUrl(wv));
       });
 
+
+      wv.addEventListener('media-started-playing', function () {
+        rec.audible = true;
+        rec.mediaDetected = true;
+        emitMediaState('started');
+      });
+
+      wv.addEventListener('media-paused', function () {
+        rec.audible = false;
+        rec.mediaDetected = true;
+        emitMediaState('paused');
+      });
+
       wv.addEventListener('found-in-page', function (ev) {
         var result = ev && ev.result ? ev.result : {};
         emit('find', {
@@ -967,10 +1008,10 @@
         if (parityUA) wv.setAttribute('useragent', parityUA);
         if (popupBridgePreload) wv.setAttribute('preload', popupBridgePreload);
         wv.src = url;
+        tabs.set(tabId, { tabId: tabId, webview: wv, audible: false, mediaDetected: false });
         bindWebview(tabId, wv);
 
         if (el.viewContainer) el.viewContainer.appendChild(wv);
-        tabs.set(tabId, { tabId: tabId, webview: wv });
         return Promise.resolve({ ok: true, tabId: tabId });
       },
 
@@ -1101,6 +1142,21 @@
         return Promise.resolve({ ok: true, tabs: ids });
       },
 
+      setMuted: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var muted = !!(payload && payload.muted);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false, error: 'Not found' });
+        try {
+          if (rec.webview.setAudioMuted) rec.webview.setAudioMuted(muted);
+          rec.mediaDetected = true;
+          emit('media', { tabId: tabId, audible: !!rec.audible, muted: muted, mediaDetected: true, reason: 'setMuted' });
+          return Promise.resolve({ ok: true, muted: muted });
+        } catch (err) {
+          return Promise.resolve({ ok: false, error: String(err && err.message || err || 'Mute failed') });
+        }
+      },
+
       findByWebContentsId: function (webContentsId) {
         var target = Number(webContentsId);
         if (!isFinite(target) || target <= 0) return null;
@@ -1121,6 +1177,7 @@
       onNavState: function (cb) { on('nav', cb); },
       onFindResult: function (cb) { on('find', cb); },
       onLoadFailed: function (cb) { on('loadFail', cb); },
+      onMediaState: function (cb) { on('media', cb); },
     };
   }
 
@@ -1348,6 +1405,7 @@
     else el.urlDisplay.textContent = String(item.url);
     setOmniIconForUrl(String(item.url));
     closeOmniSuggestions();
+    closeTabQuickPanel();
   }
 
   function buildOmniSuggestions(input) {
@@ -1666,7 +1724,17 @@
       title: String(tab.title || '').trim(),
       url: url,
       homeUrl: String(tab.homeUrl || url).trim() || url,
-      pinned: !!tab.pinned
+      pinned: !!tab.pinned,
+      audible: !!tab.audible,
+      muted: !!tab.muted,
+      mediaDetected: !!tab.mediaDetected,
+      lastActiveAt: Number(tab.lastActiveAt || 0) || Date.now(),
+      group: (tab.group && typeof tab.group === 'object') ? {
+        id: tab.group.id != null ? String(tab.group.id) : '',
+        color: String(tab.group.color || ''),
+        title: String(tab.group.title || '')
+      } : null,
+      overflowVisible: tab.overflowVisible !== false
     };
   }
 
@@ -1740,6 +1808,12 @@
     });
     if (restored) {
       restored.pinned = !!snap.pinned;
+      restored.audible = !!snap.audible;
+      restored.muted = !!snap.muted;
+      restored.mediaDetected = !!snap.mediaDetected;
+      restored.lastActiveAt = Number(snap.lastActiveAt || Date.now()) || Date.now();
+      restored.group = (snap.group && typeof snap.group === 'object') ? { id: String(snap.group.id || ''), color: String(snap.group.color || ''), title: String(snap.group.title || '') } : null;
+      restored.overflowVisible = snap.overflowVisible !== false;
       renderTabs();
       showToast('Reopened tab');
       scheduleSessionSave();
@@ -1788,7 +1862,15 @@
           titleOverride: s.title || '',
           forcedId: sidNum > 0 ? sidNum : null
         });
-        if (tab) tab.pinned = !!s.pinned;
+        if (tab) {
+          tab.pinned = !!s.pinned;
+          tab.audible = !!s.audible;
+          tab.muted = !!s.muted;
+          tab.mediaDetected = !!s.mediaDetected;
+          tab.lastActiveAt = Number(s.lastActiveAt || Date.now()) || Date.now();
+          tab.group = (s.group && typeof s.group === 'object') ? { id: String(s.group.id || ''), color: String(s.group.color || ''), title: String(s.group.title || '') } : null;
+          tab.overflowVisible = s.overflowVisible !== false;
+        }
       }
       if (maxId >= state.nextTabId) state.nextTabId = maxId + 1;
 
@@ -2495,10 +2577,141 @@
     closeDownloadsPanel();
     closeFindBar();
     closeOmniSuggestions();
+    closeTabQuickPanel();
     syncLoadBar();
   }
 
   // ---- Tabs management ----
+
+  function setTabMuteState(tabId, muted, silent) {
+    var idNum = Number(tabId);
+    if (!isFinite(idNum)) return;
+    var tab = null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i] && state.tabs[i].id === idNum) { tab = state.tabs[i]; break; }
+    }
+    if (!tab || tab.type === 'torrent' || !tab.mainTabId) return;
+    var nextMuted = !!muted;
+    webTabs.setMuted({ tabId: tab.mainTabId, muted: nextMuted }).then(function () {
+      tab.muted = nextMuted;
+      tab.mediaDetected = true;
+      renderTabs();
+      scheduleSessionSave();
+      if (!silent) showToast(nextMuted ? 'Tab muted' : 'Tab unmuted');
+    }).catch(function () {
+      showToast('Unable to change tab audio');
+    });
+  }
+
+  function scoreTabSearch(query, tab) {
+    var q = String(query || '').toLowerCase().trim();
+    if (!q) return 1;
+    var hay = String((tab && (tab.title || tab.sourceName || tab.url)) || '').toLowerCase();
+    if (!hay) return 0;
+    if (hay.indexOf(q) !== -1) return 100 - Math.max(0, hay.indexOf(q));
+    var qi = 0;
+    var gap = 0;
+    for (var i = 0; i < hay.length && qi < q.length; i++) {
+      if (hay.charAt(i) === q.charAt(qi)) qi++;
+      else if (qi > 0) gap++;
+    }
+    if (qi < q.length) return 0;
+    return Math.max(2, 60 - gap);
+  }
+
+  function getTabQuickMatches() {
+    var query = String(state.tabQuickQuery || '');
+    var rows = [];
+    for (var i = 0; i < state.tabs.length; i++) {
+      var tab = state.tabs[i];
+      if (!tab) continue;
+      var score = scoreTabSearch(query, tab);
+      if (score <= 0) continue;
+      rows.push({ tab: tab, score: score });
+    }
+    rows.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return Number(b.tab.lastActiveAt || 0) - Number(a.tab.lastActiveAt || 0);
+    });
+    return rows;
+  }
+
+  function renderTabQuickPanel() {
+    if (!el.tabQuickPanel || !el.tabQuickList) return;
+    if (!state.tabQuickOpen) {
+      el.tabQuickPanel.classList.add('hidden');
+      return;
+    }
+    el.tabQuickPanel.classList.remove('hidden');
+    var matches = getTabQuickMatches();
+    if (!matches.length) {
+      state.tabQuickActiveIndex = -1;
+      el.tabQuickList.innerHTML = '<div class="webTabQuickEmpty">No matching tabs</div>';
+      return;
+    }
+    if (state.tabQuickActiveIndex < 0) state.tabQuickActiveIndex = 0;
+    if (state.tabQuickActiveIndex >= matches.length) state.tabQuickActiveIndex = matches.length - 1;
+    var html = '';
+    for (var i = 0; i < matches.length; i++) {
+      var t = matches[i].tab;
+      var active = i === state.tabQuickActiveIndex;
+      var audio = t.audible ? (t.muted ? ' 🔇' : ' 🔊') : '';
+      html += '<button class="webTabQuickItem' + (active ? ' active' : '') + '" type="button" role="option" data-quick-tab-id="' + t.id + '" aria-selected="' + (active ? 'true' : 'false') + '">'
+        + '<span class="webTabQuickMain">' + escapeHtml(t.title || t.sourceName || 'Tab') + audio + '</span>'
+        + '<span class="webTabQuickSub">' + escapeHtml(t.url || t.homeUrl || '') + '</span>'
+        + '</button>';
+    }
+    el.tabQuickList.innerHTML = html;
+    var items = el.tabQuickList.querySelectorAll('[data-quick-tab-id]');
+    for (var j = 0; j < items.length; j++) {
+      items[j].onclick = function () {
+        var id = Number(this.getAttribute('data-quick-tab-id'));
+        if (!isFinite(id)) return;
+        closeTabQuickPanel();
+        activateTab(id);
+      };
+    }
+  }
+
+  function openTabQuickPanel() {
+    if (!state.browserOpen) return;
+    state.tabQuickOpen = true;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = 0;
+    renderTabQuickPanel();
+    if (el.tabQuickSearch && el.tabQuickSearch.focus) {
+      el.tabQuickSearch.value = '';
+      el.tabQuickSearch.focus();
+    }
+  }
+
+  function closeTabQuickPanel() {
+    state.tabQuickOpen = false;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = -1;
+    if (el.tabQuickPanel) el.tabQuickPanel.classList.add('hidden');
+  }
+
+  function syncTabOverflowAffordance() {
+    if (!el.tabBar) return;
+    var hasOverflow = (el.tabBar.scrollWidth - el.tabBar.clientWidth) > 4;
+    var tabEls = el.tabBar.querySelectorAll('.webTab');
+    for (var i = 0; i < tabEls.length; i++) {
+      var node = tabEls[i];
+      var id = Number(node.getAttribute('data-tab-id'));
+      var tab = null;
+      for (var j = 0; j < state.tabs.length; j++) { if (state.tabs[j] && state.tabs[j].id === id) { tab = state.tabs[j]; break; } }
+      if (!tab) continue;
+      var visible = true;
+      if (hasOverflow) {
+        var left = node.offsetLeft - el.tabBar.scrollLeft;
+        var right = left + node.offsetWidth;
+        visible = left >= 0 && right <= el.tabBar.clientWidth;
+      }
+      tab.overflowVisible = visible;
+    }
+    if (el.tabOverflowBtn) el.tabOverflowBtn.classList.toggle('hidden', !hasOverflow);
+  }
 
   function renderTabs() {
     if (!el.tabBar) return;
@@ -2522,9 +2735,17 @@
         favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       }
       var pinnedClass = t.pinned ? ' pinned' : '';
-      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
+      var groupAttr = '';
+      if (t.group && t.group.id) groupAttr = ' data-group-id="' + escapeHtml(String(t.group.id)) + '"';
+      var spinnerBadge = (!active && t.loading) ? '<span class="webTabBadge webTabBadgeLoading" title="Loading" aria-label="Loading"></span>' : '';
+      var audioBadge = '';
+      if (t.audible) {
+        audioBadge = '<span class="webTabBadge webTabBadgeAudio" title="' + (t.muted ? 'Muted' : 'Playing audio') + '" aria-label="' + (t.muted ? 'Muted' : 'Playing audio') + '">' + (t.muted ? '&#128263;' : '&#128266;') + '</span>';
+      }
+      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true"' + groupAttr + '>' +
         favHtml +
         (t.pinned ? '' : '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>') +
+        '<span class="webTabBadges">' + spinnerBadge + audioBadge + '</span>' +
         (t.pinned ? '' : '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>') +
         '</div>';
     }
@@ -2563,6 +2784,12 @@
     if (addBtn) {
       addBtn.onclick = function () {
         openTabPicker();
+      };
+    }
+
+    if (el.tabBar) {
+      el.tabBar.onscroll = function () {
+        syncTabOverflowAffordance();
       };
     }
 
@@ -2616,6 +2843,9 @@
             });
           } });
           items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+          if (t.mediaDetected || t.audible) {
+            items.push({ label: t.muted ? 'Unmute tab' : 'Mute tab', onClick: function () { setTabMuteState(id, !t.muted); } });
+          }
           items.push({ separator: true });
           items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
         }
@@ -2699,6 +2929,8 @@
       });
     }
 
+    syncTabOverflowAffordance();
+    if (state.tabQuickOpen) renderTabQuickPanel();
     syncLoadBar();
   }
 
@@ -4612,6 +4844,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: opts.group || null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: !!opts.pinned,
       openerTabId: opts.openerTabId || null, // CHROMIUM_PARITY: opener tracking
       runtime: createTabRuntime(startUrl)
@@ -4684,7 +4922,9 @@
     saveOmniState(); // CHROMIUM_PARITY: save omnibox state before switching
     state.activeTabId = tabId;
     state.showBrowserHome = false;
+    closeTabQuickPanel();
     var tab = getActiveTab();
+    if (tab) tab.lastActiveAt = Date.now();
     if (tab && tab.type === 'torrent') {
       // Torrent tab — no native WebContentsView, show DOM panel
       webTabs.hideAll().catch(function () {});
@@ -5059,6 +5299,11 @@
         hideContextMenu();
         return;
       }
+      if (state.tabQuickOpen) {
+        e.preventDefault();
+        closeTabQuickPanel();
+        return;
+      }
       if (isTipsOpen()) {
         e.preventDefault();
         hideTips();
@@ -5100,6 +5345,12 @@
           if (el.urlDisplay.select) el.urlDisplay.select();
         }
       } catch (err) {}
+      return;
+    }
+
+    if (ctrl && e.shiftKey && lower === 'a') {
+      e.preventDefault();
+      openTabQuickPanel();
       return;
     }
 
@@ -5409,6 +5660,68 @@
       el.browserBackBtn.onclick = function () {
         closeBrowser();
       };
+    }
+
+    if (el.tabOverflowBtn) {
+      el.tabOverflowBtn.onclick = function (evt) {
+        var items = [];
+        var hiddenTabs = [];
+        for (var i = 0; i < state.tabs.length; i++) {
+          if (state.tabs[i] && state.tabs[i].overflowVisible === false) hiddenTabs.push(state.tabs[i]);
+        }
+        if (hiddenTabs.length) {
+          for (var j = 0; j < hiddenTabs.length; j++) {
+            (function (t) {
+              items.push({ label: t.title || t.sourceName || 'Tab', onClick: function () { activateTab(t.id); } });
+            })(hiddenTabs[j]);
+          }
+          items.push({ separator: true });
+        }
+        items.push({ label: 'Scroll left', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: -220, behavior: 'smooth' }); } });
+        items.push({ label: 'Scroll right', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: 220, behavior: 'smooth' }); } });
+        var r = el.tabOverflowBtn.getBoundingClientRect();
+        showContextMenu(items, r.left, r.bottom + 4);
+      };
+    }
+
+    if (el.tabQuickSearch) {
+      el.tabQuickSearch.addEventListener('input', function () {
+        state.tabQuickQuery = String(el.tabQuickSearch.value || '');
+        state.tabQuickActiveIndex = 0;
+        renderTabQuickPanel();
+      });
+      el.tabQuickSearch.addEventListener('keydown', function (evt) {
+        var k = String(evt && evt.key || '');
+        if (k === 'ArrowDown' || k === 'ArrowUp') {
+          evt.preventDefault();
+          var rows = getTabQuickMatches();
+          if (!rows.length) return;
+          var delta = (k === 'ArrowDown') ? 1 : -1;
+          state.tabQuickActiveIndex = (state.tabQuickActiveIndex + delta + rows.length) % rows.length;
+          renderTabQuickPanel();
+          return;
+        }
+        if (k === 'Enter') {
+          evt.preventDefault();
+          var rows2 = getTabQuickMatches();
+          if (!rows2.length) return;
+          var pick = rows2[Math.max(0, Math.min(state.tabQuickActiveIndex, rows2.length - 1))];
+          if (!pick || !pick.tab) return;
+          closeTabQuickPanel();
+          activateTab(pick.tab.id);
+          return;
+        }
+        if (k === 'Escape') {
+          evt.preventDefault();
+          closeTabQuickPanel();
+        }
+      });
+    }
+
+    if (el.tabQuickPanel) {
+      el.tabQuickPanel.addEventListener('mousedown', function (evt) {
+        if (evt.target === el.tabQuickPanel) closeTabQuickPanel();
+      });
     }
 
     // BUILD_WCV: navigation via IPC
@@ -6536,6 +6849,18 @@
       }
     });
 
+    if (webTabs.onMediaState) {
+      webTabs.onMediaState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        tab.audible = !!(data && data.audible);
+        tab.muted = !!(data && data.muted);
+        tab.mediaDetected = !!(data && data.mediaDetected || tab.mediaDetected || tab.audible || tab.muted);
+        renderTabs();
+        scheduleSessionSave();
+      });
+    }
+
     if (webTabs.onLoadFailed) {
       webTabs.onLoadFailed(function (data) {
         var tab = getTabByMainId(data && data.tabId);
@@ -6703,6 +7028,13 @@
         }
       });
       _resizeObs.observe(el.viewContainer);
+    }
+
+    if (el.tabBar && typeof ResizeObserver !== 'undefined') {
+      var _tabResizeObs = new ResizeObserver(function () {
+        syncTabOverflowAffordance();
+      });
+      _tabResizeObs.observe(el.tabBar);
     }
 
     // Init
