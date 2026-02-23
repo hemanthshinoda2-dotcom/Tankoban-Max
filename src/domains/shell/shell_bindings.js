@@ -423,9 +423,14 @@
   }
 
   function openBrowserFromTopButton() {
+    console.log('[DBG-WEB] openBrowserFromTopButton called');
     var d = window.Tanko && window.Tanko.deferred;
-    if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
+    if (!d || typeof d.ensureWebModulesLoaded !== 'function') {
+      console.warn('[DBG-WEB] ensureWebModulesLoaded not available', d);
+      return;
+    }
     d.ensureWebModulesLoaded().then(function () {
+      console.log('[DBG-WEB] ensureWebModulesLoaded resolved, Tanko.web=', window.Tanko && window.Tanko.web);
       if (window.Tanko && window.Tanko.web) {
         if (typeof window.Tanko.web.openDefault === 'function') {
           window.Tanko.web.openDefault();
@@ -434,8 +439,10 @@
         if (typeof window.Tanko.web.openHome === 'function') {
           window.Tanko.web.openHome();
         }
+      } else {
+        console.error('[DBG-WEB] Tanko.web NOT set after module load — web.js IIFE likely failed');
       }
-    }).catch(function () {});
+    }).catch(function (err) { console.error('[DBG-WEB] ensureWebModulesLoaded REJECTED:', err); });
   }
 
   if (webHubToggleBtn) {

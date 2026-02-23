@@ -2,8 +2,9 @@
 // BUILD_WCV: Replaced <webview> tags with main-process WebContentsView via IPC.
 (function webBrowserDomain() {
   'use strict';
+  console.log('[DBG-WEB] web.js IIFE START');
 
-  if (window.__tankoWebBrowserBound) return;
+  if (window.__tankoWebBrowserBound) { console.log('[DBG-WEB] already bound, returning'); return; }
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
   if (!api || !api.webSources) {
@@ -1476,9 +1477,40 @@
   }
 
   function getFaviconUrl(url) {
+    function hostFromAnyUrl(input) {
+      var raw = String(input || '').trim();
+      if (!raw) return '';
+      try {
+        return String(new URL(raw).hostname || '');
+      } catch (e) {
+        try {
+          return String(new URL('https://' + raw.replace(/^\/+/, '')).hostname || '');
+        } catch (e2) {
+          return '';
+        }
+      }
+    }
+    function hashHue(text) {
+      var h = 0;
+      var s = String(text || '');
+      for (var i = 0; i < s.length; i++) {
+        h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      }
+      return Math.abs(h) % 360;
+    }
     try {
-      var domain = new URL(url).hostname;
-      return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(domain) + '&sz=128';
+      var domain = hostFromAnyUrl(url).replace(/^www\./i, '').toLowerCase();
+      if (!domain) return '';
+      var first = domain.charAt(0).toUpperCase();
+      if (!/[A-Z0-9]/.test(first)) first = '#';
+      var hue = hashHue(domain);
+      var bg = 'hsl(' + hue + ',70%,42%)';
+      var svg = '' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+        '<rect width="64" height="64" rx="12" fill="' + bg + '"/>' +
+        '<text x="32" y="43" text-anchor="middle" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700" fill="#fff">' + first + '</text>' +
+        '</svg>';
+      return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
     } catch (e) {
       return '';
     }
@@ -3697,9 +3729,7 @@
   }
 
   function faviconFor(u) {
-    var h = hostFromUrl(u);
-    if (!h) return '';
-    return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=128';
+    return getFaviconUrl(u);
   }
 
   function normalizeDownload(d) {
@@ -4911,45 +4941,6 @@
     }).catch(function () {});
   }
 
-        // CHROMIUM_PARITY: Accept URL drops onto tabs (C3)
-        if (state.dragTabId == null) {
-          var droppedUrl = '';
-          try { droppedUrl = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || ''; } catch (err) {}
-          droppedUrl = String(droppedUrl || '').trim();
-          if (droppedUrl && /^https?:\/\//i.test(droppedUrl)) {
-            var dropTarget = null;
-            for (var dti = 0; dti < state.tabs.length; dti++) {
-              if (state.tabs[dti].id === targetId) { dropTarget = state.tabs[dti]; break; }
-            }
-            if (dropTarget && dropTarget.mainTabId && dropTarget.type !== 'torrent') {
-              activateTab(targetId);
-              webTabs.navigate({ tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }).catch(function () {});
-            }
-          }
-          return;
-        }
-
-        if (state.dragTabId === targetId) return;
-        var fromIdx = -1;
-        var toIdx = -1;
-        for (var ti = 0; ti < state.tabs.length; ti++) {
-          if (state.tabs[ti].id === state.dragTabId) fromIdx = ti;
-          if (state.tabs[ti].id === targetId) toIdx = ti;
-        }
-        if (fromIdx === -1 || toIdx === -1) return;
-        // CHROMIUM_PARITY: Block drags between pinned and unpinned zones
-        if (state.tabs[fromIdx].pinned !== state.tabs[toIdx].pinned) return;
-        var moved = state.tabs.splice(fromIdx, 1)[0];
-        state.tabs.splice(toIdx, 0, moved);
-        state.dragTabId = null;
-        renderTabs();
-        scheduleSessionSave();
-      });
-    }
-
-    syncLoadBar();
-  }
-
   function syncLoadBar() {
     if (!el.loadBar) return;
     // FEAT-TOR: Don't hide load bar when Tor indicator is showing
@@ -5005,6 +4996,37 @@
     if (el.dlBadge) {
       el.dlBadge.classList.toggle('hidden', !(state.downloading > 0));
     }
+
+    // Sidebar progress bar (web home sidebar)
+    if (el.sidebarDlRow && el.sidebarDlFill && el.sidebarDlPct) {
+      if (state.downloading <= 0) {
+        el.sidebarDlRow.classList.add('hidden');
+        el.sidebarDlFill.style.width = '0%';
+        el.sidebarDlPct.textContent = '0%';
+      } else {
+        // Pick a representative active download
+        var p = null;
+        var bestAt = -1;
+        for (var i = 0; i < state.downloads.length; i++) {
+          var d = state.downloads[i];
+          if (!d || (d.state !== 'progressing' && d.state !== 'paused')) continue;
+          var at = Number(d.startedAt || 0);
+          if (at >= bestAt) {
+            bestAt = at;
+            p = d.progress;
+          }
+        }
+        if (typeof p !== 'number' || !isFinite(p)) p = state.lastDownloadProgress;
+        if (typeof p !== 'number' || !isFinite(p)) p = 0;
+        if (p < 0) p = 0;
+        if (p > 1) p = 1;
+        var pct = Math.round(p * 100);
+        el.sidebarDlRow.classList.remove('hidden');
+        el.sidebarDlFill.style.width = pct + '%';
+        el.sidebarDlPct.textContent = pct + '%';
+      }
+    }
+  }
 
   function rangeToFromTs(range) {
     var now = Date.now();
@@ -5213,7 +5235,14 @@
         showToast('Failed to clear data');
         return;
       }
-    }
+      showToast('Browsing data cleared');
+      loadDownloadHistory();
+      loadBrowsingHistory();
+      refreshTorrentState();
+      loadDataUsage();
+    }).catch(function () {
+      showToast('Failed to clear data');
+    });
   }
 
   function loadPermissions() {
@@ -5238,6 +5267,13 @@
   }
 
   moduleBridge.deps.scheduleSessionSave = scheduleSessionSave;
+  moduleBridge.deps.escapeHtml = escapeHtml;
+  moduleBridge.deps.shortPath = shortPath;
+  moduleBridge.deps.getSourceColor = getSourceColor;
+  moduleBridge.deps.getSourceById = getSourceById;
+  moduleBridge.deps.siteNameFromUrl = siteNameFromUrl;
+  moduleBridge.deps.closeOmniSuggestions = closeOmniSuggestions;
+  moduleBridge.deps.setOmniIconForUrl = setOmniIconForUrl;
 
   var downloadsModule = useWebModule('downloads');
   var formatBytes = downloadsModule.formatBytes;
@@ -5253,6 +5289,18 @@
   var renderDownloadList = downloadsModule.renderDownloadList;
   var renderDownloadsPanel = downloadsModule.renderDownloadsPanel;
   var renderHomeDownloads = downloadsModule.renderHomeDownloads;
+
+  var hubModule = useWebModule('hub');
+  var updateBookmarkButton = hubModule.updateBookmarkButton || function () {};
+  var renderHubBookmarks = hubModule.renderHubBookmarks || function () {};
+  var loadBookmarks = hubModule.loadBookmarks || function () {};
+  var toggleBookmarkForActiveTab = hubModule.toggleBookmarkForActiveTab || function () {};
+  var updateFindCountLabel = hubModule.updateFindCountLabel || function () {};
+  var runFindAction = hubModule.runFindAction || function () {};
+  var openFindBar = hubModule.openFindBar || function () {};
+  var closeFindBar = hubModule.closeFindBar || function () {};
+  var runFindFromInput = hubModule.runFindFromInput || function () {};
+  var refreshTorrentState = hubModule.refreshTorrentState || function () {};
 
   function isDirectActiveState(stateStr) {
     var s = String(stateStr || '').toLowerCase();
@@ -7806,6 +7854,7 @@
   moduleBridge.deps.syncReloadStopButton = syncReloadStopButton;
   moduleBridge.deps.updateNavButtons = updateNavButtons;
   moduleBridge.deps.updateUrlDisplay = updateUrlDisplay;
+  moduleBridge.deps.getFaviconUrl = getFaviconUrl;
   moduleBridge.deps.openBrowserForTab = openBrowserForTab;
   moduleBridge.deps.createTab = createTab;
   moduleBridge.deps.getActiveTab = getActiveTab;
@@ -7822,6 +7871,7 @@
   }
 
   // Expose openBrowser globally so Comics/Books sidebars can call it
+  console.log('[DBG-WEB] web.js IIFE reached end — about to expose Tanko.web');
   try {
     function openDefaultBrowserEntry() {
       if (state.tabs.length) {
@@ -7839,6 +7889,7 @@
       isBrowserOpen: function () { return !!state.browserOpen; },
       openAddSourceDialog: function () { openAddSourceDialog(null); }
     };
-  } catch (e) {}
+    console.log('[DBG-WEB] Tanko.web exposed successfully');
+  } catch (e) { console.error('[DBG-WEB] Tanko.web exposure FAILED:', e); }
 
 })();

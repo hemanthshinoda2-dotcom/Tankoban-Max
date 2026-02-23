@@ -78,9 +78,22 @@
       }
 
       function faviconFor(u) {
-        var h = hostFromUrl(u);
+        var icon = getFaviconUrl(u);
+        if (icon) return icon;
+        var h = hostFromUrl(u).replace(/^www\./i, '').toLowerCase();
         if (!h) return '';
-        return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=128';
+        var first = h.charAt(0).toUpperCase();
+        if (!/[A-Z0-9]/.test(first)) first = '#';
+        var hash = 0;
+        for (var i = 0; i < h.length; i++) hash = ((hash << 5) - hash + h.charCodeAt(i)) | 0;
+        var hue = Math.abs(hash) % 360;
+        var bg = 'hsl(' + hue + ',70%,42%)';
+        var svg = '' +
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
+          '<rect width="64" height="64" rx="12" fill="' + bg + '"/>' +
+          '<text x="32" y="43" text-anchor="middle" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700" fill="#fff">' + first + '</text>' +
+          '</svg>';
+        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
       }
 
       function normalizeDownload(d) {

@@ -222,10 +222,12 @@
   // BUILD_WEB: Web mode deferred loader
   let webModulesPromise = null;
   async function ensureWebModulesLoaded() {
+    console.log('[DBG-WEB-DFR] ensureWebModulesLoaded called, alreadyLoaded=', !!window.__tankoWebModulesLoaded, 'hasPromise=', !!webModulesPromise);
     if (window.__tankoWebModulesLoaded) return;
     if (!webModulesPromise) {
       webModulesPromise = (async () => {
         const activationStart = perf.now();
+        console.log('[DBG-WEB-DFR] loading web module group scripts...');
         await loadScriptGroup([
           './domains/web/web_contract.js',
           './domains/web/web_module_tabs_state.js',
@@ -234,7 +236,10 @@
           './domains/web/web_module_torrent_tab.js',
           './domains/web/web_module_hub.js',
         ]);
+        console.log('[DBG-WEB-DFR] group done, registered modules=', Object.keys(window.__tankoWebModules || {}));
+        console.log('[DBG-WEB-DFR] loading web.js...');
         await loadScriptOnce('./domains/web/web.js');
+        console.log('[DBG-WEB-DFR] web.js loaded, Tanko.web=', window.Tanko && window.Tanko.web);
         window.__tankoWebModulesLoaded = true;
 
         const elapsed = Math.round(perf.now() - activationStart);
