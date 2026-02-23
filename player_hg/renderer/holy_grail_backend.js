@@ -33,6 +33,7 @@
     var lastResizeW = 0;
     var lastResizeH = 0;
     var cleanupFns = [];
+    var destroyPromise = null;
 
     // Pending seek state (TankobanPlus pattern): queue a seek target that the
     // poll loop retries every 200ms until the position lands within tolerance.
@@ -811,7 +812,9 @@
     }
 
     function destroy() {
-      if (destroyed) return;
+      if (destroyPromise) return destroyPromise;
+
+      console.debug('[hg-backend] destroy start');
       destroyed = true;
       stopPerfLog();
       hideResumeOverlay();
@@ -831,10 +834,6 @@
       if (typeof offFileLoaded === 'function') offFileLoaded();
       if (typeof offVideoFrame === 'function') offVideoFrame();
 
-      // Stop frame loop and destroy HG player
-      hg.stopFrameLoop().catch(function () {});
-      hg.destroy().catch(function () {});
-
       // Run cleanup functions
       for (var i = 0; i < cleanupFns.length; i++) {
         try { cleanupFns[i](); } catch (e) {}
@@ -849,6 +848,24 @@
       ctx2d = null;
 
       listeners.clear();
+
+      var bridgeTeardownOps = [
+        Promise.resolve().then(function () { return hg.stopFrameLoop(); }).catch(function (err) {
+          console.warn('[hg-backend] stopFrameLoop failed during destroy', err);
+          return err;
+        }),
+        Promise.resolve().then(function () { return hg.destroy(); }).catch(function (err) {
+          console.warn('[hg-backend] hg.destroy failed during destroy', err);
+          return err;
+        }),
+      ];
+
+      destroyPromise = Promise.allSettled(bridgeTeardownOps).then(function (results) {
+        console.debug('[hg-backend] destroy finish', results);
+        return results;
+      });
+
+      return destroyPromise;
     }
 
     // ── Query state ──

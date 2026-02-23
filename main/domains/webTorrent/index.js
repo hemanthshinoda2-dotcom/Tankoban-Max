@@ -605,6 +605,13 @@ async function selectFiles(ctx, _evt, payload) {
   var selectedIndices = payload && Array.isArray(payload.selectedIndices) ? payload.selectedIndices : [];
   var selectedSet = new Set(selectedIndices.map(Number));
 
+  // FEAT-TOR: keep torrent downloads in cart mode while Tor is active.
+  // WebTorrent traffic itself is not routed through Tor, so we block transition
+  // into active downloading/streaming until Tor is disconnected.
+  if (isTorActive() && selectedSet.size > 0) {
+    return { ok: false, error: 'Disable Tor to start torrent downloads' };
+  }
+
   // Optionally set destination root at the same time
   var dest = String(payload && payload.destinationRoot || '').trim();
   if (dest) {
@@ -691,6 +698,10 @@ async function setDestination(ctx, _evt, payload) {
 }
 
 async function streamFile(ctx, _evt, payload) {
+  if (isTorActive()) {
+    return { ok: false, error: 'Disable Tor to stream torrent files' };
+  }
+
   var id = payload && payload.id ? String(payload.id) : '';
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
@@ -780,6 +791,10 @@ function isVideoFile(fileName) {
 }
 
 async function addToVideoLibrary(ctx, evt, payload) {
+  if (isTorActive()) {
+    return { ok: false, error: 'Disable Tor to stream torrents into Video Library' };
+  }
+
   var id = payload && payload.id ? String(payload.id) : '';
   var rec = activeById.get(id);
   if (!rec || !rec.torrent || !rec.entry) return { ok: false, error: 'Torrent not active' };

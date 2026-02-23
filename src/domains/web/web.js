@@ -33,7 +33,11 @@
     browserView: qs('webBrowserView'),
     browserBackBtn: qs('webBrowserBackBtn'),
     browserTitle: qs('webBrowserTitle'),
+    tabOverflowBtn: qs('webTabOverflowBtn'),
     tabBar: qs('webTabBar'),
+    tabQuickPanel: qs('webTabQuickPanel'),
+    tabQuickSearch: qs('webTabQuickSearch'),
+    tabQuickList: qs('webTabQuickList'),
     navBack: qs('webNavBack'),
     navForward: qs('webNavForward'),
     navReload: qs('webNavReload'),
@@ -45,6 +49,15 @@
     omniIcon: qs('webOmniIcon'),
     omniGhost: qs('webOmniGhost'), // CHROMIUM_PARITY: ghost text overlay
     omniSuggest: qs('webOmniSuggest'),
+    siteInfoPopover: qs('webSiteInfoPopover'),
+    siteInfoOrigin: qs('webSiteInfoOrigin'),
+    siteInfoSecurity: qs('webSiteInfoSecurity'),
+    siteInfoPermissions: qs('webSiteInfoPermissions'),
+    siteInfoUsageBtn: qs('webSiteInfoUsageBtn'),
+    siteInfoUsageText: qs('webSiteInfoUsageText'),
+    siteInfoAdblock: qs('webSiteInfoAdblock'),
+    siteInfoClearDataBtn: qs('webSiteInfoClearDataBtn'),
+    siteInfoResetPermsBtn: qs('webSiteInfoResetPermsBtn'),
     findBar: qs('webFindBar'),
     findInput: qs('webFindInput'),
     findCount: qs('webFindCount'),
@@ -138,6 +151,17 @@
     hubAdblockUpdateBtn: qs('webHubAdblockUpdateBtn'),
     hubAdblockStatsBtn: qs('webHubAdblockStatsBtn'),
     hubAdblockInfo: qs('webHubAdblockInfo'),
+    hubStartupMode: qs('webHubStartupMode'),
+    hubStartupCustomUrl: qs('webHubStartupCustomUrl'),
+    hubHomeUrl: qs('webHubHomeUrl'),
+    hubNewTabBehavior: qs('webHubNewTabBehavior'),
+    hubDownloadBehavior: qs('webHubDownloadBehavior'),
+    hubDownloadFolderHint: qs('webHubDownloadFolderHint'),
+    hubPrivacyDoNotTrack: qs('webHubPrivacyDoNotTrack'),
+    hubClearOnExitHistory: qs('webHubClearOnExitHistory'),
+    hubClearOnExitDownloads: qs('webHubClearOnExitDownloads'),
+    hubClearOnExitCookies: qs('webHubClearOnExitCookies'),
+    hubClearOnExitCache: qs('webHubClearOnExitCache'),
     // Torrent tab panel
     torrentPanel: qs('webTorrentPanel'),
     torrentPanelInner: qs('webTorrentPanelInner')
@@ -195,7 +219,28 @@
       defaultSearchEngine: 'yandex',
       parityV1Enabled: true,
       adblockEnabled: true,
-      restoreLastSession: true
+      restoreLastSession: true,
+      startup: {
+        mode: 'continue',
+        customUrl: ''
+      },
+      home: {
+        homeUrl: '',
+        newTabBehavior: 'tankoban_home'
+      },
+      downloads: {
+        behavior: 'ask',
+        folderModeHint: true
+      },
+      privacy: {
+        doNotTrack: false,
+        clearOnExit: {
+          history: false,
+          downloads: false,
+          cookies: false,
+          cache: false
+        }
+      }
     },
     // FEAT-TOR
     torActive: false,
@@ -226,7 +271,11 @@
     },
     omniSuggestOpen: false,
     omniSuggestItems: [],
+    siteInfoOpen: false,
     omniSuggestActiveIndex: -1,
+    tabQuickOpen: false,
+    tabQuickQuery: '',
+    tabQuickActiveIndex: -1,
     hubTorrentFilter: 'active',
   };
 
@@ -267,6 +316,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: false
     };
     state.tabs.push(tab);
@@ -474,7 +529,7 @@
       return true;
     }
     if (targetTab.mainTabId) {
-      webTabs.navigate({ tabId: targetTab.mainTabId, action: 'loadUrl', url: url }).catch(function () {});
+      navigateTabWithRuntime(targetTab, { tabId: targetTab.mainTabId, action: 'loadUrl', url: url }, 'request-load-url', { url: url });
       return true;
     }
     if (targetTab.id != null) {
@@ -566,7 +621,8 @@
       loading: [],
       nav: [],
       find: [],
-      loadFail: []
+      loadFail: [],
+      media: []
     };
 
     function emit(type, payload) {
@@ -788,6 +844,20 @@
     }
 
     function bindWebview(tabId, wv) {
+      var rec = tabs.get(Number(tabId)) || { tabId: tabId, webview: wv };
+
+      function emitMediaState(extra) {
+        var muted = false;
+        try { muted = !!(wv && wv.isAudioMuted && wv.isAudioMuted()); } catch (e0) {}
+        emit('media', {
+          tabId: tabId,
+          audible: !!(rec && rec.audible),
+          muted: muted,
+          mediaDetected: !!(rec && rec.mediaDetected),
+          reason: extra || ''
+        });
+      }
+
       function emitBestTitle() {
         var t = safeTitle(wv);
         if (!t) {
@@ -831,6 +901,7 @@
 
       wv.addEventListener('did-start-loading', function () {
         emit('loading', { tabId: tabId, loading: true });
+        if (healthState !== 'healthy') emitHealth('recovered', { via: 'did-start-loading' });
       });
 
       wv.addEventListener('did-stop-loading', function () {
@@ -862,17 +933,45 @@
         var tidx = rec._navTargetIndex;
         rec._navDirection = '';
         rec._navTargetIndex = null;
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx, navKind: 'navigate' });
         emitNav(tabId, wv);
       });
 
       wv.addEventListener('did-navigate-in-page', function (ev) {
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), navKind: 'in-page' });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('did-redirect-navigation', function (ev) {
+        emit('url', { tabId: tabId, url: String((ev && ev.newURL) || ''), navKind: 'redirect' });
         emitNav(tabId, wv);
       });
 
       wv.addEventListener('did-fail-load', handleLoadFail);
       wv.addEventListener('did-fail-provisional-load', handleLoadFail);
+
+      // Process health signals from Electron webview guest process
+      wv.addEventListener('render-process-gone', function (ev) {
+        var reason = String((ev && ev.reason) || '').trim().toLowerCase();
+        if (reason === 'unresponsive') {
+          emitHealth('unresponsive', { reason: reason, exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        } else {
+          emitHealth('crashed', { reason: reason || 'render-process-gone', exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        }
+      });
+
+      wv.addEventListener('unresponsive', function () {
+        emitHealth('unresponsive', { reason: 'unresponsive-event' });
+      });
+
+      wv.addEventListener('responsive', function () {
+        emitHealth('recovered', { reason: 'responsive-event' });
+      });
+
+      // Backward compatibility for older Electron where crash emits directly.
+      wv.addEventListener('crashed', function () {
+        emitHealth('crashed', { reason: 'crashed-event' });
+      });
 
       // DIAG: Forward guest-page console logs (incl. preload) to host console
       wv.addEventListener('console-message', function (ev) {
@@ -910,6 +1009,19 @@
         showToast('[DIAG] ipc-msg: ' + (target || '(empty)').substring(0, 60));
         if (!target) return;
         routePopupFromMainTab(tabId, target, safeUrl(wv));
+      });
+
+
+      wv.addEventListener('media-started-playing', function () {
+        rec.audible = true;
+        rec.mediaDetected = true;
+        emitMediaState('started');
+      });
+
+      wv.addEventListener('media-paused', function () {
+        rec.audible = false;
+        rec.mediaDetected = true;
+        emitMediaState('paused');
       });
 
       wv.addEventListener('found-in-page', function (ev) {
@@ -967,10 +1079,10 @@
         if (parityUA) wv.setAttribute('useragent', parityUA);
         if (popupBridgePreload) wv.setAttribute('preload', popupBridgePreload);
         wv.src = url;
+        tabs.set(tabId, { tabId: tabId, webview: wv, audible: false, mediaDetected: false });
         bindWebview(tabId, wv);
 
         if (el.viewContainer) el.viewContainer.appendChild(wv);
-        tabs.set(tabId, { tabId: tabId, webview: wv });
         return Promise.resolve({ ok: true, tabId: tabId });
       },
 
@@ -1101,6 +1213,21 @@
         return Promise.resolve({ ok: true, tabs: ids });
       },
 
+      setMuted: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var muted = !!(payload && payload.muted);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false, error: 'Not found' });
+        try {
+          if (rec.webview.setAudioMuted) rec.webview.setAudioMuted(muted);
+          rec.mediaDetected = true;
+          emit('media', { tabId: tabId, audible: !!rec.audible, muted: muted, mediaDetected: true, reason: 'setMuted' });
+          return Promise.resolve({ ok: true, muted: muted });
+        } catch (err) {
+          return Promise.resolve({ ok: false, error: String(err && err.message || err || 'Mute failed') });
+        }
+      },
+
       findByWebContentsId: function (webContentsId) {
         var target = Number(webContentsId);
         if (!isFinite(target) || target <= 0) return null;
@@ -1121,6 +1248,7 @@
       onNavState: function (cb) { on('nav', cb); },
       onFindResult: function (cb) { on('find', cb); },
       onLoadFailed: function (cb) { on('loadFail', cb); },
+      onMediaState: function (cb) { on('media', cb); },
     };
   }
 
@@ -1192,55 +1320,815 @@
     }
   }
 
-  moduleBridge.deps.escapeHtml = escapeHtml;
-  moduleBridge.deps.shortPath = shortPath;
-  moduleBridge.deps.getSourceColor = getSourceColor;
-  moduleBridge.deps.getSourceById = getSourceById;
-  moduleBridge.deps.siteNameFromUrl = siteNameFromUrl;
-  moduleBridge.deps.getFaviconUrl = getFaviconUrl;
-  moduleBridge.deps.showToast = showToast;
+  function getActiveSearchEngine() {
+    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'yandex').trim().toLowerCase();
+    if (!SEARCH_ENGINES[key]) key = 'yandex';
+    return key;
+  }
 
-  var navOmniboxModule = useWebModule('navOmnibox');
-  var getActiveSearchEngine = navOmniboxModule.getActiveSearchEngine;
-  var getSearchQueryUrl = navOmniboxModule.getSearchQueryUrl;
-  var syncSearchEngineSelect = navOmniboxModule.syncSearchEngineSelect;
-  var syncOmniPlaceholder = navOmniboxModule.syncOmniPlaceholder;
-  var isAllowedOmniScheme = navOmniboxModule.isAllowedOmniScheme;
-  var resolveOmniInputToUrl = navOmniboxModule.resolveOmniInputToUrl;
-  var tryResolveCtrlEnterUrl = navOmniboxModule.tryResolveCtrlEnterUrl;
-  var closeOmniSuggestions = navOmniboxModule.closeOmniSuggestions;
-  var clearOmniGhost = navOmniboxModule.clearOmniGhost;
-  var stripUrlPrefix = navOmniboxModule.stripUrlPrefix;
-  var updateOmniGhostText = navOmniboxModule.updateOmniGhostText;
-  var acceptOmniGhost = navOmniboxModule.acceptOmniGhost;
-  var saveOmniState = navOmniboxModule.saveOmniState;
-  var restoreOmniState = navOmniboxModule.restoreOmniState;
-  var applyOmniSuggestion = navOmniboxModule.applyOmniSuggestion;
-  var buildOmniSuggestions = navOmniboxModule.buildOmniSuggestions;
-  var renderOmniSuggestions = navOmniboxModule.renderOmniSuggestions;
-  var refreshOmniSuggestionsFromInput = navOmniboxModule.refreshOmniSuggestionsFromInput;
-  var openUrlFromOmni = navOmniboxModule.openUrlFromOmni;
-  var setOmniIconForUrl = navOmniboxModule.setOmniIconForUrl;
+  function getSearchQueryUrl(query) {
+    var key = getActiveSearchEngine();
+    var base = SEARCH_ENGINE_URLS[key] || SEARCH_ENGINE_URLS.yandex;
+    return base + encodeURIComponent(String(query || ''));
+  }
 
-  moduleBridge.deps.getSearchQueryUrl = getSearchQueryUrl;
-  moduleBridge.deps.closeOmniSuggestions = closeOmniSuggestions;
-  moduleBridge.deps.setOmniIconForUrl = setOmniIconForUrl;
+  function syncSearchEngineSelect() {
+    if (!el.searchEngineSelect) return;
+    var key = getActiveSearchEngine();
+    if (String(el.searchEngineSelect.value || '') !== key) {
+      el.searchEngineSelect.value = key;
+    }
+  }
 
-  var tabsStateModule = useWebModule('tabsState');
-  var getActiveTab = tabsStateModule.getActiveTab;
-  var getTabByMainId = tabsStateModule.getTabByMainId;
-  var createTabRuntime = tabsStateModule.createTabRuntime;
-  var ensureTabRuntime = tabsStateModule.ensureTabRuntime;
-  var inferSecurityStateFromUrl = tabsStateModule.inferSecurityStateFromUrl;
-  var classifyLoadFailure = tabsStateModule.classifyLoadFailure;
-  var pushRuntimeCommittedUrl = tabsStateModule.pushRuntimeCommittedUrl;
-  var normalizeSourceInput = tabsStateModule.normalizeSourceInput;
-  var snapshotTabForSession = tabsStateModule.snapshotTabForSession;
-  var buildSessionPayload = tabsStateModule.buildSessionPayload;
-  var scheduleSessionSave = tabsStateModule.scheduleSessionSave;
-  var pushClosedTab = tabsStateModule.pushClosedTab;
-  var reopenClosedTab = tabsStateModule.reopenClosedTab;
-  var loadSessionAndRestore = tabsStateModule.loadSessionAndRestore;
+  function syncOmniPlaceholder() {
+    if (!el.urlDisplay) return;
+    var key = getActiveSearchEngine();
+    var label = (SEARCH_ENGINES[key] && SEARCH_ENGINES[key].label) ? SEARCH_ENGINES[key].label : 'Yandex';
+    try { el.urlDisplay.setAttribute('placeholder', 'Search ' + label + ' or type a URL'); } catch (e) {}
+  }
+
+  function isAllowedOmniScheme(raw) {
+    var lower = String(raw || '').trim().toLowerCase();
+    return lower.indexOf('http:') === 0 || lower.indexOf('https:') === 0 || lower === 'about:blank';
+  }
+
+  // Chrome-like omnibox: accept URL or search query
+  function resolveOmniInputToUrl(input) {
+    var raw = String(input || '').trim();
+    if (!raw) return '';
+
+    // SECURITY: never pass through arbitrary schemes from omnibox text.
+    // Inputs like javascript:/data:/file:/custom protocol can execute code or
+    // access local resources, so we downgrade any non-allowlisted scheme to a search.
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) {
+      if (isAllowedOmniScheme(raw)) return raw;
+      return getSearchQueryUrl(raw);
+    }
+
+    // Looks like a domain (no spaces, has a dot)
+    if (raw.indexOf(' ') === -1 && raw.indexOf('.') !== -1) {
+      return 'https://' + raw;
+    }
+
+    // Otherwise treat as search
+    return getSearchQueryUrl(raw);
+  }
+
+  function tryResolveCtrlEnterUrl(input) {
+    var raw = String(input || '').trim();
+    if (!raw) return '';
+    if (raw.indexOf(' ') !== -1) return '';
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(raw)) return '';
+    if (raw.indexOf('.') !== -1 || raw.indexOf('/') !== -1) return '';
+    return 'https://www.' + raw + '.com';
+  }
+
+  function closeOmniSuggestions() {
+    state.omniSuggestOpen = false;
+    state.omniSuggestItems = [];
+    state.omniSuggestActiveIndex = -1;
+    clearOmniGhost(); // CHROMIUM_PARITY
+    if (!el.omniSuggest) return;
+    el.omniSuggest.classList.add('hidden');
+    el.omniSuggest.innerHTML = '';
+  }
+
+  // CHROMIUM_PARITY: Inline autocomplete ghost text (C1)
+  var _omniGhostCompletion = ''; // current completion suffix
+
+  function clearOmniGhost() {
+    _omniGhostCompletion = '';
+    if (el.omniGhost) el.omniGhost.innerHTML = '';
+  }
+
+  function stripUrlPrefix(url) {
+    var s = String(url || '');
+    s = s.replace(/^https?:\/\//, '');
+    s = s.replace(/^www\./, '');
+    return s;
+  }
+
+  function updateOmniGhostText() {
+    if (!el.omniGhost || !el.urlDisplay) { clearOmniGhost(); return; }
+    if (state._omniComposing) { clearOmniGhost(); return; } // IME active
+
+    var typed = String(el.urlDisplay.value || '');
+    if (!typed) { clearOmniGhost(); return; }
+
+    var typedLower = typed.toLowerCase();
+    var strippedTyped = stripUrlPrefix(typed).toLowerCase();
+
+    // Find best matching suggestion URL
+    var bestMatch = '';
+    var items = state.omniSuggestItems || [];
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i] || !items[i].url) continue;
+      var candidate = stripUrlPrefix(items[i].url);
+      if (candidate.toLowerCase().indexOf(strippedTyped) === 0 && candidate.length > strippedTyped.length) {
+        bestMatch = candidate;
+        break;
+      }
+      // Also try matching raw typed text against full URL
+      var fullLower = String(items[i].url || '').toLowerCase();
+      if (fullLower.indexOf(typedLower) === 0 && items[i].url.length > typed.length) {
+        bestMatch = items[i].url.substring(typed.length);
+        _omniGhostCompletion = bestMatch;
+        el.omniGhost.innerHTML = '<span class="ghost-spacer">' + escapeHtml(typed) + '</span><span class="ghost-completion">' + escapeHtml(bestMatch) + '</span>';
+        return;
+      }
+    }
+
+    if (!bestMatch) { clearOmniGhost(); return; }
+
+    var completion = bestMatch.substring(strippedTyped.length);
+    _omniGhostCompletion = completion;
+    el.omniGhost.innerHTML = '<span class="ghost-spacer">' + escapeHtml(typed) + '</span><span class="ghost-completion">' + escapeHtml(completion) + '</span>';
+  }
+
+  function acceptOmniGhost() {
+    if (!_omniGhostCompletion || !el.urlDisplay) return false;
+    el.urlDisplay.value = el.urlDisplay.value + _omniGhostCompletion;
+    clearOmniGhost();
+    return true;
+  }
+
+  // CHROMIUM_PARITY: Per-tab omnibox state (C2)
+  function saveOmniState() {
+    if (!el.urlDisplay) return;
+    var focused = (document.activeElement === el.urlDisplay);
+    if (!focused) return;
+    var tab = getActiveTab();
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    runtime.omniState = {
+      text: el.urlDisplay.value,
+      selStart: el.urlDisplay.selectionStart,
+      selEnd: el.urlDisplay.selectionEnd,
+      focused: true
+    };
+  }
+
+  function restoreOmniState(tabId) {
+    var tab = null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === tabId) { tab = state.tabs[i]; break; }
+    }
+    if (!tab || !el.urlDisplay) return;
+    var runtime = ensureTabRuntime(tab);
+    var saved = runtime.omniState;
+    runtime.omniState = null;
+    if (!saved || !saved.focused) return;
+    state._omniRestoreInProgress = true;
+    el.urlDisplay.value = saved.text;
+    try { el.urlDisplay.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) {}
+    el.urlDisplay.focus();
+    setTimeout(function () { state._omniRestoreInProgress = false; }, 50);
+  }
+
+  function applyOmniSuggestion(item) {
+    if (!item || !item.url || !el.urlDisplay) return;
+    if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = String(item.url);
+    else el.urlDisplay.textContent = String(item.url);
+    setOmniIconForUrl(String(item.url));
+    closeOmniSuggestions();
+    closeTabQuickPanel();
+  }
+
+  function buildOmniSuggestions(input) {
+    var query = String(input || '').trim().toLowerCase();
+    if (!query) return [];
+    var out = [];
+    var seen = Object.create(null);
+
+    function push(url, title, kind) {
+      var u = String(url || '').trim();
+      if (!u) return;
+      var key = u.toLowerCase();
+      if (seen[key]) return;
+      var t = String(title || '').trim();
+      if (query) {
+        var h = (u + ' ' + t).toLowerCase();
+        if (h.indexOf(query) === -1) return;
+      }
+      seen[key] = 1;
+      out.push({
+        url: u,
+        title: t || siteNameFromUrl(u) || u,
+        kind: kind || 'page'
+      });
+    }
+
+    for (var i = 0; i < state.tabs.length; i++) {
+      var tab = state.tabs[i];
+      if (!tab || tab.type === 'torrent') continue;
+      push(tab.url || tab.homeUrl, tab.title || tab.sourceName, 'tab');
+      if (out.length >= 10) break;
+    }
+    for (var b = 0; b < state.bookmarks.length && out.length < 10; b++) {
+      var bm = state.bookmarks[b];
+      if (!bm) continue;
+      push(bm.url, bm.title, 'bookmark');
+    }
+    for (var h = 0; h < state.browsingHistory.length && out.length < 10; h++) {
+      var hi = state.browsingHistory[h];
+      if (!hi) continue;
+      push(hi.url, hi.title, 'history');
+    }
+    return out.slice(0, 8);
+  }
+
+  function renderOmniSuggestions() {
+    if (!el.omniSuggest) return;
+    if (!state.omniSuggestOpen || !state.omniSuggestItems.length) {
+      closeOmniSuggestions();
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < state.omniSuggestItems.length; i++) {
+      var s = state.omniSuggestItems[i];
+      var kind = String(s.kind || 'page');
+      var activeCls = i === state.omniSuggestActiveIndex ? ' active' : '';
+      html += '' +
+        '<button type="button" class="webOmniSuggestItem' + activeCls + '" data-omni-suggest-idx="' + i + '">' +
+          '<span class="webHubBadge">' + escapeHtml(kind) + '</span>' +
+          '<span class="webOmniSuggestMain">' + escapeHtml(s.title || s.url) + '</span>' +
+          '<span class="webOmniSuggestSub">' + escapeHtml(s.url) + '</span>' +
+        '</button>';
+    }
+    el.omniSuggest.innerHTML = html;
+    el.omniSuggest.classList.remove('hidden');
+
+    var btns = el.omniSuggest.querySelectorAll('[data-omni-suggest-idx]');
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].onclick = function (evt) {
+        try { evt.preventDefault(); evt.stopPropagation(); } catch (e) {}
+        var idx = Number(this.getAttribute('data-omni-suggest-idx'));
+        if (!isFinite(idx) || idx < 0 || idx >= state.omniSuggestItems.length) return;
+        var item = state.omniSuggestItems[idx];
+        applyOmniSuggestion(item);
+        openUrlFromOmni(String(item && item.url ? item.url : ''));
+      };
+    }
+  }
+
+  function refreshOmniSuggestionsFromInput() {
+    if (!el.urlDisplay) return;
+    var raw = String(el.urlDisplay.value || '').trim();
+    state.omniSuggestItems = buildOmniSuggestions(raw);
+    state.omniSuggestActiveIndex = state.omniSuggestItems.length ? 0 : -1;
+    state.omniSuggestOpen = !!state.omniSuggestItems.length;
+    renderOmniSuggestions();
+    updateOmniGhostText(); // CHROMIUM_PARITY: refresh inline autocomplete
+  }
+
+  function openUrlFromOmni(resolved, opts) {
+    var o = opts || {};
+    var inNewTab = !!o.newTab;
+    var targetTabId = Number(o.tabId);
+    var targetTab = null;
+    if (isFinite(targetTabId) && targetTabId > 0) {
+      for (var ti = 0; ti < state.tabs.length; ti++) {
+        if (state.tabs[ti] && state.tabs[ti].id === targetTabId) {
+          targetTab = state.tabs[ti];
+          break;
+        }
+      }
+    }
+    var resolvedUrl = String(resolved || '').trim();
+    if (!resolvedUrl) return;
+    if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = resolvedUrl;
+    else el.urlDisplay.textContent = resolvedUrl;
+    setOmniIconForUrl(resolvedUrl);
+    closeOmniSuggestions();
+    if (inNewTab) {
+      var src = {
+        id: 'omni_' + Date.now(),
+        name: siteNameFromUrl(resolvedUrl) || 'New Tab',
+        url: resolvedUrl,
+        color: '#555'
+      };
+      createTab(src, resolvedUrl, { silentToast: true });
+      return;
+    }
+    var tab = targetTab || getActiveTab();
+    if (!tab || !tab.mainTabId) {
+      var src0 = {
+        id: 'omni_' + Date.now(),
+        name: siteNameFromUrl(resolvedUrl) || 'New Tab',
+        url: resolvedUrl,
+        color: '#555'
+      };
+      createTab(src0, resolvedUrl, { silentToast: true });
+      return;
+    }
+    navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: resolvedUrl }, 'request-load-url', { url: resolvedUrl });
+  }
+
+  function setOmniIconForUrl(url) {
+    if (!el.omniIcon) return;
+    var u = String(url || '').trim();
+    var icon = '';
+
+    var lockSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.5 7V5.2c0-1.4 1.1-2.6 2.5-2.6s2.5 1.2 2.5 2.6V7h.9c.9 0 1.6.7 1.6 1.6v4.1c0 .9-.7 1.6-1.6 1.6H4c-.9 0-1.6-.7-1.6-1.6V8.6C2.4 7.7 3.1 7 4 7h1.5zm1.2 0h2.6V5.2c0-.8-.6-1.4-1.3-1.4s-1.3.6-1.3 1.4V7z"/></svg>';
+    var globeSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13zm4.8 6H10.9a10.8 10.8 0 0 0-.8-3.1A5.3 5.3 0 0 1 12.8 7.5zM8 2.7c.8 1 1.5 2.8 1.7 4.8H6.3C6.5 5.5 7.2 3.7 8 2.7zM3.2 7.5A5.3 5.3 0 0 1 5.9 4.4a10.8 10.8 0 0 0-.8 3.1H3.2zm0 1.1h1.9c.1 1.1.4 2.2.8 3.1A5.3 5.3 0 0 1 3.2 8.6zM8 13.3c-.8-1-1.5-2.8-1.7-4.8h3.4c-.2 2-1 3.8-1.7 4.8zm2.1-1.6c.4-.9.7-2 .8-3.1h1.9a5.3 5.3 0 0 1-2.7 3.1z"/></svg>';
+    var searchSvg = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.9 1.8a5.1 5.1 0 1 0 3.1 9.2l2.8 2.8a.7.7 0 0 0 1-1l-2.8-2.8a5.1 5.1 0 0 0-4.1-8.2zm0 1.4a3.7 3.7 0 1 1 0 7.4 3.7 3.7 0 0 1 0-7.4z"/></svg>';
+
+    if (!u) icon = searchSvg;
+    else if (u.indexOf('https://') === 0) icon = lockSvg;
+    else icon = globeSvg;
+
+    el.omniIcon.innerHTML = icon;
+  }
+
+  function getActiveTab() {
+    if (!state.activeTabId) return null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === state.activeTabId) return state.tabs[i];
+    }
+    return null;
+  }
+
+  // BUILD_WCV: find tab by main-process tabId
+  function getTabByMainId(mainTabId) {
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].mainTabId === mainTabId) return state.tabs[i];
+    }
+    return null;
+  }
+
+  function createTabRuntime(url) {
+    var u = String(url || '').trim();
+    var entries = [];
+    if (u) entries.push({ url: u, title: '' });
+    return {
+      navEntries: entries,
+      currentIndex: entries.length ? 0 : -1,
+      pendingUrl: '',
+      lastVisibleUrl: u,
+      lastCommittedUrl: u,
+      lastError: null,
+      health: {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      },
+      securityState: inferSecurityStateFromUrl(u),
+      isBlocked: false,
+      omniState: null // CHROMIUM_PARITY: per-tab omnibox state (C2)
+    };
+  }
+
+  function ensureRuntimeHealth(runtime) {
+    if (!runtime || typeof runtime !== 'object') return null;
+    if (!runtime.health || typeof runtime.health !== 'object') {
+      runtime.health = {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      };
+    }
+    return runtime.health;
+  }
+
+  function isRuntimeInBadHealth(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return false;
+    return health.state === 'crashed' || health.state === 'unresponsive';
+  }
+
+  function ensureTabRuntime(tab) {
+    if (!tab) return createTabRuntime('');
+    if (!tab.runtime || typeof tab.runtime !== 'object') {
+      tab.runtime = createTabRuntime(tab.url || tab.homeUrl || '');
+    }
+    // CHROMIUM_PARITY: Migrate legacy string navEntries to { url, title } objects
+    var rt = tab.runtime;
+    if (rt.navEntries && rt.navEntries.length > 0 && typeof rt.navEntries[0] === 'string') {
+      rt.navEntries = rt.navEntries.map(function (e) {
+        return typeof e === 'string' ? { url: e, title: '' } : e;
+      });
+    }
+    return rt;
+  }
+
+  function normalizeRuntimeEntries(entries) {
+    var out = [];
+    var list = Array.isArray(entries) ? entries : [];
+    for (var i = 0; i < list.length; i++) {
+      var raw = list[i];
+      if (typeof raw === 'string') raw = { url: raw, title: '' };
+      if (!raw || typeof raw !== 'object') continue;
+      var u = String(raw.url || '').trim();
+      if (!u) continue;
+      out.push({
+        url: u,
+        title: String(raw.title || '').trim()
+      });
+    }
+    return out;
+  }
+
+  function assertRuntimeHistoryInvariants(tab, reason) {
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    runtime.navEntries = normalizeRuntimeEntries(runtime.navEntries);
+
+    if (!runtime.navEntries.length) {
+      runtime.currentIndex = -1;
+    } else {
+      if (!isFinite(runtime.currentIndex)) runtime.currentIndex = runtime.navEntries.length - 1;
+      runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+    }
+
+    if (runtime.currentIndex >= 0) {
+      var active = runtime.navEntries[runtime.currentIndex];
+      if (!active || !active.url) {
+        console.warn('[web-runtime] invalid active entry after', reason || 'mutation');
+        runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+      }
+    }
+  }
+
+  function reconcileRuntimeWithWebUrl(tab, webUrl, allowReplaceCurrent) {
+    var runtime = ensureTabRuntime(tab);
+    var url = String(webUrl || '').trim();
+    if (!url) return;
+    if (runtime.currentIndex < 0 || !runtime.navEntries.length) {
+      runtime.navEntries = [{ url: url, title: String(tab.title || '') }];
+      runtime.currentIndex = 0;
+      return;
+    }
+    var current = runtime.navEntries[runtime.currentIndex];
+    if (current && current.url === url) return;
+    if (allowReplaceCurrent && current) {
+      current.url = url;
+      return;
+    }
+    if (runtime.currentIndex < runtime.navEntries.length - 1) {
+      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    }
+    runtime.navEntries.push({ url: url, title: String(tab.title || '') });
+    if (runtime.navEntries.length > 250) runtime.navEntries.shift();
+    runtime.currentIndex = runtime.navEntries.length - 1;
+  }
+
+  function inferSecurityStateFromUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw) return 'unknown';
+    if (raw.indexOf('https://') === 0) return 'secure';
+    if (raw.indexOf('http://') === 0) return 'insecure';
+    if (/^(file|about|chrome|data):/i.test(raw)) return 'internal';
+    return 'unknown';
+  }
+
+  function classifyLoadFailure(errorCode, errorDescription, failedUrl) {
+    var code = Number(errorCode || 0);
+    var desc = String(errorDescription || '').trim();
+    var lower = desc.toLowerCase();
+    var host = '';
+    try { host = new URL(String(failedUrl || '')).hostname; } catch (e) {}
+
+    var out = {
+      kind: 'load_failed',
+      isBlocked: false,
+      title: '',
+      toast: ''
+    };
+
+    if (code === -20 || code === -21 || lower.indexOf('blocked') !== -1 || lower.indexOf('client blocked') !== -1) {
+      out.kind = 'blocked';
+      out.isBlocked = true;
+    } else if (code === -105 || code === -137 || code === -300 || lower.indexOf('name not resolved') !== -1 || lower.indexOf('dns') !== -1) {
+      out.kind = 'dns';
+    } else if (code <= -200 && code >= -299) {
+      out.kind = 'tls';
+    } else if (code === -118 || code === -7 || lower.indexOf('timed out') !== -1) {
+      out.kind = 'timeout';
+    } else if (code === -106 || lower.indexOf('internet disconnected') !== -1) {
+      out.kind = 'offline';
+    }
+
+    if (out.kind === 'blocked') out.title = 'Blocked';
+    else if (out.kind === 'dns') out.title = 'DNS error';
+    else if (out.kind === 'tls') out.title = 'TLS error';
+    else if (out.kind === 'timeout') out.title = 'Timed out';
+    else if (out.kind === 'offline') out.title = 'Offline';
+    else out.title = 'Load failed';
+
+    if (host) out.title += ' - ' + host;
+
+    if (out.kind === 'blocked') out.toast = 'Blocked: ' + (host || 'site');
+    else if (desc) out.toast = 'Load failed: ' + desc;
+    else out.toast = out.title;
+
+    return out;
+  }
+
+  function reduceRuntimeHistory(tab, action, payload) {
+    var runtime = ensureTabRuntime(tab);
+    var data = payload || {};
+    var url = String(data.url || '').trim();
+    var targetIndex = Number(data.targetIndex);
+
+    if (action === 'request-load-url') {
+      runtime.pendingUrl = url;
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'request-go-index') {
+      if (runtime.navEntries.length && isFinite(targetIndex)) {
+        var safeIdx = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        runtime.pendingUrl = String(runtime.navEntries[safeIdx].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'request-back') {
+      if (runtime.currentIndex > 0 && runtime.navEntries[runtime.currentIndex - 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex - 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'request-forward') {
+      if (runtime.currentIndex >= 0 && runtime.currentIndex < runtime.navEntries.length - 1 && runtime.navEntries[runtime.currentIndex + 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex + 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'loading') {
+      runtime.pendingUrl = data.loading ? String(url || tab.url || runtime.lastVisibleUrl || '').trim() : '';
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'commit') {
+      if (!url) return;
+      var direction = String(data.direction || '').trim();
+      var navKind = String(data.navKind || '').trim();
+      runtime.lastVisibleUrl = url;
+      runtime.lastCommittedUrl = url;
+      runtime.pendingUrl = '';
+      runtime.securityState = inferSecurityStateFromUrl(url);
+      runtime.isBlocked = false;
+      runtime.lastError = null;
+
+      if (direction === 'back') {
+        if (runtime.currentIndex > 0) runtime.currentIndex--;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'forward') {
+        if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'index') {
+        if (isFinite(targetIndex) && runtime.navEntries.length) {
+          runtime.currentIndex = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        }
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'in-page') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'redirect') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else {
+        reconcileRuntimeWithWebUrl(tab, url, false);
+      }
+      assertRuntimeHistoryInvariants(tab, action + ':' + (direction || navKind || 'new'));
+      return;
+    }
+
+    if (action === 'load-fail') {
+      var failedUrl = String(data.failedUrl || tab.url || runtime.lastVisibleUrl || '').trim();
+      if (failedUrl) {
+        tab.url = failedUrl;
+        runtime.lastVisibleUrl = failedUrl;
+      }
+      runtime.pendingUrl = '';
+      runtime.isBlocked = !!data.isBlocked;
+      runtime.lastError = data.lastError || null;
+      runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+      reconcileRuntimeWithWebUrl(tab, failedUrl, true);
+      assertRuntimeHistoryInvariants(tab, action);
+    }
+  }
+
+  function navigateTabWithRuntime(tab, payload, runtimeAction, runtimeData) {
+    if (!tab || !tab.mainTabId) return;
+    if (runtimeAction) reduceRuntimeHistory(tab, runtimeAction, runtimeData || payload || {});
+    webTabs.navigate(payload).catch(function () {});
+    scheduleSessionSave();
+  }
+
+  function normalizeSourceInput(source, urlOverride) {
+    if (source && typeof source === 'object') {
+      var objUrl = String(source.url || urlOverride || '').trim();
+      return {
+        id: source.id != null ? source.id : ('src_' + Date.now()),
+        name: String(source.name || siteNameFromUrl(objUrl) || 'New Tab'),
+        url: objUrl || String(urlOverride || 'about:blank').trim(),
+        color: String(source.color || '#555')
+      };
+    }
+
+    var asUrl = String(source || urlOverride || '').trim();
+    if (!asUrl) asUrl = 'about:blank';
+    return {
+      id: 'src_' + Date.now(),
+      name: siteNameFromUrl(asUrl) || 'New Tab',
+      url: asUrl,
+      color: '#555'
+    };
+  }
+
+  function snapshotTabForSession(tab) {
+    if (!tab) return null;
+    if (tab.type === 'torrent') return null; // torrent tabs are transient, don't persist
+    var url = String(tab.url || '').trim();
+    if (!url) return null;
+    return {
+      id: String(tab.id || ''),
+      sourceId: tab.sourceId != null ? String(tab.sourceId) : '',
+      sourceName: String(tab.sourceName || '').trim(),
+      title: String(tab.title || '').trim(),
+      url: url,
+      homeUrl: String(tab.homeUrl || url).trim() || url,
+      pinned: !!tab.pinned,
+      audible: !!tab.audible,
+      muted: !!tab.muted,
+      mediaDetected: !!tab.mediaDetected,
+      lastActiveAt: Number(tab.lastActiveAt || 0) || Date.now(),
+      group: (tab.group && typeof tab.group === 'object') ? {
+        id: tab.group.id != null ? String(tab.group.id) : '',
+        color: String(tab.group.color || ''),
+        title: String(tab.group.title || '')
+      } : null,
+      overflowVisible: tab.overflowVisible !== false
+    };
+  }
+
+  function buildSessionPayload() {
+    var tabs = [];
+    for (var i = 0; i < state.tabs.length; i++) {
+      var snap = snapshotTabForSession(state.tabs[i]);
+      if (snap) tabs.push(snap);
+      if (tabs.length >= MAX_TABS) break;
+    }
+    var closedTabs = [];
+    for (var j = 0; j < state.closedTabs.length; j++) {
+      var closed = snapshotTabForSession(state.closedTabs[j]);
+      if (closed) closedTabs.push(closed);
+      if (closedTabs.length >= MAX_CLOSED_TABS) break;
+    }
+    return {
+      tabs: tabs,
+      activeTabId: state.activeTabId != null ? String(state.activeTabId) : '',
+      closedTabs: closedTabs,
+      restoreLastSession: state.restoreLastSession !== false,
+      updatedAt: Date.now()
+    };
+  }
+
+  function scheduleSessionSave(immediate) {
+    if (state.sessionRestoreInProgress) return;
+    if (!api.webSession || typeof api.webSession.save !== 'function') return;
+    var runSave = function () {
+      state.sessionSaveTimer = null;
+      api.webSession.save({ state: buildSessionPayload() }).catch(function () {});
+    };
+    if (immediate) {
+      if (state.sessionSaveTimer) {
+        try { clearTimeout(state.sessionSaveTimer); } catch (e) {}
+        state.sessionSaveTimer = null;
+      }
+      runSave();
+      return;
+    }
+    if (state.sessionSaveTimer) return;
+    state.sessionSaveTimer = setTimeout(runSave, 260);
+  }
+
+  function pushClosedTab(tab) {
+    var snap = snapshotTabForSession(tab);
+    if (!snap) return;
+    state.closedTabs.unshift(snap);
+    if (state.closedTabs.length > MAX_CLOSED_TABS) state.closedTabs.length = MAX_CLOSED_TABS;
+  }
+
+  function reopenClosedTab() {
+    if (!state.closedTabs.length) {
+      showToast('No recently closed tab');
+      return;
+    }
+    var snap = state.closedTabs.shift();
+    if (!snap) return;
+    var src = {
+      id: snap.sourceId || ('restored_' + Date.now()),
+      name: snap.sourceName || siteNameFromUrl(snap.url) || 'Tab',
+      url: snap.homeUrl || snap.url,
+      color: '#555'
+    };
+    var restored = createTab(src, snap.url, {
+      silentToast: true,
+      toastText: 'Reopened tab',
+      skipHistory: true,
+      titleOverride: snap.title || '',
+      forcedId: Number(snap.id || 0) || null
+    });
+    if (restored) {
+      restored.pinned = !!snap.pinned;
+      restored.audible = !!snap.audible;
+      restored.muted = !!snap.muted;
+      restored.mediaDetected = !!snap.mediaDetected;
+      restored.lastActiveAt = Number(snap.lastActiveAt || Date.now()) || Date.now();
+      restored.group = (snap.group && typeof snap.group === 'object') ? { id: String(snap.group.id || ''), color: String(snap.group.color || ''), title: String(snap.group.title || '') } : null;
+      restored.overflowVisible = snap.overflowVisible !== false;
+      renderTabs();
+      showToast('Reopened tab');
+      scheduleSessionSave();
+    }
+  }
+
+  function loadSessionAndRestore() {
+    if (!api.webSession || typeof api.webSession.get !== 'function') return;
+    state.sessionRestoreInProgress = true;
+    api.webSession.get().then(function (res) {
+      var data = (res && res.ok && res.state) ? res.state : null;
+      if (!data || typeof data !== 'object') return;
+
+      var settingsAllowRestore = !(state.browserSettings && state.browserSettings.restoreLastSession === false);
+      state.restoreLastSession = settingsAllowRestore && (data.restoreLastSession !== false);
+      state.closedTabs = [];
+      if (Array.isArray(data.closedTabs)) {
+        for (var c = 0; c < data.closedTabs.length; c++) {
+          var cs = snapshotTabForSession(data.closedTabs[c]);
+          if (!cs) continue;
+          state.closedTabs.push(cs);
+          if (state.closedTabs.length >= MAX_CLOSED_TABS) break;
+        }
+      }
+
+      if (!state.restoreLastSession) return;
+      if (!Array.isArray(data.tabs) || !data.tabs.length) return;
+
+      var targetActive = String(data.activeTabId || '').trim();
+      var maxId = 0;
+      for (var i = 0; i < data.tabs.length && i < MAX_TABS; i++) {
+        var s = snapshotTabForSession(data.tabs[i]);
+        if (!s) continue;
+        var sidNum = Number(s.id || 0);
+        if (isFinite(sidNum) && sidNum > maxId) maxId = sidNum;
+        var src = {
+          id: s.sourceId || ('restored_' + i),
+          name: s.sourceName || siteNameFromUrl(s.homeUrl || s.url) || 'Tab',
+          url: s.homeUrl || s.url,
+          color: '#555'
+        };
+        var tab = createTab(src, s.url, {
+          silentToast: true,
+          skipHistory: true,
+          skipSessionSave: true,
+          titleOverride: s.title || '',
+          forcedId: sidNum > 0 ? sidNum : null
+        });
+        if (tab) {
+          tab.pinned = !!s.pinned;
+          tab.audible = !!s.audible;
+          tab.muted = !!s.muted;
+          tab.mediaDetected = !!s.mediaDetected;
+          tab.lastActiveAt = Number(s.lastActiveAt || Date.now()) || Date.now();
+          tab.group = (s.group && typeof s.group === 'object') ? { id: String(s.group.id || ''), color: String(s.group.color || ''), title: String(s.group.title || '') } : null;
+          tab.overflowVisible = s.overflowVisible !== false;
+        }
+      }
+      if (maxId >= state.nextTabId) state.nextTabId = maxId + 1;
+
+      if (targetActive) {
+        for (var j = 0; j < state.tabs.length; j++) {
+          if (String(state.tabs[j].id) === targetActive) {
+            activateTab(state.tabs[j].id);
+            break;
+          }
+        }
+      }
+      renderTabs();
+    }).catch(function () {
+      // ignore restore failures
+    }).finally(function () {
+      state.sessionRestoreInProgress = false;
+      scheduleSessionSave();
+    });
+  }
 
   function isWebModeActive() {
     try {
@@ -1552,22 +2440,18 @@
     }
     return api.webBrowserSettings.get().then(function (res) {
       if (!res || !res.ok || !res.settings) return;
-      var settings = res.settings || {};
-      state.browserSettings = {
-        defaultSearchEngine: String(settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
-        parityV1Enabled: settings.parityV1Enabled !== false,
-        adblockEnabled: settings.adblockEnabled !== false,
-        restoreLastSession: settings.restoreLastSession !== false
-      };
+      state.browserSettings = normalizeBrowserSettingsForUi(res.settings || {});
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
       if (api.webAdblock && typeof api.webAdblock.setEnabled === 'function') {
         api.webAdblock.setEnabled({ enabled: state.browserSettings.adblockEnabled !== false }).catch(function () {});
       }
     }).catch(function () {
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
     });
   }
 
@@ -1576,17 +2460,72 @@
     var payload = (patch && typeof patch === 'object') ? patch : {};
     api.webBrowserSettings.save(payload).then(function (res) {
       if (!res || !res.ok || !res.settings) return;
-      state.browserSettings = {
-        defaultSearchEngine: String(res.settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
-        parityV1Enabled: res.settings.parityV1Enabled !== false,
-        adblockEnabled: res.settings.adblockEnabled !== false,
-        restoreLastSession: res.settings.restoreLastSession !== false
-      };
+      state.browserSettings = normalizeBrowserSettingsForUi(res.settings);
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
       scheduleSessionSave();
     }).catch(function () {});
+  }
+
+  function normalizeBrowserSettingsForUi(settings) {
+    var src = (settings && typeof settings === 'object') ? settings : {};
+    var startup = (src.startup && typeof src.startup === 'object') ? src.startup : {};
+    var home = (src.home && typeof src.home === 'object') ? src.home : {};
+    var downloads = (src.downloads && typeof src.downloads === 'object') ? src.downloads : {};
+    var privacy = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
+    var clearOnExit = (privacy.clearOnExit && typeof privacy.clearOnExit === 'object') ? privacy.clearOnExit : {};
+    return {
+      defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
+      parityV1Enabled: src.parityV1Enabled !== false,
+      adblockEnabled: src.adblockEnabled !== false,
+      restoreLastSession: src.restoreLastSession !== false,
+      startup: {
+        mode: String(startup.mode || 'continue').trim().toLowerCase() || 'continue',
+        customUrl: String(startup.customUrl || '').trim()
+      },
+      home: {
+        homeUrl: String(home.homeUrl || '').trim(),
+        newTabBehavior: String(home.newTabBehavior || 'tankoban_home').trim().toLowerCase() || 'tankoban_home'
+      },
+      downloads: {
+        behavior: String(downloads.behavior || 'ask').trim().toLowerCase() || 'ask',
+        folderModeHint: downloads.folderModeHint !== false
+      },
+      privacy: {
+        doNotTrack: !!privacy.doNotTrack,
+        clearOnExit: {
+          history: !!clearOnExit.history,
+          downloads: !!clearOnExit.downloads,
+          cookies: !!clearOnExit.cookies,
+          cache: !!clearOnExit.cache
+        }
+      }
+    };
+  }
+
+  function syncBrowserSettingsControls() {
+    var cfg = state.browserSettings || {};
+    var startup = cfg.startup || {};
+    var home = cfg.home || {};
+    var downloads = cfg.downloads || {};
+    var privacy = cfg.privacy || {};
+    var clearOnExit = privacy.clearOnExit || {};
+    if (el.hubStartupMode) el.hubStartupMode.value = startup.mode || 'continue';
+    if (el.hubStartupCustomUrl) {
+      el.hubStartupCustomUrl.value = startup.customUrl || '';
+      el.hubStartupCustomUrl.disabled = (startup.mode || 'continue') !== 'custom_url';
+    }
+    if (el.hubHomeUrl) el.hubHomeUrl.value = home.homeUrl || '';
+    if (el.hubNewTabBehavior) el.hubNewTabBehavior.value = home.newTabBehavior || 'tankoban_home';
+    if (el.hubDownloadBehavior) el.hubDownloadBehavior.value = downloads.behavior || 'ask';
+    if (el.hubDownloadFolderHint) el.hubDownloadFolderHint.checked = downloads.folderModeHint !== false;
+    if (el.hubPrivacyDoNotTrack) el.hubPrivacyDoNotTrack.checked = !!privacy.doNotTrack;
+    if (el.hubClearOnExitHistory) el.hubClearOnExitHistory.checked = !!clearOnExit.history;
+    if (el.hubClearOnExitDownloads) el.hubClearOnExitDownloads.checked = !!clearOnExit.downloads;
+    if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = !!clearOnExit.cookies;
+    if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = !!clearOnExit.cache;
   }
 
   function loadDestinations() {
@@ -1734,6 +2673,95 @@
     if (showHome || showTorrent) {
       webTabs.hideAll().catch(function () {});
     }
+
+    renderRuntimeHealthPanel(activeTab, showWebview);
+  }
+
+  function getRuntimeHealthMessage(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return { title: 'Tab issue', detail: 'This tab encountered an issue.' };
+    if (health.state === 'crashed') {
+      return {
+        title: 'Aw, Snap! This tab crashed.',
+        detail: 'Chromium renderer process stopped unexpectedly. Reload this tab to recover.'
+      };
+    }
+    if (health.state === 'unresponsive') {
+      return {
+        title: 'Page is unresponsive',
+        detail: 'The renderer is not responding right now. Wait for recovery or reload the tab.'
+      };
+    }
+    return {
+      title: 'Tab recovered',
+      detail: 'The renderer process is responsive again.'
+    };
+  }
+
+  function renderRuntimeHealthPanel(activeTab, canShow) {
+    if (!el.viewContainer) return;
+    var panel = el.viewContainer.querySelector('.webCrashPanel');
+    var runtime = activeTab ? ensureTabRuntime(activeTab) : null;
+    var broken = !!(activeTab && activeTab.type !== 'torrent' && isRuntimeInBadHealth(runtime));
+
+    if (!canShow || !broken) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'webCrashPanel';
+      panel.innerHTML = '<div class="webCrashPanelInner">'
+        + '<div class="webCrashGlyph" aria-hidden="true">:(</div>'
+        + '<h2 class="webCrashTitle"></h2>'
+        + '<p class="webCrashDetail"></p>'
+        + '<div class="webCrashMeta"></div>'
+        + '<div class="webCrashActions">'
+        + '<button type="button" class="btn webCrashAction" data-crash-action="reload">Reload</button>'
+        + '<button type="button" class="btn secondary webCrashAction" data-crash-action="close">Close tab</button>'
+        + '</div></div>';
+      panel.addEventListener('click', function (ev) {
+        var btn = ev && ev.target && ev.target.closest ? ev.target.closest('[data-crash-action]') : null;
+        if (!btn) return;
+        var action = String(btn.getAttribute('data-crash-action') || '');
+        var tabId = Number(btn.getAttribute('data-tab-id') || 0);
+        if (!tabId) return;
+        if (action === 'reload') {
+          activateTab(tabId);
+          reloadCurrentTab();
+        } else if (action === 'close') {
+          closeTab(tabId);
+          renderContinue();
+        }
+      });
+      el.viewContainer.appendChild(panel);
+    }
+
+    var msg = getRuntimeHealthMessage(runtime);
+    var reason = (runtime && runtime.health && (runtime.health.lastCrashReason || runtime.health.lastUnresponsiveReason)) || '';
+    var meta = [];
+    if (reason) meta.push('Reason: ' + reason);
+    if (runtime && runtime.health) {
+      meta.push('Crashes: ' + Number(runtime.health.crashCount || 0));
+      meta.push('Unresponsive: ' + Number(runtime.health.unresponsiveCount || 0));
+      meta.push('Recovered: ' + Number(runtime.health.recoverCount || 0));
+    }
+
+    var titleEl = panel.querySelector('.webCrashTitle');
+    var detailEl = panel.querySelector('.webCrashDetail');
+    var metaEl = panel.querySelector('.webCrashMeta');
+    if (titleEl) titleEl.textContent = msg.title;
+    if (detailEl) detailEl.textContent = msg.detail;
+    if (metaEl) metaEl.textContent = meta.join('  ·  ');
+
+    var actionButtons = panel.querySelectorAll('[data-crash-action]');
+    for (var i = 0; i < actionButtons.length; i++) {
+      actionButtons[i].setAttribute('data-tab-id', String(activeTab.id));
+    }
+
+    panel.classList.remove('hidden');
+    webTabs.hideAll().catch(function () {});
   }
 
   function makeContinueTile(tab) {
@@ -1928,10 +2956,141 @@
     closeDownloadsPanel();
     closeFindBar();
     closeOmniSuggestions();
+    closeTabQuickPanel();
     syncLoadBar();
   }
 
   // ---- Tabs management ----
+
+  function setTabMuteState(tabId, muted, silent) {
+    var idNum = Number(tabId);
+    if (!isFinite(idNum)) return;
+    var tab = null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i] && state.tabs[i].id === idNum) { tab = state.tabs[i]; break; }
+    }
+    if (!tab || tab.type === 'torrent' || !tab.mainTabId) return;
+    var nextMuted = !!muted;
+    webTabs.setMuted({ tabId: tab.mainTabId, muted: nextMuted }).then(function () {
+      tab.muted = nextMuted;
+      tab.mediaDetected = true;
+      renderTabs();
+      scheduleSessionSave();
+      if (!silent) showToast(nextMuted ? 'Tab muted' : 'Tab unmuted');
+    }).catch(function () {
+      showToast('Unable to change tab audio');
+    });
+  }
+
+  function scoreTabSearch(query, tab) {
+    var q = String(query || '').toLowerCase().trim();
+    if (!q) return 1;
+    var hay = String((tab && (tab.title || tab.sourceName || tab.url)) || '').toLowerCase();
+    if (!hay) return 0;
+    if (hay.indexOf(q) !== -1) return 100 - Math.max(0, hay.indexOf(q));
+    var qi = 0;
+    var gap = 0;
+    for (var i = 0; i < hay.length && qi < q.length; i++) {
+      if (hay.charAt(i) === q.charAt(qi)) qi++;
+      else if (qi > 0) gap++;
+    }
+    if (qi < q.length) return 0;
+    return Math.max(2, 60 - gap);
+  }
+
+  function getTabQuickMatches() {
+    var query = String(state.tabQuickQuery || '');
+    var rows = [];
+    for (var i = 0; i < state.tabs.length; i++) {
+      var tab = state.tabs[i];
+      if (!tab) continue;
+      var score = scoreTabSearch(query, tab);
+      if (score <= 0) continue;
+      rows.push({ tab: tab, score: score });
+    }
+    rows.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return Number(b.tab.lastActiveAt || 0) - Number(a.tab.lastActiveAt || 0);
+    });
+    return rows;
+  }
+
+  function renderTabQuickPanel() {
+    if (!el.tabQuickPanel || !el.tabQuickList) return;
+    if (!state.tabQuickOpen) {
+      el.tabQuickPanel.classList.add('hidden');
+      return;
+    }
+    el.tabQuickPanel.classList.remove('hidden');
+    var matches = getTabQuickMatches();
+    if (!matches.length) {
+      state.tabQuickActiveIndex = -1;
+      el.tabQuickList.innerHTML = '<div class="webTabQuickEmpty">No matching tabs</div>';
+      return;
+    }
+    if (state.tabQuickActiveIndex < 0) state.tabQuickActiveIndex = 0;
+    if (state.tabQuickActiveIndex >= matches.length) state.tabQuickActiveIndex = matches.length - 1;
+    var html = '';
+    for (var i = 0; i < matches.length; i++) {
+      var t = matches[i].tab;
+      var active = i === state.tabQuickActiveIndex;
+      var audio = t.audible ? (t.muted ? ' 🔇' : ' 🔊') : '';
+      html += '<button class="webTabQuickItem' + (active ? ' active' : '') + '" type="button" role="option" data-quick-tab-id="' + t.id + '" aria-selected="' + (active ? 'true' : 'false') + '">'
+        + '<span class="webTabQuickMain">' + escapeHtml(t.title || t.sourceName || 'Tab') + audio + '</span>'
+        + '<span class="webTabQuickSub">' + escapeHtml(t.url || t.homeUrl || '') + '</span>'
+        + '</button>';
+    }
+    el.tabQuickList.innerHTML = html;
+    var items = el.tabQuickList.querySelectorAll('[data-quick-tab-id]');
+    for (var j = 0; j < items.length; j++) {
+      items[j].onclick = function () {
+        var id = Number(this.getAttribute('data-quick-tab-id'));
+        if (!isFinite(id)) return;
+        closeTabQuickPanel();
+        activateTab(id);
+      };
+    }
+  }
+
+  function openTabQuickPanel() {
+    if (!state.browserOpen) return;
+    state.tabQuickOpen = true;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = 0;
+    renderTabQuickPanel();
+    if (el.tabQuickSearch && el.tabQuickSearch.focus) {
+      el.tabQuickSearch.value = '';
+      el.tabQuickSearch.focus();
+    }
+  }
+
+  function closeTabQuickPanel() {
+    state.tabQuickOpen = false;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = -1;
+    if (el.tabQuickPanel) el.tabQuickPanel.classList.add('hidden');
+  }
+
+  function syncTabOverflowAffordance() {
+    if (!el.tabBar) return;
+    var hasOverflow = (el.tabBar.scrollWidth - el.tabBar.clientWidth) > 4;
+    var tabEls = el.tabBar.querySelectorAll('.webTab');
+    for (var i = 0; i < tabEls.length; i++) {
+      var node = tabEls[i];
+      var id = Number(node.getAttribute('data-tab-id'));
+      var tab = null;
+      for (var j = 0; j < state.tabs.length; j++) { if (state.tabs[j] && state.tabs[j].id === id) { tab = state.tabs[j]; break; } }
+      if (!tab) continue;
+      var visible = true;
+      if (hasOverflow) {
+        var left = node.offsetLeft - el.tabBar.scrollLeft;
+        var right = left + node.offsetWidth;
+        visible = left >= 0 && right <= el.tabBar.clientWidth;
+      }
+      tab.overflowVisible = visible;
+    }
+    if (el.tabOverflowBtn) el.tabOverflowBtn.classList.toggle('hidden', !hasOverflow);
+  }
 
   function renderTabs() {
     if (!el.tabBar) return;
@@ -1940,7 +3099,11 @@
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
       var isTorrent = t.type === 'torrent';
+      var runtime = ensureTabRuntime(t);
+      var health = ensureRuntimeHealth(runtime);
+      var isBroken = !isTorrent && isRuntimeInBadHealth(runtime);
       var loadingClass = t.loading ? ' loading' : '';
+      var brokenClass = isBroken ? ' broken' : '';
       var favSrc = isTorrent ? '' : getFaviconUrl(t.url || t.homeUrl || '');
       var favHtml;
       if (isTorrent) {
@@ -1951,13 +3114,23 @@
         } else {
           favHtml = '<span class="webTabFaviconFallback" style="font-size:11px" aria-hidden="true">&#9901;</span>';
         }
+      } else if (isBroken) {
+        favHtml = '<span class="webTabFaviconFallback webTabFaviconBroken" aria-hidden="true">!</span>';
       } else {
         favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       }
       var pinnedClass = t.pinned ? ' pinned' : '';
-      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
+      var groupAttr = '';
+      if (t.group && t.group.id) groupAttr = ' data-group-id="' + escapeHtml(String(t.group.id)) + '"';
+      var spinnerBadge = (!active && t.loading) ? '<span class="webTabBadge webTabBadgeLoading" title="Loading" aria-label="Loading"></span>' : '';
+      var audioBadge = '';
+      if (t.audible) {
+        audioBadge = '<span class="webTabBadge webTabBadgeAudio" title="' + (t.muted ? 'Muted' : 'Playing audio') + '" aria-label="' + (t.muted ? 'Muted' : 'Playing audio') + '">' + (t.muted ? '&#128263;' : '&#128266;') + '</span>';
+      }
+      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true"' + groupAttr + '>' +
         favHtml +
         (t.pinned ? '' : '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>') +
+        '<span class="webTabBadges">' + spinnerBadge + audioBadge + '</span>' +
         (t.pinned ? '' : '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>') +
         '</div>';
     }
@@ -1996,6 +3169,12 @@
     if (addBtn) {
       addBtn.onclick = function () {
         openTabPicker();
+      };
+    }
+
+    if (el.tabBar) {
+      el.tabBar.onscroll = function () {
+        syncTabOverflowAffordance();
       };
     }
 
@@ -2049,6 +3228,9 @@
             });
           } });
           items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+          if (t.mediaDetected || t.audible) {
+            items.push({ label: t.muted ? 'Unmute tab' : 'Mute tab', onClick: function () { setTabMuteState(id, !t.muted); } });
+          }
           items.push({ separator: true });
           items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
         }
@@ -2095,6 +3277,1397 @@
         this.classList.remove('dragOver');
         var targetId = parseInt(this.getAttribute('data-tab-id'), 10);
         if (isNaN(targetId)) return;
+
+        // CHROMIUM_PARITY: Accept URL drops onto tabs (C3)
+        if (state.dragTabId == null) {
+          var droppedUrl = '';
+          try { droppedUrl = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || ''; } catch (err) {}
+          droppedUrl = String(droppedUrl || '').trim();
+          if (droppedUrl && /^https?:\/\//i.test(droppedUrl)) {
+            var dropTarget = null;
+            for (var dti = 0; dti < state.tabs.length; dti++) {
+              if (state.tabs[dti].id === targetId) { dropTarget = state.tabs[dti]; break; }
+            }
+            if (dropTarget && dropTarget.mainTabId && dropTarget.type !== 'torrent') {
+              activateTab(targetId);
+              navigateTabWithRuntime(dropTarget, { tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }, 'request-load-url', { url: droppedUrl });
+            }
+          }
+          return;
+        }
+
+        if (state.dragTabId === targetId) return;
+        var fromIdx = -1;
+        var toIdx = -1;
+        for (var ti = 0; ti < state.tabs.length; ti++) {
+          if (state.tabs[ti].id === state.dragTabId) fromIdx = ti;
+          if (state.tabs[ti].id === targetId) toIdx = ti;
+        }
+        if (fromIdx === -1 || toIdx === -1) return;
+        // CHROMIUM_PARITY: Block drags between pinned and unpinned zones
+        if (state.tabs[fromIdx].pinned !== state.tabs[toIdx].pinned) return;
+        var moved = state.tabs.splice(fromIdx, 1)[0];
+        state.tabs.splice(toIdx, 0, moved);
+        state.dragTabId = null;
+        renderTabs();
+        scheduleSessionSave();
+      });
+    }
+
+    syncTabOverflowAffordance();
+    if (state.tabQuickOpen) renderTabQuickPanel();
+    syncLoadBar();
+  }
+
+  function syncLoadBar() {
+    if (!el.loadBar) return;
+    // FEAT-TOR: Don't hide load bar when Tor indicator is showing
+    if (state.torActive && el.loadBar.classList.contains('tor-indicator')) return;
+    var t = getActiveTab();
+    var show = !!(state.browserOpen && t && t.loading);
+    el.loadBar.classList.toggle('hidden', !show);
+    syncReloadStopButton();
+  }
+
+  // CHROMIUM_PARITY: Toggle reload button to stop (X) while loading
+  function syncReloadStopButton() {
+    if (!el.navReload) return;
+    var tab = getActiveTab();
+    var loading = !!(state.browserOpen && tab && tab.loading);
+    el.navReload.innerHTML = loading ? SVG_STOP : SVG_RELOAD;
+    el.navReload.title = loading ? 'Stop loading' : 'Reload';
+    el.navReload.setAttribute('aria-label', loading ? 'Stop loading' : 'Reload page');
+  }
+
+  // FEAT-TOR: Sync Tor button visual state
+  function syncTorButton() {
+    if (!el.torBtn) return;
+    el.torBtn.classList.toggle('tor-active', state.torActive && !state.torConnecting);
+    el.torBtn.classList.toggle('tor-connecting', !!state.torConnecting);
+    el.torBtn.title = state.torConnecting ? 'Tor: Connecting\u2026'
+      : state.torActive ? 'Tor Proxy (on) \u2014 click to disconnect'
+      : 'Tor Proxy (off) \u2014 click to connect';
+    // Show persistent purple load bar indicator when Tor is active
+    if (el.loadBar) {
+      if (state.torActive && !state.torConnecting) {
+        el.loadBar.classList.add('tor-indicator');
+        el.loadBar.classList.remove('hidden');
+      } else {
+        el.loadBar.classList.remove('tor-indicator');
+        syncLoadBar(); // restore normal load bar state
+      }
+    }
+  }
+
+  function syncDownloadIndicator() {
+    // DL pill removed — the badge on the download button is sufficient (Chrome-style)
+
+    if (el.downloadStatus) {
+      if (state.downloading > 0) {
+        el.downloadStatus.textContent = state.lastDownloadName ? ((state.downloadingHasProgress ? 'Downloading: ' : 'Paused: ') + state.lastDownloadName) : ((state.downloadingHasProgress ? 'Downloadingâ€¦ (' : 'Pausedâ€¦ (') + state.downloading + ')');
+      } else {
+        // keep whatever latest completion message set; fall back if blank
+        if (!el.downloadStatus.textContent) el.downloadStatus.textContent = 'No active downloads';
+      }
+    }
+
+    if (el.dlBadge) {
+      el.dlBadge.classList.toggle('hidden', !(state.downloading > 0));
+    }
+
+    // Sidebar progress bar (web home sidebar)
+    if (el.sidebarDlRow && el.sidebarDlFill && el.sidebarDlPct) {
+      if (state.downloading <= 0) {
+        el.sidebarDlRow.classList.add('hidden');
+        el.sidebarDlFill.style.width = '0%';
+        el.sidebarDlPct.textContent = '0%';
+      } else {
+        // Pick a representative active download
+        var p = null;
+        var bestAt = -1;
+        for (var i = 0; i < state.downloads.length; i++) {
+          var d = state.downloads[i];
+          if (!d || (d.state !== 'progressing' && d.state !== 'paused')) continue;
+          var at = Number(d.startedAt || 0);
+          if (at >= bestAt) {
+            bestAt = at;
+            p = d.progress;
+          }
+        }
+        if (typeof p !== 'number' || !isFinite(p)) p = state.lastDownloadProgress;
+        if (typeof p !== 'number' || !isFinite(p)) p = 0;
+        if (p < 0) p = 0;
+        if (p > 1) p = 1;
+        var pct = Math.round(p * 100);
+        el.sidebarDlRow.classList.remove('hidden');
+        el.sidebarDlFill.style.width = pct + '%';
+        el.sidebarDlPct.textContent = pct + '%';
+      }
+    }
+  }
+
+  // ---- Downloads panel ----
+
+  function formatBytes(n) {
+    n = Number(n || 0);
+    if (!isFinite(n) || n <= 0) return '0 B';
+    var u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
+    var dp = i <= 1 ? 0 : (i === 2 ? 1 : 2);
+    return n.toFixed(dp) + ' ' + u[i];
+  }
+
+  function formatSpeed(bps) {
+    bps = Number(bps || 0);
+    if (!isFinite(bps) || bps <= 0) return '';
+    return formatBytes(bps) + '/s';
+  }
+
+  function formatEta(received, total, bps) {
+    received = Number(received || 0);
+    total = Number(total || 0);
+    bps = Number(bps || 0);
+    if (!isFinite(received) || !isFinite(total) || !isFinite(bps) || total <= 0 || bps <= 0) return '';
+    var s = Math.max(0, Math.round((total - received) / bps));
+    if (s <= 0) return '';
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    if (m >= 60) {
+      var h = Math.floor(m / 60);
+      var mm = m % 60;
+      return h + 'h ' + mm + 'm';
+    }
+    if (m > 0) return m + 'm ' + r + 's';
+    return r + 's';
+  }
+
+  function hostFromUrl(u) {
+    u = String(u || '').trim();
+    if (!u) return '';
+    try {
+      if (u.indexOf('http') !== 0) u = 'https://' + u.replace(/^\/+/, '');
+      var x = new URL(u);
+      return x.hostname || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function faviconFor(u) {
+    var h = hostFromUrl(u);
+    if (!h) return '';
+    return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(h) + '&sz=128';
+  }
+
+  function normalizeDownload(d) {
+    if (!d) return null;
+    var out = {
+      id: String(d.id || ''),
+      filename: String(d.filename || ''),
+      destination: d.destination != null ? String(d.destination) : '',
+      library: d.library != null ? String(d.library) : '',
+      state: String(d.state || ''),
+      startedAt: d.startedAt != null ? Number(d.startedAt) : null,
+      finishedAt: d.finishedAt != null ? Number(d.finishedAt) : null,
+      error: d.error != null ? String(d.error) : '',
+      pageUrl: d.pageUrl != null ? String(d.pageUrl) : '',
+      downloadUrl: d.downloadUrl != null ? String(d.downloadUrl) : '',
+      receivedBytes: d.receivedBytes != null ? Number(d.receivedBytes) : 0,
+      totalBytes: d.totalBytes != null ? Number(d.totalBytes) : 0,
+      progress: d.progress != null ? Number(d.progress) : null,
+      bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
+      transport: d.transport != null ? String(d.transport) : '',
+      canPause: d.canPause != null ? !!d.canPause : null,
+      canResume: d.canResume != null ? !!d.canResume : null,
+      canCancel: d.canCancel != null ? !!d.canCancel : null,
+    };
+
+    var stateName = String(out.state || '').toLowerCase();
+    if (stateName === 'started' || stateName === 'downloading' || stateName === 'in_progress' || stateName === 'progressing') out.state = 'progressing';
+    else if (stateName === 'paused') out.state = 'paused';
+    else if (stateName === 'completed' || stateName === 'saved' || stateName === 'done') out.state = 'completed';
+    else if (stateName === 'cancelled' || stateName === 'canceled') out.state = 'cancelled';
+    else if (stateName === 'interrupted') out.state = 'interrupted';
+    else if (stateName === 'failed' || stateName === 'error') out.state = 'failed';
+    else if (out.error) out.state = 'failed';
+
+    if (!out.transport) out.transport = 'electron-item';
+    if (out.canPause == null) out.canPause = out.transport !== 'direct';
+    if (out.canResume == null) out.canResume = out.transport !== 'direct';
+    if (out.canCancel == null) out.canCancel = true;
+    if (typeof out.progress === 'number') out.progress = Math.max(0, Math.min(1, out.progress));
+    if (out.progress == null && out.totalBytes > 0 && out.receivedBytes >= 0) out.progress = Math.max(0, Math.min(1, out.receivedBytes / out.totalBytes));
+    if (!out.id) {
+      var seed = String(out.destination || out.downloadUrl || out.filename || Date.now());
+      out.id = 'dl_' + seed.replace(/[^a-z0-9_\-.]+/gi, '_').slice(0, 42);
+    }
+    if (!out.filename) out.filename = 'Download';
+    return out;
+  }
+
+  function isDownloadActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress' || s === 'started';
+  }
+
+  function isDownloadTerminalState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted';
+  }
+
+  function recomputeDownloadingCount() {
+    var active = 0;
+    var hasProgress = false;
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (d.state === 'progressing') { active++; hasProgress = true; }
+      else if (d.state === 'paused') { active++; }
+    }
+    state.downloading = active;
+    state.downloadingHasProgress = hasProgress;
+  }
+
+  var dlRenderTimer = null;
+  function scheduleDlRender() {
+    if (dlRenderTimer) return;
+    dlRenderTimer = setTimeout(function () {
+      dlRenderTimer = null;
+      renderDownloadsPanel();
+      renderHomeDownloads();
+      renderHubDirectActive();
+      renderHubDownloadHistory();
+    }, 120);
+  }
+
+  function upsertDownload(info) {
+    if (!info) return;
+    var norm = normalizeDownload(info);
+    if (!norm) return;
+
+    var found = null;
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (norm.id && d.id === norm.id) { found = d; break; }
+      if (!norm.id && norm.destination && d.destination === norm.destination) { found = d; break; }
+    }
+
+    if (!found) {
+      state.downloads.unshift(norm);
+    } else {
+      Object.assign(found, normalizeDownload(Object.assign({}, found, info)));
+    }
+
+    if (state.downloads.length > 1000) state.downloads.length = 1000;
+    recomputeDownloadingCount();
+    scheduleDlRender();
+  }
+
+  function loadDownloadHistory() {
+    if (!api || !api.webSources || !api.webSources.getDownloadHistory) return;
+    api.webSources.getDownloadHistory().then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.downloads)) return;
+      state.downloads = [];
+      for (var i = 0; i < res.downloads.length; i++) {
+        var d = normalizeDownload(res.downloads[i]);
+        if (d) state.downloads.push(d);
+      }
+      recomputeDownloadingCount();
+      renderDownloadsPanel();
+      renderHomeDownloads();
+      renderHubDirectActive();
+      renderHubDownloadHistory();
+    }).catch(function () {});
+  }
+
+  function doDownloadAction(id, action) {
+    if (!id || !api || !api.webSources) return;
+    if (action === 'pause' && api.webSources.pauseDownload) api.webSources.pauseDownload({ id: id }).catch(function () {});
+    else if (action === 'resume' && api.webSources.resumeDownload) api.webSources.resumeDownload({ id: id }).catch(function () {});
+    else if (action === 'cancel' && api.webSources.cancelDownload) api.webSources.cancelDownload({ id: id }).catch(function () {});
+    else if (action === 'retry' && api.webSources.downloadFromUrl) {
+      var item = null;
+      for (var i = 0; i < state.downloads.length; i++) { if (state.downloads[i] && state.downloads[i].id === id) { item = state.downloads[i]; break; } }
+      if (!item || !item.downloadUrl) { showToast('Retry unavailable'); return; }
+      api.webSources.downloadFromUrl({ url: item.downloadUrl, referer: item.pageUrl || '' }).catch(function () {});
+    }
+  }
+
+  function removeDownloadItem(id) {
+    if (!id) return;
+    var d = null;
+    for (var k = 0; k < state.downloads.length; k++) {
+      if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
+    }
+    if (!d || isDownloadActiveState(d.state)) {
+      showToast('Can\'t remove an active download');
+      return;
+    }
+    if (api && api.webSources && api.webSources.removeDownloadHistory) {
+      api.webSources.removeDownloadHistory({ id: id }).then(function () {
+        state.downloads = state.downloads.filter(function (x) { return x && x.id !== id; });
+        recomputeDownloadingCount();
+        scheduleDlRender();
+      }).catch(function () {});
+    }
+  }
+
+  function renderDownloadList(targetEl, emptyEl, list, opts) {
+    if (!targetEl || !emptyEl) return;
+    opts = opts || {};
+    list = list || [];
+
+    if (!list.length) {
+      targetEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+    emptyEl.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var d = list[i];
+      if (!d) continue;
+
+      var isActive = isDownloadActiveState(d.state);
+      var isOk = d.state === 'completed';
+      var isCancelled = d.state === 'cancelled';
+      var isBad = d.state === 'failed' || d.state === 'interrupted';
+      var stateTxt = isActive ? (d.state === 'paused' ? 'Paused' : 'Downloading') : (isOk ? 'Saved' : (isCancelled ? 'Cancelled' : 'Failed'));
+
+      var sub = '';
+      var libTag = d.library ? ('→ ' + d.library) : '';
+      if (isActive) {
+        var left = (d.totalBytes > 0 && d.receivedBytes >= 0) ? (formatBytes(d.receivedBytes) + ' / ' + formatBytes(d.totalBytes)) : '';
+        var sp = formatSpeed(d.bytesPerSec);
+        var eta = formatEta(d.receivedBytes, d.totalBytes, d.bytesPerSec);
+        sub = libTag;
+        if (left) sub = (sub ? (sub + ' • ') : '') + left;
+        if (sp) sub = (sub ? (sub + ' • ') : '') + sp;
+        if (eta) sub = (sub ? (sub + ' • ETA ' + eta) : ('ETA ' + eta));
+      } else if (isOk) {
+        sub = libTag;
+        if (d.destination) sub = (sub ? (sub + ' • ') : '') + shortPath(d.destination);
+      } else {
+        sub = d.error ? d.error : (isCancelled ? 'Cancelled' : 'Download failed');
+      }
+
+      var p = null;
+      if (isActive && !opts.compact) p = (typeof d.progress === 'number') ? Math.max(0, Math.min(1, d.progress)) : null;
+      var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
+      var iconUrl = faviconFor(d.pageUrl || d.downloadUrl);
+      var canPauseAction = !!(d.canPause && api && api.webSources && api.webSources.pauseDownload);
+      var canResumeAction = !!(d.canResume && api && api.webSources && api.webSources.resumeDownload);
+      var canCancelAction = !!(d.canCancel && api && api.webSources && api.webSources.cancelDownload);
+      var canRetry = !!(api && api.webSources && api.webSources.downloadFromUrl && d.downloadUrl && !isActive && !isOk);
+      var canOpenFile = !!(isOk && d.destination && api && api.shell && api.shell.openPath);
+      var canOpenFolder = !!(d.destination && api && api.shell && api.shell.revealPath);
+
+      var actionsHtml = '';
+      if (isActive) {
+        if (d.state === 'paused') {
+          if (canResumeAction) actionsHtml += '<button class="webDlAction" type="button" title="Resume" data-dl-action="resume">▶</button>';
+        } else if (canPauseAction) actionsHtml += '<button class="webDlAction" type="button" title="Pause" data-dl-action="pause">❚❚</button>';
+        if (canCancelAction) actionsHtml += '<button class="webDlAction" type="button" title="Cancel" data-dl-action="cancel">✕</button>';
+      } else {
+        if (canOpenFile) actionsHtml += '<button class="webDlAction" type="button" title="Open file" data-dl-action="open-file">Open</button>';
+        if (canOpenFolder) actionsHtml += '<button class="webDlAction" type="button" title="Open folder" data-dl-action="open-folder">Folder</button>';
+        if (canRetry) actionsHtml += '<button class="webDlAction" type="button" title="Retry" data-dl-action="retry">Retry</button>';
+      }
+
+      html += '' +
+        '<div class="webDlItem' + (opts.compact ? ' webDlItem--compact' : '') + '" data-dl-id="' + escapeHtml(d.id) + '">' +
+          '<div class="webDlIcon">' +
+            (iconUrl ? ('<img class="webDlFavicon" src="' + escapeHtml(iconUrl) + '" alt=""/>') : '<div class="webDlFaviconFallback"></div>') +
+          '</div>' +
+          '<div class="webDlMeta">' +
+            '<div class="webDlName">' + escapeHtml(d.filename) + '</div>' +
+            '<div class="webDlSub">' + escapeHtml(sub) + '</div>' +
+            (isActive ? ('<div class="webDlProgressWrap">' +
+              '<div class="webDlProgressBar"><div class="webDlProgressFill" style="width:' + escapeHtml(pctTxt || '0%') + '"></div></div>' +
+              '<div class="webDlProgressText">' + escapeHtml(pctTxt) + '</div>' +
+            '</div>') : '') +
+          '</div>' +
+          '<div class="webDlRight">' +
+            '<div class="webDlState' + (isBad ? ' webDlState--bad' : '') + '">' + escapeHtml(stateTxt) + '</div>' +
+            (actionsHtml ? ('<div class="webDlActions">' + actionsHtml + '</div>') : '') +
+            (opts.allowRemove ? ('<button class="iconBtn webDlRemove" title="Remove" aria-label="Remove" data-dl-remove="1">×</button>') : '') +
+          '</div>' +
+        '</div>';
+    }
+
+    targetEl.innerHTML = html;
+    var items = targetEl.querySelectorAll('.webDlItem');
+    for (var j = 0; j < items.length; j++) {
+      var rm = items[j].querySelector('.webDlRemove');
+      if (rm) rm.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        var p = this.parentElement; while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
+        if (!p) return; removeDownloadItem(p.getAttribute('data-dl-id'));
+      };
+      var actionBtns = items[j].querySelectorAll('[data-dl-action]');
+      for (var ai = 0; ai < actionBtns.length; ai++) {
+        actionBtns[ai].onclick = function (e) {
+          try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+          var action = String(this.getAttribute('data-dl-action') || '');
+          var p = this.parentElement; while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
+          if (!p) return;
+          var id = p.getAttribute('data-dl-id');
+          var d = null;
+          for (var k = 0; k < state.downloads.length; k++) { if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; } }
+          if (!d) return;
+          if (action === 'open-file' && d.destination && api && api.shell && api.shell.openPath) api.shell.openPath(d.destination).catch(function () {});
+          else if (action === 'open-folder' && d.destination && api && api.shell && api.shell.revealPath) api.shell.revealPath(d.destination).catch(function () {});
+          else doDownloadAction(id, action);
+        };
+      }
+    }
+  }
+
+  function getDownloadGroups() {
+    var active = [];
+    var terminal = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (isDownloadActiveState(d.state)) active.push(d);
+      else terminal.push(d);
+    }
+    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+    terminal.sort(function (a, b) { return Number(b.finishedAt || b.startedAt || 0) - Number(a.finishedAt || a.startedAt || 0); });
+    return { active: active, terminal: terminal };
+  }
+
+  function renderDownloadsPanel() {
+    if (!el.dlList || !el.dlEmpty) return;
+    var groups = getDownloadGroups();
+    renderDownloadList(el.dlList, el.dlEmpty, groups.active.concat(groups.terminal), { allowRemove: true });
+  }
+
+  function renderHomeDownloads() {
+    if (!el.homeDlList || !el.homeDlEmpty) return;
+    var groups = getDownloadGroups();
+    renderDownloadList(el.homeDlList, el.homeDlEmpty, groups.active.concat(groups.terminal).slice(0, 8), { compact: true, allowRemove: true });
+  }
+
+  function isDirectActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress';
+  }
+
+  // ── Torrent tab rendering ──
+
+  function renderTorrentTab(tab) {
+    if (!tab || tab.type !== 'torrent' || !el.torrentPanelInner) return;
+    var entry = state.torrentTabEntries[tab.id];
+    var torrentState = entry ? String(entry.state || '') : 'resolving_metadata';
+    var html = '';
+
+    if (torrentState === 'resolving_metadata') {
+      var hash = String(tab.url || '');
+      try { hash = new URL(tab.url).searchParams.get('xt') || tab.url; } catch (e) {}
+      html = '<div class="wtResolving">' +
+        '<div class="wtResolvingSpinner"></div>' +
+        '<div>Resolving torrent metadata...</div>' +
+        '<div class="wtResolvingHash">' + escapeHtml(hash) + '</div>' +
+        '</div>';
+    } else if (torrentState === 'metadata_ready') {
+      html = renderTorrentMetadataReady(tab, entry);
+    } else if (torrentState === 'downloading' || torrentState === 'paused') {
+      html = renderTorrentDownloading(tab, entry);
+    } else if (torrentState === 'completed' || torrentState === 'completed_pending' || torrentState === 'completed_with_errors') {
+      html = renderTorrentCompleted(tab, entry);
+    } else if (torrentState === 'error') {
+      html = '<div class="wtHeader"><div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div></div>' +
+        '<div class="wtMeta"><span style="color:#e57373">Error: ' + escapeHtml(entry.error || 'Unknown error') + '</span></div>' +
+        '<div class="wtActions"><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    } else {
+      html = '<div class="wtResolving"><div>Status: ' + escapeHtml(torrentState) + '</div></div>';
+    }
+
+    el.torrentPanelInner.innerHTML = html;
+    bindTorrentTabEvents(tab);
+  }
+
+  var _VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.m2ts'];
+  function _torrentHasVideoFiles(files) {
+    if (!files || !files.length) return false;
+    for (var i = 0; i < files.length; i++) {
+      var name = String(files[i].name || files[i].path || '').toLowerCase();
+      var dotIdx = name.lastIndexOf('.');
+      if (dotIdx > 0 && _VIDEO_EXTS.indexOf(name.substring(dotIdx)) !== -1) return true;
+    }
+    return false;
+  }
+
+  function renderTorrentMetadataReady(tab, entry) {
+    var files = entry.files || [];
+    var totalSize = 0;
+    var selectedCount = 0;
+    for (var i = 0; i < files.length; i++) {
+      totalSize += Number(files[i].length || 0);
+      if (files[i].selected !== false) selectedCount++;
+    }
+
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta">' +
+        '<span>' + files.length + ' file' + (files.length !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(totalSize) + '</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+      '</div></div>';
+
+    // File tree
+    html += '<div class="wtFileTree">';
+    html += buildFileTreeHtml(files, true);
+    html += '</div>';
+
+    // Sequential download toggle
+    html += '<label class="wtSequential"><input type="checkbox" id="wtSequentialCheck" /> Download in sequential order (for streaming)</label>';
+
+    // Save path — qBittorrent-style: path display + Browse button + mode shortcuts
+    html += '<div class="wtDestSection">';
+    html += '<div class="wtDestLabel">Save to</div>';
+    html += '<div class="wtSavePath">' +
+      '<span class="wtSavePathText" id="wtSavePathText">' + escapeHtml(_wtDestState.selectedPath || 'No folder selected') + '</span>' +
+      '<button class="wtBtn" data-wt-action="browse" style="padding:4px 12px;font-size:12px">Browse...</button>' +
+      '</div>';
+    html += '<div class="wtDestModes">';
+    var modes = ['videos', 'comics', 'books'];
+    for (var m = 0; m < modes.length; m++) {
+      var active = _wtDestState.mode === modes[m];
+      html += '<button class="wtDestModeBtn' + (active ? ' active' : '') + '" data-wt-dest-mode="' + modes[m] + '">' +
+        modes[m].charAt(0).toUpperCase() + modes[m].slice(1) + '</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Actions
+    var hasVideo = _torrentHasVideoFiles(files);
+    html += '<div class="wtActions">' +
+      '<button class="wtBtn primary" data-wt-action="start" id="wtStartBtn">Start Download</button>' +
+      (hasVideo ? '<button class="wtBtn videoLib" data-wt-action="addToVideoLib">Save to Video Library</button>' : '') +
+      '<button class="wtBtn" data-wt-action="cancel">Cancel</button>' +
+      '</div>';
+
+    return html;
+  }
+
+  function renderTorrentDownloading(tab, entry) {
+    var pct = Math.round((entry.progress || 0) * 100);
+    var speedText = formatBytes(entry.downloadRate || 0) + '/s';
+    var isPaused = entry.state === 'paused';
+
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta">' +
+        '<span>' + pct + '%</span>' +
+        '<span>' + speedText + '</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(entry.downloaded || 0) + ' / ' + formatBytes(entry.totalSize || 0) + '</span>' +
+        (isPaused ? '<span style="color:var(--vx-accent,rgba(var(--chrome-rgb),.55))">Paused</span>' : '') +
+      '</div></div>';
+
+    // Video library badge
+    if (entry.videoLibrary) {
+      html += '<div class="wtVideoLibBadge">Streaming to Video Library</div>';
+    }
+
+    // Overall progress bar
+    html += '<div class="wtProgressWrap"><div class="wtProgressFill" style="width:' + pct + '%"></div></div>';
+
+    // File tree with per-file progress (not editable)
+    var files = entry.files || [];
+    html += '<div class="wtFileTree">';
+    html += buildFileTreeHtml(files, false);
+    html += '</div>';
+
+    // Actions
+    html += '<div class="wtActions">';
+    if (isPaused) {
+      html += '<button class="wtBtn primary" data-wt-action="resume">Resume</button>';
+    } else {
+      html += '<button class="wtBtn" data-wt-action="pause">Pause</button>';
+    }
+    html += '<button class="wtBtn" data-wt-action="cancel">Cancel</button>';
+    html += '</div>';
+
+    return html;
+  }
+
+  function renderTorrentCompleted(tab, entry) {
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName"><span class="wtCompleteIcon">&#10003;</span>' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta"><span>Complete!</span><span>' + formatBytes(entry.totalSize || entry.downloaded || 0) + '</span></div>' +
+      '</div>';
+
+    if (entry.routedFiles || entry.ignoredFiles || entry.failedFiles) {
+      html += '<div class="wtCompleteStats">';
+      if (entry.routedFiles) html += '<span>Routed: ' + entry.routedFiles + '</span>';
+      if (entry.ignoredFiles) html += '<span>Ignored: ' + entry.ignoredFiles + '</span>';
+      if (entry.failedFiles) html += '<span style="color:#e57373">Failed: ' + entry.failedFiles + '</span>';
+      html += '</div>';
+    }
+
+    // Video library badge
+    if (entry.videoLibrary) {
+      html += '<div class="wtVideoLibBadge complete">Available in Video Library</div>';
+    }
+
+    // Show destination if set
+    if (entry.destinationRoot) {
+      html += '<div class="wtSavePath"><span class="wtSavePathText">' + escapeHtml(entry.destinationRoot) + '</span></div>';
+    }
+
+    // If completed_pending, show save path picker
+    if (entry.state === 'completed_pending') {
+      html += '<div class="wtDestSection"><div class="wtDestLabel">Save to</div>' +
+        '<div class="wtSavePath"><span class="wtSavePathText" id="wtSavePathText">' + escapeHtml(_wtDestState.selectedPath || 'No folder selected') + '</span>' +
+        '<button class="wtBtn" data-wt-action="browse" style="padding:4px 12px;font-size:12px">Browse...</button></div></div>';
+      html += '<div class="wtActions"><button class="wtBtn primary" data-wt-action="setDest">Route Files</button><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    } else {
+      html += '<div class="wtActions"><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    }
+
+    return html;
+  }
+
+  // ── File tree builder ──
+
+  function buildFileTreeHtml(files, editable) {
+    if (!files || !files.length) return '<div style="padding:12px;color:rgba(var(--chrome-rgb),.4);font-size:12px">No files</div>';
+
+    // Group files by folder path
+    var folders = {}; // folderPath -> [file]
+    var rootFiles = [];
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var path = String(f.path || f.name || '');
+      var slashIdx = path.lastIndexOf('/');
+      if (slashIdx > 0) {
+        var folder = path.substring(0, slashIdx);
+        if (!folders[folder]) folders[folder] = [];
+        folders[folder].push(f);
+      } else {
+        rootFiles.push(f);
+      }
+    }
+
+    var html = '';
+    var folderKeys = Object.keys(folders).sort();
+
+    for (var fi = 0; fi < folderKeys.length; fi++) {
+      var folderPath = folderKeys[fi];
+      var folderFiles = folders[folderPath];
+      var folderSize = 0;
+      for (var fs = 0; fs < folderFiles.length; fs++) folderSize += Number(folderFiles[fs].length || 0);
+
+      html += '<div class="wtFolderRow" data-folder="' + escapeHtml(folderPath) + '">' +
+        '<svg class="wtFolderChevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 3l5 5-5 5"/></svg>' +
+        '<span>' + escapeHtml(folderPath) + '</span>' +
+        '<span class="wtFileSize">' + formatBytes(folderSize) + '</span>' +
+        '</div>';
+
+      for (var ffi = 0; ffi < folderFiles.length; ffi++) {
+        html += buildFileRowHtml(folderFiles[ffi], editable, folderPath);
+      }
+    }
+
+    // Root-level files
+    for (var ri = 0; ri < rootFiles.length; ri++) {
+      html += buildFileRowHtml(rootFiles[ri], editable, '');
+    }
+
+    return html;
+  }
+
+  function buildFileRowHtml(file, editable, folderPath) {
+    var name = String(file.name || file.path || '');
+    var displayName = name;
+    // Strip folder prefix from display name
+    if (folderPath && displayName.indexOf(folderPath + '/') === 0) {
+      displayName = displayName.substring(folderPath.length + 1);
+    }
+    var checked = file.selected !== false;
+    var pct = Math.round((Number(file.progress || 0)) * 100);
+
+    var html = '<div class="wtFileRow" data-file-index="' + file.index + '"' +
+      (folderPath ? ' data-folder="' + escapeHtml(folderPath) + '"' : '') + '>';
+
+    if (editable) {
+      html += '<input type="checkbox" class="wtFileCheck" data-file-index="' + file.index + '"' + (checked ? ' checked' : '') + ' />';
+    }
+
+    html += '<span class="wtFileName" title="' + escapeHtml(name) + '">' + escapeHtml(displayName) + '</span>';
+    html += '<span class="wtFileSize">' + formatBytes(file.length || 0) + '</span>';
+
+    if (!editable) {
+      html += '<div class="wtFileProgress"><div class="wtFileProgressFill" style="width:' + pct + '%"></div></div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // ── Save path state ──
+
+  var _wtDestState = { mode: 'videos', selectedPath: '' };
+
+  function loadDefaultSavePath(mode) {
+    _wtDestState.mode = mode || 'videos';
+    if (!api.webSources || !api.webSources.listDestinationFolders) return;
+    api.webSources.listDestinationFolders({ mode: _wtDestState.mode, path: '' }).then(function (res) {
+      if (!res || !res.ok || !res.folders || !res.folders.length) return;
+      // Auto-select the first root folder of this mode
+      _wtDestState.selectedPath = String(res.folders[0].path || '');
+      var tab = getActiveTab();
+      if (tab && tab.type === 'torrent') renderTorrentTab(tab);
+    }).catch(function () {});
+  }
+
+  // ── Torrent tab event delegation ──
+
+  function bindTorrentTabEvents(tab) {
+    if (!el.torrentPanelInner) return;
+    el.torrentPanelInner.onclick = function (e) {
+      var target = e.target;
+      if (!target) return;
+
+      // Action buttons
+      var actionBtn = target.closest('[data-wt-action]');
+      if (actionBtn) {
+        var action = actionBtn.getAttribute('data-wt-action');
+        handleTorrentAction(tab, action);
+        return;
+      }
+
+      // Folder collapse toggle
+      var folderRow = target.closest('.wtFolderRow');
+      if (folderRow) {
+        folderRow.classList.toggle('collapsed');
+        var folderPath = folderRow.getAttribute('data-folder');
+        var sibling = folderRow.nextElementSibling;
+        while (sibling && sibling.classList.contains('wtFileRow')) {
+          if (sibling.getAttribute('data-folder') === folderPath) {
+            sibling.classList.toggle('hidden', folderRow.classList.contains('collapsed'));
+          }
+          sibling = sibling.nextElementSibling;
+        }
+        return;
+      }
+
+      // Mode quick-select buttons — switch to first root of that mode
+      var modeBtn = target.closest('[data-wt-dest-mode]');
+      if (modeBtn) {
+        var mode = modeBtn.getAttribute('data-wt-dest-mode');
+        loadDefaultSavePath(mode);
+        return;
+      }
+    };
+
+    // Checkbox change for file selection
+    el.torrentPanelInner.onchange = function (e) {
+      var target = e.target;
+      if (!target || !target.classList.contains('wtFileCheck')) return;
+      var fileIdx = parseInt(target.getAttribute('data-file-index'), 10);
+      var entry = state.torrentTabEntries[tab.id];
+      if (entry && entry.files) {
+        for (var i = 0; i < entry.files.length; i++) {
+          if (entry.files[i].index === fileIdx) {
+            entry.files[i].selected = !!target.checked;
+            break;
+          }
+        }
+      }
+    };
+  }
+
+  function handleTorrentAction(tab, action) {
+    var entry = state.torrentTabEntries[tab.id];
+    var torrentId = tab.torrentId;
+    if (!torrentId) return;
+
+    if (action === 'browse') {
+      // Open native OS folder picker
+      var browseApi = api.webSources && api.webSources.pickSaveFolder;
+      if (!browseApi) { showToast('Browse not available'); return; }
+      browseApi({ defaultPath: _wtDestState.selectedPath || '' }).then(function (res) {
+        if (!res || !res.ok || !res.path) return;
+        _wtDestState.selectedPath = res.path;
+        var pathEl = document.getElementById('wtSavePathText');
+        if (pathEl) pathEl.textContent = res.path;
+      }).catch(function () {});
+      return;
+    }
+
+    if (action === 'start') {
+      // Gather selected file indices
+      var selectedIndices = [];
+      if (entry && entry.files) {
+        for (var i = 0; i < entry.files.length; i++) {
+          if (entry.files[i].selected !== false) selectedIndices.push(entry.files[i].index);
+        }
+      }
+      if (!selectedIndices.length) {
+        showToast('Select at least one file');
+        return;
+      }
+      if (!_wtDestState.selectedPath) {
+        showToast('Pick a destination folder first');
+        return;
+      }
+      var seqCheck = document.getElementById('wtSequentialCheck');
+      var sequential = !!(seqCheck && seqCheck.checked);
+      api.webTorrent.selectFiles({
+        id: torrentId,
+        selectedIndices: selectedIndices,
+        destinationRoot: _wtDestState.selectedPath,
+        sequential: sequential
+      }).then(function (res) {
+        if (res && res.ok) {
+          showToast('Download started');
+          // Force immediate state update and re-render
+          if (entry) entry.state = 'downloading';
+          state.torrentTabEntries[tab.id] = entry;
+          renderTorrentTab(tab);
+          refreshTorrentState();
+        } else {
+          showToast((res && res.error) ? String(res.error) : 'Failed to start download');
+        }
+      }).catch(function () { showToast('Failed to start download'); });
+    } else if (action === 'pause') {
+      api.webTorrent.pause({ id: torrentId }).then(function () { refreshTorrentState(); }).catch(function () {});
+    } else if (action === 'resume') {
+      api.webTorrent.resume({ id: torrentId }).then(function () { refreshTorrentState(); }).catch(function () {});
+    } else if (action === 'cancel') {
+      api.webTorrent.cancel({ id: torrentId }).then(function () {
+        refreshTorrentState();
+        closeTab(tab.id);
+      }).catch(function () {});
+    } else if (action === 'close') {
+      closeTab(tab.id);
+    } else if (action === 'setDest') {
+      if (!_wtDestState.selectedPath) {
+        showToast('Pick a destination folder');
+        return;
+      }
+      api.webTorrent.setDestination({
+        id: torrentId,
+        destinationRoot: _wtDestState.selectedPath
+      }).then(function (res) {
+        if (res && res.ok) {
+          showToast('Files routed');
+          refreshTorrentState();
+        } else {
+          showToast((res && res.error) ? String(res.error) : 'Failed to set destination');
+        }
+      }).catch(function () { showToast('Failed to route files'); });
+    } else if (action === 'addToVideoLib') {
+      // Open folder picker, then add torrent to video library
+      var browseApi2 = api.webSources && api.webSources.pickSaveFolder;
+      if (!browseApi2) { showToast('Browse not available'); return; }
+      browseApi2({ defaultPath: _wtDestState.selectedPath || '' }).then(function (res) {
+        if (!res || !res.ok || !res.path) return;
+        var label = (entry && entry.name) ? entry.name : 'Torrent';
+        showToast('Saving to Video Library \u2014 ' + label);
+        api.webTorrent.addToVideoLibrary({
+          id: torrentId,
+          destinationRoot: res.path
+        }).then(function (result) {
+          if (result && result.ok) {
+            showToast('Added to Video Library');
+            if (entry) {
+              entry.state = 'downloading';
+              entry.videoLibrary = true;
+              entry.showFolderPath = result.showPath || '';
+            }
+            state.torrentTabEntries[tab.id] = entry;
+            renderTorrentTab(tab);
+            refreshTorrentState();
+          } else {
+            showToast((result && result.error) ? String(result.error) : 'Failed to add to video library');
+          }
+        }).catch(function (err) { showToast('Failed: ' + (err && err.message || err)); });
+      }).catch(function () {});
+    }
+  }
+
+  // ── Torrent tab IPC event updaters ──
+
+  // Preserve the user's local file checkbox state when merging backend updates.
+  // Backend sends selected=false for all files in metadata_ready (files deselected
+  // until user picks), but the user may have checked files locally.
+  function mergeLocalFileSelection(newEntry, prevEntry) {
+    if (!newEntry || !newEntry.files || !prevEntry || !prevEntry.files) return;
+    if (newEntry.state !== 'metadata_ready' && newEntry.state !== 'completed_pending') return;
+    var prevMap = {};
+    for (var i = 0; i < prevEntry.files.length; i++) {
+      prevMap[prevEntry.files[i].index] = prevEntry.files[i].selected;
+    }
+    for (var j = 0; j < newEntry.files.length; j++) {
+      var idx = newEntry.files[j].index;
+      if (prevMap[idx] !== undefined) {
+        newEntry.files[j].selected = prevMap[idx];
+      }
+    }
+  }
+
+  function updateTorrentTabFromEntry(torrentId, entryData) {
+    var tab = findTorrentTabByTorrentId(torrentId);
+    if (!tab) return;
+    var prevEntry = state.torrentTabEntries[tab.id];
+    var entry = normalizeTorrentEntry(entryData);
+    if (!entry) return;
+    mergeLocalFileSelection(entry, prevEntry);
+    state.torrentTabEntries[tab.id] = entry;
+    if (entry.name && tab.title !== entry.name) {
+      tab.title = entry.name;
+      renderTabs();
+    }
+    // When metadata first arrives: check all files by default + auto-select save path
+    var wasResolving = !prevEntry || prevEntry.state === 'resolving_metadata';
+    if (wasResolving && entry.state === 'metadata_ready') {
+      // Check all files by default (qBittorrent behavior)
+      if (entry.files) {
+        for (var fi = 0; fi < entry.files.length; fi++) entry.files[fi].selected = true;
+      }
+      loadDefaultSavePath(_wtDestState.mode);
+    }
+    // Only re-render if this is the active tab AND state actually changed.
+    // In metadata_ready, the user is interacting (checkboxes, dest picker) —
+    // don't blow away the DOM on every 800ms progress tick.
+    var stateChanged = !prevEntry || prevEntry.state !== entry.state;
+    if (state.activeTabId === tab.id && stateChanged) {
+      renderTorrentTab(tab);
+    }
+  }
+
+  function updateTorrentTabProgress(torrentId, entryData) {
+    var tab = findTorrentTabByTorrentId(torrentId);
+    if (!tab) return;
+    var prevEntry = state.torrentTabEntries[tab.id];
+    var entry = normalizeTorrentEntry(entryData);
+    if (!entry) return;
+    mergeLocalFileSelection(entry, prevEntry);
+    state.torrentTabEntries[tab.id] = entry;
+    if (state.activeTabId !== tab.id || !el.torrentPanelInner) return;
+    // If state changed (e.g. metadata_ready → downloading), do a full re-render
+    var stateChanged = prevEntry && prevEntry.state !== entry.state;
+    if (stateChanged) {
+      renderTorrentTab(tab);
+      return;
+    }
+    // Lightweight DOM update — only update progress values, not full re-render
+    var pct = Math.round((entry.progress || 0) * 100);
+    // Update overall progress bar
+    var fillEl = el.torrentPanelInner.querySelector('.wtProgressFill');
+    if (fillEl) fillEl.style.width = pct + '%';
+    // Update meta text
+    var metaEl = el.torrentPanelInner.querySelector('.wtMeta');
+    if (metaEl) {
+      metaEl.innerHTML = '<span>' + pct + '%</span>' +
+        '<span>' + formatBytes(entry.downloadRate || 0) + '/s</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(entry.downloaded || 0) + ' / ' + formatBytes(entry.totalSize || 0) + '</span>' +
+        (entry.state === 'paused' ? '<span style="color:var(--vx-accent,rgba(var(--chrome-rgb),.55))">Paused</span>' : '');
+    }
+    // Update per-file progress bars
+    if (entry.files) {
+      for (var i = 0; i < entry.files.length; i++) {
+        var fileFill = el.torrentPanelInner.querySelector('.wtFileRow[data-file-index="' + entry.files[i].index + '"] .wtFileProgressFill');
+        if (fileFill) fileFill.style.width = Math.round((entry.files[i].progress || 0) * 100) + '%';
+      }
+    }
+  }
+
+  function isTorrentActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'downloading' || s === 'paused' || s === 'checking';
+  }
+
+  function isTorrentCompletedState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'completed' || s === 'completed_pending' || s === 'completed_with_errors';
+  }
+
+  function isTorrentErroredState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'failed' || s === 'error' || s === 'cancelled';
+  }
+
+  function formatWhen(ts) {
+    var n = Number(ts || 0);
+    if (!n) return '';
+    try { return new Date(n).toLocaleString(); } catch (e) { return ''; }
+  }
+
+  function pctText(p) {
+    var n = Number(p);
+    if (!isFinite(n)) return '';
+    if (n < 0) n = 0;
+    if (n > 1) n = 1;
+    return Math.round(n * 100) + '%';
+  }
+
+  function renderHubDirectActive() {
+    if (!el.hubDirectActiveList || !el.hubDirectActiveEmpty) return;
+    var active = getDownloadGroups().active;
+
+    if (!active.length) {
+      el.hubDirectActiveList.innerHTML = '';
+      el.hubDirectActiveEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubDirectActiveEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < active.length; j++) {
+      var x = active[j];
+      var pTxt = pctText(x.progress);
+      var left = (x.totalBytes > 0) ? (formatBytes(x.receivedBytes || 0) + ' / ' + formatBytes(x.totalBytes || 0)) : '';
+      var speed = formatSpeed(x.bytesPerSec || 0);
+      var eta = formatEta(x.receivedBytes, x.totalBytes, x.bytesPerSec);
+      var sub = (x.library ? ('→ ' + x.library) : 'Direct download');
+      if (left) sub += ' • ' + left;
+      if (speed) sub += ' • ' + speed;
+      if (eta) sub += ' • ETA ' + eta;
+
+      var pauseResume = '';
+      var canPauseAction = !!(x.canPause && api && api.webSources && api.webSources.pauseDownload);
+      var canResumeAction = !!(x.canResume && api && api.webSources && api.webSources.resumeDownload);
+      var canCancelAction = !!(x.canCancel && api && api.webSources && api.webSources.cancelDownload);
+      if (String(x.state) === 'paused') {
+        if (canResumeAction) pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>';
+      } else if (canPauseAction) {
+        pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
+      }
+
+      html += '' +
+        '<div class="webHubItem" data-direct-open-id="' + escapeHtml(x.id) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.filename || 'Download') + '</div>' +
+            '<span class="webHubBadge">Direct</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
+          '<div class="webHubItemActions">' +
+            pauseResume +
+            (canCancelAction ? ('<button class="btn btn-ghost btn-sm" data-direct-action="cancel" data-direct-id="' + escapeHtml(x.id) + '">Cancel</button>') : '') +
+          '</div>' +
+        '</div>';
+    }
+    el.hubDirectActiveList.innerHTML = html;
+  }
+
+  function normalizeTorrentEntry(t) {
+    if (!t) return null;
+    return {
+      id: String(t.id || ''),
+      infoHash: String(t.infoHash || ''),
+      name: String(t.name || ''),
+      state: String(t.state || ''),
+      progress: Number(t.progress || 0),
+      downloadRate: Number(t.downloadRate || 0),
+      uploadSpeed: Number(t.uploadSpeed || 0),
+      uploaded: Number(t.uploaded || 0),
+      downloaded: Number(t.downloaded || 0),
+      totalSize: Number(t.totalSize || 0),
+      numPeers: Number(t.numPeers || 0),
+      startedAt: Number(t.startedAt || 0),
+      finishedAt: t.finishedAt != null ? Number(t.finishedAt) : null,
+      error: String(t.error || ''),
+      routedFiles: Number(t.routedFiles || 0),
+      ignoredFiles: Number(t.ignoredFiles || 0),
+      failedFiles: Number(t.failedFiles || 0),
+      metadataReady: !!t.metadataReady,
+      files: Array.isArray(t.files) ? t.files : null,
+      destinationRoot: t.destinationRoot ? String(t.destinationRoot) : '',
+    };
+  }
+
+  function findActiveTorrentById(id) {
+    var key = String(id || '');
+    if (!key) return null;
+    for (var i = 0; i < state.torrentActive.length; i++) {
+      var t = state.torrentActive[i];
+      if (t && String(t.id || '') === key) return t;
+    }
+    return null;
+  }
+
+  function renderHubTorrentActive() {
+    if (!el.hubTorrentActiveList || !el.hubTorrentActiveEmpty) return;
+    var filterKey = String(state.hubTorrentFilter || 'active').toLowerCase();
+    var combined = [];
+    var seen = Object.create(null);
+    var activeById = Object.create(null);
+    for (var ai = 0; ai < state.torrentActive.length; ai++) {
+      var a = state.torrentActive[ai];
+      if (!a || !a.id) continue;
+      seen[a.id] = 1;
+      activeById[a.id] = 1;
+      combined.push(a);
+    }
+    for (var hi = 0; hi < state.torrentHistory.length; hi++) {
+      var h = state.torrentHistory[hi];
+      if (!h || !h.id || seen[h.id]) continue;
+      combined.push(h);
+    }
+    var rows = [];
+    for (var i = 0; i < combined.length; i++) {
+      var t = combined[i];
+      if (!t) continue;
+      var s = String(t.state || '').toLowerCase();
+      var isLive = !!activeById[String(t.id || '')];
+      if (filterKey === 'active' && !isLive) continue;
+      if (filterKey === 'paused' && s !== 'paused') continue;
+      if (filterKey === 'completed' && !isTorrentCompletedState(s)) continue;
+      if (filterKey === 'errored' && !isTorrentErroredState(s) && s !== 'completed_with_errors') continue;
+      rows.push(t);
+    }
+    rows.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+
+    if (!rows.length) {
+      el.hubTorrentActiveList.innerHTML = '';
+      if (el.hubTorrentActiveEmpty) {
+        var emptyText = 'No torrents.';
+        if (filterKey === 'active') emptyText = 'No active torrent downloads.';
+        else if (filterKey === 'paused') emptyText = 'No paused torrents.';
+        else if (filterKey === 'completed') emptyText = 'No completed torrents.';
+        else if (filterKey === 'errored') emptyText = 'No errored torrents.';
+        el.hubTorrentActiveEmpty.textContent = emptyText;
+      }
+      el.hubTorrentActiveEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubTorrentActiveEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var j = 0; j < rows.length; j++) {
+      var x = rows[j];
+      var pTxt = pctText(x.progress);
+      var speed = x.downloadRate > 0 ? (' \u2022 ' + formatSpeed(x.downloadRate)) : '';
+      var stateLower = String(x.state || '').toLowerCase();
+      var isLive = !!activeById[String(x.id || '')];
+      var stateLabel = x.state || 'downloading';
+      if (!isLive && isTorrentActiveState(stateLower)) stateLabel = 'session ended';
+      var sub = stateLabel + (pTxt ? (' \u2022 ' + pTxt) : '') + speed;
+      var pauseResume = '';
+      if (isLive && stateLower === 'paused') {
+        pauseResume = '<button class="btn btn-ghost btn-sm" data-torrent-action="resume" data-torrent-id="' + escapeHtml(x.id) + '">Resume</button>';
+      } else if (isLive && isTorrentActiveState(stateLower)) {
+        pauseResume = '<button class="btn btn-ghost btn-sm" data-torrent-action="pause" data-torrent-id="' + escapeHtml(x.id) + '">Pause</button>';
+      }
+      var actionButtons = pauseResume;
+      if (isLive && isTorrentActiveState(stateLower)) {
+        actionButtons += '<button class="btn btn-ghost btn-sm" data-torrent-action="cancel" data-torrent-id="' + escapeHtml(x.id) + '">Cancel</button>';
+      } else {
+        actionButtons += '<button class="btn btn-ghost btn-sm" data-torrent-action="remove-history" data-torrent-id="' + escapeHtml(x.id) + '">Remove</button>';
+      }
+
+      html += '' +
+        '<div class="webHubItem">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.name || x.infoHash || 'Torrent') + '</div>' +
+            '<span class="webHubBadge">Torrent</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          (pTxt ? ('<div class="webHubProgress"><div class="webHubProgressFill" style="width:' + escapeHtml(pTxt) + '"></div></div>') : '') +
+          '<div class="webHubItemActions">' +
+            actionButtons +
+          '</div>' +
+        '</div>';
+    }
+    el.hubTorrentActiveList.innerHTML = html;
+  }
+
+  function applyTorrentBulkAction(action) {
+    if (!api.webTorrent) return;
+    var ids = [];
+    for (var i = 0; i < state.torrentActive.length; i++) {
+      var t = state.torrentActive[i];
+      if (!t || !t.id) continue;
+      var s = String(t.state || '').toLowerCase();
+      if (action === 'pause' && s === 'downloading') ids.push(t.id);
+      else if (action === 'resume' && s === 'paused') ids.push(t.id);
+      else if (action === 'cancel' && isTorrentActiveState(s)) ids.push(t.id);
+    }
+    if (!ids.length) {
+      showToast('No torrents to ' + action);
+      return;
+    }
+    var calls = [];
+    var invoke = null;
+    for (var j = 0; j < ids.length; j++) {
+      var id = ids[j];
+      if (action === 'pause' && api.webTorrent.pause) invoke = api.webTorrent.pause;
+      else if (action === 'resume' && api.webTorrent.resume) invoke = api.webTorrent.resume;
+      else if (action === 'cancel' && api.webTorrent.cancel) invoke = api.webTorrent.cancel;
+      else invoke = null;
+      if (!invoke) continue;
+      calls.push(
+        invoke({ id: id }).then(function (res) {
+          return {
+            ok: !(res && res.ok === false),
+            error: (res && res.error) ? String(res.error) : ''
+          };
+        }).catch(function (err) {
+          return {
+            ok: false,
+            error: String((err && err.message) || err || 'Request failed')
+          };
+        })
+      );
+    }
+    if (!calls.length) {
+      showToast('Action unavailable: ' + action);
+      return;
+    }
+    Promise.all(calls).then(function (results) {
+      var okCount = 0;
+      var failCount = 0;
+      for (var k = 0; k < results.length; k++) {
+        if (results[k] && results[k].ok) okCount++;
+        else failCount++;
+      }
+      var actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+      if (failCount === 0) {
+        showToast(actionLabel + ' applied to ' + okCount + ' torrent' + (okCount === 1 ? '' : 's'));
+      } else if (okCount === 0) {
+        showToast(actionLabel + ' failed for ' + failCount + ' torrent' + (failCount === 1 ? '' : 's'));
+      } else {
+        showToast(actionLabel + ' applied to ' + okCount + ' torrent' + (okCount === 1 ? '' : 's') + ' (' + failCount + ' failed)');
+      }
+      refreshTorrentState();
+    }).catch(function () {
+      refreshTorrentState();
+    });
+  }
+
+  function buildUnifiedHistory() {
+    var merged = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d || !d.id) continue;
+      if (!isDownloadTerminalState(d.state)) continue;
+      merged.push({
+        id: 'direct:' + d.id,
+        transport: 'direct',
+        rawId: d.id,
+        filename: d.filename || 'Download',
+        state: d.state || '',
+        progress: d.progress,
+        startedAt: Number(d.startedAt || 0),
+        finishedAt: Number(d.finishedAt || 0) || null,
+        library: d.library || '',
+        error: d.error || '',
+        destination: d.destination || '',
+        downloadUrl: d.downloadUrl || '',
+        pageUrl: d.pageUrl || ''
+      });
+
+      tabEls[di].addEventListener('dragstart', function (e) {
+        var id = this.getAttribute('data-tab-id');
+        state.dragTabId = parseInt(id, 10);
+        this.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; } catch (ex) {}
+      });
+    }
+
+    merged.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+    if (merged.length > MAX_UNIFIED_HISTORY_UI) merged.length = MAX_UNIFIED_HISTORY_UI;
+    return merged;
+  }
+
+  function renderHubDownloadHistory() {
+    if (!el.hubDownloadHistoryList || !el.hubDownloadHistoryEmpty) return;
+    var list = buildUnifiedHistory();
+    if (!list.length) {
+      el.hubDownloadHistoryList.innerHTML = '';
+      el.hubDownloadHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubDownloadHistoryEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i];
+      var when = formatWhen(x.finishedAt || x.startedAt);
+      var sub = (x.state || 'done') + (x.library ? (' \u2022 ' + x.library) : '') + (when ? (' \u2022 ' + when) : '');
+      var badge = x.transport === 'torrent' ? 'Torrent' : 'Direct';
+      var actions = '';
+      if (x.transport === 'direct') {
+        var openFile = x.destination ? '<button class="btn btn-ghost btn-sm" data-unified-open-file-id="' + escapeHtml(x.id) + '">Open</button>' : '';
+        var openFolder = x.destination ? '<button class="btn btn-ghost btn-sm" data-unified-open-folder-id="' + escapeHtml(x.id) + '">Folder</button>' : '';
+        var retry = (x.state !== 'completed' && x.downloadUrl) ? '<button class="btn btn-ghost btn-sm" data-unified-retry-id="' + escapeHtml(x.id) + '">Retry</button>' : '';
+        actions = openFile + openFolder + retry;
+      }
+      actions += '<button class="btn btn-ghost btn-sm" data-unified-remove-id="' + escapeHtml(x.id) + '">Remove</button>';
+      html += '' +
+        '<div class="webHubItem" data-unified-open-id="' + escapeHtml(x.id) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(x.filename) + '</div>' +
+            '<span class="webHubBadge">' + escapeHtml(badge) + '</span>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + (x.error ? (' \u2022 ' + escapeHtml(x.error)) : '') + '</div>' +
+          '<div class="webHubItemActions">' + actions + '</div>' +
+        '</div>';
+    }
+    el.hubDownloadHistoryList.innerHTML = html;
+  }
+
+  function renderHubBrowsingHistory() {
+    if (!el.hubBrowseHistoryList || !el.hubBrowseHistoryEmpty) return;
+    var list = state.browsingHistory || [];
+    if (!list.length) {
+      el.hubBrowseHistoryList.innerHTML = '';
+      el.hubBrowseHistoryEmpty.classList.remove('hidden');
+      return;
+    }
+    el.hubBrowseHistoryEmpty.classList.add('hidden');
+
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var x = list[i] || {};
+      var title = x.title || x.url || 'History';
+      var sub = (x.url || '') + (x.visitedAt ? (' \u2022 ' + formatWhen(x.visitedAt)) : '');
+      html += '' +
+        '<div class="webHubItem" data-history-open-id="' + escapeHtml(String(x.url || '')) + '">' +
+          '<div class="webHubItemTop">' +
+            '<div class="webHubItemTitle">' + escapeHtml(title) + '</div>' +
+          '</div>' +
+          '<div class="webHubItemSub">' + escapeHtml(sub) + '</div>' +
+          '<div class="webHubItemActions">' +
+            '<button class="btn btn-ghost btn-sm" data-history-remove-id="' + escapeHtml(String(x.id || '')) + '">Remove</button>' +
+          '</div>' +
+        '</div>';
+    }
+    el.hubBrowseHistoryList.innerHTML = html;
+  }
+
+  function renderHubAll() {
+    renderHubDirectActive();
+    renderHubTorrentActive();
+    renderHubDownloadHistory();
+    renderHubBrowsingHistory();
+    renderHubBookmarks();
+    renderPermissions();
+    renderAdblockInfo();
+  }
+
+  function loadBrowsingHistory() {
+    if (!api.webHistory || typeof api.webHistory.list !== 'function') return;
+    api.webHistory.list({
+      query: String(state.browsingHistoryQuery || ''),
+      limit: MAX_BROWSING_HISTORY_UI
+    }).then(function (res) {
+      if (!res || !res.ok || !Array.isArray(res.entries)) return;
+      state.browsingHistory = res.entries;
+      renderHubBrowsingHistory();
+    }).catch(function () {});
+  }
 
         // CHROMIUM_PARITY: Accept URL drops onto tabs (C3)
         if (state.dragTabId == null) {
@@ -2191,38 +4764,236 @@
       el.dlBadge.classList.toggle('hidden', !(state.downloading > 0));
     }
 
-    // Sidebar progress bar (web home sidebar)
-    if (el.sidebarDlRow && el.sidebarDlFill && el.sidebarDlPct) {
-      if (state.downloading <= 0) {
-        el.sidebarDlRow.classList.add('hidden');
-        el.sidebarDlFill.style.width = '0%';
-        el.sidebarDlPct.textContent = '0%';
-      } else {
-        // Pick a representative active download
-        var p = null;
-        var bestAt = -1;
-        for (var i = 0; i < state.downloads.length; i++) {
-          var d = state.downloads[i];
-          if (!d || (d.state !== 'progressing' && d.state !== 'paused')) continue;
-          var at = Number(d.startedAt || 0);
-          if (at >= bestAt) {
-            bestAt = at;
-            p = d.progress;
-          }
-        }
-        if (typeof p !== 'number' || !isFinite(p)) p = state.lastDownloadProgress;
-        if (typeof p !== 'number' || !isFinite(p)) p = 0;
-        if (p < 0) p = 0;
-        if (p > 1) p = 1;
-        var pct = Math.round(p * 100);
-        el.sidebarDlRow.classList.remove('hidden');
-        el.sidebarDlFill.style.width = pct + '%';
-        el.sidebarDlPct.textContent = pct + '%';
+  function rangeToFromTs(range) {
+    var now = Date.now();
+    var key = String(range || 'all').trim().toLowerCase();
+    if (key === 'hour') return now - 3600 * 1000;
+    if (key === 'day') return now - 24 * 3600 * 1000;
+    if (key === 'week') return now - 7 * 24 * 3600 * 1000;
+    if (key === 'month') return now - 28 * 24 * 3600 * 1000;
+    return 0;
+  }
+
+  function loadDataUsage() {
+    if (!api.webData || typeof api.webData.usage !== 'function' || !el.hubDataUsageText) return;
+    api.webData.usage().then(function (res) {
+      if (!res || !res.ok || !res.usage) return;
+      var u = res.usage || {};
+      var text = 'Total: ' + formatByteSize(u.totalBytes || 0)
+        + ' (History ' + formatByteSize(u.historyBytes || 0)
+        + ', Downloads ' + formatByteSize(u.downloadsBytes || 0)
+        + ', Torrents ' + formatByteSize(u.torrentsBytes || 0) + ')';
+      el.hubDataUsageText.textContent = text;
+    }).catch(function () {
+      el.hubDataUsageText.textContent = 'Failed to read data usage.';
+    });
+  }
+
+  function getActiveSiteOrigin() {
+    var tab = getActiveTab();
+    var url = String((tab && tab.url) || '').trim();
+    if (!url || url === 'about:blank') return '';
+    try {
+      return String(new URL(url).origin || '').trim().toLowerCase();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getPermissionDecision(origin, permission) {
+    var o = String(origin || '').trim().toLowerCase();
+    var p = String(permission || '').trim();
+    if (!o || !p) return 'ask';
+    for (var i = 0; i < state.permissions.length; i++) {
+      var r = state.permissions[i];
+      if (!r) continue;
+      if (String(r.origin || '').trim().toLowerCase() === o && String(r.permission || '').trim() === p) {
+        return String(r.decision || 'ask').trim().toLowerCase();
+      }
+    }
+    return 'ask';
+  }
+
+  function securitySummaryForTab(tab) {
+    var t = tab || getActiveTab();
+    var rawUrl = String((t && t.url) || '').trim();
+    if (!rawUrl) return 'No page loaded';
+    var scheme = '';
+    try { scheme = String(new URL(rawUrl).protocol || '').replace(':', '').toUpperCase(); } catch (e) {}
+    var runtime = ensureTabRuntime(t);
+    var sec = String((runtime && runtime.securityState) || '').trim().toLowerCase();
+    var stateLabel = 'Unknown';
+    if (sec === 'secure') stateLabel = 'Secure';
+    else if (sec === 'insecure') stateLabel = 'Not secure';
+    else if (sec === 'local') stateLabel = 'Local page';
+    else if (sec === 'internal') stateLabel = 'Internal page';
+    return (scheme ? (scheme + ' • ') : '') + stateLabel;
+  }
+
+  function renderSiteInfoPermissions(origin) {
+    if (!el.siteInfoPermissions) return;
+    var perms = ['notifications', 'geolocation', 'media', 'midi'];
+    var labels = {
+      notifications: 'Notifications',
+      geolocation: 'Location',
+      media: 'Camera/Mic',
+      midi: 'MIDI'
+    };
+    var html = '';
+    for (var i = 0; i < perms.length; i++) {
+      var p = perms[i];
+      var decision = getPermissionDecision(origin, p);
+      var checked = decision === 'allow' ? ' checked' : '';
+      html += '<div class="webSiteInfoPermRow">'
+        + '<span>' + escapeHtml(labels[p] || p) + '</span>'
+        + '<label><input type="checkbox" data-site-perm="' + escapeHtml(p) + '"' + checked + (origin ? '' : ' disabled') + ' /> Allow</label>'
+        + '</div>';
+    }
+    el.siteInfoPermissions.innerHTML = html;
+  }
+
+  function renderSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    var tab = getActiveTab();
+    var origin = getActiveSiteOrigin();
+    if (el.siteInfoOrigin) el.siteInfoOrigin.textContent = origin || 'No site loaded';
+    if (el.siteInfoSecurity) el.siteInfoSecurity.textContent = securitySummaryForTab(tab);
+    renderSiteInfoPermissions(origin);
+    if (el.siteInfoUsageText) el.siteInfoUsageText.textContent = 'Usage unknown.';
+    if (el.siteInfoAdblock) {
+      var blocked = Number(state.adblock && state.adblock.blockedCount || 0);
+      var suffix = origin ? 'Current-page breakdown unavailable' : 'No active site';
+      el.siteInfoAdblock.textContent = 'Blocked requests: ' + blocked + ' total • ' + suffix;
+    }
+  }
+
+  function openSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    renderSiteInfoPopover();
+    state.siteInfoOpen = true;
+    el.siteInfoPopover.classList.remove('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'false'); } catch (e) {}
+  }
+
+  function closeSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    state.siteInfoOpen = false;
+    el.siteInfoPopover.classList.add('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'true'); } catch (e) {}
+  }
+
+  function toggleSiteInfoPopover() {
+    if (state.siteInfoOpen) closeSiteInfoPopover();
+    else openSiteInfoPopover();
+  }
+
+  function loadSiteUsageSummary() {
+    if (!api.webData || typeof api.webData.usage !== 'function' || !el.siteInfoUsageText) return;
+    api.webData.usage().then(function (res) {
+      if (!res || !res.ok || !res.usage) {
+        el.siteInfoUsageText.textContent = 'Usage unavailable.';
+        return;
+      }
+      var u = res.usage || {};
+      el.siteInfoUsageText.textContent = 'Total profile storage: ' + formatByteSize(u.totalBytes || 0);
+    }).catch(function () {
+      el.siteInfoUsageText.textContent = 'Usage unavailable.';
+    });
+  }
+
+  function clearCurrentSiteData() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webData || typeof api.webData.clear !== 'function') return;
+    api.webData.clear({
+      from: 0,
+      to: Date.now(),
+      kinds: ['cookies', 'siteData'],
+      origin: origin
+    }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to clear site data');
+        return;
+      }
+      showToast('Site data cleared');
+      loadSiteUsageSummary();
+      loadDataUsage();
+    }).catch(function () {
+      showToast('Failed to clear site data');
+    });
+  }
+
+  function resetPermissionsForCurrentSite() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webPermissions || typeof api.webPermissions.reset !== 'function') return;
+    api.webPermissions.reset({ origin: origin }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to reset permissions');
+        return;
+      }
+      showToast('Permissions reset for site');
+      loadPermissions();
+      renderSiteInfoPopover();
+    }).catch(function () {
+      showToast('Failed to reset permissions');
+    });
+  }
+
+  function clearSelectedBrowsingData() {
+    if (!api.webData || typeof api.webData.clear !== 'function') return;
+    var kinds = [];
+    if (el.hubDataHistory && el.hubDataHistory.checked) kinds.push('history');
+    if (el.hubDataDownloads && el.hubDataDownloads.checked) kinds.push('downloads');
+    if (el.hubDataTorrents && el.hubDataTorrents.checked) kinds.push('torrents');
+    if (el.hubDataCookies && el.hubDataCookies.checked) {
+      kinds.push('cookies');
+      kinds.push('siteData');
+    }
+    if (el.hubDataCache && el.hubDataCache.checked) kinds.push('cache');
+    if (!kinds.length) {
+      showToast('Select at least one data type');
+      return;
+    }
+    var from = rangeToFromTs(el.hubDataRange ? el.hubDataRange.value : 'all');
+    api.webData.clear({
+      from: from,
+      to: Date.now(),
+      kinds: kinds
+    }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to clear data');
+        return;
       }
     }
   }
 
-  // ---- Downloads panel ----
+  function loadPermissions() {
+    if (!api.webPermissions || typeof api.webPermissions.list !== 'function') return;
+    api.webPermissions.list().then(function (res) {
+      state.permissions = [];
+      if (res && res.ok && Array.isArray(res.rules)) {
+        for (var i = 0; i < res.rules.length; i++) {
+          var r = normalizePermissionRule(res.rules[i]);
+          if (r) state.permissions.push(r);
+        }
+      }
+      state.permissions.sort(function (a, b) {
+        var ao = String(a.origin || '');
+        var bo = String(b.origin || '');
+        if (ao === bo) return String(a.permission || '').localeCompare(String(b.permission || ''));
+        return ao.localeCompare(bo);
+      });
+      renderPermissions();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
+    }).catch(function () {});
+  }
 
   moduleBridge.deps.scheduleSessionSave = scheduleSessionSave;
 
@@ -2246,66 +5017,19 @@
     return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress';
   }
 
-  // ── Torrent tab rendering ──
-
-  var torrentTabModule = useWebModule('torrentTab');
-  var renderTorrentTab = torrentTabModule.renderTorrentTab;
-  var _torrentHasVideoFiles = torrentTabModule._torrentHasVideoFiles;
-  var renderTorrentMetadataReady = torrentTabModule.renderTorrentMetadataReady;
-  var renderTorrentDownloading = torrentTabModule.renderTorrentDownloading;
-  var renderTorrentCompleted = torrentTabModule.renderTorrentCompleted;
-  var buildFileTreeHtml = torrentTabModule.buildFileTreeHtml;
-  var buildFileRowHtml = torrentTabModule.buildFileRowHtml;
-  var loadDefaultSavePath = torrentTabModule.loadDefaultSavePath;
-  var bindTorrentTabEvents = torrentTabModule.bindTorrentTabEvents;
-  var handleTorrentAction = torrentTabModule.handleTorrentAction;
-  var mergeLocalFileSelection = torrentTabModule.mergeLocalFileSelection;
-  var updateTorrentTabFromEntry = torrentTabModule.updateTorrentTabFromEntry;
-  var updateTorrentTabProgress = torrentTabModule.updateTorrentTabProgress;
-
-  moduleBridge.deps.renderDownloadsPanel = renderDownloadsPanel;
-  moduleBridge.deps.renderHomeDownloads = renderHomeDownloads;
-
-  var hubModule = useWebModule('hub');
-  var isTorrentActiveState = hubModule.isTorrentActiveState;
-  var isTorrentCompletedState = hubModule.isTorrentCompletedState;
-  var isTorrentErroredState = hubModule.isTorrentErroredState;
-  var formatWhen = hubModule.formatWhen;
-  var pctText = hubModule.pctText;
-  var renderHubDirectActive = hubModule.renderHubDirectActive;
-  var normalizeTorrentEntry = hubModule.normalizeTorrentEntry;
-  var findActiveTorrentById = hubModule.findActiveTorrentById;
-  var renderHubTorrentActive = hubModule.renderHubTorrentActive;
-  var applyTorrentBulkAction = hubModule.applyTorrentBulkAction;
-  var buildUnifiedHistory = hubModule.buildUnifiedHistory;
-  var renderHubDownloadHistory = hubModule.renderHubDownloadHistory;
-  var renderHubBrowsingHistory = hubModule.renderHubBrowsingHistory;
-  var renderHubAll = hubModule.renderHubAll;
-  var loadBrowsingHistory = hubModule.loadBrowsingHistory;
-  var refreshTorrentState = hubModule.refreshTorrentState;
-  var maybeRecordBrowsingHistory = hubModule.maybeRecordBrowsingHistory;
-  var normalizeBookmarkEntry = hubModule.normalizeBookmarkEntry;
-  var findBookmarkByUrl = hubModule.findBookmarkByUrl;
-  var isActiveTabBookmarked = hubModule.isActiveTabBookmarked;
-  var updateBookmarkButton = hubModule.updateBookmarkButton;
-  var renderHubBookmarks = hubModule.renderHubBookmarks;
-  var loadBookmarks = hubModule.loadBookmarks;
-  var toggleBookmarkForActiveTab = hubModule.toggleBookmarkForActiveTab;
-  var updateFindCountLabel = hubModule.updateFindCountLabel;
-  var runFindAction = hubModule.runFindAction;
-  var openFindBar = hubModule.openFindBar;
-  var closeFindBar = hubModule.closeFindBar;
-  var runFindFromInput = hubModule.runFindFromInput;
-  var formatByteSize = hubModule.formatByteSize;
-  var rangeToFromTs = hubModule.rangeToFromTs;
-  var loadDataUsage = hubModule.loadDataUsage;
-  var clearSelectedBrowsingData = hubModule.clearSelectedBrowsingData;
-  var normalizePermissionRule = hubModule.normalizePermissionRule;
-  var renderPermissions = hubModule.renderPermissions;
-  var loadPermissions = hubModule.loadPermissions;
-  var savePermissionRuleFromHub = hubModule.savePermissionRuleFromHub;
-  var renderAdblockInfo = hubModule.renderAdblockInfo;
-  var loadAdblockState = hubModule.loadAdblockState;
+  function loadAdblockState() {
+    if (!api.webAdblock || typeof api.webAdblock.get !== 'function') return;
+    api.webAdblock.get().then(function (res) {
+      if (!res || !res.ok) return;
+      state.adblock.enabled = !!res.enabled;
+      state.adblock.blockedCount = Number(res.blockedCount || 0) || 0;
+      state.adblock.domainCount = Number(res.domainCount || 0) || 0;
+      state.adblock.listUpdatedAt = Number(res.listUpdatedAt || 0) || 0;
+      if (el.hubAdblockEnabled) el.hubAdblockEnabled.checked = !!state.adblock.enabled;
+      renderAdblockInfo();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
+    }).catch(function () {});
+  }
 
   function openDownloadsPanel() {
     if (!el.dlPanel) return;
@@ -2458,6 +5182,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: opts.group || null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: !!opts.pinned,
       openerTabId: opts.openerTabId || null, // CHROMIUM_PARITY: opener tracking
       runtime: createTabRuntime(startUrl)
@@ -2530,7 +5260,9 @@
     saveOmniState(); // CHROMIUM_PARITY: save omnibox state before switching
     state.activeTabId = tabId;
     state.showBrowserHome = false;
+    closeTabQuickPanel();
     var tab = getActiveTab();
+    if (tab) tab.lastActiveAt = Date.now();
     if (tab && tab.type === 'torrent') {
       // Torrent tab — no native WebContentsView, show DOM panel
       webTabs.hideAll().catch(function () {});
@@ -2716,6 +5448,7 @@
     else el.urlDisplay.textContent = u;
     setOmniIconForUrl(u);
     updateBookmarkButton();
+    if (state.siteInfoOpen) renderSiteInfoPopover();
   }
 
   // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
@@ -2905,6 +5638,11 @@
         hideContextMenu();
         return;
       }
+      if (state.tabQuickOpen) {
+        e.preventDefault();
+        closeTabQuickPanel();
+        return;
+      }
       if (isTipsOpen()) {
         e.preventDefault();
         hideTips();
@@ -2949,6 +5687,12 @@
       return;
     }
 
+    if (ctrl && e.shiftKey && lower === 'a') {
+      e.preventDefault();
+      openTabQuickPanel();
+      return;
+    }
+
     // Do not steal keys while typing (except Escape above)
     if (isTypingTarget(e.target)) return;
     if (ctrl && !e.shiftKey && (lower === 'j')) {
@@ -2976,7 +5720,7 @@
       e.preventDefault();
       var t0 = getActiveTab();
       if (t0 && t0.mainTabId) {
-        webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
+        navigateTabWithRuntime(t0, { tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }, (key === 'ArrowLeft') ? 'request-back' : 'request-forward');
       }
       return;
     }
@@ -3005,7 +5749,7 @@
       e.preventDefault();
       var tab = getActiveTab();
       if (tab && tab.canGoBack && tab.mainTabId) {
-        webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+        navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
       } else {
         showToast('No back history');
       }
@@ -3085,8 +5829,9 @@
     var tab = getActiveTab();
     if (!tab) return;
     var runtime = ensureTabRuntime(tab);
-    var entries = runtime.navEntries;
+    var entries = normalizeRuntimeEntries(runtime.navEntries);
     var idx = runtime.currentIndex;
+    runtime.navEntries = entries;
     if (!entries || !entries.length) return;
 
     var items = [];
@@ -3100,7 +5845,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -3116,7 +5861,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -3257,6 +6002,68 @@
       };
     }
 
+    if (el.tabOverflowBtn) {
+      el.tabOverflowBtn.onclick = function (evt) {
+        var items = [];
+        var hiddenTabs = [];
+        for (var i = 0; i < state.tabs.length; i++) {
+          if (state.tabs[i] && state.tabs[i].overflowVisible === false) hiddenTabs.push(state.tabs[i]);
+        }
+        if (hiddenTabs.length) {
+          for (var j = 0; j < hiddenTabs.length; j++) {
+            (function (t) {
+              items.push({ label: t.title || t.sourceName || 'Tab', onClick: function () { activateTab(t.id); } });
+            })(hiddenTabs[j]);
+          }
+          items.push({ separator: true });
+        }
+        items.push({ label: 'Scroll left', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: -220, behavior: 'smooth' }); } });
+        items.push({ label: 'Scroll right', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: 220, behavior: 'smooth' }); } });
+        var r = el.tabOverflowBtn.getBoundingClientRect();
+        showContextMenu(items, r.left, r.bottom + 4);
+      };
+    }
+
+    if (el.tabQuickSearch) {
+      el.tabQuickSearch.addEventListener('input', function () {
+        state.tabQuickQuery = String(el.tabQuickSearch.value || '');
+        state.tabQuickActiveIndex = 0;
+        renderTabQuickPanel();
+      });
+      el.tabQuickSearch.addEventListener('keydown', function (evt) {
+        var k = String(evt && evt.key || '');
+        if (k === 'ArrowDown' || k === 'ArrowUp') {
+          evt.preventDefault();
+          var rows = getTabQuickMatches();
+          if (!rows.length) return;
+          var delta = (k === 'ArrowDown') ? 1 : -1;
+          state.tabQuickActiveIndex = (state.tabQuickActiveIndex + delta + rows.length) % rows.length;
+          renderTabQuickPanel();
+          return;
+        }
+        if (k === 'Enter') {
+          evt.preventDefault();
+          var rows2 = getTabQuickMatches();
+          if (!rows2.length) return;
+          var pick = rows2[Math.max(0, Math.min(state.tabQuickActiveIndex, rows2.length - 1))];
+          if (!pick || !pick.tab) return;
+          closeTabQuickPanel();
+          activateTab(pick.tab.id);
+          return;
+        }
+        if (k === 'Escape') {
+          evt.preventDefault();
+          closeTabQuickPanel();
+        }
+      });
+    }
+
+    if (el.tabQuickPanel) {
+      el.tabQuickPanel.addEventListener('mousedown', function (evt) {
+        if (evt.target === el.tabQuickPanel) closeTabQuickPanel();
+      });
+    }
+
     // BUILD_WCV: navigation via IPC
     // CHROMIUM_PARITY: Long-press/right-click shows history dropdown
     if (el.navBack) {
@@ -3264,7 +6071,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
         }
       };
       addNavLongPressHandler(el.navBack, function (e) {
@@ -3277,7 +6084,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'forward' }, 'request-forward');
         }
       };
       addNavLongPressHandler(el.navForward, function (e) {
@@ -3331,7 +6138,8 @@
       el.navHome.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
+          var homeTargetUrl = String(tab.homeUrl || tab.url || '').trim();
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: homeTargetUrl }, 'request-load-url', { url: homeTargetUrl });
         }
       };
     }
@@ -3363,6 +6171,10 @@
           e.dataTransfer.setData('text/uri-list', url);
           e.dataTransfer.effectAllowed = 'copyLink';
         } catch (err) {}
+      });
+      el.omniIcon.addEventListener('click', function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        toggleSiteInfoPopover();
       });
     }
 
@@ -3463,6 +6275,63 @@
       });
       syncSearchEngineSelect();
     }
+
+    if (el.hubStartupMode) {
+      el.hubStartupMode.addEventListener('change', function () {
+        var mode = String(el.hubStartupMode.value || 'continue').trim();
+        saveBrowserSettings({ startup: { mode: mode } });
+      });
+    }
+
+    if (el.hubStartupCustomUrl) {
+      el.hubStartupCustomUrl.addEventListener('blur', function () {
+        saveBrowserSettings({ startup: { customUrl: String(el.hubStartupCustomUrl.value || '').trim() } });
+      });
+    }
+
+    if (el.hubHomeUrl) {
+      el.hubHomeUrl.addEventListener('blur', function () {
+        saveBrowserSettings({ home: { homeUrl: String(el.hubHomeUrl.value || '').trim() } });
+      });
+    }
+
+    if (el.hubNewTabBehavior) {
+      el.hubNewTabBehavior.addEventListener('change', function () {
+        saveBrowserSettings({ home: { newTabBehavior: String(el.hubNewTabBehavior.value || 'tankoban_home').trim() } });
+      });
+    }
+
+    if (el.hubDownloadBehavior) {
+      el.hubDownloadBehavior.addEventListener('change', function () {
+        saveBrowserSettings({ downloads: { behavior: String(el.hubDownloadBehavior.value || 'ask').trim() } });
+      });
+    }
+
+    if (el.hubDownloadFolderHint) {
+      el.hubDownloadFolderHint.addEventListener('change', function () {
+        saveBrowserSettings({ downloads: { folderModeHint: !!el.hubDownloadFolderHint.checked } });
+      });
+    }
+
+    if (el.hubPrivacyDoNotTrack) {
+      el.hubPrivacyDoNotTrack.addEventListener('change', function () {
+        saveBrowserSettings({ privacy: { doNotTrack: !!el.hubPrivacyDoNotTrack.checked } });
+      });
+    }
+
+    function bindClearOnExitToggle(elm, key) {
+      if (!elm) return;
+      elm.addEventListener('change', function () {
+        var patch = { privacy: { clearOnExit: {} } };
+        patch.privacy.clearOnExit[key] = !!elm.checked;
+        saveBrowserSettings(patch);
+      });
+    }
+
+    bindClearOnExitToggle(el.hubClearOnExitHistory, 'history');
+    bindClearOnExitToggle(el.hubClearOnExitDownloads, 'downloads');
+    bindClearOnExitToggle(el.hubClearOnExitCookies, 'cookies');
+    bindClearOnExitToggle(el.hubClearOnExitCache, 'cache');
 
     if (el.findInput) {
       el.findInput.addEventListener('input', function () {
@@ -3798,6 +6667,55 @@
       el.hubDownloadHistoryList.addEventListener('click', function (evt) {
         var t = evt && evt.target ? evt.target : null;
         if (!t) return;
+        var openFileBtn = t.closest ? t.closest('[data-unified-open-file-id]') : null;
+        if (openFileBtn) {
+          var ofid = String(openFileBtn.getAttribute('data-unified-open-file-id') || '');
+          if (ofid.indexOf('direct:') === 0) {
+            var did = ofid.slice('direct:'.length);
+            for (var di = 0; di < state.downloads.length; di++) {
+              var dd = state.downloads[di];
+              if (!dd || String(dd.id) !== did) continue;
+              if (dd.destination && api.shell && api.shell.openPath) {
+                try { api.shell.openPath(dd.destination); } catch (e) {}
+              }
+              break;
+            }
+          }
+          return;
+        }
+
+        var openFolderBtn = t.closest ? t.closest('[data-unified-open-folder-id]') : null;
+        if (openFolderBtn) {
+          var ofdid = String(openFolderBtn.getAttribute('data-unified-open-folder-id') || '');
+          if (ofdid.indexOf('direct:') === 0) {
+            var did2 = ofdid.slice('direct:'.length);
+            for (var dj = 0; dj < state.downloads.length; dj++) {
+              var dd2 = state.downloads[dj];
+              if (!dd2 || String(dd2.id) !== did2) continue;
+              if (dd2.destination && api.shell && api.shell.revealPath) {
+                try { api.shell.revealPath(dd2.destination); } catch (e2) {}
+              }
+              break;
+            }
+          }
+          return;
+        }
+
+        var retryBtn = t.closest ? t.closest('[data-unified-retry-id]') : null;
+        if (retryBtn) {
+          var rrid = String(retryBtn.getAttribute('data-unified-retry-id') || '');
+          if (rrid.indexOf('direct:') === 0 && api.webSources && api.webSources.downloadFromUrl) {
+            var did3 = rrid.slice('direct:'.length);
+            for (var dk = 0; dk < state.downloads.length; dk++) {
+              var dd3 = state.downloads[dk];
+              if (!dd3 || String(dd3.id) !== did3) continue;
+              if (dd3.downloadUrl) api.webSources.downloadFromUrl({ url: dd3.downloadUrl, referer: dd3.pageUrl || '' }).catch(function () {});
+              break;
+            }
+          }
+          return;
+        }
+
         var rm = t.closest ? t.closest('[data-unified-remove-id]') : null;
         if (rm) {
           var rid = String(rm.getAttribute('data-unified-remove-id') || '');
@@ -3995,6 +6913,54 @@
       });
     }
 
+
+    if (el.siteInfoUsageBtn) {
+      el.siteInfoUsageBtn.onclick = function () {
+        loadSiteUsageSummary();
+      };
+    }
+
+    if (el.siteInfoClearDataBtn) {
+      el.siteInfoClearDataBtn.onclick = function () {
+        clearCurrentSiteData();
+      };
+    }
+
+    if (el.siteInfoResetPermsBtn) {
+      el.siteInfoResetPermsBtn.onclick = function () {
+        resetPermissionsForCurrentSite();
+      };
+    }
+
+    if (el.siteInfoPermissions) {
+      el.siteInfoPermissions.addEventListener('change', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t || !t.matches || !t.matches('input[data-site-perm]')) return;
+        var permission = String(t.getAttribute('data-site-perm') || '').trim();
+        var origin = getActiveSiteOrigin();
+        if (!permission || !origin || !api.webPermissions || !api.webPermissions.set) return;
+        api.webPermissions.set({
+          origin: origin,
+          permission: permission,
+          decision: t.checked ? 'allow' : 'ask'
+        }).then(function (res) {
+          if (!res || !res.ok) showToast('Failed to update permission');
+          loadPermissions();
+        }).catch(function () {
+          showToast('Failed to update permission');
+        });
+      });
+    }
+
+    document.addEventListener('click', function (evt) {
+      if (!state.siteInfoOpen) return;
+      var t = evt && evt.target ? evt.target : null;
+      if (!t) return;
+      var insidePopover = el.siteInfoPopover && el.siteInfoPopover.contains && el.siteInfoPopover.contains(t);
+      var insideIcon = el.omniIcon && el.omniIcon.contains && el.omniIcon.contains(t);
+      if (!insidePopover && !insideIcon) closeSiteInfoPopover();
+    });
+
     if (el.hubDataUsageBtn) {
       el.hubDataUsageBtn.onclick = function () {
         loadDataUsage();
@@ -4158,8 +7124,14 @@
 
     if (api.webSources.onDownloadCompleted) {
       api.webSources.onDownloadCompleted(function (info) {
-        upsertDownload(info);
-        var cancelled = (info && (String(info.error || '') === 'Cancelled' || String(info.state || '') === 'cancelled'));
+        var stateName = String((info && info.state) || '').toLowerCase();
+        if (!stateName) {
+          if (info && info.ok) stateName = 'completed';
+          else if (String((info && info.error) || '').toLowerCase() === 'cancelled') stateName = 'cancelled';
+          else stateName = 'failed';
+        }
+        upsertDownload(Object.assign({}, info || {}, { state: stateName }));
+        var cancelled = stateName === 'cancelled';
         if (cancelled) {
           showToast('Download cancelled');
           showDlBar('Cancelled: ' + ((info && info.filename) ? info.filename : ''), null);
@@ -4274,21 +7246,12 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
-      // CHROMIUM_PARITY: direction-aware history tracking
-      var direction = (data && data.direction) || '';
-      if (direction === 'index' && data.targetIndex != null) {
-        var runtime = ensureTabRuntime(tab);
-        runtime.currentIndex = Math.max(0, Math.min(Number(data.targetIndex), runtime.navEntries.length - 1));
-        if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = tab.url;
-        runtime.lastVisibleUrl = tab.url;
-        runtime.lastCommittedUrl = tab.url;
-        runtime.pendingUrl = '';
-        runtime.securityState = inferSecurityStateFromUrl(tab.url);
-        runtime.isBlocked = false;
-        runtime.lastError = null;
-      } else {
-        pushRuntimeCommittedUrl(tab, tab.url, direction);
-      }
+      reduceRuntimeHistory(tab, 'commit', {
+        url: tab.url,
+        direction: data && data.direction,
+        targetIndex: data && data.targetIndex,
+        navKind: data && data.navKind
+      });
       maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
@@ -4303,12 +7266,10 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.loading = !!data.loading;
-      var runtime = ensureTabRuntime(tab);
-      if (tab.loading) {
-        runtime.pendingUrl = String(tab.url || runtime.lastVisibleUrl || '').trim();
-      } else {
-        runtime.pendingUrl = '';
-      }
+      reduceRuntimeHistory(tab, 'loading', {
+        loading: tab.loading,
+        url: String(tab.url || '').trim()
+      });
       renderTabs();
       renderBrowserHome();
       syncLoadBar();
@@ -4327,6 +7288,18 @@
       }
     });
 
+    if (webTabs.onMediaState) {
+      webTabs.onMediaState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        tab.audible = !!(data && data.audible);
+        tab.muted = !!(data && data.muted);
+        tab.mediaDetected = !!(data && data.mediaDetected || tab.mediaDetected || tab.audible || tab.muted);
+        renderTabs();
+        scheduleSessionSave();
+      });
+    }
+
     if (webTabs.onLoadFailed) {
       webTabs.onLoadFailed(function (data) {
         var tab = getTabByMainId(data && data.tabId);
@@ -4334,20 +7307,17 @@
         var runtime = ensureTabRuntime(tab);
         var failure = (data && data.failure) ? data.failure : classifyLoadFailure(data && data.errorCode, data && data.errorDescription, data && data.url);
         var failedUrl = String((data && data.url) || tab.url || runtime.lastVisibleUrl || '').trim();
-        if (failedUrl) {
-          tab.url = failedUrl;
-          runtime.lastVisibleUrl = failedUrl;
-        }
-        runtime.pendingUrl = '';
-        runtime.isBlocked = !!failure.isBlocked;
-        runtime.lastError = {
-          kind: String(failure.kind || 'load_failed'),
-          code: Number(data && data.errorCode || 0),
-          description: String(data && data.errorDescription || ''),
-          url: failedUrl,
-          at: Date.now()
-        };
-        runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+        reduceRuntimeHistory(tab, 'load-fail', {
+          failedUrl: failedUrl,
+          isBlocked: !!failure.isBlocked,
+          lastError: {
+            kind: String(failure.kind || 'load_failed'),
+            code: Number(data && data.errorCode || 0),
+            description: String(data && data.errorDescription || ''),
+            url: failedUrl,
+            at: Date.now()
+          }
+        });
         if (failure && failure.title) {
           tab.title = String(failure.title);
         }
@@ -4357,6 +7327,56 @@
         renderTabs();
         renderBrowserHome();
         renderContinue();
+        syncLoadBar();
+        scheduleSessionSave();
+      });
+    }
+
+    if (webTabs.onHealthState) {
+      webTabs.onHealthState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        var runtime = ensureTabRuntime(tab);
+        var health = ensureRuntimeHealth(runtime);
+        var nextState = String((data && data.state) || '').trim().toLowerCase();
+        if (!nextState) return;
+
+        if (nextState === 'crashed' || nextState === 'unresponsive') {
+          tab.loading = false;
+          runtime.pendingUrl = '';
+          runtime.lastError = runtime.lastError || {
+            kind: nextState,
+            code: 0,
+            description: '',
+            url: String(tab.url || runtime.lastVisibleUrl || ''),
+            at: Date.now()
+          };
+        }
+
+        if (nextState === 'crashed') {
+          health.state = 'crashed';
+          health.crashCount = Number(health.crashCount || 0) + 1;
+          health.lastCrashReason = String((data && data.details && data.details.reason) || '');
+          tab.title = 'Crashed tab';
+          showToast('Tab crashed. Reload to restore.');
+        } else if (nextState === 'unresponsive') {
+          health.state = 'unresponsive';
+          health.unresponsiveCount = Number(health.unresponsiveCount || 0) + 1;
+          health.lastUnresponsiveReason = String((data && data.details && data.details.reason) || '');
+          tab.title = tab.title || 'Unresponsive tab';
+          showToast('Tab is unresponsive.');
+        } else if (nextState === 'recovered') {
+          if (health.state === 'crashed' || health.state === 'unresponsive') {
+            health.recoverCount = Number(health.recoverCount || 0) + 1;
+            showToast('Tab recovered.');
+          }
+          health.state = 'healthy';
+        }
+
+        health.lastChangedAt = Number((data && data.at) || Date.now()) || Date.now();
+        if (tab.id === state.activeTabId) updateUrlDisplay();
+        renderTabs();
+        renderBrowserHome();
         syncLoadBar();
         scheduleSessionSave();
       });
@@ -4494,6 +7514,13 @@
         }
       });
       _resizeObs.observe(el.viewContainer);
+    }
+
+    if (el.tabBar && typeof ResizeObserver !== 'undefined') {
+      var _tabResizeObs = new ResizeObserver(function () {
+        syncTabOverflowAffordance();
+      });
+      _tabResizeObs.observe(el.tabBar);
     }
 
     // Init
