@@ -104,7 +104,7 @@ function prepPlayer() {
 
   log('player', 'Building Qt player (Python 3.10+ detected)...');
   try {
-    run('cd player_qt && build_player.bat');
+    execSync('build_player.bat', { stdio: 'inherit', cwd: path.join(ROOT, 'player_qt') });
     if (fs.existsSync(PLAYER_EXE)) {
       log('player', 'Build succeeded.');
       return true;
