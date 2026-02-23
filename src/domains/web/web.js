@@ -608,6 +608,11 @@
     var dedupKey = canonicalPopupDedupKey(url, parentTab || null);
     if (shouldSkipDuplicatePopup(dedupKey)) { logWebDebug('[DIAG:route] DEDUP skip'); return true; }
     if (maybeStartTorrentFromUrl(url, referer || '')) { logWebDebug('[DIAG:route] torrent intercept'); return true; }
+    var openedTab = openPopupUrlInNewTab(url, parentTab || getActiveTab());
+    if (openedTab) {
+      logWebDebug('[DIAG:route] openPopupUrlInNewTab ok');
+      return true;
+    }
     var navResult = navigateUrlInTab(parentTab || getActiveTab(), url);
     logWebDebug('[DIAG:route] navigateUrlInTab returned ' + navResult);
     return navResult;
@@ -5408,7 +5413,9 @@
       src = { id: 0, name: 'New Tab', url: url, color: '#555' };
     }
 
-    createTab(src, url, { toastText: 'Opened in new tab', openerTabId: parentTab ? parentTab.id : null });
+    var tab = createTab(src, url, { toastText: 'Opened in new tab', openerTabId: parentTab ? parentTab.id : null });
+    if (tab && !state.browserOpen) openBrowserForTab(state.activeTabId);
+    return tab || null;
   }
 
   function openSourceInNewTab(source) {
@@ -7458,7 +7465,7 @@
       });
     }
 
-    // BUILD_WCV: Popup/new-window â†’ same tab (main-process handler sends tabId)
+    // BUILD_WCV: Popup/new-window â†’ new tab (main-process handler sends tabId)
     if (api.webSources.onPopupOpen) {
       api.webSources.onPopupOpen(function (info) {
         var url = info && info.url ? String(info.url) : '';

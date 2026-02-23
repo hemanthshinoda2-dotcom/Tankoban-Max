@@ -500,7 +500,7 @@
   border-radius: 6px;
   border: 1px solid rgba(var(--chrome-rgb), .10);
   background: rgba(var(--chrome-rgb), .06);
-  color: inherit;
+  color: var(--text, #e6e6e6);
   padding: 0 6px;
   font-size: 11px;
   max-width: 100px;
@@ -510,6 +510,10 @@
 .webSearchEngineSelect:focus {
   outline: none;
   border-color: rgba(var(--chrome-rgb), .22);
+}
+.webSearchEngineSelect option {
+  background: #1a1c22;
+  color: #e6e6e6;
 }
 
 .webOmniSuggest {
