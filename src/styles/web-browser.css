@@ -376,6 +376,7 @@
   height: 40px;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(var(--chrome-rgb), .06);
+  position: relative;
 }
 
 /* Nav buttons (back, forward, reload, home, split) */
@@ -442,6 +443,7 @@
   justify-content: center;
   flex-shrink: 0;
   opacity: .6;
+  cursor: pointer;
 }
 .webOmniIcon svg {
   width: 14px;
@@ -556,6 +558,66 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.webSiteInfoPopover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 118px;
+  width: 340px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--chrome-rgb), .12);
+  background: var(--bg, rgba(10,12,20,.95));
+  box-shadow: 0 12px 28px rgba(0,0,0,.32);
+  padding: 10px;
+  z-index: 45;
+}
+.webSiteInfoPopover.hidden { display: none !important; }
+.webSiteInfoHead { margin-bottom: 8px; }
+.webSiteInfoOrigin {
+  font-size: 12px;
+  font-weight: 600;
+  word-break: break-all;
+}
+.webSiteInfoSecurity {
+  font-size: 11px;
+  opacity: .75;
+  margin-top: 3px;
+}
+.webSiteInfoSection {
+  border-top: 1px solid rgba(var(--chrome-rgb), .1);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.webSiteInfoLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  opacity: .7;
+  margin-bottom: 6px;
+}
+.webSiteInfoPermissions {
+  display: grid;
+  gap: 4px;
+}
+.webSiteInfoPermRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+.webSiteInfoPermRow label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.webSiteInfoActions {
+  border-top: 1px solid rgba(var(--chrome-rgb), .1);
+  margin-top: 10px;
+  padding-top: 10px;
+  display: flex;
+  gap: 8px;
 }
 
 /* Action buttons in nav bar (bookmark, find, downloads) */

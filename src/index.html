@@ -1688,6 +1688,26 @@ COMMON ANCHORS
             </select>
             <div id="webOmniSuggest" class="webOmniSuggest hidden" role="listbox" aria-label="Address suggestions"></div>
           </div>
+          <div id="webSiteInfoPopover" class="webSiteInfoPopover hidden" role="dialog" aria-label="Site information" aria-hidden="true">
+            <div class="webSiteInfoHead">
+              <div id="webSiteInfoOrigin" class="webSiteInfoOrigin">No site loaded</div>
+              <div id="webSiteInfoSecurity" class="webSiteInfoSecurity">Security unknown</div>
+            </div>
+            <div class="webSiteInfoSection">
+              <div class="webSiteInfoLabel">Permissions</div>
+              <div id="webSiteInfoPermissions" class="webSiteInfoPermissions"></div>
+            </div>
+            <div class="webSiteInfoSection">
+              <div class="webSiteInfoLabel">Data & blocking</div>
+              <button id="webSiteInfoUsageBtn" class="btn btn-ghost btn-sm" type="button">Cookie/storage usage</button>
+              <div id="webSiteInfoUsageText" class="navMuted">Usage unknown.</div>
+              <div id="webSiteInfoAdblock" class="navMuted">Blocked requests: unavailable</div>
+            </div>
+            <div class="webSiteInfoActions">
+              <button id="webSiteInfoClearDataBtn" class="btn btn-ghost btn-sm" type="button">Clear site data</button>
+              <button id="webSiteInfoResetPermsBtn" class="btn btn-ghost btn-sm" type="button">Reset permissions for this site</button>
+            </div>
+          </div>
           <button id="webBookmarkBtn" class="webNavAction" title="Toggle bookmark" aria-label="Toggle bookmark">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13.1l.7-4-2.9-2.8 4-.6z"/></svg>
           </button>
