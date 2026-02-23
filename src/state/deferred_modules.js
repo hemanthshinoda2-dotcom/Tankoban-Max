@@ -226,6 +226,14 @@
     if (!webModulesPromise) {
       webModulesPromise = (async () => {
         const activationStart = perf.now();
+        await loadScriptGroup([
+          './domains/web/web_contract.js',
+          './domains/web/web_module_tabs_state.js',
+          './domains/web/web_module_nav_omnibox.js',
+          './domains/web/web_module_downloads.js',
+          './domains/web/web_module_torrent_tab.js',
+          './domains/web/web_module_hub.js',
+        ]);
         await loadScriptOnce('./domains/web/web.js');
         window.__tankoWebModulesLoaded = true;
 
