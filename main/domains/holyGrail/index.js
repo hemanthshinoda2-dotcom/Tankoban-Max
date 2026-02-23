@@ -505,6 +505,13 @@ async function observeProperty(ctx, evt, name) {
     if (!__state.addon || !__state.initialized) return { ok: false, error: 'not_initialized' };
     const propName = String(name || '');
     if (!propName) return { ok: false, error: 'missing_property_name' };
+
+    // Build 1: idempotent observe to avoid duplicate mpv subscriptions
+    // (main default observers + renderer observers can overlap).
+    if (__state.observedProperties.has(propName)) {
+      return { ok: true, id: null, alreadyObserved: true };
+    }
+
     const id = __state.addon.observeProperty(propName);
     __state.observedProperties.add(propName);
     return { ok: true, id };

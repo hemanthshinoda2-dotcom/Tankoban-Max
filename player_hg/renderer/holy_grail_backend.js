@@ -35,6 +35,23 @@
     var cleanupFns = [];
     var destroyPromise = null;
 
+    // Build 1 audit state
+    var canvasSizeDirty = true;
+
+    // Deduplicate ended() per load cycle (HG_EOF + eof-reached can both fire)
+    var endedEmittedForLoadSeq = 0;
+
+    // Property-event health tracking (for adaptive polling fallback)
+    var propertyEventsSeen = 0;
+    var lastPropertyEventAt = 0;
+    var trackListEverSeen = false;
+    var chapterListEverSeen = false;
+
+    // Adaptive polling (replace always-on fixed 250ms interval)
+    var pollTimer = null;
+    var pollInFlight = false;
+    var pollTrackCounter = 0;
+
     // Pending seek state (TankobanPlus pattern): queue a seek target that the
     // poll loop retries every 200ms until the position lands within tolerance.
     var _pendingSeekSec = null;
@@ -201,12 +218,19 @@
       }
 
       hostEl.appendChild(canvas);
-      syncCanvasSize();
+      canvasSizeDirty = true;
+      syncCanvasSize(true);
       setupResizeObserver();
     }
 
-    function syncCanvasSize() {
+    function markCanvasSizeDirty() {
+      canvasSizeDirty = true;
+    }
+
+    function syncCanvasSize(force) {
       if (!canvas || !hostEl) return;
+      if (!force && !canvasSizeDirty) return;
+
       var rect = hostEl.getBoundingClientRect();
       var cssW = Math.max(16, Math.round(rect.width || hostEl.clientWidth || 1280));
       var cssH = Math.max(16, Math.round(rect.height || hostEl.clientHeight || 720));
@@ -216,14 +240,20 @@
 
       canvas.style.width = cssW + 'px';
       canvas.style.height = cssH + 'px';
-      if (canvas.width !== pxW) canvas.width = pxW;
-      if (canvas.height !== pxH) canvas.height = pxH;
+
+      var changed = false;
+      if (canvas.width !== pxW) { canvas.width = pxW; changed = true; }
+      if (canvas.height !== pxH) { canvas.height = pxH; changed = true; }
+
+      canvasSizeDirty = false;
+      return changed;
     }
 
     function setupResizeObserver() {
       if (typeof ResizeObserver !== 'function') {
         var onResize = function () {
-          syncCanvasSize();
+          markCanvasSizeDirty();
+          syncCanvasSize(true);
           requestSurfaceResize();
         };
         window.addEventListener('resize', onResize, { passive: true });
@@ -231,7 +261,8 @@
         return;
       }
       resizeObserver = new ResizeObserver(function () {
-        syncCanvasSize();
+        markCanvasSizeDirty();
+        syncCanvasSize(true);
         requestSurfaceResize();
       });
       resizeObserver.observe(hostEl);
@@ -255,8 +286,6 @@
 
     function drawFrame(videoFrame) {
       if (!videoFrame || !ctx2d || !canvas) return;
-
-      syncCanvasSize();
 
       var srcW = Math.max(1, toFiniteNumber(videoFrame.displayWidth || videoFrame.codedWidth, 1));
       var srcH = Math.max(1, toFiniteNumber(videoFrame.displayHeight || videoFrame.codedHeight, 1));
@@ -292,6 +321,12 @@
 
       if (!firstFrameEmitted && loadSeq > 0) {
         firstFrameEmitted = true;
+
+        // Build 1: "ready" means first frame is actually visible.
+        state.ready = true;
+        emit('ready');
+        window.TankoPlayer.state.set({ ready: true, fileLoaded: true });
+
         emit('first-frame', {
           sinceLoadMs: loadStartedAtMs ? Math.max(0, Date.now() - loadStartedAtMs) : null,
           frameCount: renderStats.frameCount,
@@ -391,23 +426,39 @@
       if (destroyed) return;
       var name = (data && data.name) ? String(data.name) : '';
       var value = data ? data.value : undefined;
+
+      if (name) {
+        propertyEventsSeen += 1;
+        lastPropertyEventAt = Date.now();
+      }
+
       applyPropertyChange(name, value);
     });
 
-    var offEof = hg.onEof(function () {
-      if (destroyed || suppressEof) return;
+    function emitEndedOnce(payload) {
+      if (destroyed || suppressEof) return false;
+      if (loadSeq <= 0) return false;
+      if (endedEmittedForLoadSeq === loadSeq) return false;
+
+      endedEmittedForLoadSeq = loadSeq;
       state.eofReached = true;
       state.paused = true;
-      emit('ended', { eof: true });
+      emit('ended', payload || { eof: true });
       window.TankoPlayer.state.set({ eofReached: true, paused: true });
+      return true;
+    }
+
+    var offEof = hg.onEof(function () {
+      emitEndedOnce({ eof: true, source: 'event' });
     });
 
     var offFileLoaded = hg.onFileLoaded(function () {
       if (destroyed) return;
-      state.ready = true;
-      emit('ready');
+
+      // Build 1: file is loaded, but do not mark ready until the first frame is drawn.
       emit('file-loaded');
-      window.TankoPlayer.state.set({ ready: true, fileLoaded: true });
+      window.TankoPlayer.state.set({ fileLoaded: true });
+
       console.log('[hg-backend] file loaded');
       startPerfLog();
     });
@@ -416,30 +467,80 @@
       queueVideoFrame(videoFrame);
     });
 
-    // ── State polling fallback ──
-    // The native addon's pollEvents() doesn't return property-change events
-    // (file-loaded and end-file work, but mpv property observations are lost).
-    // Work around this by polling getState() + getTrackList() on an interval.
-    var pollTimer = null;
-    var lastPollState = null;
+    // ── State polling fallback (adaptive) ──
+    // Build 1: keep fallback polling, but do not run a hard 250ms loop forever.
+    // Use polling only when:
+    // - startup / bootstrapping (before property events are confirmed)
+    // - pending resume-seek recovery
+    // - property events appear stale / unavailable
+    //
+    // Once property-change events are healthy, back off heavily.
+
+    function hasHealthyPropertyEvents() {
+      if (propertyEventsSeen <= 0) return false;
+      var ageMs = Date.now() - lastPropertyEventAt;
+      return ageMs < 1500;
+    }
+
+    function scheduleNextPoll(delayMs) {
+      if (destroyed) return;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(pollStateTick, Math.max(50, delayMs || 250));
+    }
 
     function startStatePoll() {
+      if (destroyed) return;
       if (pollTimer) return;
-      pollTimer = setInterval(pollStateTick, 250);
+      scheduleNextPoll(150);
     }
 
     function stopStatePoll() {
-      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      pollInFlight = false;
+      pollTrackCounter = 0;
+    }
+
+    function getNextPollDelay() {
+      // Fast while resume-seek is in progress
+      if (_pendingSeekSec !== null) return 120;
+
+      // Fast until property events are confirmed healthy
+      if (!hasHealthyPropertyEvents()) return 250;
+
+      // Property events are flowing → only occasional safety fallback
+      return 1500;
+    }
+
+    function shouldPollTrackListThisTick() {
+      // During seek/startup, allow quicker track/chapter fallback.
+      if (_pendingSeekSec !== null) return true;
+      if (!trackListEverSeen || !chapterListEverSeen) return true;
+
+      // If property events look unhealthy, poll track-list more often.
+      if (!hasHealthyPropertyEvents()) return true;
+
+      // Otherwise keep it sparse (~ every few fallback ticks).
+      return false;
     }
 
     function pollStateTick() {
-      if (destroyed || !gpuInitialized) return;
+      if (destroyed || !gpuInitialized) {
+        pollTimer = null;
+        return;
+      }
+      if (pollInFlight) {
+        scheduleNextPoll(getNextPollDelay());
+        return;
+      }
+
+      pollInFlight = true;
+      pollTimer = null;
 
       hg.getState().then(function (res) {
         if (!res || !res.ok || !res.state || destroyed) return;
         var s = res.state;
 
-        // Synthesize property-change events for values that differ
+        // Synthesize property-change updates as fallback
         if (s.timePos !== undefined) applyPropertyChange('time-pos', s.timePos);
         if (s.duration !== undefined) applyPropertyChange('duration', s.duration);
         if (s.paused !== undefined) applyPropertyChange('pause', s.paused);
@@ -448,8 +549,12 @@
         if (s.muted !== undefined) applyPropertyChange('mute', s.muted);
         if (s.speed !== undefined) applyPropertyChange('speed', s.speed);
 
+        // Build 1: also keep transform state in sync during fallback mode
+        if (s.aspectOverride !== undefined) applyPropertyChange('video-aspect-override', s.aspectOverride);
+        if (s.videoCrop !== undefined) applyPropertyChange('video-crop', s.videoCrop);
+
         // Pending seek retry: re-issue seek every 200ms until position lands
-        // within 1s of target.  Modeled on TankobanPlus video_player_adapter.
+        // within 1s of target. Modeled on TankobanPlus video_player_adapter.
         try {
           if (_pendingSeekSec !== null) {
             var tgt = Number(_pendingSeekSec);
@@ -457,15 +562,16 @@
             var durSec = toFiniteNumber(s.duration, 0);
             var timeSec = toFiniteNumber(s.timePos, 0);
             var readyForSeek = durSec > 0;
-            // Clamp target to duration so we don't seek past the end.
+
             if (readyForSeek && tgt > durSec - 2) tgt = Math.max(0, durSec - 5);
+
             if (readyForSeek && Number.isFinite(tgt)) {
               if (_pendingSeekIssuedAt === 0 || (nowMs - _pendingSeekIssuedAt > 200)) {
                 _pendingSeekIssuedAt = nowMs;
                 _pendingSeekAttempts += 1;
                 hg.command(['seek', String(Math.max(0, tgt)), 'absolute']).catch(function () {});
               }
-              // Seek landed: position is close enough to target.
+
               if (Number.isFinite(timeSec) && Math.abs(timeSec - tgt) < 1) {
                 var shouldUnpause = _pendingSeekUnpause;
                 _pendingSeekSec = null;
@@ -473,13 +579,10 @@
                 _pendingSeekAttempts = 0;
                 _pendingSeekUnpause = false;
                 hideResumeOverlay();
-                if (shouldUnpause) {
-                  hg.setProperty('pause', 'no').catch(function () {});
-                }
+                if (shouldUnpause) hg.setProperty('pause', 'no').catch(function () {});
               }
             }
-            // Safety: if seek hasn't landed after 4s wall-clock, give up
-            // and just unpause wherever we are.
+
             if (_pendingSeekSec !== null && _pendingSeekStartMs > 0 && (Date.now() - _pendingSeekStartMs > 4000)) {
               _pendingSeekSec = null;
               _pendingSeekStartMs = 0;
@@ -493,18 +596,30 @@
             }
           }
         } catch (e) {}
-      }).catch(function () {});
+      }).catch(function () {
+        // Ignore; fallback scheduler will keep running
+      }).finally(function () {
+        // Poll track-list/chapter-list sparsely as fallback
+        pollTrackCounter += 1;
+        var doTrackPoll = shouldPollTrackListThisTick();
 
-      // Poll track list less frequently (every ~4th tick ≈ 1s)
-      if (!pollTimer) return;
-      if (!startStatePoll._trackCounter) startStatePoll._trackCounter = 0;
-      startStatePoll._trackCounter++;
-      if (startStatePoll._trackCounter % 4 === 0) {
-        hg.getTrackList().then(function (res) {
-          if (!res || !res.ok || !Array.isArray(res.tracks) || destroyed) return;
-          applyPropertyChange('track-list', res.tracks);
-        }).catch(function () {});
-      }
+        // In healthy mode, only every ~4 ticks (~6s with 1500ms base)
+        if (!doTrackPoll && (pollTrackCounter % 4 === 0)) {
+          doTrackPoll = true;
+        }
+
+        if (doTrackPoll && !destroyed && gpuInitialized) {
+          hg.getTrackList().then(function (res) {
+            if (!res || !res.ok || !Array.isArray(res.tracks) || destroyed) return;
+            applyPropertyChange('track-list', res.tracks);
+          }).catch(function () {});
+        }
+
+        pollInFlight = false;
+        if (!destroyed && gpuInitialized) {
+          scheduleNextPoll(getNextPollDelay());
+        }
+      });
     }
 
     // ── Property change dispatch ──
@@ -548,10 +663,9 @@
         var was = !!state.eofReached;
         var next = !!value;
         state.eofReached = next;
+
         if (!was && next) {
-          state.paused = true;
-          emit('ended', { eof: true });
-          window.TankoPlayer.state.set({ eofReached: true, paused: true });
+          emitEndedOnce({ eof: true, source: 'property' });
         }
         return;
       }
@@ -604,19 +718,46 @@
       }
 
       if (name === 'track-list') {
+        trackListEverSeen = true;
         normalizeAndStoreTrackList(value);
         return;
       }
 
       if (name === 'chapter-list') {
+        chapterListEverSeen = true;
         normalizeAndStoreChapterList(value);
         return;
       }
 
       if (name === 'video-aspect-override') {
-        var v = String(value == null ? '' : value).trim();
-        state.aspectRatio = (!v || v === 'no' || v === '0' || v === '-1') ? 'auto' : v;
-        emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        var nextAspect = 'auto';
+
+        if (typeof value === 'number') {
+          if (Number.isFinite(value) && value !== 0 && value !== -1) {
+            nextAspect = String(value);
+          }
+        } else {
+          var v = String(value == null ? '' : value).trim().toLowerCase();
+          if (v && v !== 'no' && v !== '0' && v !== '-1' && v !== 'auto') {
+            nextAspect = String(value).trim();
+          }
+        }
+
+        if (nextAspect !== state.aspectRatio) {
+          state.aspectRatio = nextAspect;
+          emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        }
+        return;
+      }
+
+      if (name === 'video-crop') {
+        var cropRaw = String(value == null ? '' : value).trim();
+        var nextCrop = cropRaw ? cropRaw : 'none';
+
+        if (nextCrop !== state.crop) {
+          state.crop = nextCrop;
+          emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
+        }
         return;
       }
 
@@ -700,6 +841,12 @@
 
     function load(filePath, loadOpts) {
       loadSeq += 1;
+      endedEmittedForLoadSeq = 0;
+      trackListEverSeen = false;
+      chapterListEverSeen = false;
+      propertyEventsSeen = 0;
+      lastPropertyEventAt = 0;
+      pollTrackCounter = 0;
       firstFrameEmitted = false;
       loadStartedAtMs = Date.now();
       state.ready = false;
@@ -806,6 +953,7 @@
         state.ready = false;
         state.timeSec = 0;
         state.durationSec = 0;
+        endedEmittedForLoadSeq = 0;
         window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: null });
         return { ok: true };
       });
