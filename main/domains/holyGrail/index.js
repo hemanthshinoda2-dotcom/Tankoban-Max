@@ -35,8 +35,17 @@ const __state = {
   addon: null,
   addonPath: '',
   initialized: false,
+
   frameLoopRunning: false,
   frameLoopTimer: null,
+
+  // Build 2: decouple event polling from frame sending
+  eventLoopRunning: false,
+  eventLoopTimer: null,
+
+  // Build 2: prevent overlapping sendSharedTexture() calls on the same shared texture
+  frameSendInFlight: false,
+
   ownerWebContents: null,
   ownerFrame: null,
   observedProperties: new Set(),
@@ -185,9 +194,18 @@ function clearFrameLoopTimer() {
   __state.frameLoopTimer = null;
 }
 
+function clearEventLoopTimer() {
+  if (!__state.eventLoopTimer) return;
+  try { clearTimeout(__state.eventLoopTimer); } catch {}
+  __state.eventLoopTimer = null;
+}
+
 function stopFrameLoopInternal() {
   __state.frameLoopRunning = false;
+  __state.eventLoopRunning = false;
+  __state.frameSendInFlight = false;
   clearFrameLoopTimer();
+  clearEventLoopTimer();
 }
 
 function loadAddonOrThrow(ctx) {
@@ -233,6 +251,54 @@ function handleAddonEvents(events) {
   }
 }
 
+function scheduleNextFrameLoop(ctx, delayMs) {
+  if (!__state.frameLoopRunning) return;
+  clearFrameLoopTimer();
+  __state.frameLoopTimer = setTimeout(() => {
+    void frameLoopTick(ctx);
+  }, Math.max(0, Number(delayMs) || 0));
+}
+
+function scheduleNextEventLoop(ctx, delayMs) {
+  if (!__state.eventLoopRunning) return;
+  clearEventLoopTimer();
+  __state.eventLoopTimer = setTimeout(() => {
+    void eventLoopTick(ctx);
+  }, Math.max(4, Number(delayMs) || 16));
+}
+
+async function eventLoopTick(ctx) {
+  if (!__state.eventLoopRunning) return;
+
+  try {
+    if (!__state.addon || !__state.initialized) {
+      stopFrameLoopInternal();
+      return;
+    }
+
+    if (!ensureLiveOwner(ctx)) {
+      stopFrameLoopInternal();
+      try { __state.addon.destroyPlayer && __state.addon.destroyPlayer(); } catch {}
+      __state.initialized = false;
+      __state.observedProperties.clear();
+      return;
+    }
+
+    if (typeof __state.addon.pollEvents === 'function') {
+      const events = __state.addon.pollEvents();
+      handleAddonEvents(events);
+    }
+  } catch (err) {
+    emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
+      name: '__error__',
+      value: toErrorString(err),
+    });
+  }
+
+  // Build 2: event polling stays responsive even if frame sending stalls.
+  scheduleNextEventLoop(ctx, 12);
+}
+
 async function frameLoopTick(ctx) {
   if (!__state.frameLoopRunning) return;
 
@@ -250,11 +316,37 @@ async function frameLoopTick(ctx) {
       return;
     }
 
+    // Build 2: do not overlap sends on the same shared texture handle.
+    // If a send is still in flight, retry soon but don't hammer.
+    if (__state.frameSendInFlight) {
+      scheduleNextFrameLoop(ctx, 2);
+      return;
+    }
+
+    // Build 2: cheap native atomic peek to avoid unnecessary renderFrame() calls.
+    if (__state.addon && typeof __state.addon.hasFrameReady === 'function') {
+      let ready = false;
+      try { ready = !!__state.addon.hasFrameReady(); } catch {}
+      if (!ready) {
+        // Back off when idle (no frame pending)
+        scheduleNextFrameLoop(ctx, 8);
+        return;
+      }
+    }
+
     const handleBuf = (__state.addon.renderFrame && __state.addon.renderFrame()) || null;
-    if (handleBuf && sharedTexture && isLiveFrame(__state.ownerFrame)) {
+
+    if (!handleBuf) {
+      // No frame was actually produced (race or no update flag). Back off a bit.
+      scheduleNextFrameLoop(ctx, 8);
+      return;
+    }
+
+    if (sharedTexture && isLiveFrame(__state.ownerFrame)) {
       const size = (__state.addon.getSize && __state.addon.getSize()) || {};
       const width = Number(size.width) || 0;
       const height = Number(size.height) || 0;
+
       if (width > 0 && height > 0) {
         const imported = sharedTexture.importSharedTexture({
           textureInfo: {
@@ -265,21 +357,27 @@ async function frameLoopTick(ctx) {
           },
           allReferencesReleased: () => {},
         });
+
+        __state.frameSendInFlight = true;
         try {
           await sharedTexture.sendSharedTexture({
             frame: __state.ownerFrame,
             importedSharedTexture: imported,
           });
         } finally {
+          __state.frameSendInFlight = false;
           try { imported.release(); } catch {}
         }
+
+        // If we just delivered a frame, run again quickly.
+        scheduleNextFrameLoop(ctx, 1);
+        return;
       }
     }
 
-    if (typeof __state.addon.pollEvents === 'function') {
-      const events = __state.addon.pollEvents();
-      handleAddonEvents(events);
-    }
+    // Shared texture unavailable or invalid size → retry, but don't busy-spin.
+    scheduleNextFrameLoop(ctx, 8);
+    return;
   } catch (err) {
     emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
       name: '__error__',
@@ -287,12 +385,8 @@ async function frameLoopTick(ctx) {
     });
   }
 
-  if (!__state.frameLoopRunning) return;
-  // Poll at ~250Hz — sufficient to catch every frame up to 120fps content.
-  // renderFrame() returns null instantly when no new frame is ready (native flag check).
-  __state.frameLoopTimer = setTimeout(() => {
-    void frameLoopTick(ctx);
-  }, 4);
+  // Error path backoff
+  scheduleNextFrameLoop(ctx, 16);
 }
 
 function teardownPlayerOnly() {
@@ -420,9 +514,18 @@ async function startFrameLoop(ctx, evt) {
   try {
     setOwnerFromEvent(ctx, evt);
     if (!__state.addon || !__state.initialized) return { ok: false, error: 'not_initialized' };
-    if (__state.frameLoopRunning) return { ok: true, alreadyRunning: true };
+
+    if (__state.frameLoopRunning && __state.eventLoopRunning) {
+      return { ok: true, alreadyRunning: true };
+    }
+
     __state.frameLoopRunning = true;
+    __state.eventLoopRunning = true;
+    __state.frameSendInFlight = false;
+
     void frameLoopTick(ctx);
+    void eventLoopTick(ctx);
+
     return { ok: true };
   } catch (err) {
     return { ok: false, error: toErrorString(err) };

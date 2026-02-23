@@ -200,6 +200,7 @@ typedef EGLint     (*pfn_eglGetError)(void);
 
 // ── GLES ──
 typedef void       (*pfn_glFinish)(void);
+typedef void       (*pfn_glFlush)(void);
 typedef unsigned   (*pfn_glGetError)(void);
 
 // ── mpv ──
@@ -251,6 +252,7 @@ static pfn_eglGetError                    p_eglGetError = nullptr;
 
 // GLES function pointers
 static pfn_glFinish   p_glFinish = nullptr;
+static pfn_glFlush    p_glFlush = nullptr;
 static pfn_glGetError p_glGetError = nullptr;
 
 // mpv function pointers
@@ -400,6 +402,7 @@ static const char* LoadGles(const char* path) {
     if (!h_gles) return "Failed to load libGLESv2.dll";
 
     LOAD_FN(h_gles, glFinish);
+    LOAD_FN(h_gles, glFlush);
     LOAD_FN(h_gles, glGetError);
     return nullptr;
 }
@@ -809,9 +812,12 @@ Napi::Value RenderFrame(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (!g_mpvGl) return env.Null();
 
-    // Only render when mpv has a new frame — skip duplicate renders.
-    // This matches frame delivery to the video's native frame rate (e.g. 23.976fps)
-    // instead of re-rendering the same frame ~1000 times/sec.
+    // Build 2: cheap atomic gate before crossing into mpv render update path.
+    if (!g_frameReady.load(std::memory_order_acquire)) {
+        return env.Null();
+    }
+
+    // Only render when mpv reports a real new frame.
     uint64_t flags = p_mpv_render_context_update(g_mpvGl);
     if (!(flags & MPV_RENDER_UPDATE_FRAME)) return env.Null();
 
@@ -832,8 +838,11 @@ Napi::Value RenderFrame(const Napi::CallbackInfo& info) {
     };
     p_mpv_render_context_render(g_mpvGl, renderParams);
 
-    // Ensure GPU work is complete
-    p_glFinish();
+    // Build 2: avoid hard GPU stall when possible.
+    // glFlush submits work without forcing a full pipeline wait.
+    // Keep glFinish as fallback only if glFlush is unavailable.
+    if (p_glFlush) p_glFlush();
+    else if (p_glFinish) p_glFinish();
 
     // Release EGL context
     p_eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
@@ -842,11 +851,22 @@ Napi::Value RenderFrame(const Napi::CallbackInfo& info) {
     ComPtr<IDXGIKeyedMutex> mutex;
     g_externalTex.As(&mutex);
     if (mutex) {
-        HRESULT hr = mutex->AcquireSync(0, 5000);
-        if (FAILED(hr)) return env.Null();
+        // Build 2: fail fast instead of hitching the whole app.
+        // If the consumer still holds the texture, skip this frame and retry next tick.
+        HRESULT hr = mutex->AcquireSync(0, 0); // non-blocking
+        if (hr == WAIT_TIMEOUT) {
+            // Keep g_frameReady = true so JS can retry soon.
+            return env.Null();
+        }
+        if (FAILED(hr)) {
+            return env.Null();
+        }
     }
 
     g_context->CopyResource(g_externalTex.Get(), g_internalTex.Get());
+
+    // Keep D3D flush for visibility to downstream consumer after copy.
+    // (We can tune this further in a later build if needed.)
     g_context->Flush();
 
     if (mutex) {
@@ -1122,6 +1142,11 @@ Napi::Value GetSize(const Napi::CallbackInfo& info) {
     return obj;
 }
 
+Napi::Value HasFrameReady(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    return Napi::Boolean::New(env, g_frameReady.load(std::memory_order_acquire));
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // § 17. N-API: destroyPlayer() / destroyAll()
 // ═══════════════════════════════════════════════════════════════════
@@ -1195,6 +1220,7 @@ Napi::Object InitModule(Napi::Env env, Napi::Object exports) {
     exports.Set("resizeSurface",    Napi::Function::New(env, ResizeSurface));
     exports.Set("loadFile",         Napi::Function::New(env, LoadFile));
     exports.Set("renderFrame",      Napi::Function::New(env, RenderFrame));
+    exports.Set("hasFrameReady",    Napi::Function::New(env, HasFrameReady));
     exports.Set("command",          Napi::Function::New(env, MpvCommand));
     exports.Set("getProperty",      Napi::Function::New(env, GetProperty));
     exports.Set("setProperty",      Napi::Function::New(env, SetProperty));
