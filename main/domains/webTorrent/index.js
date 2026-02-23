@@ -2,10 +2,17 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { session } = require('electron');
 
 const HISTORY_FILE = 'web_torrent_history.json';
 const MAX_HISTORY = 1000;
+
+// Diagnostic logger — writes to temp file (main process console is unreliable)
+var _wtLogPath = path.join(os.tmpdir(), 'tankoban_webtorrent.log');
+function wtLog(msg) {
+  try { fs.appendFileSync(_wtLogPath, '[' + new Date().toISOString() + '] ' + msg + '\n'); } catch {}
+}
 
 var WebTorrentCtor = null;
 var webTorrentCtorPromise = null;
@@ -18,22 +25,33 @@ function getIpc() {
 }
 
 async function ensureClient() {
-  if (client) return client;
+  if (client) { wtLog('ensureClient: reusing existing client'); return client; }
+  wtLog('ensureClient: creating new client...');
   if (!WebTorrentCtor) {
     if (!webTorrentCtorPromise) {
       webTorrentCtorPromise = (async function loadCtor() {
+        wtLog('ensureClient: loading webtorrent module...');
         try {
           var mod = await import('webtorrent');
+          wtLog('ensureClient: import() succeeded');
           return (mod && (mod.default || mod.WebTorrent)) || mod;
         } catch (_e) {
+          wtLog('ensureClient: import() failed (' + (_e && _e.message || _e) + '), trying require()');
           var legacy = require('webtorrent');
           return (legacy && (legacy.default || legacy.WebTorrent)) || legacy;
         }
       })();
     }
     WebTorrentCtor = await webTorrentCtorPromise;
+    wtLog('ensureClient: constructor loaded, type=' + typeof WebTorrentCtor);
   }
-  client = new WebTorrentCtor();
+  // Disable UTP (native addon) to avoid segfaults with Electron 40's Node v24.
+  wtLog('ensureClient: calling new WebTorrent({ utp: false })...');
+  client = new WebTorrentCtor({ utp: false });
+  wtLog('ensureClient: client created OK');
+  client.on('error', function (err) {
+    wtLog('CLIENT ERROR: ' + (err && err.message || err));
+  });
   return client;
 }
 
@@ -190,42 +208,63 @@ function createEntry(partial) {
     state: 'downloading',
     progress: 0,
     downloadRate: 0,
+    uploadSpeed: 0,
     uploaded: 0,
     downloaded: 0,
+    totalSize: 0,
+    numPeers: 0,
     startedAt: Date.now(),
     finishedAt: null,
     error: '',
     magnetUri: '',
     sourceUrl: '',
     destinationRoot: '',
+    files: null,
+    metadataReady: false,
     routedFiles: 0,
     ignoredFiles: 0,
     failedFiles: 0,
   }, partial || {});
 }
 
-async function onTorrentDone(ctx, rec) {
-  if (!rec || !rec.torrent || !rec.entry) return;
+function buildFileList(torrent) {
+  if (!torrent || !torrent.files || !torrent.files.length) return [];
+  return torrent.files.map(function (f, i) {
+    return {
+      index: i,
+      path: String(f.path || f.name || ''),
+      name: String(f.name || ''),
+      length: Number(f.length || 0),
+      progress: Number(f.progress || 0),
+      selected: true,
+    };
+  });
+}
+
+function updateFileProgress(entry, torrent) {
+  if (!entry.files || !torrent || !torrent.files) return;
+  for (var i = 0; i < entry.files.length && i < torrent.files.length; i++) {
+    entry.files[i].progress = Number(torrent.files[i].progress || 0);
+  }
+}
+
+async function routeCompletedFiles(ctx, rec) {
   var torrent = rec.torrent;
   var entry = rec.entry;
+  var root = String(entry.destinationRoot || '').trim();
+  if (!root) return;
+
   var routedLibraries = new Set();
   var routed = 0;
   var ignored = 0;
   var failed = 0;
-  var root = String(entry.destinationRoot || '').trim();
-  if (!root) {
-    entry.state = 'failed';
-    entry.error = 'Missing destination folder';
-    entry.finishedAt = Date.now();
-    upsertHistory(ctx, entry);
-    removeActive(entry.id);
-    var ipc0 = getIpc();
-    if (ipc0) emit(ctx, ipc0.EVENT.WEB_TORRENT_COMPLETED, entry);
-    emitUpdated(ctx);
-    return;
-  }
 
   for (var i = 0; i < torrent.files.length; i++) {
+    // Skip files the user deselected
+    if (entry.files && entry.files[i] && !entry.files[i].selected) {
+      ignored += 1;
+      continue;
+    }
     var f = torrent.files[i];
     var relPath = String(f.path || f.name || '').trim();
     if (!relPath) relPath = String(f.name || 'file_' + i);
@@ -241,20 +280,64 @@ async function onTorrentDone(ctx, rec) {
     }
   }
 
-  entry.state = failed > 0 ? 'completed_with_errors' : 'completed';
-  entry.progress = 1;
-  entry.downloadRate = 0;
-  entry.finishedAt = Date.now();
   entry.routedFiles = routed;
   entry.ignoredFiles = ignored;
   entry.failedFiles = failed;
+  routedLibraries.forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
+}
+
+async function onTorrentDone(ctx, rec) {
+  if (!rec || !rec.torrent || !rec.entry) return;
+  var entry = rec.entry;
+  var ipc = getIpc();
+
+  entry.progress = 1;
+  entry.downloadRate = 0;
+  entry.uploadSpeed = 0;
+  updateFileProgress(entry, rec.torrent);
+
+  var root = String(entry.destinationRoot || '').trim();
+  if (!root) {
+    // No destination set yet — hold files in temp, wait for user to set destination.
+    entry.state = 'completed_pending';
+    upsertHistory(ctx, entry);
+    if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
+    emitUpdated(ctx);
+    return;
+  }
+
+  await routeCompletedFiles(ctx, rec);
+
+  entry.state = entry.failedFiles > 0 ? 'completed_with_errors' : 'completed';
+  entry.finishedAt = Date.now();
   upsertHistory(ctx, entry);
   removeActive(entry.id);
 
-  routedLibraries.forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
-
-  var ipc = getIpc();
   if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
+  emitUpdated(ctx);
+}
+
+function onMetadataReady(ctx, torrent, entry, rec) {
+  var ipc = getIpc();
+  entry.infoHash = String(torrent.infoHash || entry.infoHash || '');
+  entry.name = String(torrent.name || entry.name || entry.infoHash || 'Torrent');
+  entry.totalSize = Number(torrent.length || 0);
+  entry.numPeers = Number(torrent.numPeers || 0);
+  entry.files = buildFileList(torrent);
+  entry.metadataReady = true;
+
+  // If no destination was set upfront, deselect all files so data doesn't download
+  // until the user picks files + destination in the torrent tab UI.
+  if (!entry.destinationRoot) {
+    entry.state = 'metadata_ready';
+    for (var i = 0; i < torrent.files.length; i++) {
+      try { torrent.files[i].deselect(); } catch {}
+      if (entry.files[i]) entry.files[i].selected = false;
+    }
+  }
+
+  upsertHistory(ctx, entry);
+  if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_METADATA, entry);
   emitUpdated(ctx);
 }
 
@@ -262,19 +345,32 @@ function bindTorrent(ctx, torrent, entry) {
   var ipc = getIpc();
   entry.infoHash = String(torrent.infoHash || entry.infoHash || '');
   entry.name = String(torrent.name || entry.name || entry.infoHash || 'Torrent');
-  entry.state = 'downloading';
+  entry.state = entry.destinationRoot ? 'downloading' : 'resolving_metadata';
   upsertHistory(ctx, entry);
 
-  var rec = { torrent: torrent, entry: entry, interval: null };
+  var rec = { torrent: torrent, entry: entry, interval: null, streams: {} };
   activeById.set(entry.id, rec);
+
+  // Handle metadata: for .torrent files, metadata is available immediately.
+  // For magnet links, we need to wait for the 'ready' event.
+  if (torrent.files && torrent.files.length > 0) {
+    onMetadataReady(ctx, torrent, entry, rec);
+  } else {
+    torrent.on('ready', function () {
+      onMetadataReady(ctx, torrent, entry, rec);
+    });
+  }
 
   rec.interval = setInterval(function () {
     if (!activeById.has(entry.id)) return;
     entry.progress = Number(torrent.progress || 0);
     entry.downloadRate = Number(torrent.downloadSpeed || 0);
+    entry.uploadSpeed = Number(torrent.uploadSpeed || 0);
     entry.uploaded = Number(torrent.uploaded || 0);
     entry.downloaded = Number(torrent.downloaded || 0);
+    entry.numPeers = Number(torrent.numPeers || 0);
     entry.name = String(torrent.name || entry.name || '');
+    updateFileProgress(entry, torrent);
     upsertHistory(ctx, entry);
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_PROGRESS, entry);
     emitUpdated(ctx);
@@ -312,9 +408,12 @@ function buildTorrentTmpPath(ctx, id) {
   return dir;
 }
 
-function resolveDestinationRoot(payload) {
+function resolveDestinationRoot(payload, required) {
   var destinationRoot = String(payload && payload.destinationRoot || '').trim();
-  if (!destinationRoot) return { ok: false, error: 'Destination folder required', absRoot: '' };
+  if (!destinationRoot) {
+    if (required) return { ok: false, error: 'Destination folder required', absRoot: '' };
+    return { ok: true, absRoot: '' };
+  }
   var absRoot = '';
   try { absRoot = path.resolve(destinationRoot); } catch {}
   if (!absRoot) return { ok: false, error: 'Invalid destination folder', absRoot: '' };
@@ -358,7 +457,7 @@ async function fetchTorrentBuffer(url, referer) {
 async function startMagnet(ctx, evt, payload) {
   var magnetUri = String(payload && payload.magnetUri || '').trim();
   if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
-  var root = resolveDestinationRoot(payload);
+  var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
   var entry = createEntry({
     magnetUri: magnetUri,
@@ -371,7 +470,7 @@ async function startMagnet(ctx, evt, payload) {
 async function startTorrentUrl(ctx, evt, payload) {
   var url = String(payload && payload.url || '').trim();
   if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'Invalid torrent URL' };
-  var root = resolveDestinationRoot(payload);
+  var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
   var fetched = null;
   try {
@@ -386,7 +485,7 @@ async function startTorrentUrl(ctx, evt, payload) {
 }
 
 async function startTorrentBuffer(ctx, evt, payload) {
-  var root = resolveDestinationRoot(payload);
+  var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
   var input = payload && payload.buffer;
   if (!Buffer.isBuffer(input) || !input.length) return { ok: false, error: 'Invalid torrent file' };
@@ -449,8 +548,9 @@ async function getHistory(ctx) {
 
 async function clearHistory(ctx) {
   var c = ensureHistory(ctx);
+  var activeStates = { downloading: 1, paused: 1, resolving_metadata: 1, metadata_ready: 1, completed_pending: 1 };
   c.torrents = (c.torrents || []).filter(function (t) {
-    return t && (String(t.state) === 'downloading' || String(t.state) === 'paused');
+    return t && activeStates[String(t.state)];
   });
   c.updatedAt = Date.now();
   writeHistory(ctx);
@@ -472,6 +572,164 @@ async function removeHistory(ctx, _evt, payload) {
   return { ok: true };
 }
 
+async function selectFiles(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  var rec = activeById.get(id);
+  if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
+  var torrent = rec.torrent;
+  var entry = rec.entry;
+
+  var selectedIndices = payload && Array.isArray(payload.selectedIndices) ? payload.selectedIndices : [];
+  var selectedSet = new Set(selectedIndices.map(Number));
+
+  // Optionally set destination root at the same time
+  var dest = String(payload && payload.destinationRoot || '').trim();
+  if (dest) {
+    var absRoot = '';
+    try { absRoot = path.resolve(dest); } catch {}
+    if (absRoot) {
+      try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
+      entry.destinationRoot = absRoot;
+    }
+  }
+
+  if (!torrent.files || !torrent.files.length) return { ok: false, error: 'No files in torrent' };
+
+  for (var i = 0; i < torrent.files.length; i++) {
+    if (selectedSet.has(i)) {
+      try { torrent.files[i].select(); } catch {}
+      if (entry.files && entry.files[i]) entry.files[i].selected = true;
+    } else {
+      try { torrent.files[i].deselect(); } catch {}
+      if (entry.files && entry.files[i]) entry.files[i].selected = false;
+    }
+  }
+
+  // If we were in metadata_ready state and now have a destination + files, start downloading
+  if (entry.state === 'metadata_ready' || entry.state === 'completed_pending') {
+    if (entry.destinationRoot && selectedSet.size > 0) {
+      entry.state = 'downloading';
+    }
+  }
+
+  upsertHistory(ctx, entry);
+  emitUpdated(ctx);
+  return { ok: true };
+}
+
+async function setDestination(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  var rec = activeById.get(id);
+  if (!rec || !rec.entry) return { ok: false, error: 'Torrent not active' };
+  var entry = rec.entry;
+
+  var dest = String(payload && payload.destinationRoot || '').trim();
+  if (!dest) return { ok: false, error: 'Destination folder required' };
+  var absRoot = '';
+  try { absRoot = path.resolve(dest); } catch {}
+  if (!absRoot) return { ok: false, error: 'Invalid destination folder' };
+  try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
+
+  entry.destinationRoot = absRoot;
+
+  // If torrent already completed but was waiting for destination, route files now
+  if (entry.state === 'completed_pending' && rec.torrent) {
+    await routeCompletedFiles(ctx, rec);
+    entry.state = entry.failedFiles > 0 ? 'completed_with_errors' : 'completed';
+    entry.finishedAt = Date.now();
+    upsertHistory(ctx, entry);
+    removeActive(entry.id);
+    var ipc = getIpc();
+    if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
+    emitUpdated(ctx);
+    return { ok: true };
+  }
+
+  upsertHistory(ctx, entry);
+  emitUpdated(ctx);
+  return { ok: true };
+}
+
+async function streamFile(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  var rec = activeById.get(id);
+  if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
+  var torrent = rec.torrent;
+
+  var fileIndex = Number(payload && payload.fileIndex);
+  if (isNaN(fileIndex) || fileIndex < 0 || fileIndex >= torrent.files.length) {
+    return { ok: false, error: 'Invalid file index' };
+  }
+
+  var destPath = String(payload && payload.destinationPath || '').trim();
+  if (!destPath) return { ok: false, error: 'Destination path required' };
+
+  var absPath = '';
+  try { absPath = path.resolve(destPath); } catch {}
+  if (!absPath) return { ok: false, error: 'Invalid destination path' };
+
+  // Ensure the file is selected for download
+  try { torrent.files[fileIndex].select(); } catch {}
+  if (rec.entry.files && rec.entry.files[fileIndex]) rec.entry.files[fileIndex].selected = true;
+
+  try { ensureDir(path.dirname(absPath)); } catch {}
+
+  var file = torrent.files[fileIndex];
+  var ipc = getIpc();
+  var streamKey = id + ':' + fileIndex;
+
+  // Avoid duplicate streams for the same file
+  if (rec.streams && rec.streams[streamKey]) {
+    return { ok: true, path: absPath, alreadyStreaming: true };
+  }
+
+  try {
+    var rs = file.createReadStream();
+    var ws = fs.createWriteStream(absPath);
+    var written = 0;
+    var readyFired = false;
+    var READY_THRESHOLD = Math.min(5 * 1024 * 1024, Math.floor(file.length * 0.02)); // 5MB or 2%
+    if (READY_THRESHOLD < 512 * 1024) READY_THRESHOLD = Math.min(512 * 1024, file.length); // at least 512KB
+
+    rs.on('data', function (chunk) {
+      written += chunk.length;
+      if (!readyFired && written >= READY_THRESHOLD) {
+        readyFired = true;
+        if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_STREAM_READY, {
+          id: id, fileIndex: fileIndex, path: absPath, bytesWritten: written
+        });
+      }
+    });
+
+    rs.on('error', function (err) {
+      try { ws.end(); } catch {}
+      delete rec.streams[streamKey];
+    });
+
+    ws.on('error', function (err) {
+      try { rs.destroy(); } catch {}
+      delete rec.streams[streamKey];
+    });
+
+    ws.on('finish', function () {
+      delete rec.streams[streamKey];
+      // If stream wasn't ready yet (small file), fire ready now
+      if (!readyFired && ipc) {
+        emit(ctx, ipc.EVENT.WEB_TORRENT_STREAM_READY, {
+          id: id, fileIndex: fileIndex, path: absPath, bytesWritten: written
+        });
+      }
+    });
+
+    rs.pipe(ws);
+    rec.streams[streamKey] = { rs: rs, ws: ws };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+
+  return { ok: true, path: absPath };
+}
+
 module.exports = {
   startMagnet,
   startTorrentUrl,
@@ -483,4 +741,7 @@ module.exports = {
   getHistory,
   clearHistory,
   removeHistory,
+  selectFiles,
+  setDestination,
+  streamFile,
 };

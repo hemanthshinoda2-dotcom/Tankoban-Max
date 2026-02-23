@@ -130,6 +130,9 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       getHistory: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_GET_HISTORY),
       clearHistory: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_CLEAR_HISTORY),
       removeHistory: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_REMOVE_HISTORY, payload),
+      selectFiles: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SELECT_FILES, payload),
+      setDestination: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SET_DESTINATION, payload),
+      streamFile: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_STREAM_FILE, payload),
       onStarted: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENT_STARTED, (_evt, data) => cb(data));
@@ -145,6 +148,14 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       onUpdated: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENTS_UPDATED, (_evt, data) => cb(data));
+      },
+      onMetadata: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_TORRENT_METADATA, (_evt, data) => cb(data));
+      },
+      onStreamReady: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_TORRENT_STREAM_READY, (_evt, data) => cb(data));
       },
     },
   };

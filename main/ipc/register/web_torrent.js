@@ -11,4 +11,7 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_TORRENT_GET_HISTORY, function (e) { return d.getHistory(ctx, e); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_CLEAR_HISTORY, function (e) { return d.clearHistory(ctx, e); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_REMOVE_HISTORY, function (e, payload) { return d.removeHistory(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_SELECT_FILES, function (e, payload) { return d.selectFiles(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_SET_DESTINATION, function (e, payload) { return d.setDestination(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_STREAM_FILE, function (e, payload) { return d.streamFile(ctx, e, payload); });
 };

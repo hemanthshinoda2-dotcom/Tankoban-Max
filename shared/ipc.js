@@ -921,6 +921,15 @@ const CHANNEL = {
   /** Remove one torrent history entry. Args: { id }. Returns: { ok } */
   WEB_TORRENT_REMOVE_HISTORY: 'webTorrent:removeHistory',
 
+  /** Select/deselect files in a torrent. Args: { id, selectedIndices, destinationRoot? }. Returns: { ok } */
+  WEB_TORRENT_SELECT_FILES: 'webTorrent:selectFiles',
+
+  /** Set destination root for a torrent (deferred). Args: { id, destinationRoot }. Returns: { ok } */
+  WEB_TORRENT_SET_DESTINATION: 'webTorrent:setDestination',
+
+  /** Stream a torrent file to a destination path. Args: { id, fileIndex, destinationPath }. Returns: { ok, path? } */
+  WEB_TORRENT_STREAM_FILE: 'webTorrent:streamFile',
+
   // ========================================
   // Audiobooks (FEAT-AUDIOBOOK)
   // ========================================
@@ -1080,6 +1089,8 @@ const EVENT = {
   WEB_TORRENT_PROGRESS: 'webTorrent:progress',
   WEB_TORRENT_COMPLETED: 'webTorrent:completed',
   WEB_TORRENTS_UPDATED: 'webTorrent:listUpdated',
+  WEB_TORRENT_METADATA: 'webTorrent:metadata',
+  WEB_TORRENT_STREAM_READY: 'webTorrent:streamReady',
 
   // ========================================
   // Audiobook Events (FEAT-AUDIOBOOK)
