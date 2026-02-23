@@ -20,17 +20,22 @@ The user is not a programmer — frame discussions around what the app does, wha
 
 ## Workflow
 
-### 1. Live-test before committing
-UI and visual changes must be tested in the running app before commit:
-1. Add `console.log` diagnostics to changed code paths
-2. Launch the app (`unset ELECTRON_RUN_AS_NODE && npm start`)
-3. User clicks through and tests; logs confirm correct behavior
-4. Only then → commit and push
+### 1. Commit immediately after writing code — THIS IS NON-NEGOTIABLE
+The moment you finish writing a change, commit and push. Do NOT wait for live testing. The order is:
+1. Write the code
+2. Review your own diff for regressions (see below)
+3. Commit and push
+4. THEN launch the app for live testing
 
-Pure logic changes (IPC handlers, data transforms, storage operations) that don't affect rendering can be verified by reading the diff carefully and reasoning about correctness, without requiring a full app launch. Use your judgment — if there's any doubt, test it live.
+If live testing reveals a bug, fix it and commit the fix as a new commit. Never hold code hostage waiting for a test pass.
 
-### 2. Commit after every verified change
-Verify → commit → push. No batching. No "I'll commit later."
+### 2. Live-test after committing
+UI and visual changes should be tested in the running app after commit:
+1. Launch the app (`unset ELECTRON_RUN_AS_NODE && npm start`)
+2. User clicks through and tests
+3. If bugs are found → fix → commit the fix immediately
+
+Pure logic changes (IPC handlers, data transforms, storage operations) that don't affect rendering can be verified by reading the diff carefully and reasoning about correctness, without requiring a full app launch.
 
 ### 3. Review your own diff for regressions
 Before committing, re-read every changed line. Ask: "Did I break something else?" CSS change → did I make something invisible? JS change → did I remove an event listener? Think like a reviewer.

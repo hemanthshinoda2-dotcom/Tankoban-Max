@@ -1486,6 +1486,40 @@
         }
       },
 
+      setZoomLevel: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var level = Number(payload && payload.level);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false });
+        try { rec.webview.setZoomLevel(level); } catch (e) {}
+        return Promise.resolve({ ok: true, level: level });
+      },
+
+      getZoomLevel: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false, level: 0 });
+        var lvl = 0;
+        try { lvl = rec.webview.getZoomLevel(); } catch (e) {}
+        return Promise.resolve({ ok: true, level: lvl });
+      },
+
+      print: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false });
+        try { rec.webview.print(); } catch (e) {}
+        return Promise.resolve({ ok: true });
+      },
+
+      openDevTools: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false });
+        try { rec.webview.openDevTools(); } catch (e) {}
+        return Promise.resolve({ ok: true });
+      },
+
       findByWebContentsId: function (webContentsId) {
         var target = Number(webContentsId);
         if (!isFinite(target) || target <= 0) return null;
@@ -6499,7 +6533,7 @@ function respondToPermissionPrompt(action) {
 
     if (!state.tabs.length && state.browserOpen) {
       state.activeTabId = null;
-      openYandexNewTab();
+      openNewTab();
     }
 
     renderSources();
@@ -6527,7 +6561,7 @@ function respondToPermissionPrompt(action) {
     syncLoadBar();
     updateBookmarkButton();
     scheduleSessionSave(true);
-    if (state.browserOpen) openYandexNewTab();
+    if (state.browserOpen) openNewTab();
   }
 
   // BUILD_WCV: nav state from cached tab properties (updated via IPC events)
@@ -6613,21 +6647,54 @@ function respondToPermissionPrompt(action) {
     if (btn) btn.classList.toggle('active', state.split);
   }
 
-  var HOME_PAGE_URL = 'https://yandex.com';
+  var HOME_PAGE_URL_FALLBACK = 'https://yandex.com';
 
-  function openYandexNewTab() {
+  function getConfiguredHomeUrl() {
+    var cfg = state.browserSettings && state.browserSettings.home;
+    var url = String((cfg && cfg.homeUrl) || '').trim();
+    return url || HOME_PAGE_URL_FALLBACK;
+  }
+
+  // ---- Zoom utility ----
+  var ZOOM_LEVELS = [-3, -2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2, 3, 4, 5];
+
+  function zoomActiveTab(direction) {
+    var tab = getActiveTab();
+    if (!tab || !tab.mainTabId) return;
+    webTabs.getZoomLevel({ tabId: tab.mainTabId }).then(function (res) {
+      var current = (res && res.ok) ? res.level : 0;
+      var next = current;
+      if (direction === 'in') {
+        for (var i = 0; i < ZOOM_LEVELS.length; i++) {
+          if (ZOOM_LEVELS[i] > current + 0.01) { next = ZOOM_LEVELS[i]; break; }
+        }
+      } else if (direction === 'out') {
+        for (var i = ZOOM_LEVELS.length - 1; i >= 0; i--) {
+          if (ZOOM_LEVELS[i] < current - 0.01) { next = ZOOM_LEVELS[i]; break; }
+        }
+      } else {
+        next = 0;
+      }
+      webTabs.setZoomLevel({ tabId: tab.mainTabId, level: next });
+      var pct = Math.round(Math.pow(1.2, next) * 100);
+      showToast('Zoom: ' + pct + '%');
+    });
+  }
+
+  function openNewTab() {
+    var homeUrl = getConfiguredHomeUrl();
     var tab = createTab({
       id: 'src_' + Date.now(),
-      name: 'Yandex',
-      url: HOME_PAGE_URL,
+      name: siteNameFromUrl(homeUrl) || 'New Tab',
+      url: homeUrl,
       color: '#fc0'
-    }, HOME_PAGE_URL, { silentToast: true });
+    }, homeUrl, { silentToast: true });
     if (!tab) return;
     if (!state.browserOpen) openBrowserForTab(tab.id);
   }
 
   function openTabPicker() {
-    openYandexNewTab();
+    openNewTab();
   }
 
   // ---- Add source dialog ----
@@ -6862,7 +6929,8 @@ function respondToPermissionPrompt(action) {
       e.preventDefault();
       var homeTab = getActiveTab();
       if (homeTab && homeTab.mainTabId && homeTab.type !== 'torrent') {
-        navigateTabWithRuntime(homeTab, { tabId: homeTab.mainTabId, action: 'loadUrl', url: HOME_PAGE_URL }, 'request-home', { url: HOME_PAGE_URL });
+        var cfgHome = getConfiguredHomeUrl();
+        navigateTabWithRuntime(homeTab, { tabId: homeTab.mainTabId, action: 'loadUrl', url: cfgHome }, 'request-home', { url: cfgHome });
       }
       return;
     }
@@ -6879,6 +6947,35 @@ function respondToPermissionPrompt(action) {
       e.preventDefault();
       if (api.window && api.window.toggleFullscreen) api.window.toggleFullscreen();
       return;
+    }
+
+    // F12 / Ctrl+Shift+I: open DevTools for active tab
+    if (state.browserOpen && (key === 'F12' || (ctrl && e.shiftKey && lower === 'i'))) {
+      e.preventDefault();
+      var devTab = getActiveTab();
+      if (devTab && devTab.mainTabId) webTabs.openDevTools({ tabId: devTab.mainTabId });
+      return;
+    }
+
+    // Ctrl+P: print active tab
+    if (state.browserOpen && ctrl && !e.altKey && !e.shiftKey && lower === 'p') {
+      e.preventDefault();
+      var printTab = getActiveTab();
+      if (printTab && printTab.mainTabId) webTabs.print({ tabId: printTab.mainTabId });
+      return;
+    }
+
+    // Ctrl+=/+ : zoom in, Ctrl+- : zoom out, Ctrl+0 : reset zoom
+    if (state.browserOpen && ctrl && !e.altKey && !e.shiftKey) {
+      if (lower === '=' || lower === '+' || key === 'Equal' || key === 'NumpadAdd') {
+        e.preventDefault(); zoomActiveTab('in'); return;
+      }
+      if (lower === '-' || key === 'Minus' || key === 'NumpadSubtract') {
+        e.preventDefault(); zoomActiveTab('out'); return;
+      }
+      if (lower === '0' || key === 'Digit0' || key === 'Numpad0') {
+        e.preventDefault(); zoomActiveTab('reset'); return;
+      }
     }
 
     if (key === 'Backspace') {
@@ -8848,7 +8945,7 @@ function respondToPermissionPrompt(action) {
         var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
         openBrowserForTab(targetId);
       } else {
-        openYandexNewTab();
+        openNewTab();
       }
     }
     window.Tanko = window.Tanko || {};
