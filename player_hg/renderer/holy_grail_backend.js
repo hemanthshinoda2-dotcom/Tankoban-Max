@@ -40,6 +40,21 @@
     var _pendingSeekIssuedAt = 0;
     var _pendingSeekAttempts = 0;
     var _pendingSeekUnpause = false;
+    var _resumeOverlay = null;
+
+    function showResumeOverlay() {
+      if (_resumeOverlay || !hostEl) return;
+      _resumeOverlay = document.createElement('div');
+      _resumeOverlay.style.cssText = 'position:absolute;inset:0;z-index:10;background:#000;display:flex;align-items:center;justify-content:center;pointer-events:none;';
+      _resumeOverlay.innerHTML = '<div style="color:rgba(255,255,255,0.6);font:500 14px/1 system-ui,sans-serif;letter-spacing:0.5px;">Resuming\u2026</div>';
+      hostEl.appendChild(_resumeOverlay);
+    }
+
+    function hideResumeOverlay() {
+      if (!_resumeOverlay) return;
+      try { _resumeOverlay.remove(); } catch (e) {}
+      _resumeOverlay = null;
+    }
 
     var canvas = null;
     var ctx2d = null;
@@ -452,6 +467,7 @@
                 _pendingSeekIssuedAt = 0;
                 _pendingSeekAttempts = 0;
                 _pendingSeekUnpause = false;
+                hideResumeOverlay();
                 if (shouldUnpause) {
                   hg.setProperty('pause', 'no').catch(function () {});
                 }
@@ -687,6 +703,8 @@
       _pendingSeekIssuedAt = 0;
       _pendingSeekAttempts = 0;
       _pendingSeekUnpause = (startSec > 2);
+      if (_pendingSeekSec !== null) showResumeOverlay();
+      else hideResumeOverlay();
 
       return ensureGpu().then(function (gpuRes) {
         if (!gpuRes || !gpuRes.ok) {
@@ -778,6 +796,7 @@
       if (destroyed) return;
       destroyed = true;
       stopPerfLog();
+      hideResumeOverlay();
 
       emit('shutdown');
 

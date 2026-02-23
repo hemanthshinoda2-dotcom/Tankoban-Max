@@ -7272,9 +7272,13 @@ async function openVideo(v, opts = {}) {
   armEmbeddedFirstFrameWatch(v, opts, player);
 
   applySettingsToPlayer();
-  updateHudFromPlayer();
-  showHud();
-  hideHudSoon();
+  // Don't flash the HUD with 0:00 / 0:00 while the resume seek is in flight.
+  // The backend shows a "Resuming…" overlay; HUD will appear on first mouse move.
+  if (!(start > 2)) {
+    updateHudFromPlayer();
+    showHud();
+    hideHudSoon();
+  }
   startProgressPoll();
 
   // Keep existing preference pipeline active with first-pass safe timing.
