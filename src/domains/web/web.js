@@ -517,7 +517,8 @@
       url: [],
       loading: [],
       nav: [],
-      find: []
+      find: [],
+      loadFail: []
     };
 
     function emit(type, payload) {
@@ -543,6 +544,9 @@
 
     function safeUrl(wv) {
       try { return String((wv && wv.getURL && wv.getURL()) || ''); } catch (e) { return ''; }
+    }
+    function safeTitle(wv) {
+      try { return String((wv && wv.getTitle && wv.getTitle()) || ''); } catch (e) { return ''; }
     }
 
     function emitNav(tabId, wv) {
@@ -669,6 +673,40 @@
     }
 
     function bindWebview(tabId, wv) {
+      function emitBestTitle() {
+        var t = safeTitle(wv);
+        if (!t) {
+          var u = safeUrl(wv);
+          t = siteNameFromUrl(u) || '';
+        }
+        if (t) emit('title', { tabId: tabId, title: t });
+      }
+
+      function handleLoadFail(ev) {
+        if (ev && ev.isMainFrame === false) return;
+        var code = Number(ev && ev.errorCode || 0);
+        var desc = String(ev && ev.errorDescription || '').trim();
+        if (code === -3 && /aborted/i.test(desc || '')) return;
+
+        var failedUrl = String(ev && ev.validatedURL || '') || safeUrl(wv);
+        var failure = classifyLoadFailure(code, desc, failedUrl);
+        emit('loading', { tabId: tabId, loading: false });
+        if (failedUrl) emit('url', { tabId: tabId, url: failedUrl });
+        emitNav(tabId, wv);
+        emit('loadFail', {
+          tabId: tabId,
+          url: failedUrl,
+          errorCode: code,
+          errorDescription: desc,
+          failure: failure
+        });
+
+        var label = String(failure && failure.title || '').trim();
+        if (!label) label = 'Load failed';
+        emit('title', { tabId: tabId, title: label });
+        showToast((failure && failure.toast) ? failure.toast : (desc ? ('Load failed: ' + desc) : 'Load failed'));
+      }
+
       wv.addEventListener('did-start-loading', function () {
         emit('loading', { tabId: tabId, loading: true });
       });
@@ -677,6 +715,7 @@
         emit('loading', { tabId: tabId, loading: false });
         emit('url', { tabId: tabId, url: safeUrl(wv) });
         emitNav(tabId, wv);
+        emitBestTitle();
       });
 
       wv.addEventListener('page-title-updated', function (ev) {
@@ -687,6 +726,7 @@
       wv.addEventListener('dom-ready', function () {
         emit('url', { tabId: tabId, url: safeUrl(wv) });
         emitNav(tabId, wv);
+        emitBestTitle();
       });
 
       wv.addEventListener('did-navigate', function (ev) {
@@ -698,6 +738,9 @@
         emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
         emitNav(tabId, wv);
       });
+
+      wv.addEventListener('did-fail-load', handleLoadFail);
+      wv.addEventListener('did-fail-provisional-load', handleLoadFail);
 
       wv.addEventListener('will-navigate', function (ev) {
         var target = String((ev && ev.url) || '').trim();
@@ -907,6 +950,7 @@
       onLoading: function (cb) { on('loading', cb); },
       onNavState: function (cb) { on('nav', cb); },
       onFindResult: function (cb) { on('find', cb); },
+      onLoadFailed: function (cb) { on('loadFail', cb); },
     };
   }
 
@@ -1192,6 +1236,104 @@
       if (state.tabs[i].mainTabId === mainTabId) return state.tabs[i];
     }
     return null;
+  }
+
+  function createTabRuntime(url) {
+    var u = String(url || '').trim();
+    var entries = [];
+    if (u) entries.push(u);
+    return {
+      navEntries: entries,
+      currentIndex: entries.length ? 0 : -1,
+      pendingUrl: '',
+      lastVisibleUrl: u,
+      lastCommittedUrl: u,
+      lastError: null,
+      securityState: inferSecurityStateFromUrl(u),
+      isBlocked: false
+    };
+  }
+
+  function ensureTabRuntime(tab) {
+    if (!tab) return createTabRuntime('');
+    if (!tab.runtime || typeof tab.runtime !== 'object') {
+      tab.runtime = createTabRuntime(tab.url || tab.homeUrl || '');
+    }
+    return tab.runtime;
+  }
+
+  function inferSecurityStateFromUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw) return 'unknown';
+    if (raw.indexOf('https://') === 0) return 'secure';
+    if (raw.indexOf('http://') === 0) return 'insecure';
+    if (/^(file|about|chrome|data):/i.test(raw)) return 'internal';
+    return 'unknown';
+  }
+
+  function classifyLoadFailure(errorCode, errorDescription, failedUrl) {
+    var code = Number(errorCode || 0);
+    var desc = String(errorDescription || '').trim();
+    var lower = desc.toLowerCase();
+    var host = '';
+    try { host = new URL(String(failedUrl || '')).hostname; } catch (e) {}
+
+    var out = {
+      kind: 'load_failed',
+      isBlocked: false,
+      title: '',
+      toast: ''
+    };
+
+    if (code === -20 || code === -21 || lower.indexOf('blocked') !== -1 || lower.indexOf('client blocked') !== -1) {
+      out.kind = 'blocked';
+      out.isBlocked = true;
+    } else if (code === -105 || code === -137 || code === -300 || lower.indexOf('name not resolved') !== -1 || lower.indexOf('dns') !== -1) {
+      out.kind = 'dns';
+    } else if (code <= -200 && code >= -299) {
+      out.kind = 'tls';
+    } else if (code === -118 || code === -7 || lower.indexOf('timed out') !== -1) {
+      out.kind = 'timeout';
+    } else if (code === -106 || lower.indexOf('internet disconnected') !== -1) {
+      out.kind = 'offline';
+    }
+
+    if (out.kind === 'blocked') out.title = 'Blocked';
+    else if (out.kind === 'dns') out.title = 'DNS error';
+    else if (out.kind === 'tls') out.title = 'TLS error';
+    else if (out.kind === 'timeout') out.title = 'Timed out';
+    else if (out.kind === 'offline') out.title = 'Offline';
+    else out.title = 'Load failed';
+
+    if (host) out.title += ' - ' + host;
+
+    if (out.kind === 'blocked') out.toast = 'Blocked: ' + (host || 'site');
+    else if (desc) out.toast = 'Load failed: ' + desc;
+    else out.toast = out.title;
+
+    return out;
+  }
+
+  function pushRuntimeCommittedUrl(tab, url) {
+    var runtime = ensureTabRuntime(tab);
+    var u = String(url || '').trim();
+    if (!u) return;
+    runtime.lastVisibleUrl = u;
+    runtime.lastCommittedUrl = u;
+    runtime.pendingUrl = '';
+    runtime.securityState = inferSecurityStateFromUrl(u);
+    runtime.isBlocked = false;
+    runtime.lastError = null;
+
+    if (runtime.currentIndex >= 0 && runtime.navEntries[runtime.currentIndex] === u) return;
+    if (runtime.currentIndex < runtime.navEntries.length - 1) {
+      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    }
+    runtime.navEntries.push(u);
+    if (runtime.navEntries.length > 250) {
+      runtime.navEntries.shift();
+    }
+    runtime.currentIndex = runtime.navEntries.length - 1;
   }
 
   function normalizeSourceInput(source, urlOverride) {
@@ -3931,7 +4073,8 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
-      pinned: !!opts.pinned
+      pinned: !!opts.pinned,
+      runtime: createTabRuntime(startUrl)
     };
 
     state.tabs.push(tab);
@@ -5445,6 +5588,7 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
+      pushRuntimeCommittedUrl(tab, tab.url);
       maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
@@ -5459,6 +5603,12 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.loading = !!data.loading;
+      var runtime = ensureTabRuntime(tab);
+      if (tab.loading) {
+        runtime.pendingUrl = String(tab.url || runtime.lastVisibleUrl || '').trim();
+      } else {
+        runtime.pendingUrl = '';
+      }
       renderTabs();
       renderBrowserHome();
       syncLoadBar();
@@ -5470,10 +5620,47 @@
       if (!tab) return;
       tab.canGoBack = !!data.canGoBack;
       tab.canGoForward = !!data.canGoForward;
+      var runtime = ensureTabRuntime(tab);
+      runtime.securityState = inferSecurityStateFromUrl(tab.url || runtime.lastVisibleUrl || '');
       if (tab.id === state.activeTabId) {
         updateNavButtons();
       }
     });
+
+    if (webTabs.onLoadFailed) {
+      webTabs.onLoadFailed(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        var runtime = ensureTabRuntime(tab);
+        var failure = (data && data.failure) ? data.failure : classifyLoadFailure(data && data.errorCode, data && data.errorDescription, data && data.url);
+        var failedUrl = String((data && data.url) || tab.url || runtime.lastVisibleUrl || '').trim();
+        if (failedUrl) {
+          tab.url = failedUrl;
+          runtime.lastVisibleUrl = failedUrl;
+        }
+        runtime.pendingUrl = '';
+        runtime.isBlocked = !!failure.isBlocked;
+        runtime.lastError = {
+          kind: String(failure.kind || 'load_failed'),
+          code: Number(data && data.errorCode || 0),
+          description: String(data && data.errorDescription || ''),
+          url: failedUrl,
+          at: Date.now()
+        };
+        runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+        if (failure && failure.title) {
+          tab.title = String(failure.title);
+        }
+        if (tab.id === state.activeTabId) {
+          updateUrlDisplay();
+        }
+        renderTabs();
+        renderBrowserHome();
+        renderContinue();
+        syncLoadBar();
+        scheduleSessionSave();
+      });
+    }
 
     webTabs.onFindResult(function (data) {
       var tab = getTabByMainId(data && data.tabId);

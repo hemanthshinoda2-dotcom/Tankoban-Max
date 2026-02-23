@@ -575,6 +575,10 @@
 .webTabWebview.hidden {
   display: none;
 }
+/* Ensure hub interactions don't get eaten by webview layer */
+body.webHubOpen .webTabWebview {
+  pointer-events: none;
+}
 
 /* Split view */
 .webViewContainer.webSplitActive {
