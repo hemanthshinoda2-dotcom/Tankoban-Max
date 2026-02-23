@@ -474,7 +474,7 @@
       return true;
     }
     if (targetTab.mainTabId) {
-      webTabs.navigate({ tabId: targetTab.mainTabId, action: 'loadUrl', url: url }).catch(function () {});
+      navigateTabWithRuntime(targetTab, { tabId: targetTab.mainTabId, action: 'loadUrl', url: url }, 'request-load-url', { url: url });
       return true;
     }
     if (targetTab.id != null) {
@@ -862,12 +862,17 @@
         var tidx = rec._navTargetIndex;
         rec._navDirection = '';
         rec._navTargetIndex = null;
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx, navKind: 'navigate' });
         emitNav(tabId, wv);
       });
 
       wv.addEventListener('did-navigate-in-page', function (ev) {
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), navKind: 'in-page' });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('did-redirect-navigation', function (ev) {
+        emit('url', { tabId: tabId, url: String((ev && ev.newURL) || ''), navKind: 'redirect' });
         emitNav(tabId, wv);
       });
 
@@ -1477,7 +1482,7 @@
       createTab(src0, resolvedUrl, { silentToast: true });
       return;
     }
-    webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: resolvedUrl }).catch(function () {});
+    navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: resolvedUrl }, 'request-load-url', { url: resolvedUrl });
   }
 
   function setOmniIconForUrl(url) {
@@ -1544,6 +1549,67 @@
     return rt;
   }
 
+  function normalizeRuntimeEntries(entries) {
+    var out = [];
+    var list = Array.isArray(entries) ? entries : [];
+    for (var i = 0; i < list.length; i++) {
+      var raw = list[i];
+      if (typeof raw === 'string') raw = { url: raw, title: '' };
+      if (!raw || typeof raw !== 'object') continue;
+      var u = String(raw.url || '').trim();
+      if (!u) continue;
+      out.push({
+        url: u,
+        title: String(raw.title || '').trim()
+      });
+    }
+    return out;
+  }
+
+  function assertRuntimeHistoryInvariants(tab, reason) {
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    runtime.navEntries = normalizeRuntimeEntries(runtime.navEntries);
+
+    if (!runtime.navEntries.length) {
+      runtime.currentIndex = -1;
+    } else {
+      if (!isFinite(runtime.currentIndex)) runtime.currentIndex = runtime.navEntries.length - 1;
+      runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+    }
+
+    if (runtime.currentIndex >= 0) {
+      var active = runtime.navEntries[runtime.currentIndex];
+      if (!active || !active.url) {
+        console.warn('[web-runtime] invalid active entry after', reason || 'mutation');
+        runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+      }
+    }
+  }
+
+  function reconcileRuntimeWithWebUrl(tab, webUrl, allowReplaceCurrent) {
+    var runtime = ensureTabRuntime(tab);
+    var url = String(webUrl || '').trim();
+    if (!url) return;
+    if (runtime.currentIndex < 0 || !runtime.navEntries.length) {
+      runtime.navEntries = [{ url: url, title: String(tab.title || '') }];
+      runtime.currentIndex = 0;
+      return;
+    }
+    var current = runtime.navEntries[runtime.currentIndex];
+    if (current && current.url === url) return;
+    if (allowReplaceCurrent && current) {
+      current.url = url;
+      return;
+    }
+    if (runtime.currentIndex < runtime.navEntries.length - 1) {
+      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    }
+    runtime.navEntries.push({ url: url, title: String(tab.title || '') });
+    if (runtime.navEntries.length > 250) runtime.navEntries.shift();
+    runtime.currentIndex = runtime.navEntries.length - 1;
+  }
+
   function inferSecurityStateFromUrl(url) {
     var raw = String(url || '').trim();
     if (!raw) return 'unknown';
@@ -1596,41 +1662,102 @@
     return out;
   }
 
-  // CHROMIUM_PARITY: direction-aware history tracking for back/forward dropdown
-  function pushRuntimeCommittedUrl(tab, url, direction) {
+  function reduceRuntimeHistory(tab, action, payload) {
     var runtime = ensureTabRuntime(tab);
-    var u = String(url || '').trim();
-    if (!u) return;
-    runtime.lastVisibleUrl = u;
-    runtime.lastCommittedUrl = u;
-    runtime.pendingUrl = '';
-    runtime.securityState = inferSecurityStateFromUrl(u);
-    runtime.isBlocked = false;
-    runtime.lastError = null;
+    var data = payload || {};
+    var url = String(data.url || '').trim();
+    var targetIndex = Number(data.targetIndex);
 
-    if (direction === 'back') {
-      if (runtime.currentIndex > 0) runtime.currentIndex--;
-      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+    if (action === 'request-load-url') {
+      runtime.pendingUrl = url;
+      assertRuntimeHistoryInvariants(tab, action);
       return;
     }
-    if (direction === 'forward') {
-      if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
-      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+
+    if (action === 'request-go-index') {
+      if (runtime.navEntries.length && isFinite(targetIndex)) {
+        var safeIdx = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        runtime.pendingUrl = String(runtime.navEntries[safeIdx].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
       return;
     }
-    if (direction === 'index') return; // index handled directly in onUrlUpdated
 
-    // Normal new navigation
-    var current = runtime.navEntries[runtime.currentIndex];
-    if (current && current.url === u) return;
-    if (runtime.currentIndex < runtime.navEntries.length - 1) {
-      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    if (action === 'request-back') {
+      if (runtime.currentIndex > 0 && runtime.navEntries[runtime.currentIndex - 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex - 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
     }
-    runtime.navEntries.push({ url: u, title: String(tab.title || '') });
-    if (runtime.navEntries.length > 250) {
-      runtime.navEntries.shift();
+
+    if (action === 'request-forward') {
+      if (runtime.currentIndex >= 0 && runtime.currentIndex < runtime.navEntries.length - 1 && runtime.navEntries[runtime.currentIndex + 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex + 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
     }
-    runtime.currentIndex = runtime.navEntries.length - 1;
+
+    if (action === 'loading') {
+      runtime.pendingUrl = data.loading ? String(url || tab.url || runtime.lastVisibleUrl || '').trim() : '';
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'commit') {
+      if (!url) return;
+      var direction = String(data.direction || '').trim();
+      var navKind = String(data.navKind || '').trim();
+      runtime.lastVisibleUrl = url;
+      runtime.lastCommittedUrl = url;
+      runtime.pendingUrl = '';
+      runtime.securityState = inferSecurityStateFromUrl(url);
+      runtime.isBlocked = false;
+      runtime.lastError = null;
+
+      if (direction === 'back') {
+        if (runtime.currentIndex > 0) runtime.currentIndex--;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'forward') {
+        if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'index') {
+        if (isFinite(targetIndex) && runtime.navEntries.length) {
+          runtime.currentIndex = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        }
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'in-page') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'redirect') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else {
+        reconcileRuntimeWithWebUrl(tab, url, false);
+      }
+      assertRuntimeHistoryInvariants(tab, action + ':' + (direction || navKind || 'new'));
+      return;
+    }
+
+    if (action === 'load-fail') {
+      var failedUrl = String(data.failedUrl || tab.url || runtime.lastVisibleUrl || '').trim();
+      if (failedUrl) {
+        tab.url = failedUrl;
+        runtime.lastVisibleUrl = failedUrl;
+      }
+      runtime.pendingUrl = '';
+      runtime.isBlocked = !!data.isBlocked;
+      runtime.lastError = data.lastError || null;
+      runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+      reconcileRuntimeWithWebUrl(tab, failedUrl, true);
+      assertRuntimeHistoryInvariants(tab, action);
+    }
+  }
+
+  function navigateTabWithRuntime(tab, payload, runtimeAction, runtimeData) {
+    if (!tab || !tab.mainTabId) return;
+    if (runtimeAction) reduceRuntimeHistory(tab, runtimeAction, runtimeData || payload || {});
+    webTabs.navigate(payload).catch(function () {});
+    scheduleSessionSave();
   }
 
   function normalizeSourceInput(source, urlOverride) {
@@ -2675,7 +2802,7 @@
             }
             if (dropTarget && dropTarget.mainTabId && dropTarget.type !== 'torrent') {
               activateTab(targetId);
-              webTabs.navigate({ tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }).catch(function () {});
+              navigateTabWithRuntime(dropTarget, { tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }, 'request-load-url', { url: droppedUrl });
             }
           }
           return;
@@ -5108,7 +5235,7 @@
       e.preventDefault();
       var t0 = getActiveTab();
       if (t0 && t0.mainTabId) {
-        webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
+        navigateTabWithRuntime(t0, { tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }, (key === 'ArrowLeft') ? 'request-back' : 'request-forward');
       }
       return;
     }
@@ -5137,7 +5264,7 @@
       e.preventDefault();
       var tab = getActiveTab();
       if (tab && tab.canGoBack && tab.mainTabId) {
-        webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+        navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
       } else {
         showToast('No back history');
       }
@@ -5217,8 +5344,9 @@
     var tab = getActiveTab();
     if (!tab) return;
     var runtime = ensureTabRuntime(tab);
-    var entries = runtime.navEntries;
+    var entries = normalizeRuntimeEntries(runtime.navEntries);
     var idx = runtime.currentIndex;
+    runtime.navEntries = entries;
     if (!entries || !entries.length) return;
 
     var items = [];
@@ -5232,7 +5360,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -5248,7 +5376,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -5396,7 +5524,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
         }
       };
       addNavLongPressHandler(el.navBack, function (e) {
@@ -5409,7 +5537,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'forward' }, 'request-forward');
         }
       };
       addNavLongPressHandler(el.navForward, function (e) {
@@ -5463,7 +5591,8 @@
       el.navHome.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
+          var homeTargetUrl = String(tab.homeUrl || tab.url || '').trim();
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: homeTargetUrl }, 'request-load-url', { url: homeTargetUrl });
         }
       };
     }
@@ -6406,21 +6535,12 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
-      // CHROMIUM_PARITY: direction-aware history tracking
-      var direction = (data && data.direction) || '';
-      if (direction === 'index' && data.targetIndex != null) {
-        var runtime = ensureTabRuntime(tab);
-        runtime.currentIndex = Math.max(0, Math.min(Number(data.targetIndex), runtime.navEntries.length - 1));
-        if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = tab.url;
-        runtime.lastVisibleUrl = tab.url;
-        runtime.lastCommittedUrl = tab.url;
-        runtime.pendingUrl = '';
-        runtime.securityState = inferSecurityStateFromUrl(tab.url);
-        runtime.isBlocked = false;
-        runtime.lastError = null;
-      } else {
-        pushRuntimeCommittedUrl(tab, tab.url, direction);
-      }
+      reduceRuntimeHistory(tab, 'commit', {
+        url: tab.url,
+        direction: data && data.direction,
+        targetIndex: data && data.targetIndex,
+        navKind: data && data.navKind
+      });
       maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
@@ -6435,12 +6555,10 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.loading = !!data.loading;
-      var runtime = ensureTabRuntime(tab);
-      if (tab.loading) {
-        runtime.pendingUrl = String(tab.url || runtime.lastVisibleUrl || '').trim();
-      } else {
-        runtime.pendingUrl = '';
-      }
+      reduceRuntimeHistory(tab, 'loading', {
+        loading: tab.loading,
+        url: String(tab.url || '').trim()
+      });
       renderTabs();
       renderBrowserHome();
       syncLoadBar();
@@ -6466,20 +6584,17 @@
         var runtime = ensureTabRuntime(tab);
         var failure = (data && data.failure) ? data.failure : classifyLoadFailure(data && data.errorCode, data && data.errorDescription, data && data.url);
         var failedUrl = String((data && data.url) || tab.url || runtime.lastVisibleUrl || '').trim();
-        if (failedUrl) {
-          tab.url = failedUrl;
-          runtime.lastVisibleUrl = failedUrl;
-        }
-        runtime.pendingUrl = '';
-        runtime.isBlocked = !!failure.isBlocked;
-        runtime.lastError = {
-          kind: String(failure.kind || 'load_failed'),
-          code: Number(data && data.errorCode || 0),
-          description: String(data && data.errorDescription || ''),
-          url: failedUrl,
-          at: Date.now()
-        };
-        runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+        reduceRuntimeHistory(tab, 'load-fail', {
+          failedUrl: failedUrl,
+          isBlocked: !!failure.isBlocked,
+          lastError: {
+            kind: String(failure.kind || 'load_failed'),
+            code: Number(data && data.errorCode || 0),
+            description: String(data && data.errorDescription || ''),
+            url: failedUrl,
+            at: Date.now()
+          }
+        });
         if (failure && failure.title) {
           tab.title = String(failure.title);
         }
