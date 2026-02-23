@@ -663,62 +663,172 @@
 
     // ── Webview page context menu builder ──
     function buildWebviewContextMenu(tabId, wv, params) {
-      var items = [];
-      var parentTab = getTabByMainId(tabId);
+      var parentTab = getTabByMainId(tabId) || getActiveTab();
       var linkUrl = String(params.linkURL || '').trim();
       var srcUrl = String(params.srcURL || '').trim();
+      var pageUrl = String(safeUrl(wv) || '').trim();
       var selText = String(params.selectionText || '').trim();
       var isEditable = !!params.isEditable;
       var mediaType = String(params.mediaType || '').toLowerCase();
+      var supportsDownload = !!(api && api.webSources && typeof api.webSources.downloadFromUrl === 'function');
+      var supportsBookmark = !!(api && api.webBookmarks && typeof api.webBookmarks.toggle === 'function');
+      var supportsFind = !!(webTabs && typeof webTabs.findInPage === 'function');
+      var supportsInspect = !!(wv && typeof wv.inspectElement === 'function');
+      var isPageBookmarked = !!findBookmarkByUrl(pageUrl);
 
-      // Navigation
+      var menuCtx = {
+        tabId: tabId,
+        parentTab: parentTab,
+        wv: wv,
+        params: params,
+        pageUrl: pageUrl,
+        linkUrl: linkUrl,
+        srcUrl: srcUrl,
+        selText: selText,
+        isEditable: isEditable,
+        mediaType: mediaType,
+        supportsDownload: supportsDownload,
+        supportsBookmark: supportsBookmark,
+        supportsFind: supportsFind,
+        supportsInspect: supportsInspect,
+        isPageBookmarked: isPageBookmarked
+      };
+
+      var groups = [];
+      groups.push(buildPageContextMenuItems(menuCtx));
+      if (linkUrl) groups.push(buildLinkContextMenuItems(menuCtx));
+      if (mediaType === 'image' && srcUrl) groups.push(buildImageContextMenuItems(menuCtx));
+      if (mediaType && mediaType !== 'none' && mediaType !== 'image' && srcUrl) groups.push(buildMediaContextMenuItems(menuCtx));
+      if (isEditable || selText) groups.push(buildEditableFieldContextMenuItems(menuCtx));
+      groups.push([{ label: 'Inspect element', disabled: !supportsInspect, onClick: function () {
+        if (!supportsInspect) return;
+        try { wv.inspectElement(params.x || 0, params.y || 0); } catch (e) {}
+      } }]);
+
+      var flat = [];
+      for (var i = 0; i < groups.length; i++) {
+        var g = groups[i];
+        if (!g || !g.length) continue;
+        if (flat.length) flat.push({ separator: true });
+        for (var j = 0; j < g.length; j++) flat.push(g[j]);
+      }
+      return normalizeContextMenuItems(flat);
+    }
+
+    function buildPageContextMenuItems(ctx) {
+      var wv = ctx.wv;
       var canBack = false;
       var canFwd = false;
-      try { canBack = wv.canGoBack(); } catch (e) {}
-      try { canFwd = wv.canGoForward(); } catch (e) {}
-      items.push({ label: 'Back', disabled: !canBack, onClick: function () { try { wv.goBack(); } catch (e) {} } });
-      items.push({ label: 'Forward', disabled: !canFwd, onClick: function () { try { wv.goForward(); } catch (e) {} } });
-      items.push({ label: 'Reload', onClick: function () { try { wv.reload(); } catch (e) {} } });
-      items.push({ separator: true });
-
-      // Link actions
-      if (linkUrl) {
-        items.push({ label: 'Open link', onClick: function () { navigateUrlInTab(parentTab || getActiveTab(), linkUrl); } });
-        items.push({ label: 'Open link in new tab', onClick: function () { openUrlFromOmni(linkUrl, { newTab: true }); } });
-        items.push({ label: 'Copy link address', onClick: function () { copyText(linkUrl); showToast('Copied'); } });
-        items.push({ separator: true });
-      }
-
-      // Image actions
-      if (mediaType === 'image' && srcUrl) {
-        items.push({ label: 'Save image as\u2026', onClick: function () {
-          if (api && api.webSources && api.webSources.downloadFromUrl) {
-            api.webSources.downloadFromUrl({ url: srcUrl, referer: safeUrl(wv) });
+      try { canBack = !!wv.canGoBack(); } catch (e) {}
+      try { canFwd = !!wv.canGoForward(); } catch (e) {}
+      return [
+        { label: 'Back', disabled: !canBack, onClick: function () { try { wv.goBack(); } catch (e) {} } },
+        { label: 'Forward', disabled: !canFwd, onClick: function () { try { wv.goForward(); } catch (e) {} } },
+        { label: 'Reload', onClick: function () { try { wv.reload(); } catch (e) {} } },
+        {
+          label: ctx.isPageBookmarked ? 'Remove bookmark' : 'Bookmark page',
+          disabled: !ctx.supportsBookmark || !/^https?:\/\//i.test(ctx.pageUrl),
+          onClick: function () {
+            if (!ctx.supportsBookmark) return;
+            if (ctx.parentTab && state.activeTabId !== ctx.parentTab.id) activateTab(ctx.parentTab.id);
+            toggleBookmarkForActiveTab();
           }
-        } });
-        items.push({ label: 'Copy image address', onClick: function () { copyText(srcUrl); showToast('Copied'); } });
-        items.push({ separator: true });
-      }
+        },
+        {
+          label: 'Find in page',
+          disabled: !ctx.supportsFind,
+          onClick: function () {
+            if (!ctx.supportsFind) return;
+            openFindBar();
+          }
+        },
+        {
+          label: 'Copy page address',
+          disabled: !ctx.pageUrl,
+          onClick: function () { if (ctx.pageUrl) { copyText(ctx.pageUrl); showToast('Copied'); } }
+        }
+      ];
+    }
 
-      // Text selection / editing
-      if (selText) {
-        items.push({ label: 'Copy', onClick: function () { try { wv.copy(); } catch (e) { copyText(selText); } } });
-      }
-      if (isEditable) {
-        items.push({ label: 'Paste', onClick: function () { try { wv.paste(); } catch (e) {} } });
-        items.push({ label: 'Cut', onClick: function () { try { wv.cut(); } catch (e) {} } });
-        items.push({ label: 'Select all', onClick: function () { try { wv.selectAll(); } catch (e) {} } });
-      }
-      if (selText || isEditable) {
-        items.push({ separator: true });
-      }
+    function buildLinkContextMenuItems(ctx) {
+      return [
+        { label: 'Open link', disabled: !ctx.linkUrl, onClick: function () { if (ctx.linkUrl) navigateUrlInTab(ctx.parentTab || getActiveTab(), ctx.linkUrl); } },
+        { label: 'Open link in new tab', disabled: !ctx.linkUrl, onClick: function () { if (ctx.linkUrl) openUrlFromOmni(ctx.linkUrl, { newTab: true }); } },
+        {
+          label: 'Download link',
+          disabled: !ctx.linkUrl || !ctx.supportsDownload,
+          onClick: function () {
+            if (!ctx.linkUrl || !ctx.supportsDownload) return;
+            api.webSources.downloadFromUrl({ url: ctx.linkUrl, referer: ctx.pageUrl || '' }).catch(function () {
+              showToast('Download failed');
+            });
+          }
+        },
+        { label: 'Copy link address', disabled: !ctx.linkUrl, onClick: function () { if (ctx.linkUrl) { copyText(ctx.linkUrl); showToast('Copied'); } } }
+      ];
+    }
 
-      // Inspect element (always last)
-      items.push({ label: 'Inspect element', onClick: function () {
-        try { wv.inspectElement(params.x || 0, params.y || 0); } catch (e) {}
-      } });
+    function buildImageContextMenuItems(ctx) {
+      return [
+        {
+          label: 'Save image as\u2026',
+          disabled: !ctx.srcUrl || !ctx.supportsDownload,
+          onClick: function () {
+            if (!ctx.srcUrl || !ctx.supportsDownload) return;
+            api.webSources.downloadFromUrl({ url: ctx.srcUrl, referer: ctx.pageUrl || '' }).catch(function () {
+              showToast('Download failed');
+            });
+          }
+        },
+        { label: 'Open image in new tab', disabled: !ctx.srcUrl, onClick: function () { if (ctx.srcUrl) openUrlFromOmni(ctx.srcUrl, { newTab: true }); } },
+        { label: 'Copy image address', disabled: !ctx.srcUrl, onClick: function () { if (ctx.srcUrl) { copyText(ctx.srcUrl); showToast('Copied'); } } }
+      ];
+    }
 
-      return items;
+    function buildMediaContextMenuItems(ctx) {
+      var mediaLabel = (ctx.mediaType === 'video' || ctx.mediaType === 'audio') ? ctx.mediaType : 'media';
+      return [
+        {
+          label: 'Save ' + mediaLabel + ' as\u2026',
+          disabled: !ctx.srcUrl || !ctx.supportsDownload,
+          onClick: function () {
+            if (!ctx.srcUrl || !ctx.supportsDownload) return;
+            api.webSources.downloadFromUrl({ url: ctx.srcUrl, referer: ctx.pageUrl || '' }).catch(function () {
+              showToast('Download failed');
+            });
+          }
+        },
+        { label: 'Open ' + mediaLabel + ' in new tab', disabled: !ctx.srcUrl, onClick: function () { if (ctx.srcUrl) openUrlFromOmni(ctx.srcUrl, { newTab: true }); } },
+        { label: 'Copy ' + mediaLabel + ' address', disabled: !ctx.srcUrl, onClick: function () { if (ctx.srcUrl) { copyText(ctx.srcUrl); showToast('Copied'); } } }
+      ];
+    }
+
+    function buildEditableFieldContextMenuItems(ctx) {
+      var wv = ctx.wv;
+      var canCopy = !!ctx.selText;
+      return [
+        { label: 'Copy', disabled: !canCopy, onClick: function () { if (!canCopy) return; try { wv.copy(); } catch (e) { copyText(ctx.selText); } } },
+        { label: 'Cut', disabled: !ctx.isEditable, onClick: function () { if (ctx.isEditable) { try { wv.cut(); } catch (e) {} } } },
+        { label: 'Paste', disabled: !ctx.isEditable, onClick: function () { if (ctx.isEditable) { try { wv.paste(); } catch (e) {} } } },
+        { label: 'Select all', disabled: !ctx.isEditable, onClick: function () { if (ctx.isEditable) { try { wv.selectAll(); } catch (e) {} } } }
+      ];
+    }
+
+    function normalizeContextMenuItems(items) {
+      var out = [];
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        if (!it) continue;
+        if (it.separator) {
+          if (!out.length) continue;
+          if (out[out.length - 1] && out[out.length - 1].separator) continue;
+          out.push({ separator: true });
+          continue;
+        }
+        out.push(it);
+      }
+      while (out.length && out[out.length - 1] && out[out.length - 1].separator) out.pop();
+      return out;
     }
 
     // CHROMIUM_PARITY: Styled error page for load failures (like Chrome's ERR_ pages)
@@ -943,11 +1053,6 @@
         }, 'webview:' + String(tabId));
         var items = buildWebviewContextMenu(tabId, wv, params);
         if (!items.length) return;
-        // DIAG: add coords as visible item so user can screenshot it
-        items.unshift({
-          label: 'px=' + (params.x|0) + ',' + (params.y|0) + ' rect=' + (rect.left|0) + ',' + (rect.top|0) + ' dpr=' + dpr,
-          disabled: true
-        });
         // Use raw (no DPR correction) — if dpr>1, try dpr-corrected
         var useVx = dpr > 1 ? dprVx : rawVx;
         var useVy = dpr > 1 ? dprVy : rawVy;
@@ -1994,6 +2099,84 @@
     });
   }
 
+  function buildTabStripContextMenuItems(tab, idx) {
+    var id = Number(tab && tab.id);
+    var canDuplicate = !!(tab && tab.type !== 'torrent');
+    var canPin = !!(tab && tab.type !== 'torrent');
+    var hasAddress = !!(tab && tab.url);
+    var otherClosableIds = [];
+    var rightClosableIds = [];
+    for (var i = 0; i < state.tabs.length; i++) {
+      var t = state.tabs[i];
+      if (!t || t.id === id || t.pinned) continue;
+      otherClosableIds.push(t.id);
+      if (i > idx) rightClosableIds.push(t.id);
+    }
+
+    var groups = [
+      [{ label: 'New tab', onClick: function () { openTabPicker(); } }],
+      [
+        {
+          label: tab && tab.pinned ? 'Unpin tab' : 'Pin tab',
+          disabled: !canPin,
+          onClick: function () { if (!canPin) return; if (tab.pinned) unpinTab(id); else pinTab(id); }
+        },
+        {
+          label: 'Duplicate tab',
+          disabled: !canDuplicate,
+          onClick: function () {
+            if (!canDuplicate) return;
+            createTab({
+              id: tab.sourceId || ('dup_' + Date.now()),
+              name: tab.sourceName || siteNameFromUrl(tab.url || tab.homeUrl || '') || 'Tab',
+              url: tab.homeUrl || tab.url || 'about:blank',
+              color: getSourceColor(tab.sourceId)
+            }, tab.url || tab.homeUrl || 'about:blank', {
+              titleOverride: tab.title || '',
+              silentToast: true,
+              openerTabId: id
+            });
+          }
+        },
+        {
+          label: 'Reload',
+          disabled: !canDuplicate || !tab.mainTabId,
+          onClick: function () {
+            if (!canDuplicate || !tab.mainTabId) return;
+            if (state.activeTabId !== id) activateTab(id);
+            webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
+          }
+        },
+        {
+          label: 'Copy address',
+          disabled: !hasAddress,
+          onClick: function () { if (hasAddress) { copyText(tab.url || ''); showToast('Copied'); } }
+        }
+      ],
+      [
+        { label: 'Close tab', onClick: function () { closeTab(id); } },
+        {
+          label: 'Close other tabs',
+          disabled: !otherClosableIds.length,
+          onClick: function () { for (var oi = 0; oi < otherClosableIds.length; oi++) closeTab(otherClosableIds[oi]); }
+        },
+        {
+          label: 'Close tabs to the right',
+          disabled: !rightClosableIds.length,
+          onClick: function () { for (var ri = 0; ri < rightClosableIds.length; ri++) closeTab(rightClosableIds[ri]); }
+        }
+      ]
+    ];
+
+    var items = [];
+    for (var gi = 0; gi < groups.length; gi++) {
+      if (items.length) items.push({ separator: true });
+      var g = groups[gi];
+      for (var gj = 0; gj < g.length; gj++) items.push(g[gj]);
+    }
+    return normalizeContextMenuItems(items);
+  }
+
   // ---- BUILD_WCV: Bounds reporting ----
 
   // FIX-WEB-MODE: View.setBounds uses CSS/logical pixels, not physical
@@ -2592,46 +2775,7 @@
           if (state.tabs[i] && state.tabs[i].id === id) { t = state.tabs[i]; idx = i; break; }
         }
         if (!t) return;
-        var items = [];
-        items.push({ label: 'New tab', onClick: function () {
-          openTabPicker();
-        } });
-        // CHROMIUM_PARITY: Pin/Unpin tab
-        if (t.type !== 'torrent') {
-          items.push({ label: t.pinned ? 'Unpin tab' : 'Pin tab', onClick: function () {
-            if (t.pinned) unpinTab(id); else pinTab(id);
-          } });
-        }
-        if (t.type !== 'torrent') {
-          items.push({ label: 'Duplicate tab', onClick: function () {
-            createTab({
-              id: t.sourceId || ('dup_' + Date.now()),
-              name: t.sourceName || siteNameFromUrl(t.url || t.homeUrl || '') || 'Tab',
-              url: t.homeUrl || t.url || 'about:blank',
-              color: getSourceColor(t.sourceId)
-            }, t.url || t.homeUrl || 'about:blank', {
-              titleOverride: t.title || '',
-              silentToast: true,
-              openerTabId: id
-            });
-          } });
-          items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
-          items.push({ separator: true });
-          items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
-        }
-        items.push({ separator: true });
-        items.push({ label: 'Close tab', onClick: function () { closeTab(id); } });
-        items.push({ label: 'Close other tabs', onClick: function () {
-          var ids = [];
-          for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i] && state.tabs[i].id !== id && !state.tabs[i].pinned) ids.push(state.tabs[i].id);
-          for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
-        }});
-        items.push({ label: 'Close tabs to the right', onClick: function () {
-          if (idx < 0) return;
-          var ids = [];
-          for (var i = idx + 1; i < state.tabs.length; i++) if (state.tabs[i] && !state.tabs[i].pinned) ids.push(state.tabs[i].id);
-          for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
-        }});
+        var items = buildTabStripContextMenuItems(t, idx);
         showContextMenu(items, e.clientX, e.clientY);
       });
 
