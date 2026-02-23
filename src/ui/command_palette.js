@@ -77,6 +77,10 @@
     }});
     items.push({ type: 'action', label: 'Open Settings', hint: '', action: function () {
       try {
+        if (window.Tanko && window.Tanko.settings && typeof window.Tanko.settings.open === 'function') {
+          window.Tanko.settings.open({ tab: 'general' });
+          return;
+        }
         var overlay = document.getElementById('librarySettingsOverlay');
         if (overlay) overlay.classList.remove('hidden');
       } catch (e) {}

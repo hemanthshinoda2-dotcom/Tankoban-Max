@@ -654,17 +654,19 @@ function getThumbWarmupMode(){
     } catch {}
   });
   // Library Settings (Build 42A)
-  el.openSettingsBtn?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openLibrarySettingsOverlay();
-  });
-  el.settingsClose?.addEventListener('click', () => closeLibrarySettingsOverlay());
-  el.settingsSave?.addEventListener('click', () => saveLibrarySettings());
-  el.settingsReset?.addEventListener('click', () => resetLibrarySettings());
-  el.librarySettingsOverlay?.addEventListener('click', (e) => {
-    if (e.target === el.librarySettingsOverlay) closeLibrarySettingsOverlay();
-  });
+  if (!(window.Tanko && window.Tanko.settings && typeof window.Tanko.settings.open === 'function')) {
+    el.openSettingsBtn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openLibrarySettingsOverlay();
+    });
+    el.settingsClose?.addEventListener('click', () => closeLibrarySettingsOverlay());
+    el.settingsSave?.addEventListener('click', () => saveLibrarySettings());
+    el.settingsReset?.addEventListener('click', () => resetLibrarySettings());
+    el.librarySettingsOverlay?.addEventListener('click', (e) => {
+      if (e.target === el.librarySettingsOverlay) closeLibrarySettingsOverlay();
+    });
+  }
 
   // Hidden series manager (Build 45D)
   el.hiddenSeriesBtn?.addEventListener('click', (e) => {

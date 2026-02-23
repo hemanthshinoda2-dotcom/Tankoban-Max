@@ -158,88 +158,284 @@
     });
   }
 
-  // Escape closes drawer.
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    var closed = false;
-    if (isDownloadDestPickerOpen()) {
-      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Cancelled' });
-      closed = true;
-    }
-    if (isReaderOrPlayerContext()) {
-      if (closed) e.preventDefault();
-      return;
-    }
-    if (document.body.classList.contains('libDrawerOpen')) {
-      setDrawerOpen(false);
-      closed = true;
-    }
-    if (document.body.classList.contains('webHubOpen')) {
-      setWebHubOpen(false);
-      closed = true;
-    }
-    if (closed) e.preventDefault();
-  });
+  // Global Settings overlay controller
+  var LIB_DEFAULT_AUTO_BASE = 25;
+  var LIB_DEFAULT_AUTO_STEP = 15;
 
-  // Global right Browser Hub drawer
   var webHubToggleBtn = document.getElementById('webHubToggleBtn');
-  var webHubPanel = document.getElementById('webHubPanel');
-  var webHubBackdrop = document.getElementById('webHubBackdrop');
-  var webHubCloseBtn = document.getElementById('webHubCloseBtn');
-  var webHubOpenBrowserBtn = document.getElementById('webHubOpenBrowserBtn');
+  var openSettingsBtn = document.getElementById('openSettingsBtn');
+  var librarySettingsOverlay = document.getElementById('librarySettingsOverlay');
+  var settingsCloseBtn = document.getElementById('settingsClose');
+  var settingsTabButtons = document.querySelectorAll('.settingsTab[data-settings-tab]');
+  var settingsTabGeneral = document.getElementById('settingsTabGeneral');
+  var settingsTabBrowser = document.getElementById('settingsTabBrowser');
+  var settingsPanelGeneral = document.getElementById('settingsPanelGeneral');
+  var settingsPanelBrowser = document.getElementById('settingsPanelBrowser');
+  var settingsAutoBase = document.getElementById('settingsAutoBase');
+  var settingsAutoStep = document.getElementById('settingsAutoStep');
+  var settingsScanIgnore = document.getElementById('settingsScanIgnore');
+  var settingsSaveBtn = document.getElementById('settingsSave');
+  var settingsResetBtn = document.getElementById('settingsReset');
   var webHubAddSourceBtn = document.getElementById('webHubAddSourceBtn');
-  var webHubSectionToggles = document.querySelectorAll('.webHubSectionToggle[data-target]');
-  var WEB_HUB_COLLAPSE_KEY = 'webHubCollapsedSections';
 
-  function readWebHubCollapsedState() {
+  // Cleanup deprecated Web Hub state.
+  try { localStorage.removeItem('webHubCollapsedSections'); } catch (err) {}
+
+  function normalizeSettingsTab(tab) {
+    var t = String(tab || 'general').toLowerCase();
+    if (t === 'browser') return 'browser';
+    return 'general';
+  }
+
+  function isSettingsOpen() {
+    return !!(librarySettingsOverlay && !librarySettingsOverlay.classList.contains('hidden'));
+  }
+
+  function readSettingsNumber(inputEl, fallbackValue, min, max) {
+    var raw = parseInt(String((inputEl && inputEl.value) || ''), 10);
+    var num = isFinite(raw) ? raw : fallbackValue;
+    if (num < min) num = min;
+    if (num > max) num = max;
+    return num;
+  }
+
+  function syncGeneralSettingsInputs() {
+    var base = LIB_DEFAULT_AUTO_BASE;
+    var step = LIB_DEFAULT_AUTO_STEP;
     try {
-      var raw = localStorage.getItem(WEB_HUB_COLLAPSE_KEY);
-      if (!raw) return {};
-      var parsed = JSON.parse(raw);
-      return parsed && typeof parsed === 'object' ? parsed : {};
-    } catch (err) {
-      return {};
-    }
-  }
-
-  function writeWebHubCollapsedState(state) {
-    try { localStorage.setItem(WEB_HUB_COLLAPSE_KEY, JSON.stringify(state || {})); } catch (err) {}
-  }
-
-  function applyWebHubCollapsedState() {
-    var state = readWebHubCollapsedState();
-    for (var i = 0; i < webHubSectionToggles.length; i++) {
-      var btn = webHubSectionToggles[i];
-      var targetId = btn.getAttribute('data-target');
-      var key = btn.getAttribute('data-collapse-key');
-      if (!targetId || !key) continue;
-      var target = document.getElementById(targetId);
-      if (!target) continue;
-      var collapsed = !!state[key];
-      target.classList.toggle('hidden', collapsed);
-      btn.classList.toggle('collapsed', collapsed);
-    }
-  }
-
-  function setWebHubOpen(open) {
-    var isOpen = !!open;
-    if (isOpen && isReaderOrPlayerContext()) return;
-    document.body.classList.toggle('webHubOpen', isOpen);
-    try { if (webHubPanel) webHubPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true'); } catch (err) {}
-    try { if (webHubBackdrop) webHubBackdrop.setAttribute('aria-hidden', isOpen ? 'false' : 'true'); } catch (err) {}
-    if (isOpen) setDrawerOpen(false);
-  }
-
-  function toggleWebHubOpen() {
-    var willOpen = !document.body.classList.contains('webHubOpen');
-    setWebHubOpen(willOpen);
-    if (willOpen) {
-      try {
-        if (window.Tanko && window.Tanko.deferred && typeof window.Tanko.deferred.ensureWebModulesLoaded === 'function') {
-          window.Tanko.deferred.ensureWebModulesLoaded().catch(function () {});
+      if (window.appState && window.appState.ui) {
+        if (isFinite(Number(window.appState.ui.autoScrollBaseSecondsPerScreen))) {
+          base = Number(window.appState.ui.autoScrollBaseSecondsPerScreen);
         }
-      } catch (err) {}
+        if (isFinite(Number(window.appState.ui.autoScrollStepPct))) {
+          step = Number(window.appState.ui.autoScrollStepPct);
+        }
+      }
+    } catch (err) {}
+    try {
+      var baseStored = parseInt(localStorage.getItem('autoScrollBaseSecondsPerScreen') || '', 10);
+      var stepStored = parseInt(localStorage.getItem('autoScrollStepPct') || '', 10);
+      if (isFinite(baseStored)) base = baseStored;
+      if (isFinite(stepStored)) step = stepStored;
+    } catch (err2) {}
+    if (settingsAutoBase) settingsAutoBase.value = String(readSettingsNumber({ value: base }, base, 5, 60));
+    if (settingsAutoStep) settingsAutoStep.value = String(readSettingsNumber({ value: step }, step, 1, 50));
+
+    if (settingsScanIgnore) {
+      var ignore = [];
+      try {
+        var list = window.appState && window.appState.library ? window.appState.library.scanIgnore : null;
+        if (Array.isArray(list)) ignore = list;
+      } catch (err3) {}
+      settingsScanIgnore.value = ignore.join('\n');
     }
+  }
+
+  function persistGeneralSettings(baseSeconds, stepPct) {
+    try { localStorage.setItem('autoScrollBaseSecondsPerScreen', String(baseSeconds)); } catch (err) {}
+    try { localStorage.setItem('autoScrollStepPct', String(stepPct)); } catch (err2) {}
+  }
+
+  function showSettingsToast(msg) {
+    try {
+      if (typeof window.toast === 'function') {
+        window.toast(String(msg || ''));
+        return;
+      }
+    } catch (err) {}
+  }
+
+  function saveGeneralSettings() {
+    if (!settingsAutoBase || !settingsAutoStep) return;
+    var base = readSettingsNumber(settingsAutoBase, LIB_DEFAULT_AUTO_BASE, 5, 60);
+    var step = readSettingsNumber(settingsAutoStep, LIB_DEFAULT_AUTO_STEP, 1, 50);
+    persistGeneralSettings(base, step);
+    try {
+      if (window.appState && window.appState.ui) {
+        window.appState.ui.autoScrollBaseSecondsPerScreen = base;
+        window.appState.ui.autoScrollStepPct = step;
+      }
+    } catch (err) {}
+
+    var ignoreLines = [];
+    if (settingsScanIgnore) {
+      ignoreLines = String(settingsScanIgnore.value || '')
+        .split('\n')
+        .map(function (line) { return String(line || '').trim(); })
+        .filter(Boolean);
+    }
+    try {
+      if (window.Tanko && window.Tanko.api && window.Tanko.api.library && typeof window.Tanko.api.library.setScanIgnore === 'function') {
+        window.Tanko.api.library.setScanIgnore(ignoreLines).then(function (res) {
+          try {
+            if (res && res.ok && res.state && window.appState) window.appState.library = res.state;
+          } catch (innerErr) {}
+        }).catch(function () {});
+      }
+    } catch (err2) {}
+    showSettingsToast('Settings saved');
+    syncGeneralSettingsInputs();
+  }
+
+  function resetGeneralSettings() {
+    persistGeneralSettings(LIB_DEFAULT_AUTO_BASE, LIB_DEFAULT_AUTO_STEP);
+    try {
+      if (window.appState && window.appState.ui) {
+        window.appState.ui.autoScrollBaseSecondsPerScreen = LIB_DEFAULT_AUTO_BASE;
+        window.appState.ui.autoScrollStepPct = LIB_DEFAULT_AUTO_STEP;
+      }
+    } catch (err) {}
+    syncGeneralSettingsInputs();
+    showSettingsToast('Settings reset');
+  }
+
+  function selectSettingsTab(tab) {
+    var normalized = normalizeSettingsTab(tab);
+    if (settingsTabGeneral) {
+      var generalActive = normalized === 'general';
+      settingsTabGeneral.classList.toggle('active', generalActive);
+      settingsTabGeneral.setAttribute('aria-selected', generalActive ? 'true' : 'false');
+    }
+    if (settingsTabBrowser) {
+      var browserActive = normalized === 'browser';
+      settingsTabBrowser.classList.toggle('active', browserActive);
+      settingsTabBrowser.setAttribute('aria-selected', browserActive ? 'true' : 'false');
+    }
+    if (settingsPanelGeneral) settingsPanelGeneral.classList.toggle('hidden', normalized !== 'general');
+    if (settingsPanelBrowser) settingsPanelBrowser.classList.toggle('hidden', normalized !== 'browser');
+    if (librarySettingsOverlay) librarySettingsOverlay.setAttribute('data-active-settings-tab', normalized);
+  }
+
+  function ensureWebModulesLoadedForSettings() {
+    try {
+      var d = window.Tanko && window.Tanko.deferred;
+      if (d && typeof d.ensureWebModulesLoaded === 'function') d.ensureWebModulesLoaded().catch(function () {});
+    } catch (err) {}
+  }
+
+  function ensureReaderModulesLoadedForSettings() {
+    try {
+      var d = window.Tanko && window.Tanko.deferred;
+      if (d && typeof d.ensureReaderModulesLoaded === 'function') d.ensureReaderModulesLoaded().catch(function () {});
+    } catch (err) {}
+  }
+
+  function getBrowserSettingsSectionId(section) {
+    var key = String(section || '').toLowerCase();
+    if (key === 'sources') return 'settingsBrowserSourcesSection';
+    if (key === 'history' || key === 'browsinghistory' || key === 'browsing-history') return 'settingsBrowserHistorySection';
+    if (key === 'bookmarks') return 'settingsBrowserBookmarksSection';
+    if (key === 'privacy' || key === 'data' || key === 'privacy-data') return 'settingsBrowserPrivacySection';
+    if (key === 'permissions' || key === 'site-permissions') return 'settingsBrowserPermissionsSection';
+    if (key === 'adblock' || key === 'ad-blocker') return 'settingsBrowserAdblockSection';
+    return '';
+  }
+
+  function openSettings(opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var tab = normalizeSettingsTab(options.tab);
+    if (!librarySettingsOverlay) return;
+
+    if (tab === 'browser') ensureWebModulesLoadedForSettings();
+    else {
+      ensureReaderModulesLoadedForSettings();
+      syncGeneralSettingsInputs();
+    }
+
+    librarySettingsOverlay.classList.remove('hidden');
+    try { librarySettingsOverlay.setAttribute('aria-hidden', 'false'); } catch (err) {}
+    setDrawerOpen(false);
+    selectSettingsTab(tab);
+
+    if (tab === 'browser' && options.section) {
+      var targetId = getBrowserSettingsSectionId(options.section);
+      if (targetId) {
+        setTimeout(function () {
+          var target = document.getElementById(targetId);
+          if (!target || !isSettingsOpen()) return;
+          try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (err2) {}
+        }, 80);
+      }
+    }
+  }
+
+  function closeSettings() {
+    if (!librarySettingsOverlay) return;
+    librarySettingsOverlay.classList.add('hidden');
+    try { librarySettingsOverlay.setAttribute('aria-hidden', 'true'); } catch (err) {}
+  }
+
+  for (var sti = 0; sti < settingsTabButtons.length; sti++) {
+    settingsTabButtons[sti].addEventListener('click', function (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      var tab = this.getAttribute('data-settings-tab');
+      selectSettingsTab(tab);
+      if (normalizeSettingsTab(tab) === 'browser') ensureWebModulesLoadedForSettings();
+      else {
+        ensureReaderModulesLoadedForSettings();
+        syncGeneralSettingsInputs();
+      }
+    });
+  }
+
+  if (openSettingsBtn) {
+    openSettingsBtn.addEventListener('click', function (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      openSettings({ tab: 'general' });
+    });
+  }
+
+  if (settingsCloseBtn) {
+    settingsCloseBtn.addEventListener('click', function (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      closeSettings();
+    });
+  }
+
+  if (librarySettingsOverlay) {
+    librarySettingsOverlay.addEventListener('click', function (e) {
+      if (e.target === librarySettingsOverlay) closeSettings();
+    });
+  }
+
+  if (settingsSaveBtn) {
+    settingsSaveBtn.addEventListener('click', function (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      saveGeneralSettings();
+    });
+  }
+
+  if (settingsResetBtn) {
+    settingsResetBtn.addEventListener('click', function (e) {
+      try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+      resetGeneralSettings();
+    });
+  }
+
+  selectSettingsTab('general');
+
+  function isWebBrowserOpen() {
+    try {
+      return !!(window.Tanko && window.Tanko.web && typeof window.Tanko.web.isBrowserOpen === 'function' && window.Tanko.web.isBrowserOpen());
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function openBrowserFromTopButton() {
+    var d = window.Tanko && window.Tanko.deferred;
+    if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
+    d.ensureWebModulesLoaded().then(function () {
+      if (window.Tanko && window.Tanko.web) {
+        if (typeof window.Tanko.web.openDefault === 'function') {
+          window.Tanko.web.openDefault();
+          return;
+        }
+        if (typeof window.Tanko.web.openHome === 'function') {
+          window.Tanko.web.openHome();
+        }
+      }
+    }).catch(function () {});
   }
 
   if (webHubToggleBtn) {
@@ -247,37 +443,7 @@
       e.preventDefault();
       e.stopPropagation();
       if (isReaderOrPlayerContext()) return;
-      toggleWebHubOpen();
-    });
-  }
-
-  if (webHubCloseBtn) {
-    webHubCloseBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setWebHubOpen(false);
-    });
-  }
-
-  if (webHubBackdrop) {
-    webHubBackdrop.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      setWebHubOpen(false);
-    });
-  }
-
-  if (webHubOpenBrowserBtn) {
-    webHubOpenBrowserBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      var d = window.Tanko && window.Tanko.deferred;
-      if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
-      d.ensureWebModulesLoaded().then(function () {
-        if (window.Tanko && window.Tanko.web && typeof window.Tanko.web.openHome === 'function') {
-          window.Tanko.web.openHome();
-        }
-      }).catch(function () {});
+      openBrowserFromTopButton();
     });
   }
 
@@ -298,24 +464,36 @@
     });
   }
 
-  for (var whi = 0; whi < webHubSectionToggles.length; whi++) {
-    webHubSectionToggles[whi].addEventListener('click', function (e) {
-      e.preventDefault();
-      var btn = this;
-      var targetId = btn.getAttribute('data-target');
-      var key = btn.getAttribute('data-collapse-key');
-      if (!targetId || !key) return;
-      var target = document.getElementById(targetId);
-      if (!target) return;
-      var collapsed = target.classList.toggle('hidden');
-      btn.classList.toggle('collapsed', collapsed);
-      var state = readWebHubCollapsedState();
-      state[key] = collapsed;
-      writeWebHubCollapsedState(state);
-    });
-  }
+  // Escape closes pickers, settings, then drawer.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    var closed = false;
+    if (isDownloadDestPickerOpen()) {
+      closeDownloadDestPicker({ ok: false, cancelled: true, error: 'Cancelled' });
+      closed = true;
+    }
+    if (isSettingsOpen()) {
+      closeSettings();
+      closed = true;
+    }
+    if (isReaderOrPlayerContext()) {
+      if (closed) e.preventDefault();
+      return;
+    }
+    if (document.body.classList.contains('libDrawerOpen')) {
+      setDrawerOpen(false);
+      closed = true;
+    }
+    if (closed) e.preventDefault();
+  });
 
-  applyWebHubCollapsedState();
+  try {
+    window.Tanko = window.Tanko || {};
+    window.Tanko.settings = window.Tanko.settings || {};
+    window.Tanko.settings.open = openSettings;
+    window.Tanko.settings.close = closeSettings;
+    window.Tanko.settings.selectTab = selectSettingsTab;
+  } catch (err) {}
 
   // In-app download destination picker (Books/Comics/Videos only)
   var downloadDestPickerOverlay = document.getElementById('downloadDestPickerOverlay');

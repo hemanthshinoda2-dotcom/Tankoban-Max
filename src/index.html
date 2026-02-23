@@ -72,7 +72,7 @@ COMMON ANCHORS
           <svg class="themeIcon themeIcon--moon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="display:none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
         </button>
         <sl-button id="hiddenSeriesBtn" class="btn btn-ghost btn-sm" size="small" title="Hidden series">Hidden</sl-button>
-        <button id="webHubToggleBtn" class="iconBtn" title="Tankoban Browser Hub" aria-label="Tankoban Browser Hub">Web</button>
+        <button id="webHubToggleBtn" class="iconBtn" title="Open Tankoban Browser" aria-label="Open Tankoban Browser">Web</button>
 
         <!-- Global search across library -->
         <div class="globalSearchWrap compact">
@@ -97,158 +97,6 @@ COMMON ANCHORS
 
     <!-- Off-canvas library drawer backdrop (used when sidebar is hidden) -->
     <div id="libDrawerBackdrop" class="drawerBackdrop" aria-hidden="true"></div>
-    <div id="webHubBackdrop" class="webHubBackdrop" aria-hidden="true"></div>
-
-    <!-- Global right browser hub drawer -->
-    <aside id="webHubPanel" class="webHubPanel" aria-label="Tankoban Browser Hub" aria-hidden="true">
-      <div class="webHubTop">
-        <div class="webHubTitle">Tankoban Browser</div>
-        <button id="webHubCloseBtn" class="btn btn-ghost btn-sm" title="Close">Close</button>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubBrowserToggle" class="webHubSectionToggle" type="button" data-target="webHubBrowserBody" data-collapse-key="browser">Browser</button>
-        <div id="webHubBrowserBody" class="webHubSectionBody">
-          <button id="webHubOpenBrowserBtn" class="navBtn" type="button">Open Tankoban Browser</button>
-          <button id="webHubAddSourceBtn" class="navBtn" type="button">Add source...</button>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubDirectToggle" class="webHubSectionToggle" type="button" data-target="webHubDirectBody" data-collapse-key="directActive">Active Direct Downloads</button>
-        <div id="webHubDirectBody" class="webHubSectionBody">
-          <div id="webHubDirectActiveList" class="webHubList"></div>
-          <div id="webHubDirectActiveEmpty" class="navMuted">No active direct downloads.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubTorrentToggle" class="webHubSectionToggle" type="button" data-target="webHubTorrentBody" data-collapse-key="torrentActive">Active Torrent Downloads</button>
-        <div id="webHubTorrentBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <input id="webHubMagnetInput" class="search webHubSearch" type="text" placeholder="Paste magnet or .torrent URL..." autocomplete="off" />
-            <button id="webHubMagnetPasteBtn" class="btn btn-ghost btn-sm" type="button">Paste</button>
-            <button id="webHubMagnetStartBtn" class="btn btn-ghost btn-sm" type="button">Start</button>
-          </div>
-          <div class="webHubSectionActions">
-            <select id="webHubTorrentFilter" class="select" aria-label="Torrent filter">
-              <option value="active" selected>Active</option>
-              <option value="paused">Paused</option>
-              <option value="completed">Completed</option>
-              <option value="errored">Errored</option>
-              <option value="all">All</option>
-            </select>
-            <button id="webHubTorrentPauseAllBtn" class="btn btn-ghost btn-sm" type="button">Pause All</button>
-            <button id="webHubTorrentResumeAllBtn" class="btn btn-ghost btn-sm" type="button">Resume All</button>
-            <button id="webHubTorrentCancelAllBtn" class="btn btn-ghost btn-sm" type="button">Cancel All</button>
-          </div>
-          <div id="webHubTorrentActiveList" class="webHubList"></div>
-          <div id="webHubTorrentActiveEmpty" class="navMuted">No active torrent downloads.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubHistoryToggle" class="webHubSectionToggle" type="button" data-target="webHubHistoryBody" data-collapse-key="downloadHistory">Download History</button>
-        <div id="webHubHistoryBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <button id="webHubDownloadHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
-          </div>
-          <div id="webHubDownloadHistoryList" class="webHubList"></div>
-          <div id="webHubDownloadHistoryEmpty" class="navMuted">No download history.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubBrowseToggle" class="webHubSectionToggle" type="button" data-target="webHubBrowseBody" data-collapse-key="browsingHistory">Browsing History</button>
-        <div id="webHubBrowseBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <input id="webHubBrowseSearch" class="search webHubSearch" type="search" placeholder="Search history..." autocomplete="off" />
-            <button id="webHubBrowseHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
-          </div>
-          <div id="webHubBrowseHistoryList" class="webHubList"></div>
-          <div id="webHubBrowseHistoryEmpty" class="navMuted">No browsing history.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubBookmarksToggle" class="webHubSectionToggle" type="button" data-target="webHubBookmarksBody" data-collapse-key="bookmarks">Bookmarks</button>
-        <div id="webHubBookmarksBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <button id="webHubBookmarkCurrentBtn" class="btn btn-ghost btn-sm" type="button">Bookmark current tab</button>
-          </div>
-          <div id="webHubBookmarksList" class="webHubList"></div>
-          <div id="webHubBookmarksEmpty" class="navMuted">No bookmarks yet.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubPrivacyToggle" class="webHubSectionToggle" type="button" data-target="webHubPrivacyBody" data-collapse-key="privacy">Privacy &amp; Data</button>
-        <div id="webHubPrivacyBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <label for="webHubDataRange" class="settingsLabel">Time range</label>
-            <select id="webHubDataRange" class="select">
-              <option value="hour">Last hour</option>
-              <option value="day">Last 24 hours</option>
-              <option value="week">Last 7 days</option>
-              <option value="month">Last 4 weeks</option>
-              <option value="all" selected>All time</option>
-            </select>
-          </div>
-          <div class="webHubChecklist">
-            <label><input id="webHubDataHistory" type="checkbox" checked /> Browsing history</label>
-            <label><input id="webHubDataDownloads" type="checkbox" checked /> Download history</label>
-            <label><input id="webHubDataTorrents" type="checkbox" checked /> Torrent history</label>
-            <label><input id="webHubDataCookies" type="checkbox" /> Cookies/site data</label>
-            <label><input id="webHubDataCache" type="checkbox" /> Cache</label>
-          </div>
-          <div class="webHubSectionActions">
-            <button id="webHubDataUsageBtn" class="btn btn-ghost btn-sm" type="button">Data Usage</button>
-            <button id="webHubDataClearBtn" class="btn btn-ghost btn-sm" type="button">Clear Selected</button>
-          </div>
-          <div id="webHubDataUsageText" class="navMuted">Usage unknown.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubPermissionsToggle" class="webHubSectionToggle" type="button" data-target="webHubPermissionsBody" data-collapse-key="permissions">Site Permissions</button>
-        <div id="webHubPermissionsBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <input id="webHubPermOrigin" class="search webHubSearch" type="text" placeholder="https://example.com" autocomplete="off" />
-          </div>
-          <div class="webHubSectionActions">
-            <select id="webHubPermType" class="select">
-              <option value="notifications">Notifications</option>
-              <option value="geolocation">Geolocation</option>
-              <option value="microphone">Microphone</option>
-              <option value="camera">Camera</option>
-              <option value="clipboard-read">Clipboard Read</option>
-              <option value="fullscreen">Fullscreen</option>
-            </select>
-            <select id="webHubPermDecision" class="select">
-              <option value="allow">Allow</option>
-              <option value="deny" selected>Deny</option>
-              <option value="ask">Ask</option>
-            </select>
-            <button id="webHubPermSaveBtn" class="btn btn-ghost btn-sm" type="button">Save</button>
-          </div>
-          <div id="webHubPermissionsList" class="webHubList"></div>
-          <div id="webHubPermissionsEmpty" class="navMuted">No explicit permission rules.</div>
-        </div>
-      </div>
-
-      <div class="webHubSection">
-        <button id="webHubAdblockToggle" class="webHubSectionToggle" type="button" data-target="webHubAdblockBody" data-collapse-key="adblock">Ad Blocker</button>
-        <div id="webHubAdblockBody" class="webHubSectionBody">
-          <div class="webHubSectionActions">
-            <label><input id="webHubAdblockEnabled" type="checkbox" checked /> Enabled</label>
-            <button id="webHubAdblockUpdateBtn" class="btn btn-ghost btn-sm" type="button">Update Lists</button>
-            <button id="webHubAdblockStatsBtn" class="btn btn-ghost btn-sm" type="button">Stats</button>
-          </div>
-          <div id="webHubAdblockInfo" class="navMuted">Ad blocker status unavailable.</div>
-        </div>
-      </div>
-    </aside>
-
     <main>
       <!-- Library view -->
       <section id="libraryView" class="view">
@@ -1824,7 +1672,10 @@ COMMON ANCHORS
           </button>
           <div class="webOmni" role="group" aria-label="Address bar">
             <span id="webOmniIcon" class="webOmniIcon" aria-hidden="true"></span>
-            <input id="webUrlDisplay" class="webUrlDisplay" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Address" />
+            <div class="webOmniInputWrap">
+              <input id="webUrlDisplay" class="webUrlDisplay" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Address" />
+              <span id="webOmniGhost" class="webOmniGhost" aria-hidden="true"></span>
+            </div>
             <select id="webSearchEngineSelect" class="webSearchEngineSelect" aria-label="Default search engine">
               <option value="yandex">Yandex</option>
               <option value="google">Google</option>
@@ -1950,41 +1801,141 @@ COMMON ANCHORS
           <button id="settingsClose" class="btn btn-ghost btn-sm">Close</button>
         </div>
 
-        <div class="settingsGroup">
-          <label class="settingsLabel" for="settingsAutoBase">Auto Scroll base seconds per screen (Preset 1)</label>
-          <input id="settingsAutoBase" type="number" min="5" max="60" step="1" class="search settingsNum" />
-          <div class="muted tiny">How long Auto Scroll takes to move one full screen at Preset 1.</div>
+        <div class="settingsTabs" role="tablist" aria-label="Settings tabs">
+          <button id="settingsTabGeneral" class="settingsTab active" type="button" role="tab" aria-selected="true" aria-controls="settingsPanelGeneral" data-settings-tab="general">General</button>
+          <button id="settingsTabBrowser" class="settingsTab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanelBrowser" data-settings-tab="browser">Browser</button>
         </div>
 
-        <div class="settingsGroup">
-          <label class="settingsLabel" for="settingsAutoStep">Auto Scroll step percentage</label>
-          <input id="settingsAutoStep" type="number" min="1" max="50" step="1" class="search settingsNum" />
-          <div class="muted tiny">How much each speed step changes Auto Scroll (as a percent).</div>
-        </div>
+        <div id="settingsPanelGeneral" class="settingsPanel" role="tabpanel" aria-labelledby="settingsTabGeneral" data-settings-panel="general">
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="settingsAutoBase">Auto Scroll base seconds per screen (Preset 1)</label>
+            <input id="settingsAutoBase" type="number" min="5" max="60" step="1" class="search settingsNum" />
+            <div class="muted tiny">How long Auto Scroll takes to move one full screen at Preset 1.</div>
+          </div>
 
-        <div class="settingsGroup">
-          <label class="settingsLabel" for="settingsScanIgnore">Library scan ignore patterns (one per line)</label>
-          <textarea id="settingsScanIgnore" class="search settingsTextArea" rows="4" spellcheck="false"></textarea>
-          <div class="muted tiny">
-            Matches are case-insensitive substring checks against full paths (folders + files). Hidden folders and common junk dirs are ignored automatically.
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="settingsAutoStep">Auto Scroll step percentage</label>
+            <input id="settingsAutoStep" type="number" min="1" max="50" step="1" class="search settingsNum" />
+            <div class="muted tiny">How much each speed step changes Auto Scroll (as a percent).</div>
+          </div>
+
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="settingsScanIgnore">Library scan ignore patterns (one per line)</label>
+            <textarea id="settingsScanIgnore" class="search settingsTextArea" rows="4" spellcheck="false"></textarea>
+            <div class="muted tiny">
+              Matches are case-insensitive substring checks against full paths (folders + files). Hidden folders and common junk dirs are ignored automatically.
+            </div>
+          </div>
+
+          <!-- MERIDIAN_THEME: color theme picker -->
+          <div class="settingsGroup">
+            <label class="settingsLabel">App Theme</label>
+            <div id="appThemeSwatches" class="themeSwatches"></div>
+          </div>
+
+          <!-- MERIDIAN_KEYS: keyboard shortcuts -->
+          <div class="settingsGroup">
+            <label class="settingsLabel">Keyboard Shortcuts</label>
+            <div id="globalShortcutsList" class="globalShortcutsList"></div>
+          </div>
+
+          <div class="settingsActions">
+            <button id="settingsSave" class="btn">Save</button>
+            <button id="settingsReset" class="btn btn-ghost">Reset to defaults</button>
           </div>
         </div>
 
-        <!-- MERIDIAN_THEME: color theme picker -->
-        <div class="settingsGroup">
-          <label class="settingsLabel">App Theme</label>
-          <div id="appThemeSwatches" class="themeSwatches"></div>
-        </div>
+        <div id="settingsPanelBrowser" class="settingsPanel hidden" role="tabpanel" aria-labelledby="settingsTabBrowser" data-settings-panel="browser">
+          <div class="muted tiny">Browser configuration and management controls.</div>
 
-        <!-- MERIDIAN_KEYS: keyboard shortcuts -->
-        <div class="settingsGroup">
-          <label class="settingsLabel">Keyboard Shortcuts</label>
-          <div id="globalShortcutsList" class="globalShortcutsList"></div>
-        </div>
+          <div id="settingsBrowserSourcesSection" class="webHubSection">
+            <div class="webHubSectionHeading">Sources</div>
+            <div class="webHubSectionActions">
+              <button id="webHubAddSourceBtn" class="btn btn-ghost btn-sm" type="button">Add source...</button>
+            </div>
+            <div id="webHubSourcesList" class="webHubList"></div>
+            <div id="webHubSourcesEmpty" class="navMuted">No sources yet.</div>
+          </div>
 
-        <div class="settingsActions">
-          <button id="settingsSave" class="btn">Save</button>
-          <button id="settingsReset" class="btn btn-ghost">Reset to defaults</button>
+          <div id="settingsBrowserHistorySection" class="webHubSection">
+            <div class="webHubSectionHeading">Browsing History</div>
+            <div class="webHubSectionActions">
+              <input id="webHubBrowseSearch" class="search webHubSearch" type="search" placeholder="Search history..." autocomplete="off" />
+              <button id="webHubBrowseHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+            </div>
+            <div id="webHubBrowseHistoryList" class="webHubList"></div>
+            <div id="webHubBrowseHistoryEmpty" class="navMuted">No browsing history.</div>
+          </div>
+
+          <div id="settingsBrowserBookmarksSection" class="webHubSection">
+            <div class="webHubSectionHeading">Bookmarks</div>
+            <div class="webHubSectionActions">
+              <button id="webHubBookmarkCurrentBtn" class="btn btn-ghost btn-sm" type="button">Bookmark current tab</button>
+            </div>
+            <div id="webHubBookmarksList" class="webHubList"></div>
+            <div id="webHubBookmarksEmpty" class="navMuted">No bookmarks yet.</div>
+          </div>
+
+          <div id="settingsBrowserPrivacySection" class="webHubSection">
+            <div class="webHubSectionHeading">Privacy &amp; Data</div>
+            <div class="webHubSectionActions">
+              <label for="webHubDataRange" class="settingsLabel">Time range</label>
+              <select id="webHubDataRange" class="select">
+                <option value="hour">Last hour</option>
+                <option value="day">Last 24 hours</option>
+                <option value="week">Last 7 days</option>
+                <option value="month">Last 4 weeks</option>
+                <option value="all" selected>All time</option>
+              </select>
+            </div>
+            <div class="webHubChecklist">
+              <label><input id="webHubDataHistory" type="checkbox" checked /> Browsing history</label>
+              <label><input id="webHubDataDownloads" type="checkbox" checked /> Download history</label>
+              <label><input id="webHubDataTorrents" type="checkbox" checked /> Torrent history</label>
+              <label><input id="webHubDataCookies" type="checkbox" /> Cookies/site data</label>
+              <label><input id="webHubDataCache" type="checkbox" /> Cache</label>
+            </div>
+            <div class="webHubSectionActions">
+              <button id="webHubDataUsageBtn" class="btn btn-ghost btn-sm" type="button">Data Usage</button>
+              <button id="webHubDataClearBtn" class="btn btn-ghost btn-sm" type="button">Clear Selected</button>
+            </div>
+            <div id="webHubDataUsageText" class="navMuted">Usage unknown.</div>
+          </div>
+
+          <div id="settingsBrowserPermissionsSection" class="webHubSection">
+            <div class="webHubSectionHeading">Site Permissions</div>
+            <div class="webHubSectionActions">
+              <input id="webHubPermOrigin" class="search webHubSearch" type="text" placeholder="https://example.com" autocomplete="off" />
+            </div>
+            <div class="webHubSectionActions">
+              <select id="webHubPermType" class="select">
+                <option value="notifications">Notifications</option>
+                <option value="geolocation">Geolocation</option>
+                <option value="microphone">Microphone</option>
+                <option value="camera">Camera</option>
+                <option value="clipboard-read">Clipboard Read</option>
+                <option value="fullscreen">Fullscreen</option>
+              </select>
+              <select id="webHubPermDecision" class="select">
+                <option value="allow">Allow</option>
+                <option value="deny" selected>Deny</option>
+                <option value="ask">Ask</option>
+              </select>
+              <button id="webHubPermSaveBtn" class="btn btn-ghost btn-sm" type="button">Save</button>
+            </div>
+            <div id="webHubPermissionsList" class="webHubList"></div>
+            <div id="webHubPermissionsEmpty" class="navMuted">No explicit permission rules.</div>
+          </div>
+
+          <div id="settingsBrowserAdblockSection" class="webHubSection">
+            <div class="webHubSectionHeading">Ad Blocker</div>
+            <div class="webHubSectionActions">
+              <label><input id="webHubAdblockEnabled" type="checkbox" checked /> Enabled</label>
+              <button id="webHubAdblockUpdateBtn" class="btn btn-ghost btn-sm" type="button">Update Lists</button>
+              <button id="webHubAdblockStatsBtn" class="btn btn-ghost btn-sm" type="button">Stats</button>
+            </div>
+            <div id="webHubAdblockInfo" class="navMuted">Ad blocker status unavailable.</div>
+          </div>
         </div>
       </div>
     </div>

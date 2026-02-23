@@ -239,6 +239,18 @@
   border-left: 2px solid var(--vx-accent, rgba(var(--chrome-rgb), .55));
 }
 
+/* CHROMIUM_PARITY: Pinned tabs — compact, favicon-only */
+.webTab.pinned {
+  flex: 0 0 36px;
+  min-width: 36px;
+  max-width: 36px;
+  justify-content: center;
+  padding: 0;
+}
+.webTab.pinned .webTabLabel,
+.webTab.pinned .webTabClose { display: none; }
+.webTab.pinned + .webTab:not(.pinned) { margin-left: 6px; }
+
 /* Window controls in tab strip inherit from global .winControls/.winCtrl */
 
 
@@ -327,8 +339,14 @@
   display: block;
 }
 
-.webUrlDisplay {
+/* CHROMIUM_PARITY: Wrapper for input + ghost text overlay */
+.webOmniInputWrap {
   flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.webUrlDisplay {
+  width: 100%;
   min-width: 0;
   border: none;
   outline: none;
@@ -336,9 +354,32 @@
   color: inherit;
   font-size: 13px;
   padding: 0;
+  position: relative;
+  z-index: 1;
 }
 .webUrlDisplay::placeholder {
   color: var(--muted, rgba(var(--chrome-rgb), .45));
+}
+/* CHROMIUM_PARITY: Ghost text autocomplete overlay */
+.webOmniGhost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  z-index: 0;
+}
+.webOmniGhost .ghost-spacer {
+  visibility: hidden;
+  white-space: pre;
+}
+.webOmniGhost .ghost-completion {
+  color: rgba(var(--chrome-rgb), .3);
 }
 
 /* Search engine select — inside the omnibox, compact */
@@ -574,10 +615,6 @@
 }
 .webTabWebview.hidden {
   display: none;
-}
-/* Ensure hub interactions don't get eaten by webview layer */
-body.webHubOpen .webTabWebview {
-  pointer-events: none;
 }
 
 /* Split view */

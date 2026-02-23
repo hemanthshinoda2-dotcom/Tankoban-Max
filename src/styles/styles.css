@@ -1405,6 +1405,51 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 .settingsLabel{ font-weight:800; }
 .settingsNum{ width: 260px; max-width: 100%; }
 .settingsActions{ display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-top: 6px; }
+.settingsTabs{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(var(--chrome-rgb), .16);
+  border-radius: 12px;
+  background: rgba(var(--surface-rgb), .35);
+}
+.settingsTab{
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.settingsTab:hover{
+  background: rgba(var(--chrome-rgb), .08);
+}
+.settingsTab.active{
+  background: rgba(var(--vx-accent-rgb), .20);
+  border-color: rgba(var(--vx-accent-rgb), .36);
+}
+.settingsPanel{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settingsPanel.hidden{
+  display: none !important;
+}
+#settingsPanelBrowser .webHubSectionActions{
+  flex-wrap: wrap;
+}
+#settingsPanelBrowser .webHubSearch{
+  min-width: 0;
+  flex: 1 1 220px;
+}
+#settingsPanelBrowser .webHubList{
+  max-height: 280px;
+  overflow: auto;
+}
 
 /* Build 45D: Hidden series list (library overlay) */
 .hiddenSeriesList{

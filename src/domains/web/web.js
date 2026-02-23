@@ -43,6 +43,7 @@
     findBtn: qs('webFindBtn'),
     urlDisplay: qs('webUrlDisplay'),
     omniIcon: qs('webOmniIcon'),
+    omniGhost: qs('webOmniGhost'), // CHROMIUM_PARITY: ghost text overlay
     omniSuggest: qs('webOmniSuggest'),
     findBar: qs('webFindBar'),
     findInput: qs('webFindInput'),
@@ -87,6 +88,8 @@
     sourceSaveBtn: qs('webSourceSaveBtn'),
     // Chrome-style kebab menu
     menuBtn: qs('webMenuBtn'),
+    hubSourcesList: qs('webHubSourcesList'),
+    hubSourcesEmpty: qs('webHubSourcesEmpty'),
     // BUILD_WEB_PARITY
     tipsOverlay: qs('webLibTipsOverlay'),
     tipsClose: qs('webLibTipsClose'),
@@ -157,6 +160,10 @@
     bing: SEARCH_ENGINES.bing.url,
     brave: SEARCH_ENGINES.brave.url
   };
+
+  // CHROMIUM_PARITY: Reload/Stop toggle SVGs
+  var SVG_RELOAD = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 1 1 1.3 3.5"/><path d="M2 5v3.5H5.5" stroke-width="1.4"/></svg>';
+  var SVG_STOP = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
 
   var state = {
     sources: [],
@@ -438,14 +445,35 @@
     return false;
   }
 
+  function navigateUrlInTab(tab, url) {
+    var targetTab = tab || getActiveTab();
+    if (!targetTab) {
+      createTab({
+        id: 'src_' + Date.now(),
+        name: 'New Tab',
+        url: String(url || '').trim() || 'about:blank',
+        color: '#555'
+      }, url || 'about:blank', { silentToast: true });
+      return true;
+    }
+    if (targetTab.mainTabId) {
+      webTabs.navigate({ tabId: targetTab.mainTabId, action: 'loadUrl', url: url }).catch(function () {});
+      return true;
+    }
+    if (targetTab.id != null) {
+      openUrlFromOmni(url, { tabId: targetTab.id, fromAddressBar: true });
+      return true;
+    }
+    return false;
+  }
+
   function routePopupUrl(target, parentTab, referer) {
     var url = normalizePopupUrl(target);
     if (!url) return false;
     var dedupKey = canonicalPopupDedupKey(url, parentTab || null);
     if (shouldSkipDuplicatePopup(dedupKey)) return true;
     if (maybeStartTorrentFromUrl(url, referer || '')) return true;
-    openPopupUrlInNewTab(url, parentTab || getActiveTab());
-    return true;
+    return navigateUrlInTab(parentTab || getActiveTab(), url);
   }
 
   function getParentTabForMainTabId(mainTabId) {
@@ -635,7 +663,7 @@
 
       // Link actions
       if (linkUrl) {
-        items.push({ label: 'Open link in new tab', onClick: function () { routePopupUrl(linkUrl, parentTab, safeUrl(wv)); } });
+        items.push({ label: 'Open link', onClick: function () { navigateUrlInTab(parentTab || getActiveTab(), linkUrl); } });
         items.push({ label: 'Copy link address', onClick: function () { copyText(linkUrl); showToast('Copied'); } });
         items.push({ separator: true });
       }
@@ -672,6 +700,72 @@
       return items;
     }
 
+    // CHROMIUM_PARITY: Styled error page for load failures (like Chrome's ERR_ pages)
+    function buildErrorPageHtml(failure, failedUrl, errorCode, errorDesc) {
+      var kind = String((failure && failure.kind) || 'load_failed');
+      var title, emoji, message, suggestion;
+      if (kind === 'dns') {
+        title = 'This site can\u2019t be reached';
+        emoji = '\uD83D\uDD0D';
+        message = 'The server DNS address could not be found.';
+        suggestion = 'Check that the URL is spelled correctly, or try again later.';
+      } else if (kind === 'tls') {
+        title = 'Connection isn\u2019t secure';
+        emoji = '\uD83D\uDD12';
+        message = 'There was a problem with the site\u2019s security certificate.';
+        suggestion = 'The site may be temporarily down, or the certificate may have expired.';
+      } else if (kind === 'timeout') {
+        title = 'Connection timed out';
+        emoji = '\u23F1\uFE0F';
+        message = 'The server took too long to respond.';
+        suggestion = 'Check your internet connection and try again.';
+      } else if (kind === 'offline') {
+        title = 'No internet connection';
+        emoji = '\uD83D\uDCE1';
+        message = 'Your device is not connected to the internet.';
+        suggestion = 'Check your Wi-Fi or network cable and try again.';
+      } else if (kind === 'blocked') {
+        title = 'Blocked';
+        emoji = '\uD83D\uDEAB';
+        message = 'This page was blocked by content filters.';
+        suggestion = 'The ad blocker or a security rule prevented this page from loading.';
+      } else {
+        title = 'This page isn\u2019t working';
+        emoji = '\u26A0\uFE0F';
+        message = 'Something went wrong while loading this page.';
+        suggestion = 'Try reloading or check the URL.';
+      }
+      var host = '';
+      try { host = new URL(String(failedUrl || '')).hostname; } catch (e) {}
+      var codeStr = errorCode ? String(errorCode) : '';
+      if (errorDesc) codeStr += ' (' + errorDesc + ')';
+
+      return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
+        + 'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;'
+        + 'background:#1a1a2e;color:#e0e0e0;display:flex;align-items:center;justify-content:center;'
+        + 'min-height:100vh;margin:0;padding:20px;box-sizing:border-box}'
+        + '.ep{text-align:center;max-width:480px}'
+        + '.em{font-size:64px;margin-bottom:16px}'
+        + '.et{font-size:22px;font-weight:600;margin:0 0 8px;color:#fff}'
+        + '.eh{font-size:13px;color:#888;margin-bottom:20px;word-break:break-all}'
+        + '.ed{font-size:14px;line-height:1.6;color:#aaa;margin-bottom:8px}'
+        + '.es{font-size:13px;color:#777;margin-bottom:24px}'
+        + '.ec{font-size:11px;color:#555;margin-top:16px}'
+        + '.eb{display:inline-block;padding:10px 28px;border-radius:8px;'
+        + 'border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.06);'
+        + 'color:#fff;font-size:14px;cursor:pointer;transition:background .15s}'
+        + '.eb:hover{background:rgba(255,255,255,.12)}'
+        + '</style></head><body><div class="ep">'
+        + '<div class="em">' + emoji + '</div>'
+        + '<h1 class="et">' + escapeHtml(title) + '</h1>'
+        + (host ? '<div class="eh">' + escapeHtml(host) + '</div>' : '')
+        + '<p class="ed">' + escapeHtml(message) + '</p>'
+        + '<p class="es">' + escapeHtml(suggestion) + '</p>'
+        + '<button class="eb" onclick="location.reload()">Try again</button>'
+        + (codeStr ? '<div class="ec">ERR_CODE: ' + escapeHtml(codeStr) + '</div>' : '')
+        + '</div></body></html>';
+    }
+
     function bindWebview(tabId, wv) {
       function emitBestTitle() {
         var t = safeTitle(wv);
@@ -705,6 +799,13 @@
         if (!label) label = 'Load failed';
         emit('title', { tabId: tabId, title: label });
         showToast((failure && failure.toast) ? failure.toast : (desc ? ('Load failed: ' + desc) : 'Load failed'));
+
+        // CHROMIUM_PARITY: Inject styled error page into the webview
+        try {
+          var errorHtml = buildErrorPageHtml(failure, failedUrl, code, desc);
+          var injectScript = 'document.open();document.write(' + JSON.stringify(errorHtml) + ');document.close();';
+          wv.executeJavaScript(injectScript).catch(function () {});
+        } catch (e2) {}
       }
 
       wv.addEventListener('did-start-loading', function () {
@@ -713,7 +814,12 @@
 
       wv.addEventListener('did-stop-loading', function () {
         emit('loading', { tabId: tabId, loading: false });
-        emit('url', { tabId: tabId, url: safeUrl(wv) });
+        // CHROMIUM_PARITY: pass direction for history tracking
+        var dir = rec._navDirection || '';
+        var tidx = rec._navTargetIndex;
+        rec._navDirection = '';
+        rec._navTargetIndex = null;
+        emit('url', { tabId: tabId, url: safeUrl(wv), direction: dir, targetIndex: tidx });
         emitNav(tabId, wv);
         emitBestTitle();
       });
@@ -730,7 +836,12 @@
       });
 
       wv.addEventListener('did-navigate', function (ev) {
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        // CHROMIUM_PARITY: consume direction flag for the primary navigation event
+        var dir = rec._navDirection || '';
+        var tidx = rec._navTargetIndex;
+        rec._navDirection = '';
+        rec._navTargetIndex = null;
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx });
         emitNav(tabId, wv);
       });
 
@@ -847,12 +958,23 @@
         var wv = rec.webview;
         try {
           if (action === 'back') {
+            rec._navDirection = 'back'; // CHROMIUM_PARITY: track direction
             if (safeCanGoBack(wv)) wv.goBack();
           } else if (action === 'forward') {
+            rec._navDirection = 'forward'; // CHROMIUM_PARITY: track direction
             if (safeCanGoForward(wv)) wv.goForward();
           } else if (action === 'reload') {
             wv.reload();
+          } else if (action === 'stop') {
+            try { wv.stop(); } catch (e2) {}
+          } else if (action === 'goToIndex') {
+            // CHROMIUM_PARITY: navigate to specific history index
+            var targetIdx = Number(payload && payload.index);
+            rec._navDirection = 'index';
+            rec._navTargetIndex = targetIdx;
+            try { wv.goToIndex(targetIdx); } catch (e3) {}
           } else if (action === 'loadUrl') {
+            rec._navDirection = ''; // clear on new navigation
             var url = String((payload && payload.url) || '').trim();
             if (url) {
               if (!maybeStartTorrentFromUrl(url, safeUrl(wv))) {
@@ -1074,9 +1196,102 @@
     state.omniSuggestOpen = false;
     state.omniSuggestItems = [];
     state.omniSuggestActiveIndex = -1;
+    clearOmniGhost(); // CHROMIUM_PARITY
     if (!el.omniSuggest) return;
     el.omniSuggest.classList.add('hidden');
     el.omniSuggest.innerHTML = '';
+  }
+
+  // CHROMIUM_PARITY: Inline autocomplete ghost text (C1)
+  var _omniGhostCompletion = ''; // current completion suffix
+
+  function clearOmniGhost() {
+    _omniGhostCompletion = '';
+    if (el.omniGhost) el.omniGhost.innerHTML = '';
+  }
+
+  function stripUrlPrefix(url) {
+    var s = String(url || '');
+    s = s.replace(/^https?:\/\//, '');
+    s = s.replace(/^www\./, '');
+    return s;
+  }
+
+  function updateOmniGhostText() {
+    if (!el.omniGhost || !el.urlDisplay) { clearOmniGhost(); return; }
+    if (state._omniComposing) { clearOmniGhost(); return; } // IME active
+
+    var typed = String(el.urlDisplay.value || '');
+    if (!typed) { clearOmniGhost(); return; }
+
+    var typedLower = typed.toLowerCase();
+    var strippedTyped = stripUrlPrefix(typed).toLowerCase();
+
+    // Find best matching suggestion URL
+    var bestMatch = '';
+    var items = state.omniSuggestItems || [];
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i] || !items[i].url) continue;
+      var candidate = stripUrlPrefix(items[i].url);
+      if (candidate.toLowerCase().indexOf(strippedTyped) === 0 && candidate.length > strippedTyped.length) {
+        bestMatch = candidate;
+        break;
+      }
+      // Also try matching raw typed text against full URL
+      var fullLower = String(items[i].url || '').toLowerCase();
+      if (fullLower.indexOf(typedLower) === 0 && items[i].url.length > typed.length) {
+        bestMatch = items[i].url.substring(typed.length);
+        _omniGhostCompletion = bestMatch;
+        el.omniGhost.innerHTML = '<span class="ghost-spacer">' + escapeHtml(typed) + '</span><span class="ghost-completion">' + escapeHtml(bestMatch) + '</span>';
+        return;
+      }
+    }
+
+    if (!bestMatch) { clearOmniGhost(); return; }
+
+    var completion = bestMatch.substring(strippedTyped.length);
+    _omniGhostCompletion = completion;
+    el.omniGhost.innerHTML = '<span class="ghost-spacer">' + escapeHtml(typed) + '</span><span class="ghost-completion">' + escapeHtml(completion) + '</span>';
+  }
+
+  function acceptOmniGhost() {
+    if (!_omniGhostCompletion || !el.urlDisplay) return false;
+    el.urlDisplay.value = el.urlDisplay.value + _omniGhostCompletion;
+    clearOmniGhost();
+    return true;
+  }
+
+  // CHROMIUM_PARITY: Per-tab omnibox state (C2)
+  function saveOmniState() {
+    if (!el.urlDisplay) return;
+    var focused = (document.activeElement === el.urlDisplay);
+    if (!focused) return;
+    var tab = getActiveTab();
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    runtime.omniState = {
+      text: el.urlDisplay.value,
+      selStart: el.urlDisplay.selectionStart,
+      selEnd: el.urlDisplay.selectionEnd,
+      focused: true
+    };
+  }
+
+  function restoreOmniState(tabId) {
+    var tab = null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === tabId) { tab = state.tabs[i]; break; }
+    }
+    if (!tab || !el.urlDisplay) return;
+    var runtime = ensureTabRuntime(tab);
+    var saved = runtime.omniState;
+    runtime.omniState = null;
+    if (!saved || !saved.focused) return;
+    state._omniRestoreInProgress = true;
+    el.urlDisplay.value = saved.text;
+    try { el.urlDisplay.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) {}
+    el.urlDisplay.focus();
+    setTimeout(function () { state._omniRestoreInProgress = false; }, 50);
   }
 
   function applyOmniSuggestion(item) {
@@ -1171,11 +1386,22 @@
     state.omniSuggestActiveIndex = state.omniSuggestItems.length ? 0 : -1;
     state.omniSuggestOpen = !!state.omniSuggestItems.length;
     renderOmniSuggestions();
+    updateOmniGhostText(); // CHROMIUM_PARITY: refresh inline autocomplete
   }
 
   function openUrlFromOmni(resolved, opts) {
     var o = opts || {};
     var inNewTab = !!o.newTab;
+    var targetTabId = Number(o.tabId);
+    var targetTab = null;
+    if (isFinite(targetTabId) && targetTabId > 0) {
+      for (var ti = 0; ti < state.tabs.length; ti++) {
+        if (state.tabs[ti] && state.tabs[ti].id === targetTabId) {
+          targetTab = state.tabs[ti];
+          break;
+        }
+      }
+    }
     var resolvedUrl = String(resolved || '').trim();
     if (!resolvedUrl) return;
     if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = resolvedUrl;
@@ -1192,7 +1418,7 @@
       createTab(src, resolvedUrl, { silentToast: true });
       return;
     }
-    var tab = getActiveTab();
+    var tab = targetTab || getActiveTab();
     if (!tab || !tab.mainTabId) {
       var src0 = {
         id: 'omni_' + Date.now(),
@@ -1241,7 +1467,7 @@
   function createTabRuntime(url) {
     var u = String(url || '').trim();
     var entries = [];
-    if (u) entries.push(u);
+    if (u) entries.push({ url: u, title: '' });
     return {
       navEntries: entries,
       currentIndex: entries.length ? 0 : -1,
@@ -1250,7 +1476,8 @@
       lastCommittedUrl: u,
       lastError: null,
       securityState: inferSecurityStateFromUrl(u),
-      isBlocked: false
+      isBlocked: false,
+      omniState: null // CHROMIUM_PARITY: per-tab omnibox state (C2)
     };
   }
 
@@ -1259,7 +1486,14 @@
     if (!tab.runtime || typeof tab.runtime !== 'object') {
       tab.runtime = createTabRuntime(tab.url || tab.homeUrl || '');
     }
-    return tab.runtime;
+    // CHROMIUM_PARITY: Migrate legacy string navEntries to { url, title } objects
+    var rt = tab.runtime;
+    if (rt.navEntries && rt.navEntries.length > 0 && typeof rt.navEntries[0] === 'string') {
+      rt.navEntries = rt.navEntries.map(function (e) {
+        return typeof e === 'string' ? { url: e, title: '' } : e;
+      });
+    }
+    return rt;
   }
 
   function inferSecurityStateFromUrl(url) {
@@ -1314,7 +1548,8 @@
     return out;
   }
 
-  function pushRuntimeCommittedUrl(tab, url) {
+  // CHROMIUM_PARITY: direction-aware history tracking for back/forward dropdown
+  function pushRuntimeCommittedUrl(tab, url, direction) {
     var runtime = ensureTabRuntime(tab);
     var u = String(url || '').trim();
     if (!u) return;
@@ -1325,11 +1560,25 @@
     runtime.isBlocked = false;
     runtime.lastError = null;
 
-    if (runtime.currentIndex >= 0 && runtime.navEntries[runtime.currentIndex] === u) return;
+    if (direction === 'back') {
+      if (runtime.currentIndex > 0) runtime.currentIndex--;
+      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+      return;
+    }
+    if (direction === 'forward') {
+      if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
+      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+      return;
+    }
+    if (direction === 'index') return; // index handled directly in onUrlUpdated
+
+    // Normal new navigation
+    var current = runtime.navEntries[runtime.currentIndex];
+    if (current && current.url === u) return;
     if (runtime.currentIndex < runtime.navEntries.length - 1) {
       runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
     }
-    runtime.navEntries.push(u);
+    runtime.navEntries.push({ url: u, title: String(tab.title || '') });
     if (runtime.navEntries.length > 250) {
       runtime.navEntries.shift();
     }
@@ -1517,6 +1766,24 @@
       return !!(document.body && document.body.classList && document.body.classList.contains('inWebMode'));
     } catch (e) {
       return false;
+    }
+  }
+
+  function openHubPanelSection(collapseKey) {
+    var section = '';
+    var key = String(collapseKey || '').toLowerCase();
+    if (key === 'browsinghistory' || key === 'history') section = 'history';
+    else if (key === 'bookmarks') section = 'bookmarks';
+    else if (key === 'privacy') section = 'privacy';
+    else if (key === 'permissions') section = 'permissions';
+    else if (key === 'adblock') section = 'adblock';
+    else if (key === 'browser' || key === 'sources') section = 'sources';
+    try {
+      if (window.Tanko && window.Tanko.settings && typeof window.Tanko.settings.open === 'function') {
+        window.Tanko.settings.open({ tab: 'browser', section: section });
+      }
+    } catch (e) {
+      // no-op
     }
   }
 
@@ -1753,8 +2020,8 @@
 
   // BUILD_WEB_HOME: sidebar source list rendering
   function renderSources() {
-    if (!el.sourcesList) return;
-    var html = '';
+    var sidebarHtml = '';
+    var settingsHtml = '';
     for (var i = 0; i < state.sources.length; i++) {
       var s = state.sources[i];
       var isActive = false;
@@ -1764,12 +2031,25 @@
           break;
         }
       }
-      html += '<div class="webSourceItem' + (isActive ? ' active' : '') + '" data-source-id="' + s.id + '" role="listitem">'
+      sidebarHtml += '<div class="webSourceItem' + (isActive ? ' active' : '') + '" data-source-id="' + s.id + '" role="listitem">'
         + '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>'
         + '<span class="webSourceName">' + escapeHtml(s.name) + '</span>'
         + '</div>';
+      settingsHtml += '<div class="webHubItem" data-settings-source-id="' + escapeHtml(String(s.id || '')) + '">'
+        + '<div class="webHubItemTop">'
+          + '<div class="webHubItemTitle">' + escapeHtml(s.name || 'Source') + '</div>'
+          + '<span class="webHubBadge">Source</span>'
+        + '</div>'
+        + '<div class="webHubItemSub">' + escapeHtml(s.url || '') + '</div>'
+        + '<div class="webHubItemActions">'
+          + '<button class="btn btn-ghost btn-sm" type="button" data-settings-source-edit-id="' + escapeHtml(String(s.id || '')) + '">Edit</button>'
+          + '<button class="btn btn-ghost btn-sm" type="button" data-settings-source-remove-id="' + escapeHtml(String(s.id || '')) + '">Remove</button>'
+        + '</div>'
+      + '</div>';
     }
-    el.sourcesList.innerHTML = html;
+    if (el.sourcesList) el.sourcesList.innerHTML = sidebarHtml;
+    if (el.hubSourcesList) el.hubSourcesList.innerHTML = settingsHtml;
+    if (el.hubSourcesEmpty) el.hubSourcesEmpty.classList.toggle('hidden', !!state.sources.length);
   }
 
   function loadSources() {
@@ -2193,10 +2473,11 @@
       } else {
         favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       }
-      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
+      var pinnedClass = t.pinned ? ' pinned' : '';
+      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
         favHtml +
-        '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
-        '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>' +
+        (t.pinned ? '' : '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>') +
+        (t.pinned ? '' : '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>') +
         '</div>';
     }
 
@@ -2246,6 +2527,10 @@
         e.preventDefault();
         var id = Number(this.getAttribute('data-tab-id'));
         if (!isFinite(id)) return;
+        // CHROMIUM_PARITY: Don't middle-click close pinned tabs
+        var clickedTab = null;
+        for (var ci = 0; ci < state.tabs.length; ci++) { if (state.tabs[ci].id === id) { clickedTab = state.tabs[ci]; break; } }
+        if (clickedTab && clickedTab.pinned) return;
         closeTab(id);
       });
 
@@ -2263,6 +2548,12 @@
         items.push({ label: 'New tab', onClick: function () {
           openTabPicker();
         } });
+        // CHROMIUM_PARITY: Pin/Unpin tab
+        if (t.type !== 'torrent') {
+          items.push({ label: t.pinned ? 'Unpin tab' : 'Pin tab', onClick: function () {
+            if (t.pinned) unpinTab(id); else pinTab(id);
+          } });
+        }
         if (t.type !== 'torrent') {
           items.push({ label: 'Duplicate tab', onClick: function () {
             createTab({
@@ -2272,7 +2563,8 @@
               color: getSourceColor(t.sourceId)
             }, t.url || t.homeUrl || 'about:blank', {
               titleOverride: t.title || '',
-              silentToast: true
+              silentToast: true,
+              openerTabId: id
             });
           } });
           items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
@@ -2283,13 +2575,13 @@
         items.push({ label: 'Close tab', onClick: function () { closeTab(id); } });
         items.push({ label: 'Close other tabs', onClick: function () {
           var ids = [];
-          for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i] && state.tabs[i].id !== id) ids.push(state.tabs[i].id);
+          for (var i = 0; i < state.tabs.length; i++) if (state.tabs[i] && state.tabs[i].id !== id && !state.tabs[i].pinned) ids.push(state.tabs[i].id);
           for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
         }});
         items.push({ label: 'Close tabs to the right', onClick: function () {
           if (idx < 0) return;
           var ids = [];
-          for (var i = idx + 1; i < state.tabs.length; i++) if (state.tabs[i]) ids.push(state.tabs[i].id);
+          for (var i = idx + 1; i < state.tabs.length; i++) if (state.tabs[i] && !state.tabs[i].pinned) ids.push(state.tabs[i].id);
           for (var j = 0; j < ids.length; j++) closeTab(ids[j]);
         }});
         showContextMenu(items, e.clientX, e.clientY);
@@ -2321,7 +2613,27 @@
         e.preventDefault();
         this.classList.remove('dragOver');
         var targetId = parseInt(this.getAttribute('data-tab-id'), 10);
-        if (isNaN(targetId) || state.dragTabId == null || state.dragTabId === targetId) return;
+        if (isNaN(targetId)) return;
+
+        // CHROMIUM_PARITY: Accept URL drops onto tabs (C3)
+        if (state.dragTabId == null) {
+          var droppedUrl = '';
+          try { droppedUrl = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || ''; } catch (err) {}
+          droppedUrl = String(droppedUrl || '').trim();
+          if (droppedUrl && /^https?:\/\//i.test(droppedUrl)) {
+            var dropTarget = null;
+            for (var dti = 0; dti < state.tabs.length; dti++) {
+              if (state.tabs[dti].id === targetId) { dropTarget = state.tabs[dti]; break; }
+            }
+            if (dropTarget && dropTarget.mainTabId && dropTarget.type !== 'torrent') {
+              activateTab(targetId);
+              webTabs.navigate({ tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }).catch(function () {});
+            }
+          }
+          return;
+        }
+
+        if (state.dragTabId === targetId) return;
         var fromIdx = -1;
         var toIdx = -1;
         for (var ti = 0; ti < state.tabs.length; ti++) {
@@ -2329,6 +2641,8 @@
           if (state.tabs[ti].id === targetId) toIdx = ti;
         }
         if (fromIdx === -1 || toIdx === -1) return;
+        // CHROMIUM_PARITY: Block drags between pinned and unpinned zones
+        if (state.tabs[fromIdx].pinned !== state.tabs[toIdx].pinned) return;
         var moved = state.tabs.splice(fromIdx, 1)[0];
         state.tabs.splice(toIdx, 0, moved);
         state.dragTabId = null;
@@ -2345,6 +2659,17 @@
     var t = getActiveTab();
     var show = !!(state.browserOpen && t && t.loading);
     el.loadBar.classList.toggle('hidden', !show);
+    syncReloadStopButton();
+  }
+
+  // CHROMIUM_PARITY: Toggle reload button to stop (X) while loading
+  function syncReloadStopButton() {
+    if (!el.navReload) return;
+    var tab = getActiveTab();
+    var loading = !!(state.browserOpen && tab && tab.loading);
+    el.navReload.innerHTML = loading ? SVG_STOP : SVG_RELOAD;
+    el.navReload.title = loading ? 'Stop loading' : 'Reload';
+    el.navReload.setAttribute('aria-label', loading ? 'Stop loading' : 'Reload page');
   }
 
   function syncDownloadIndicator() {
@@ -2764,6 +3089,17 @@
     bindTorrentTabEvents(tab);
   }
 
+  var _VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.m2ts'];
+  function _torrentHasVideoFiles(files) {
+    if (!files || !files.length) return false;
+    for (var i = 0; i < files.length; i++) {
+      var name = String(files[i].name || files[i].path || '').toLowerCase();
+      var dotIdx = name.lastIndexOf('.');
+      if (dotIdx > 0 && _VIDEO_EXTS.indexOf(name.substring(dotIdx)) !== -1) return true;
+    }
+    return false;
+  }
+
   function renderTorrentMetadataReady(tab, entry) {
     var files = entry.files || [];
     var totalSize = 0;
@@ -2807,8 +3143,10 @@
     html += '</div>';
 
     // Actions
+    var hasVideo = _torrentHasVideoFiles(files);
     html += '<div class="wtActions">' +
       '<button class="wtBtn primary" data-wt-action="start" id="wtStartBtn">Start Download</button>' +
+      (hasVideo ? '<button class="wtBtn videoLib" data-wt-action="addToVideoLib">Save to Video Library</button>' : '') +
       '<button class="wtBtn" data-wt-action="cancel">Cancel</button>' +
       '</div>';
 
@@ -3312,15 +3650,27 @@
     };
   }
 
+  function findActiveTorrentById(id) {
+    var key = String(id || '');
+    if (!key) return null;
+    for (var i = 0; i < state.torrentActive.length; i++) {
+      var t = state.torrentActive[i];
+      if (t && String(t.id || '') === key) return t;
+    }
+    return null;
+  }
+
   function renderHubTorrentActive() {
     if (!el.hubTorrentActiveList || !el.hubTorrentActiveEmpty) return;
     var filterKey = String(state.hubTorrentFilter || 'active').toLowerCase();
     var combined = [];
     var seen = Object.create(null);
+    var activeById = Object.create(null);
     for (var ai = 0; ai < state.torrentActive.length; ai++) {
       var a = state.torrentActive[ai];
       if (!a || !a.id) continue;
       seen[a.id] = 1;
+      activeById[a.id] = 1;
       combined.push(a);
     }
     for (var hi = 0; hi < state.torrentHistory.length; hi++) {
@@ -3333,7 +3683,8 @@
       var t = combined[i];
       if (!t) continue;
       var s = String(t.state || '').toLowerCase();
-      if (filterKey === 'active' && !isTorrentActiveState(s)) continue;
+      var isLive = !!activeById[String(t.id || '')];
+      if (filterKey === 'active' && !isLive) continue;
       if (filterKey === 'paused' && s !== 'paused') continue;
       if (filterKey === 'completed' && !isTorrentCompletedState(s)) continue;
       if (filterKey === 'errored' && !isTorrentErroredState(s) && s !== 'completed_with_errors') continue;
@@ -3361,16 +3712,19 @@
       var x = rows[j];
       var pTxt = pctText(x.progress);
       var speed = x.downloadRate > 0 ? (' \u2022 ' + formatSpeed(x.downloadRate)) : '';
-      var sub = (x.state || 'downloading') + (pTxt ? (' \u2022 ' + pTxt) : '') + speed;
       var stateLower = String(x.state || '').toLowerCase();
+      var isLive = !!activeById[String(x.id || '')];
+      var stateLabel = x.state || 'downloading';
+      if (!isLive && isTorrentActiveState(stateLower)) stateLabel = 'session ended';
+      var sub = stateLabel + (pTxt ? (' \u2022 ' + pTxt) : '') + speed;
       var pauseResume = '';
-      if (stateLower === 'paused') {
+      if (isLive && stateLower === 'paused') {
         pauseResume = '<button class="btn btn-ghost btn-sm" data-torrent-action="resume" data-torrent-id="' + escapeHtml(x.id) + '">Resume</button>';
-      } else if (isTorrentActiveState(stateLower)) {
+      } else if (isLive && isTorrentActiveState(stateLower)) {
         pauseResume = '<button class="btn btn-ghost btn-sm" data-torrent-action="pause" data-torrent-id="' + escapeHtml(x.id) + '">Pause</button>';
       }
       var actionButtons = pauseResume;
-      if (isTorrentActiveState(stateLower)) {
+      if (isLive && isTorrentActiveState(stateLower)) {
         actionButtons += '<button class="btn btn-ghost btn-sm" data-torrent-action="cancel" data-torrent-id="' + escapeHtml(x.id) + '">Cancel</button>';
       } else {
         actionButtons += '<button class="btn btn-ghost btn-sm" data-torrent-action="remove-history" data-torrent-id="' + escapeHtml(x.id) + '">Remove</button>';
@@ -3408,13 +3762,47 @@
       return;
     }
     var calls = [];
+    var invoke = null;
     for (var j = 0; j < ids.length; j++) {
-      if (action === 'pause' && api.webTorrent.pause) calls.push(api.webTorrent.pause({ id: ids[j] }));
-      else if (action === 'resume' && api.webTorrent.resume) calls.push(api.webTorrent.resume({ id: ids[j] }));
-      else if (action === 'cancel' && api.webTorrent.cancel) calls.push(api.webTorrent.cancel({ id: ids[j] }));
+      var id = ids[j];
+      if (action === 'pause' && api.webTorrent.pause) invoke = api.webTorrent.pause;
+      else if (action === 'resume' && api.webTorrent.resume) invoke = api.webTorrent.resume;
+      else if (action === 'cancel' && api.webTorrent.cancel) invoke = api.webTorrent.cancel;
+      else invoke = null;
+      if (!invoke) continue;
+      calls.push(
+        invoke({ id: id }).then(function (res) {
+          return {
+            ok: !(res && res.ok === false),
+            error: (res && res.error) ? String(res.error) : ''
+          };
+        }).catch(function (err) {
+          return {
+            ok: false,
+            error: String((err && err.message) || err || 'Request failed')
+          };
+        })
+      );
     }
-    Promise.allSettled(calls).then(function () {
-      showToast(action.charAt(0).toUpperCase() + action.slice(1) + ' requested for ' + ids.length + ' torrent' + (ids.length === 1 ? '' : 's'));
+    if (!calls.length) {
+      showToast('Action unavailable: ' + action);
+      return;
+    }
+    Promise.all(calls).then(function (results) {
+      var okCount = 0;
+      var failCount = 0;
+      for (var k = 0; k < results.length; k++) {
+        if (results[k] && results[k].ok) okCount++;
+        else failCount++;
+      }
+      var actionLabel = action.charAt(0).toUpperCase() + action.slice(1);
+      if (failCount === 0) {
+        showToast(actionLabel + ' applied to ' + okCount + ' torrent' + (okCount === 1 ? '' : 's'));
+      } else if (okCount === 0) {
+        showToast(actionLabel + ' failed for ' + failCount + ' torrent' + (failCount === 1 ? '' : 's'));
+      } else {
+        showToast(actionLabel + ' applied to ' + okCount + ' torrent' + (okCount === 1 ? '' : 's') + ' (' + failCount + ' failed)');
+      }
       refreshTorrentState();
     }).catch(function () {
       refreshTorrentState();
@@ -3996,7 +4384,7 @@
     }, DL_BAR_AUTO_HIDE_MS);
   }
 
-  // ---- Popup â†’ new tab ----
+  // ---- Tab open helpers ----
 
   function openPopupUrlInNewTab(url, parentTab) {
     url = String(url || '').trim();
@@ -4031,13 +4419,35 @@
       src = { id: 0, name: 'New Tab', url: url, color: '#555' };
     }
 
-    createTab(src, url, { toastText: 'Opened in new tab' });
+    createTab(src, url, { toastText: 'Opened in new tab', openerTabId: parentTab ? parentTab.id : null });
   }
 
   function openSourceInNewTab(source) {
     if (!source) return;
     createTab(source, source.url);
     if (!state.browserOpen) openBrowserForTab(state.activeTabId);
+  }
+
+  // CHROMIUM_PARITY: Insert tab next to its opener (like Chrome's tab placement)
+  function insertTabAtOpenerPosition(tab) {
+    if (!tab.openerTabId) {
+      state.tabs.push(tab);
+      return;
+    }
+    var openerIdx = -1;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === tab.openerTabId) { openerIdx = i; break; }
+    }
+    if (openerIdx === -1) {
+      state.tabs.push(tab);
+      return;
+    }
+    // Find the last consecutive sibling from the same opener (insert after it)
+    var insertIdx = openerIdx + 1;
+    while (insertIdx < state.tabs.length && state.tabs[insertIdx].openerTabId === tab.openerTabId) {
+      insertIdx++;
+    }
+    state.tabs.splice(insertIdx, 0, tab);
   }
 
   // BUILD_WCV: createTab now uses IPC instead of DOM webview
@@ -4074,10 +4484,11 @@
       canGoBack: false,
       canGoForward: false,
       pinned: !!opts.pinned,
+      openerTabId: opts.openerTabId || null, // CHROMIUM_PARITY: opener tracking
       runtime: createTabRuntime(startUrl)
     };
 
-    state.tabs.push(tab);
+    insertTabAtOpenerPosition(tab);
     state.activeTabId = tabId;
     state.showBrowserHome = false;
     // Record the initial URL immediately as a fallback for sites where URL
@@ -4141,6 +4552,7 @@
 
   // BUILD_WCV: activateTab uses IPC instead of CSS visibility
   function activateTab(tabId) {
+    saveOmniState(); // CHROMIUM_PARITY: save omnibox state before switching
     state.activeTabId = tabId;
     state.showBrowserHome = false;
     var tab = getActiveTab();
@@ -4157,6 +4569,7 @@
     renderBrowserHome();
     updateNavButtons();
     updateUrlDisplay();
+    restoreOmniState(tabId); // CHROMIUM_PARITY: restore omnibox state for new tab
     syncLoadBar();
     renderSources();
     if (state.findBarOpen) {
@@ -4165,6 +4578,47 @@
       runFindFromInput('find');
     }
     updateBookmarkButton();
+    scheduleSessionSave();
+  }
+
+  // CHROMIUM_PARITY: Pin tab (move to end of pinned zone, show favicon-only)
+  function pinTab(tabId) {
+    var idx = -1;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === tabId) { idx = i; break; }
+    }
+    if (idx === -1) return;
+    var tab = state.tabs[idx];
+    if (tab.pinned) return;
+    tab.pinned = true;
+    // Move to end of pinned zone
+    state.tabs.splice(idx, 1);
+    var lastPinned = -1;
+    for (var j = 0; j < state.tabs.length; j++) {
+      if (state.tabs[j].pinned) lastPinned = j;
+    }
+    state.tabs.splice(lastPinned + 1, 0, tab);
+    renderTabs();
+    scheduleSessionSave();
+  }
+
+  function unpinTab(tabId) {
+    var idx = -1;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i].id === tabId) { idx = i; break; }
+    }
+    if (idx === -1) return;
+    var tab = state.tabs[idx];
+    if (!tab.pinned) return;
+    tab.pinned = false;
+    // Move to first unpinned position
+    state.tabs.splice(idx, 1);
+    var firstUnpinned = state.tabs.length;
+    for (var j = 0; j < state.tabs.length; j++) {
+      if (!state.tabs[j].pinned) { firstUnpinned = j; break; }
+    }
+    state.tabs.splice(firstUnpinned, 0, tab);
+    renderTabs();
     scheduleSessionSave();
   }
 
@@ -4211,11 +4665,17 @@
 
     state.tabs.splice(idx, 1);
 
-    // Adjust active tab
+    // CHROMIUM_PARITY: Prefer activating opener tab on close, fallback to adjacent
     if (state.activeTabId === tabId) {
       if (state.tabs.length) {
+        var openerFallback = null;
+        if (tab.openerTabId) {
+          for (var oi = 0; oi < state.tabs.length; oi++) {
+            if (state.tabs[oi].id === tab.openerTabId) { openerFallback = state.tabs[oi].id; break; }
+          }
+        }
         var newIdx = Math.min(idx, state.tabs.length - 1);
-        activateTab(state.tabs[newIdx].id);
+        activateTab(openerFallback != null ? openerFallback : state.tabs[newIdx].id);
       } else {
         state.activeTabId = null;
         renderTabs();
@@ -4227,12 +4687,7 @@
 
     if (!state.tabs.length && state.browserOpen) {
       state.activeTabId = null;
-      state.showBrowserHome = true;
-      webTabs.hideAll().catch(function () {});
-      renderBrowserHome();
-      updateUrlDisplay();
-      updateNavButtons();
-      syncLoadBar();
+      openYandexNewTab();
     }
 
     renderSources();
@@ -4251,16 +4706,15 @@
     }
     state.tabs = [];
     state.activeTabId = null;
-    state.showBrowserHome = !!state.browserOpen;
     webTabs.hideAll().catch(function () {});
     renderTabs();
-    renderBrowserHome();
     renderSources();
     renderSourcesGrid();
     renderContinue();
     syncLoadBar();
     updateBookmarkButton();
     scheduleSessionSave(true);
+    if (state.browserOpen) openYandexNewTab();
   }
 
   // BUILD_WCV: nav state from cached tab properties (updated via IPC events)
@@ -4345,18 +4799,21 @@
     if (btn) btn.classList.toggle('active', state.split);
   }
 
+  var HOME_PAGE_URL = 'https://yandex.com';
+
+  function openYandexNewTab() {
+    var tab = createTab({
+      id: 'src_' + Date.now(),
+      name: 'Yandex',
+      url: HOME_PAGE_URL,
+      color: '#fc0'
+    }, HOME_PAGE_URL, { silentToast: true });
+    if (!tab) return;
+    if (!state.browserOpen) openBrowserForTab(tab.id);
+  }
+
   function openTabPicker() {
-    state.showBrowserHome = true;
-    if (!state.browserOpen) {
-      openHome();
-      return;
-    }
-    webTabs.hideAll().catch(function () {});
-    renderBrowserHome();
-    updateUrlDisplay();
-    updateNavButtons();
-    syncLoadBar();
-    showToast('Pick a source');
+    openYandexNewTab();
   }
 
   // ---- Add source dialog ----
@@ -4488,6 +4945,15 @@
         closeAddSourceDialog();
         return;
       }
+      // CHROMIUM_PARITY: Escape stops page loading before closing browser
+      if (state.browserOpen) {
+        var escTab = getActiveTab();
+        if (escTab && escTab.loading && escTab.mainTabId) {
+          e.preventDefault();
+          webTabs.navigate({ tabId: escTab.mainTabId, action: 'stop' }).catch(function () {});
+          return;
+        }
+      }
       if (state.browserOpen) {
         e.preventDefault();
         closeBrowser();
@@ -4607,26 +5073,85 @@
 
     if (ctrl && lower === 't') {
       e.preventDefault();
-      var t3 = getActiveTab();
-      if (t3) {
-        var src = getSourceById(t3.sourceId);
-        if (src) {
-          createTab(src, src.url);
-          if (!state.browserOpen) openBrowserForTab(state.activeTabId);
-        } else {
-          createTab({
-            id: t3.sourceId || ('tab_' + Date.now()),
-            name: t3.sourceName || siteNameFromUrl(t3.url || t3.homeUrl || '') || 'New Tab',
-            url: t3.homeUrl || t3.url || 'about:blank',
-            color: '#555'
-          }, t3.url || t3.homeUrl || 'about:blank');
-        }
-      } else {
-        // no tabs yet: prompt pick
-        openTabPicker();
-      }
+      openTabPicker();
       return;
     }
+  }
+
+  // CHROMIUM_PARITY: Long-press detection for back/forward history dropdown
+  var _navLongPressTriggered = false;
+
+  function addNavLongPressHandler(btn, onLongPress) {
+    var timer = null;
+    var LONG_PRESS_MS = 500;
+    btn.addEventListener('mousedown', function (e) {
+      if (e.button !== 0) return;
+      timer = setTimeout(function () {
+        timer = null;
+        _navLongPressTriggered = true;
+        onLongPress(e);
+      }, LONG_PRESS_MS);
+    });
+    btn.addEventListener('mouseup', function () {
+      if (timer) { clearTimeout(timer); timer = null; }
+    });
+    btn.addEventListener('mouseleave', function () {
+      if (timer) { clearTimeout(timer); timer = null; }
+    });
+    btn.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      if (timer) { clearTimeout(timer); timer = null; }
+      _navLongPressTriggered = true;
+      onLongPress(e);
+    });
+  }
+
+  function showNavHistoryDropdown(direction, event) {
+    var tab = getActiveTab();
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    var entries = runtime.navEntries;
+    var idx = runtime.currentIndex;
+    if (!entries || !entries.length) return;
+
+    var items = [];
+    if (direction === 'back') {
+      for (var i = idx - 1; i >= 0 && items.length < 15; i--) {
+        (function (entryIdx) {
+          var entry = entries[entryIdx];
+          var label = entry.title || siteNameFromUrl(entry.url) || entry.url;
+          if (label.length > 60) label = label.substring(0, 57) + '...';
+          items.push({
+            label: label,
+            onClick: function () {
+              if (tab.mainTabId != null) {
+                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+              }
+            }
+          });
+        })(i);
+      }
+    } else {
+      for (var j = idx + 1; j < entries.length && items.length < 15; j++) {
+        (function (entryIdx) {
+          var entry = entries[entryIdx];
+          var label = entry.title || siteNameFromUrl(entry.url) || entry.url;
+          if (label.length > 60) label = label.substring(0, 57) + '...';
+          items.push({
+            label: label,
+            onClick: function () {
+              if (tab.mainTabId != null) {
+                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+              }
+            }
+          });
+        })(j);
+      }
+    }
+
+    if (!items.length) return;
+    var rect = (direction === 'back' ? el.navBack : el.navForward).getBoundingClientRect();
+    showContextMenu(items, rect.left, rect.bottom + 4);
   }
 
   // ---- Bind UI events ----
@@ -4758,32 +5283,73 @@
     }
 
     // BUILD_WCV: navigation via IPC
+    // CHROMIUM_PARITY: Long-press/right-click shows history dropdown
     if (el.navBack) {
       el.navBack.onclick = function () {
+        if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
           webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
         }
       };
+      addNavLongPressHandler(el.navBack, function (e) {
+        showNavHistoryDropdown('back', e);
+      });
     }
 
     if (el.navForward) {
       el.navForward.onclick = function () {
+        if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
           webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
         }
       };
+      addNavLongPressHandler(el.navForward, function (e) {
+        showNavHistoryDropdown('forward', e);
+      });
     }
 
+    // CHROMIUM_PARITY: Reload/Stop toggle — stop while loading, reload otherwise
     if (el.navReload) {
       el.navReload.onclick = function () {
         var tab = getActiveTab();
-        if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
-          showToast('Reloadingâ€¦');
+        if (!tab || !tab.mainTabId) return;
+        if (tab.loading) {
+          webTabs.navigate({ tabId: tab.mainTabId, action: 'stop' }).catch(function () {});
+          return;
         }
+        webTabs.navigate({ tabId: tab.mainTabId, action: 'reload' }).catch(function () {});
       };
+    }
+
+    // CHROMIUM_PARITY: Drop URL on empty tab-bar area → new tab (C3)
+    if (el.tabBar) {
+      el.tabBar.addEventListener('dragover', function (e) {
+        if (state.dragTabId != null) return; // tab reorder handled per-tab
+        var hasUrl = false;
+        try { hasUrl = e.dataTransfer.types.indexOf('text/uri-list') !== -1 || e.dataTransfer.types.indexOf('text/plain') !== -1; } catch (err) {}
+        if (hasUrl) { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch (ex) {} }
+      });
+      el.tabBar.addEventListener('drop', function (e) {
+        if (state.dragTabId != null) return; // tab reorder handled per-tab
+        // Only fire if the drop landed on the bar itself, not on a tab element
+        if (e.target !== el.tabBar) return;
+        e.preventDefault();
+        var droppedUrl = '';
+        try { droppedUrl = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain') || ''; } catch (err) {}
+        droppedUrl = String(droppedUrl || '').trim();
+        if (droppedUrl && /^https?:\/\//i.test(droppedUrl)) {
+          var host = '';
+          try { host = new URL(droppedUrl).hostname.replace(/^www\./, ''); } catch (err) {}
+          createTab({
+            id: 'drop_' + Date.now(),
+            name: host || 'Tab',
+            url: droppedUrl,
+            color: '#888'
+          }, droppedUrl, { silentToast: true });
+        }
+      });
     }
 
     if (el.navHome) {
@@ -4810,11 +5376,27 @@
       };
     }
 
+    // CHROMIUM_PARITY: Drag URL from omnibox lock/globe icon (C3)
+    if (el.omniIcon) {
+      el.omniIcon.setAttribute('draggable', 'true');
+      el.omniIcon.addEventListener('dragstart', function (e) {
+        var tab = getActiveTab();
+        var url = tab ? (tab.url || '') : '';
+        if (!url || url === 'about:blank') { e.preventDefault(); return; }
+        try {
+          e.dataTransfer.setData('text/plain', url);
+          e.dataTransfer.setData('text/uri-list', url);
+          e.dataTransfer.effectAllowed = 'copyLink';
+        } catch (err) {}
+      });
+    }
+
     // Chrome-ish omnibox behavior
     if (el.urlDisplay) {
       syncOmniPlaceholder();
 
       el.urlDisplay.addEventListener('focus', function () {
+        if (state._omniRestoreInProgress) return; // CHROMIUM_PARITY: don't select-all during restore
         try { this.select(); } catch (e) {}
         refreshOmniSuggestionsFromInput();
       });
@@ -4825,6 +5407,19 @@
 
       el.urlDisplay.addEventListener('keydown', function (e) {
         var key = String((e && e.key) || '');
+        // CHROMIUM_PARITY: Tab or Right-arrow at end of input accepts ghost text
+        if (key === 'Tab' && _omniGhostCompletion) {
+          e.preventDefault();
+          acceptOmniGhost();
+          refreshOmniSuggestionsFromInput();
+          return;
+        }
+        if (key === 'ArrowRight' && _omniGhostCompletion && el.urlDisplay.selectionStart === el.urlDisplay.value.length) {
+          e.preventDefault();
+          acceptOmniGhost();
+          refreshOmniSuggestionsFromInput();
+          return;
+        }
         if (key === 'ArrowDown' || key === 'ArrowUp') {
           if (!state.omniSuggestOpen || !state.omniSuggestItems.length) return;
           try { e.preventDefault(); } catch (e0) {}
@@ -4870,8 +5465,20 @@
       });
 
       el.urlDisplay.addEventListener('blur', function () {
+        if (state._omniRestoreInProgress) return; // CHROMIUM_PARITY: don't clobber during tab switch
         setTimeout(function () { closeOmniSuggestions(); }, 120);
+        clearOmniGhost(); // CHROMIUM_PARITY
         updateUrlDisplay();
+      });
+
+      // CHROMIUM_PARITY: IME composition safety for ghost text
+      el.urlDisplay.addEventListener('compositionstart', function () {
+        state._omniComposing = true;
+        clearOmniGhost();
+      });
+      el.urlDisplay.addEventListener('compositionend', function () {
+        state._omniComposing = false;
+        setTimeout(function () { updateOmniGhostText(); }, 10);
       });
     }
 
@@ -4927,37 +5534,18 @@
         var items = [
           { label: 'New tab', onClick: function () { openTabPicker(); } },
           { separator: true },
-          { label: 'History', onClick: function () {
-            var hubBtn = document.getElementById('webHubToggleBtn');
-            if (hubBtn && !document.body.classList.contains('webHubOpen')) hubBtn.click();
-            var historySection = document.querySelector('[data-collapse-key="browsingHistory"]');
-            if (historySection) {
-              var targetId = historySection.getAttribute('data-target');
-              var target = targetId ? document.getElementById(targetId) : null;
-              if (target && target.classList.contains('hidden')) historySection.click();
-              try { historySection.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (err) {}
-            }
-          }},
+          { label: 'History', onClick: function () { openHubPanelSection('browsingHistory'); } },
           { label: 'Downloads', onClick: function () { toggleDownloadsPanel(); } },
-          { label: 'Bookmarks', onClick: function () {
-            var hubBtn = document.getElementById('webHubToggleBtn');
-            if (hubBtn && !document.body.classList.contains('webHubOpen')) hubBtn.click();
-            var bkSection = document.querySelector('[data-collapse-key="bookmarks"]');
-            if (bkSection) {
-              var targetId = bkSection.getAttribute('data-target');
-              var target = targetId ? document.getElementById(targetId) : null;
-              if (target && target.classList.contains('hidden')) bkSection.click();
-              try { bkSection.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (err) {}
-            }
-          }},
+          { label: 'Bookmarks', onClick: function () { openHubPanelSection('bookmarks'); } },
           { separator: true },
           { label: 'Split view', onClick: function () { toggleSplit(); } },
           { label: 'Find in page', onClick: function () { openFindBar(); } },
           { separator: true },
           { label: 'Keyboard shortcuts', onClick: function () { toggleTips(); } },
-          { label: 'Hub panel', onClick: function () {
-            var hubBtn = document.getElementById('webHubToggleBtn');
-            if (hubBtn) hubBtn.click();
+          { label: 'Settings', onClick: function () {
+            if (window.Tanko && window.Tanko.settings && typeof window.Tanko.settings.open === 'function') {
+              window.Tanko.settings.open({ tab: 'browser' });
+            }
           }}
         ];
         showContextMenu(items, rect.right - 200, rect.bottom + 4);
@@ -5115,17 +5703,58 @@
         if (!t) return;
         var actionEl = t.closest ? t.closest('[data-torrent-action]') : null;
         if (!actionEl || !api.webTorrent) return;
+        try { evt.preventDefault(); evt.stopPropagation(); } catch (e) {}
         var action = String(actionEl.getAttribute('data-torrent-action') || '');
         var id = String(actionEl.getAttribute('data-torrent-id') || '');
         if (!id) return;
+        var activeEntry = findActiveTorrentById(id);
         if (action === 'pause' && api.webTorrent.pause) {
-          api.webTorrent.pause({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+          if (!activeEntry) {
+            showToast('Torrent is not active in this session');
+            refreshTorrentState();
+            return;
+          }
+          api.webTorrent.pause({ id: id }).then(function (res) {
+            if (res && res.ok === false) showToast(String(res.error || 'Unable to pause torrent'));
+            refreshTorrentState();
+          }).catch(function () {
+            showToast('Unable to pause torrent');
+            refreshTorrentState();
+          });
         } else if (action === 'resume' && api.webTorrent.resume) {
-          api.webTorrent.resume({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+          if (!activeEntry) {
+            showToast('Torrent is not active in this session');
+            refreshTorrentState();
+            return;
+          }
+          api.webTorrent.resume({ id: id }).then(function (res) {
+            if (res && res.ok === false) showToast(String(res.error || 'Unable to resume torrent'));
+            refreshTorrentState();
+          }).catch(function () {
+            showToast('Unable to resume torrent');
+            refreshTorrentState();
+          });
         } else if (action === 'cancel' && api.webTorrent.cancel) {
-          api.webTorrent.cancel({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+          if (!activeEntry) {
+            showToast('Torrent is not active in this session');
+            refreshTorrentState();
+            return;
+          }
+          api.webTorrent.cancel({ id: id }).then(function (res) {
+            if (res && res.ok === false) showToast(String(res.error || 'Unable to cancel torrent'));
+            refreshTorrentState();
+          }).catch(function () {
+            showToast('Unable to cancel torrent');
+            refreshTorrentState();
+          });
         } else if (action === 'remove-history' && api.webTorrent.removeHistory) {
-          api.webTorrent.removeHistory({ id: id }).then(function () { refreshTorrentState(); }).catch(function () {});
+          api.webTorrent.removeHistory({ id: id }).then(function (res) {
+            if (res && res.ok === false) showToast(String(res.error || 'Unable to remove history'));
+            refreshTorrentState();
+          }).catch(function () {
+            showToast('Unable to remove history');
+            refreshTorrentState();
+          });
         }
       });
     }
@@ -5198,6 +5827,43 @@
           showToast('Failed to clear history');
         });
       };
+    }
+
+    if (el.hubSourcesList) {
+      el.hubSourcesList.addEventListener('click', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t) return;
+        var editBtn = t.closest ? t.closest('[data-settings-source-edit-id]') : null;
+        if (editBtn) {
+          var editId = String(editBtn.getAttribute('data-settings-source-edit-id') || '').trim();
+          if (!editId) return;
+          var sourceToEdit = null;
+          for (var i = 0; i < state.sources.length; i++) {
+            if (state.sources[i] && String(state.sources[i].id) === editId) { sourceToEdit = state.sources[i]; break; }
+          }
+          if (sourceToEdit) openAddSourceDialog(sourceToEdit);
+          return;
+        }
+
+        var removeBtn = t.closest ? t.closest('[data-settings-source-remove-id]') : null;
+        if (removeBtn) {
+          var removeId = String(removeBtn.getAttribute('data-settings-source-remove-id') || '').trim();
+          if (!removeId) return;
+          removeSource(removeId);
+          return;
+        }
+
+        var sourceCard = t.closest ? t.closest('[data-settings-source-id]') : null;
+        if (!sourceCard) return;
+        var sourceId = String(sourceCard.getAttribute('data-settings-source-id') || '').trim();
+        if (!sourceId) return;
+        for (var si = 0; si < state.sources.length; si++) {
+          var src = state.sources[si];
+          if (!src || String(src.id) !== sourceId) continue;
+          openBrowser(src);
+          break;
+        }
+      });
     }
 
     if (el.hubBrowseSearch) {
@@ -5515,7 +6181,7 @@
       });
     }
 
-    // BUILD_WCV: Popup â†’ new tab (main-process handler now sends tabId instead of wcId)
+    // BUILD_WCV: Popup/new-window â†’ same tab (main-process handler sends tabId)
     if (api.webSources.onPopupOpen) {
       api.webSources.onPopupOpen(function (info) {
         var url = info && info.url ? String(info.url) : '';
@@ -5577,6 +6243,11 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.title = data.title || tab.sourceName || 'Tab';
+      // CHROMIUM_PARITY: sync title into navEntries for history dropdown
+      var rt = ensureTabRuntime(tab);
+      if (rt.currentIndex >= 0 && rt.navEntries[rt.currentIndex]) {
+        rt.navEntries[rt.currentIndex].title = String(data.title || '');
+      }
       renderTabs();
       renderBrowserHome();
       renderContinue();
@@ -5588,7 +6259,21 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
-      pushRuntimeCommittedUrl(tab, tab.url);
+      // CHROMIUM_PARITY: direction-aware history tracking
+      var direction = (data && data.direction) || '';
+      if (direction === 'index' && data.targetIndex != null) {
+        var runtime = ensureTabRuntime(tab);
+        runtime.currentIndex = Math.max(0, Math.min(Number(data.targetIndex), runtime.navEntries.length - 1));
+        if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = tab.url;
+        runtime.lastVisibleUrl = tab.url;
+        runtime.lastCommittedUrl = tab.url;
+        runtime.pendingUrl = '';
+        runtime.securityState = inferSecurityStateFromUrl(tab.url);
+        runtime.isBlocked = false;
+        runtime.lastError = null;
+      } else {
+        pushRuntimeCommittedUrl(tab, tab.url, direction);
+      }
       maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
@@ -5820,10 +6505,20 @@
 
   // Expose openBrowser globally so Comics/Books sidebars can call it
   try {
+    function openDefaultBrowserEntry() {
+      if (state.tabs.length) {
+        var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
+        openBrowserForTab(targetId);
+      } else {
+        openYandexNewTab();
+      }
+    }
     window.Tanko = window.Tanko || {};
     window.Tanko.web = {
       openBrowser: openBrowser,
       openHome: openHome,
+      openDefault: openDefaultBrowserEntry,
+      isBrowserOpen: function () { return !!state.browserOpen; },
       openAddSourceDialog: function () { openAddSourceDialog(null); }
     };
   } catch (e) {}
