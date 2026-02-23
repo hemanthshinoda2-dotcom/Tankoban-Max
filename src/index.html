@@ -2019,6 +2019,27 @@ COMMON ANCHORS
             </div>
             <div id="webHubAdblockInfo" class="navMuted">Ad blocker status unavailable.</div>
           </div>
+          <div id="settingsBrowserUserscriptsSection" class="webHubSection">
+            <div class="webHubSectionHeading">Userscripts (Built-in)</div>
+            <div class="webHubSectionActions">
+              <label><input id="webHubUserscriptsEnabled" type="checkbox" checked /> Enabled</label>
+              <button id="webHubUserscriptAddCurrentBtn" class="btn btn-ghost btn-sm" type="button">Use Current Site</button>
+              <button id="webHubUserscriptClearBtn" class="btn btn-ghost btn-sm" type="button">Clear Form</button>
+            </div>
+            <div class="webHubSectionActions" style="flex-wrap: wrap; gap: 8px; align-items: stretch;">
+              <input id="webHubUserscriptTitle" class="search webHubSearch" type="text" placeholder="Rule name (example: YouTube cleanup)" autocomplete="off" />
+              <input id="webHubUserscriptMatch" class="search webHubSearch" type="text" placeholder="Match pattern (example: *://*.youtube.com/*)" autocomplete="off" />
+              <select id="webHubUserscriptRunAt" class="select">
+                <option value="did-finish-load" selected>After page load</option>
+                <option value="dom-ready">When Document Object Model is ready</option>
+              </select>
+              <button id="webHubUserscriptSaveBtn" class="btn btn-ghost btn-sm" type="button">Save Rule</button>
+            </div>
+            <textarea id="webHubUserscriptCode" class="search settingsTextArea" rows="7" spellcheck="false" placeholder="JavaScript code to run on matching pages."></textarea>
+            <div id="webHubUserscriptInfo" class="navMuted">Simple built-in userscripts for site fixes and custom behaviors. Use carefully.</div>
+            <div id="webHubUserscriptsList" class="webHubList"></div>
+            <div id="webHubUserscriptsEmpty" class="navMuted">No userscript rules yet.</div>
+          </div>
         </div>
       </div>
     </div>

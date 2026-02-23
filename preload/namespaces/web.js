@@ -96,9 +96,26 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       list: () => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_LIST),
       set: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_SET, payload),
       reset: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_RESET, payload),
+      resolvePrompt: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PERMISSIONS_PROMPT_RESOLVE, payload),
       onUpdated: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_PERMISSIONS_UPDATED, (_evt, data) => cb(data));
+      },
+      onPrompt: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_PERMISSION_PROMPT, (_evt, data) => cb(data));
+      },
+    },
+
+    webUserscripts: {
+      get: () => ipcRenderer.invoke(CHANNEL.WEB_USERSCRIPTS_GET),
+      setEnabled: (payload) => ipcRenderer.invoke(CHANNEL.WEB_USERSCRIPTS_SET_ENABLED, payload),
+      upsert: (payload) => ipcRenderer.invoke(CHANNEL.WEB_USERSCRIPTS_UPSERT, payload),
+      remove: (payload) => ipcRenderer.invoke(CHANNEL.WEB_USERSCRIPTS_REMOVE, payload),
+      setRuleEnabled: (payload) => ipcRenderer.invoke(CHANNEL.WEB_USERSCRIPTS_SET_RULE_ENABLED, payload),
+      onUpdated: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_USERSCRIPTS_UPDATED, (_evt, data) => cb(data));
       },
     },
 

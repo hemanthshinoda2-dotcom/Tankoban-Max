@@ -87,7 +87,9 @@
   overflow-x: auto;
   padding: 0 4px;
   scrollbar-width: none;
+  scroll-behavior: smooth;
 }
+
 .webTabBar::-webkit-scrollbar {
   display: none;
 }
@@ -136,8 +138,9 @@
 }
 
 .webTab.active {
-  background: rgba(var(--chrome-rgb), .10);
-  border-color: rgba(var(--chrome-rgb), .10);
+  background: rgba(var(--chrome-rgb), .12);
+  border-color: rgba(var(--chrome-rgb), .12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
 }
 /* Active tab accent line */
 .webTab.active::after {
@@ -232,6 +235,37 @@
   background: rgba(var(--chrome-rgb), .12);
 }
 
+/* Build 6 — keep active tab close affordance lightly visible */
+.webTab.active .webTabClose {
+  opacity: .34;
+}
+.webTab.active:hover .webTabClose {
+  opacity: .78;
+}
+.webTabClose:focus-visible {
+  opacity: 1 !important;
+  outline: 1px solid rgba(var(--chrome-rgb), .35);
+  outline-offset: 1px;
+}
+
+/* Build 6 — clearer insert marker for drag reorder */
+.webTab.dragBefore::before,
+.webTab.dragAfter::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .70));
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+}
+.webTab.dragBefore::before { left: -1px; }
+.webTab.dragAfter::before { right: -1px; }
+.webTab.dragOver:not(.dragBefore):not(.dragAfter) {
+  background: rgba(var(--chrome-rgb), .12);
+}
+
 /* Loading tab — spinner replaces favicon */
 .webTab.loading {
   opacity: .88;
@@ -279,7 +313,7 @@
   opacity: 0.4;
 }
 .webTab.dragOver {
-  border-left: 2px solid var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  border-left: none;
 }
 
 .webTab.broken {
@@ -309,6 +343,47 @@
 .webTab.pinned .webTabClose { display: none; }
 .webTab.pinned .webTabBadges { position: absolute; right: 2px; top: 2px; }
 .webTab.pinned + .webTab:not(.pinned) { margin-left: 6px; }
+
+/* Build 6 — tab density scaling for high tab counts */
+.webBrowserView.webTabsDense .webTabStrip {
+  height: 36px;
+}
+.webBrowserView.webTabsDense .webTab {
+  height: 32px;
+  max-width: 170px;
+  flex-basis: 156px;
+  padding: 5px 10px;
+  gap: 5px;
+}
+.webBrowserView.webTabsDense .webTabLabel {
+  font-size: 11px;
+}
+.webBrowserView.webTabsDense .webTabClose {
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  font-size: 12px;
+}
+.webBrowserView.webTabsDense .webTab.pinned {
+  flex-basis: 34px;
+  min-width: 34px;
+  max-width: 34px;
+}
+.webBrowserView.webTabsDense .webTabAdd,
+.webBrowserView.webTabsDense .webTabOverflowBtn {
+  width: 26px;
+  height: 26px;
+  margin-bottom: 2px;
+}
+
+.webBrowserView.webTabsUltraDense .webTab {
+  max-width: 148px;
+  flex-basis: 138px;
+  padding: 4px 8px;
+}
+.webBrowserView.webTabsUltraDense .webTabLabel {
+  font-size: 10.5px;
+}
 
 .webTabQuickPanel {
   position: absolute;
@@ -1146,6 +1221,60 @@
   font-weight: 600;
 }
 
+
+.webDlToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .06);
+}
+.webDlToolbar--home {
+  padding: 8px 0 10px;
+  border-bottom: none;
+}
+.webDlToolbarInput {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: rgba(var(--chrome-rgb), .04);
+  color: inherit;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.webDlToolbarInput:focus {
+  outline: none;
+  border-color: rgba(var(--chrome-rgb), .22);
+  background: rgba(var(--chrome-rgb), .06);
+}
+.webDlToolbarSelect {
+  flex: 0 0 auto;
+  min-width: 116px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: rgba(var(--chrome-rgb), .04);
+  color: inherit;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.webDlToolbarSelect:focus {
+  outline: none;
+  border-color: rgba(var(--chrome-rgb), .22);
+}
+
+.webDlGroupLabel {
+  margin: 8px 4px 6px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  opacity: .55;
+}
+
 .webDlList {
   overflow: auto;
   padding: 6px;
@@ -1454,6 +1583,61 @@
   pointer-events: none;
 }
 
+
+.webPermissionPrompt {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 230;
+}
+.webPermissionPrompt.hidden {
+  display: none;
+}
+.webPermissionPromptCard {
+  width: min(520px, calc(100vw - 28px));
+  border-radius: 14px;
+  border: 1px solid rgba(var(--chrome-rgb), .16);
+  background: rgba(var(--surface-rgb), .96);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(12px) saturate(125%);
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+  padding: 12px 12px 10px;
+  pointer-events: auto;
+}
+.webPermissionPromptTitle {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.webPermissionPromptBody {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: .92;
+}
+.webPermissionPromptMeta {
+  margin-top: 5px;
+  font-size: 11px;
+  opacity: .65;
+  min-height: 14px;
+}
+.webPermissionPromptRemember {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  opacity: .9;
+}
+.webPermissionPromptActions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
 /* ══════════════════════════════════════════
    Hub panel checklist (privacy/data section)

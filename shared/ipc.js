@@ -892,6 +892,9 @@ const CHANNEL = {
   /** Reset permission overrides. Args: { origin?, permission? }. Returns: { ok } */
   WEB_PERMISSIONS_RESET: 'webPermissions:reset',
 
+  /** Resolve a pending runtime permission prompt. Args: { requestId, decision }. Returns: { ok } */
+  WEB_PERMISSIONS_PROMPT_RESOLVE: 'webPermissions:promptResolve',
+
   // ========================================
   // Web Adblock
   // ========================================
@@ -907,6 +910,16 @@ const CHANNEL = {
 
   /** Get adblock stats. Returns: { ok, stats } */
   WEB_ADBLOCK_STATS: 'webAdblock:stats',
+
+  // ========================================
+  // Web Userscripts (extension-lite)
+  // ========================================
+
+  WEB_USERSCRIPTS_GET: 'webUserscripts:get',
+  WEB_USERSCRIPTS_SET_ENABLED: 'webUserscripts:setEnabled',
+  WEB_USERSCRIPTS_UPSERT: 'webUserscripts:upsert',
+  WEB_USERSCRIPTS_REMOVE: 'webUserscripts:remove',
+  WEB_USERSCRIPTS_SET_RULE_ENABLED: 'webUserscripts:setRuleEnabled',
 
   // ========================================
   // WebTorrent
@@ -1124,7 +1137,9 @@ const EVENT = {
   WEB_BOOKMARKS_UPDATED: 'webBookmarks:updated',
   WEB_FIND_RESULT: 'webFind:result',
   WEB_PERMISSIONS_UPDATED: 'webPermissions:updated',
+  WEB_PERMISSION_PROMPT: 'webPermissions:prompt',
   WEB_ADBLOCK_UPDATED: 'webAdblock:updated',
+  WEB_USERSCRIPTS_UPDATED: 'webUserscripts:updated',
   WEB_TORRENT_STARTED: 'webTorrent:started',
   WEB_TORRENT_PROGRESS: 'webTorrent:progress',
   WEB_TORRENT_COMPLETED: 'webTorrent:completed',

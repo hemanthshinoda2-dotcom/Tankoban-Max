@@ -68,6 +68,25 @@ function isAllowedWebModeTopLevelUrl(targetUrl) {
   }
 }
 
+function __readWebPrivacyFlagsFromSettings() {
+  try {
+    var settingsPath = dataPath('web_browser_settings.json');
+    if (!settingsPath || !fs.existsSync(settingsPath)) {
+      return { doNotTrack: false };
+    }
+    var raw = fs.readFileSync(settingsPath, 'utf8');
+    if (!raw) return { doNotTrack: false };
+    var parsed = JSON.parse(raw);
+    var s = (parsed && typeof parsed === 'object' && parsed.settings && typeof parsed.settings === 'object')
+      ? parsed.settings
+      : ((parsed && typeof parsed === 'object') ? parsed : {});
+    var privacy = (s && typeof s.privacy === 'object' && s.privacy) ? s.privacy : {};
+    return { doNotTrack: !!privacy.doNotTrack };
+  } catch {
+    return { doNotTrack: false };
+  }
+}
+
 function ensureWebModeSecurity() {
   if (__didInstallWebModeSecurity) return;
   __didInstallWebModeSecurity = true;
@@ -78,8 +97,12 @@ function ensureWebModeSecurity() {
 
   var webPermissionsDomain = null;
   var webAdblockDomain = null;
+  var webPermissionPromptsDomain = null;
+  var webUserscriptsDomain = null;
   try { webPermissionsDomain = require('./domains/webPermissions'); } catch {}
   try { webAdblockDomain = require('./domains/webAdblock'); } catch {}
+  try { webPermissionPromptsDomain = require('./domains/webPermissionPrompts'); } catch {}
+  try { webUserscriptsDomain = require('./domains/webUserscripts'); } catch {}
 
   const blockedPermissions = new Set([
     'media', 'mediaKeySystem', 'audioCapture', 'videoCapture',
@@ -135,15 +158,78 @@ function ensureWebModeSecurity() {
     }
   } catch {}
 
+  const promptablePermissions = new Set([
+    'media', 'camera', 'microphone', 'audioCapture', 'videoCapture',
+    'geolocation', 'notifications', 'midi', 'midiSysex',
+    'clipboard-read', 'clipboard-sanitized-write'
+  ]);
+
+  function shouldPromptPermissionRequest(key) {
+    var p = String(key || '').trim();
+    if (!p) return false;
+    if (promptablePermissions.has(p)) return true;
+    if (p === 'pointerLock' || p === 'fullscreen') return false;
+    return false;
+  }
+
+  function getPromptTargetWindow() {
+    try { if (win && !win.isDestroyed()) return win; } catch {}
+    return null;
+  }
+
+  function getPromptOrigin(wc, details) {
+    var origin = getPermissionOrigin(wc, details, '');
+    if (!origin) return '';
+    try {
+      return String(new URL(origin).origin || '').trim();
+    } catch {
+      return '';
+    }
+  }
+
   try {
     ses.setPermissionRequestHandler((wc, permission, callback, details) => {
       var allow = false;
+      var key = '';
       try {
-        allow = isPermissionAllowed(wc, permission, details, '');
+        key = String(permission || '').trim();
+        allow = isPermissionAllowed(wc, key, details, '');
       } catch {
         allow = false;
       }
-      return callback(allow);
+      if (allow) {
+        try { return callback(true); } catch { return; }
+      }
+
+      var origin = '';
+      try { origin = getPromptOrigin(wc, details); } catch {}
+      if (!key || !origin || !/^https?:\/\//i.test(origin)) {
+        try { return callback(false); } catch { return; }
+      }
+      if (!shouldPromptPermissionRequest(key)) {
+        try { return callback(false); } catch { return; }
+      }
+      if (!webPermissionPromptsDomain || typeof webPermissionPromptsDomain.request !== 'function') {
+        try { return callback(false); } catch { return; }
+      }
+
+      try {
+        webPermissionPromptsDomain.request({
+          win: getPromptTargetWindow(),
+          wc: wc,
+          permission: key,
+          origin: origin,
+          details: details || {},
+          eventName: EVENT.WEB_PERMISSION_PROMPT,
+        }).then(function (granted) {
+          try { callback(!!granted); } catch {}
+        }).catch(function () {
+          try { callback(false); } catch {}
+        });
+        return;
+      } catch {
+        try { return callback(false); } catch { return; }
+      }
     });
   } catch {}
 
@@ -178,6 +264,28 @@ function ensureWebModeSecurity() {
         }
       } catch {}
       callback({ cancel: false });
+    });
+  } catch {}
+
+  // Build Browser Parity 8: Honor privacy setting by adding DNT / Global Privacy Control headers
+  // for webmode requests (best-effort, session-scoped).
+  try {
+    ses.webRequest.onBeforeSendHeaders((details, callback) => {
+      try {
+        var headers = Object.assign({}, (details && details.requestHeaders) || {});
+        var flags = __readWebPrivacyFlagsFromSettings();
+        var dntEnabled = !!(flags && flags.doNotTrack);
+        if (dntEnabled) {
+          headers['DNT'] = '1';
+          headers['Sec-GPC'] = '1';
+        } else {
+          try { delete headers['DNT']; } catch {}
+          try { delete headers['Sec-GPC']; } catch {}
+        }
+        callback({ requestHeaders: headers });
+        return;
+      } catch {}
+      callback({ requestHeaders: (details && details.requestHeaders) || {} });
     });
   } catch {}
 
@@ -230,6 +338,59 @@ function ensureWebModeSecurity() {
           if (!isAllowedWebModeTopLevelUrl(navUrl)) {
             try { event.preventDefault(); } catch {}
           }
+        });
+      } catch {}
+
+      // Build Browser Parity 9: Inject matching userscripts on dom-ready and did-finish-load.
+      function injectUserscriptsForRunAt(runAt) {
+        try {
+          if (!webUserscriptsDomain || typeof webUserscriptsDomain.getMatchingScripts !== 'function') return;
+          var pageUrl = '';
+          try { pageUrl = String(contents.getURL() || ''); } catch {}
+          if (!/^https?:/i.test(pageUrl)) return;
+          var res = webUserscriptsDomain.getMatchingScripts({ url: pageUrl, runAt: runAt });
+          var list = (res && Array.isArray(res.scripts)) ? res.scripts : [];
+          if (!list.length) return;
+          for (var si = 0; si < list.length; si++) {
+            (function (rule) {
+              if (!rule || !rule.code) return;
+              var payload = {
+                id: String(rule.id || ''),
+                title: String(rule.title || ''),
+                runAt: String(runAt || ''),
+                code: String(rule.code || '')
+              };
+              var source = '(function(){try{'
+                + 'window.__tankobanUserscriptsRan=window.__tankobanUserscriptsRan||Object.create(null);'
+                + 'var __u=' + JSON.stringify(payload) + ';'
+                + 'var __k=__u.id+"::"+location.href+"::"+__u.runAt;'
+                + 'if(window.__tankobanUserscriptsRan[__k]){return;}'
+                + 'window.__tankobanUserscriptsRan[__k]=Date.now();'
+                + 'try{(0,eval)(__u.code);}catch(__e){try{console.warn("[Tankoban userscript]",__u.title||__u.id,__e);}catch(_){}}'
+                + '}catch(__outer){try{console.warn("[Tankoban userscript bootstrap]",__outer);}catch(_){}}})();';
+              try {
+                Promise.resolve(contents.executeJavaScript(source, true)).then(function () {
+                  try {
+                    if (webUserscriptsDomain && typeof webUserscriptsDomain.touchInjected === 'function') {
+                      webUserscriptsDomain.touchInjected(rule.id);
+                    }
+                  } catch {}
+                }).catch(function () {});
+              } catch {}
+            })(list[si]);
+          }
+        } catch {}
+      }
+
+      try {
+        contents.on('dom-ready', function () {
+          injectUserscriptsForRunAt('dom-ready');
+        });
+      } catch {}
+
+      try {
+        contents.on('did-finish-load', function () {
+          injectUserscriptsForRunAt('did-finish-load');
         });
       } catch {}
     });
@@ -823,7 +984,77 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// Note: before-quit cleanup handled in IPC registry where state lives
+// Build Browser Parity 8: before-quit cleanup for web privacy clear-on-exit settings.
+let __beforeQuitWebCleanupStarted = false;
+let __beforeQuitWebCleanupFinished = false;
+
+async function __runBrowserParityQuitCleanup() {
+  // Best-effort: flush debounced writes first, then honor web privacy clear-on-exit settings.
+  try {
+    const storageLib = require('./lib/storage');
+    if (storageLib && typeof storageLib.flushAllWrites === 'function') {
+      await storageLib.flushAllWrites();
+    }
+  } catch {}
+
+  try {
+    const storageLib = require('./lib/storage');
+    const webBrowserSettingsDomain = require('./domains/webBrowserSettings');
+    const webDataDomain = require('./domains/webData');
+    const ctxLite = { storage: storageLib };
+    const res = await webBrowserSettingsDomain.get(ctxLite);
+    const s = (res && res.ok && res.settings) ? res.settings : null;
+    const clearOnExit = s && s.privacy && s.privacy.clearOnExit ? s.privacy.clearOnExit : null;
+    if (!clearOnExit) return;
+    var kinds = [];
+    if (clearOnExit.history) kinds.push('history');
+    if (clearOnExit.downloads) kinds.push('downloads');
+    if (clearOnExit.cookies) {
+      kinds.push('cookies');
+      kinds.push('siteData');
+    }
+    if (clearOnExit.cache) kinds.push('cache');
+    if (kinds.length) {
+      await webDataDomain.clear(ctxLite, null, {
+        kinds: kinds,
+        from: 0,
+        to: Date.now()
+      });
+      try {
+        if (storageLib && typeof storageLib.flushAllWrites === 'function') {
+          await storageLib.flushAllWrites();
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+try {
+  app.on('before-quit', function (event) {
+    if (__beforeQuitWebCleanupFinished) return;
+    if (__beforeQuitWebCleanupStarted) {
+      try { event.preventDefault(); } catch {}
+      return;
+    }
+    __beforeQuitWebCleanupStarted = true;
+    try { event.preventDefault(); } catch {}
+    var done = false;
+    var finish = function () {
+      if (done) return;
+      done = true;
+      __beforeQuitWebCleanupFinished = true;
+      try { app.quit(); } catch {}
+    };
+    try {
+      __runBrowserParityQuitCleanup().then(finish).catch(finish);
+    } catch {
+      finish();
+      return;
+    }
+    // Hard timeout so quit cannot hang indefinitely if a session clear stalls.
+    try { setTimeout(finish, 1800); } catch {}
+  });
+} catch {}
 
 }; // end boot
 

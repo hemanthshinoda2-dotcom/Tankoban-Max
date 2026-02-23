@@ -27,7 +27,12 @@
         "visual:browser:baseline": "electron tools/visual-qa/browser_ui_visual_qa.js capture-baseline",
         "visual:browser:capture": "electron tools/visual-qa/browser_ui_visual_qa.js capture-current",
         "visual:browser:compare": "node tools/visual-qa/browser_ui_compare.js",
-        "visual:browser:ci": "npm run visual:browser:capture && npm run visual:browser:compare"
+        "visual:browser:ci": "npm run visual:browser:capture && npm run visual:browser:compare",
+        "browser:parity:baseline": "node tools/browser_parity_baseline.js",
+        "browser:stability:scan": "node tools/browser_stability_log_scan.js",
+        "browser:nav:audit": "node tools/browser_nav_shortcut_audit.js",
+        "browser:tabs:audit": "node tools/browser_tabs_polish_audit.js",
+        "browser:omni:audit": "node tools/browser_omni_build7_audit.js"
     },
     "devDependencies": {
         "electron": "^40.6.0",
