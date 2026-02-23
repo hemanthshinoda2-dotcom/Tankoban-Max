@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Browser UI Visual QA Fixture</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background:#0f1012; color:#eceef4; }
+    .scene { width: 1280px; height: 720px; margin: 0; position: relative; overflow: hidden; border-bottom:1px solid #2b2e38; background:#171920; }
+    .top { height: 106px; background:#20232d; border-bottom:1px solid #323644; }
+    .tabstrip { height: 44px; display:flex; align-items:flex-end; gap:8px; padding:8px 12px 0; }
+    .tab { height:30px; min-width:180px; border-radius:10px 10px 0 0; background:#2d3240; padding:6px 12px; color:#b9c0d7; font-size:13px; display:flex; align-items:center; gap:8px; }
+    .tab.active { background:#3d465c; color:#fff; }
+    .tab.pinned{ min-width:42px; justify-content:center; padding:0; }
+    .spinner{width:10px;height:10px;border:2px solid #7f89a6;border-top-color:transparent;border-radius:50%;}
+    .crash{color:#ff8d8d;font-weight:700;}
+    .omniboxrow{height:62px; display:flex; align-items:center; gap:10px; padding:12px;}
+    .btn{width:30px;height:30px;border-radius:8px;background:#2a2f3c;}
+    .omnibox{flex:1;height:38px;border-radius:19px;background:#151922;border:1px solid #384059;display:flex;align-items:center;padding:0 14px;color:#cdd5f0;position:relative;overflow:hidden}
+    .ghost{position:absolute;left:140px;color:#7680a0;}
+    .caret{width:1px;height:18px;background:#b4bedf;margin-left:2px;}
+    .content{height:614px;background:linear-gradient(180deg,#1f2533,#151922);position:relative;}
+    .dropdown{position:absolute;top:88px;left:220px;width:640px;background:#202636;border:1px solid #3b4257;border-radius:12px;padding:8px;box-shadow:0 10px 28px rgba(0,0,0,.45);}
+    .row{padding:10px 12px;border-radius:8px;font-size:13px;color:#d6dcf0;}
+    .row.active{background:#3a455f;}
+    .shelf{position:absolute;left:0;right:0;bottom:0;height:76px;background:#1c202c;border-top:1px solid #34394b;display:flex;gap:10px;padding:10px;}
+    .dl{flex:1;background:#262c3b;border:1px solid #3d455d;border-radius:10px;padding:8px 10px;font-size:12px;}
+    .bar{height:6px;border-radius:3px;background:#141924;margin-top:6px;overflow:hidden}
+    .bar>span{display:block;height:100%;background:#79a8ff;width:55%;}
+    .ok{color:#88e5a8}.err{color:#ff8a8a}
+    .prompt,.popover{position:absolute;right:16px;top:106px;width:300px;background:#232939;border:1px solid #424b63;border-radius:12px;padding:12px;box-shadow:0 10px 24px rgba(0,0,0,.45)}
+    .split{position:absolute;inset:106px 0 0 0;display:grid;grid-template-columns:1fr 1fr;gap:2px;background:#2b2f3f}
+    .pane{background:linear-gradient(180deg,#243147,#171f31);display:flex;align-items:center;justify-content:center;color:#9eb4df}
+    .home{position:absolute;top:106px;left:0;width:420px;bottom:0;background:#1d2130;border-right:1px solid #373d50;padding:18px;}
+    .tile{height:64px;border-radius:10px;background:#2a3144;margin-bottom:10px;}
+    .fadeIn{opacity:.65}
+  </style>
+</head>
+<body>
+  <section class="scene" data-scene="tabs-normal"><div class="top"><div class="tabstrip"><div class="tab active">Tankoban</div><div class="tab">Docs</div><div class="tab">News</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://tankoban.example/</div><div class="btn"></div></div></div><div class="content"></div></section>
+  <section class="scene" data-scene="tabs-pinned"><div class="top"><div class="tabstrip"><div class="tab pinned active">★</div><div class="tab">Tankoban</div><div class="tab">Guide</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://pinned.example/</div><div class="btn"></div></div></div><div class="content"></div></section>
+  <section class="scene" data-scene="tabs-loading"><div class="top"><div class="tabstrip"><div class="tab active"><div class="spinner"></div> Loading docs…</div><div class="tab">Guide</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://loading.example/</div><div class="btn"></div></div></div><div class="content"></div></section>
+  <section class="scene" data-scene="tabs-crashed"><div class="top"><div class="tabstrip"><div class="tab active"><span class="crash">⚠</span> Render process crashed</div><div class="tab">Guide</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">chrome://crash</div><div class="btn"></div></div></div><div class="content"></div></section>
+  <section class="scene" data-scene="omnibox-idle"><div class="top"><div class="tabstrip"><div class="tab active">Tankoban</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">Search or type URL</div><div class="btn"></div></div></div><div class="content"></div></section>
+  <section class="scene" data-scene="omnibox-typing-suggestions-ghost"><div class="top"><div class="tabstrip"><div class="tab active">Tankoban</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">tanko<div class="caret"></div><span class="ghost">ban max docs</span></div><div class="btn"></div></div></div><div class="content"><div class="dropdown"><div class="row active">tankoban max docs</div><div class="row">tankoban max github</div><div class="row">tankoban downloads</div></div></div></section>
+  <section class="scene" data-scene="history-dropdown"><div class="top"><div class="tabstrip"><div class="tab active">Tankoban</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://tankoban.example/page</div><div class="btn"></div></div></div><div class="content"><div class="dropdown" style="left:16px;top:120px;width:340px"><div class="row">← Getting Started</div><div class="row active">← Installation</div><div class="row">→ API Reference</div></div></div></section>
+  <section class="scene" data-scene="download-shelf-states"><div class="top"><div class="tabstrip"><div class="tab active">Tankoban</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://downloads.example/</div><div class="btn"></div></div></div><div class="content"><div class="shelf"><div class="dl">book.epub <div class="bar"><span></span></div><div>Active • 55%</div></div><div class="dl">chapter.pdf <div class="ok">Completed</div></div><div class="dl">archive.cbz <div class="err">Failed: Network timeout</div></div></div></div></section>
+  <section class="scene" data-scene="permission-and-siteinfo"><div class="top"><div class="tabstrip"><div class="tab active">Maps</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://maps.example/</div><div class="btn"></div></div></div><div class="content"><div class="prompt"><strong>Allow location access?</strong><div style="margin-top:8px;font-size:12px;color:#adb8d8">maps.example wants your location.</div></div><div class="popover" style="top:260px"><strong>Site information</strong><div style="margin-top:8px;font-size:12px;color:#adb8d8">Connection is secure. Cookies: 3 in use.</div></div></div></section>
+  <section class="scene" data-scene="split-view-transition"><div class="top"><div class="tabstrip"><div class="tab active">Split View</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">https://left.example/ | https://right.example/</div><div class="btn"></div></div></div><div class="split"><div class="pane">Left tab</div><div class="pane">Right tab</div></div></section>
+  <section class="scene" data-scene="home-panel-transition"><div class="top"><div class="tabstrip"><div class="tab active">Home</div></div><div class="omniboxrow"><div class="btn"></div><div class="btn"></div><div class="omnibox">Search or type URL</div><div class="btn"></div></div></div><div class="content"><div class="home fadeIn"><div class="tile"></div><div class="tile"></div><div class="tile"></div></div></div></section>
+</body>
+</html>
