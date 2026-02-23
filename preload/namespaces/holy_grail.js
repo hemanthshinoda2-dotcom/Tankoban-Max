@@ -67,10 +67,15 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       getTrackList: () => invoke(CHANNEL.HG_GET_TRACK_LIST),
       observeProperty: (name) => invoke(CHANNEL.HG_OBSERVE_PROPERTY, String(name || '')),
       destroy: () => invoke(CHANNEL.HG_DESTROY),
+      setPresentationActive: (active) => invoke(CHANNEL.HG_SET_PRESENTATION_ACTIVE, !!active),
+      getDiagnostics: () => invoke(CHANNEL.HG_GET_DIAGNOSTICS),
+      setDiagnosticsEnabled: (enabled) => invoke(CHANNEL.HG_SET_DIAGNOSTICS_ENABLED, !!enabled),
+      resetDiagnostics: () => invoke(CHANNEL.HG_RESET_DIAGNOSTICS),
 
       onPropertyChange: (handler) => onEvent(EVENT.HG_PROPERTY_CHANGE, handler),
       onEof: (handler) => onEvent(EVENT.HG_EOF, handler),
       onFileLoaded: (handler) => onEvent(EVENT.HG_FILE_LOADED, handler),
+      onDiagnostics: (handler) => onEvent(EVENT.HG_DIAGNOSTICS, handler),
 
       onVideoFrame: (handler) => {
         __frameHandler = (typeof handler === 'function') ? handler : null;

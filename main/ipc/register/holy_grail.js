@@ -14,5 +14,9 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.HG_GET_TRACK_LIST, (e, ...args) => domains.holyGrailDomain.getTrackList(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_OBSERVE_PROPERTY, (e, ...args) => domains.holyGrailDomain.observeProperty(ctx, e, ...args));
   ipcMain.handle(CHANNEL.HG_DESTROY, (e, ...args) => domains.holyGrailDomain.destroy(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.HG_SET_PRESENTATION_ACTIVE, (e, ...args) => domains.holyGrailDomain.setPresentationActive(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.HG_GET_DIAGNOSTICS, (e, ...args) => domains.holyGrailDomain.getDiagnostics(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.HG_SET_DIAGNOSTICS_ENABLED, (e, ...args) => domains.holyGrailDomain.setDiagnosticsEnabled(ctx, e, ...args));
+  ipcMain.handle(CHANNEL.HG_RESET_DIAGNOSTICS, (e, ...args) => domains.holyGrailDomain.resetDiagnostics(ctx, e, ...args));
 };
 

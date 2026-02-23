@@ -46,6 +46,64 @@ const __state = {
   // Build 2: prevent overlapping sendSharedTexture() calls on the same shared texture
   frameSendInFlight: false,
 
+  // Build 4: renderer visibility / presentation hint
+  presentationActive: true,
+  playbackPaused: false,
+  playbackEof: false,
+  forcePresentOnce: false,
+
+  // Build 4: cache imported shared texture to avoid per-frame import/release churn
+  importedSharedTexture: null,
+  importedSharedTextureKey: '',
+  importedSharedTextureMeta: null,
+
+  // Build 4: main-side coalescing for hot property events
+  hotPropFlushTimer: null,
+  hotPropQueue: Object.create(null),
+  hotPropFlushScheduled: false,
+  hotPropMinIntervalMs: 33,
+  lastHotPropFlushAt: 0,
+
+  // Build 5: lifecycle hardening
+  runToken: 0,
+  frameLoopToken: 0,
+  eventLoopToken: 0,
+  isTearingDown: false,
+
+  // Build 5: diagnostics
+  diagEnabled: false,
+  diagEmitTimer: null,
+  diagLastEmitAt: 0,
+  diag: {
+    startedAt: 0,
+    lastResetAt: 0,
+    frameLoopTicks: 0,
+    eventLoopTicks: 0,
+    frameReadyFalse: 0,
+    renderFrameNull: 0,
+    framesProduced: 0,
+    framesSent: 0,
+    frameSendErrors: 0,
+    frameSendSkippedHidden: 0,
+    frameSendSkippedBusy: 0,
+    importCacheHits: 0,
+    importCacheMisses: 0,
+    importCacheResets: 0,
+    pollEventsCalls: 0,
+    pollEventsErrors: 0,
+    propertyEventsTotal: 0,
+    hotPropsQueued: 0,
+    hotPropsFlushed: 0,
+    ownerLostCount: 0,
+    teardownCount: 0,
+    destroyPlayerCalls: 0,
+    destroyPlayerErrors: 0,
+    lastError: '',
+    lastErrorAt: 0,
+    lastFrameSentAt: 0,
+    lastEventPollAt: 0,
+  },
+
   ownerWebContents: null,
   ownerFrame: null,
   observedProperties: new Set(),
@@ -173,6 +231,42 @@ function emitToOwner(channel, payload) {
   } catch {}
 }
 
+// Build 4: hot-property coalescing (time-pos, duration → batch at 33ms)
+const HOT_PROPERTIES = new Set(['time-pos', 'duration']);
+
+function emitHotPropertyChangeNow(name, value) {
+  emitToOwner(EVENT.HG_PROPERTY_CHANGE, { name: String(name), value: value });
+}
+
+function flushHotPropertyChanges() {
+  __state.hotPropFlushScheduled = false;
+  __state.hotPropFlushTimer = null;
+  const queue = __state.hotPropQueue;
+  const keys = Object.keys(queue);
+  if (!keys.length) return;
+  __state.lastHotPropFlushAt = Date.now();
+  for (const key of keys) {
+    emitHotPropertyChangeNow(key, queue[key]);
+  }
+  __state.hotPropQueue = Object.create(null);
+  diagBump('hotPropsFlushed', keys.length);
+}
+
+function scheduleHotPropertyFlush() {
+  if (__state.hotPropFlushScheduled) return;
+  __state.hotPropFlushScheduled = true;
+  const now = Date.now();
+  const elapsed = now - __state.lastHotPropFlushAt;
+  const delay = Math.max(0, __state.hotPropMinIntervalMs - elapsed);
+  __state.hotPropFlushTimer = setTimeout(flushHotPropertyChanges, delay);
+}
+
+function queueHotPropertyChange(name, value) {
+  __state.hotPropQueue[name] = value;
+  diagBump('hotPropsQueued');
+  scheduleHotPropertyFlush();
+}
+
 function normalizeState(rawState) {
   const s = (rawState && typeof rawState === 'object') ? rawState : {};
   return {
@@ -200,12 +294,145 @@ function clearEventLoopTimer() {
   __state.eventLoopTimer = null;
 }
 
+// Build 4: hot-property flush timer
+function clearHotPropFlushTimer() {
+  if (!__state.hotPropFlushTimer) return;
+  try { clearTimeout(__state.hotPropFlushTimer); } catch {}
+  __state.hotPropFlushTimer = null;
+  __state.hotPropFlushScheduled = false;
+}
+
+function resetHotPropQueue() {
+  __state.hotPropQueue = Object.create(null);
+  clearHotPropFlushTimer();
+  __state.lastHotPropFlushAt = 0;
+}
+
+// Build 4: imported shared texture cache
+function makeImportedTextureKey(handleBuf, width, height) {
+  return String(width) + 'x' + String(height);
+}
+
+function releaseImportedSharedTextureCache() {
+  if (__state.importedSharedTexture) {
+    try { __state.importedSharedTexture.release(); } catch {}
+  }
+  __state.importedSharedTexture = null;
+  __state.importedSharedTextureKey = '';
+  __state.importedSharedTextureMeta = null;
+}
+
+// Build 5: diagnostics helpers
+function resetDiagnostics() {
+  const now = Date.now();
+  const d = __state.diag;
+  d.startedAt = d.startedAt || now;
+  d.lastResetAt = now;
+  d.frameLoopTicks = 0;
+  d.eventLoopTicks = 0;
+  d.frameReadyFalse = 0;
+  d.renderFrameNull = 0;
+  d.framesProduced = 0;
+  d.framesSent = 0;
+  d.frameSendErrors = 0;
+  d.frameSendSkippedHidden = 0;
+  d.frameSendSkippedBusy = 0;
+  d.importCacheHits = 0;
+  d.importCacheMisses = 0;
+  d.importCacheResets = 0;
+  d.pollEventsCalls = 0;
+  d.pollEventsErrors = 0;
+  d.propertyEventsTotal = 0;
+  d.hotPropsQueued = 0;
+  d.hotPropsFlushed = 0;
+  d.ownerLostCount = 0;
+  d.teardownCount = 0;
+  d.destroyPlayerCalls = 0;
+  d.destroyPlayerErrors = 0;
+  d.lastError = '';
+  d.lastErrorAt = 0;
+  d.lastFrameSentAt = 0;
+  d.lastEventPollAt = 0;
+}
+
+function diagBump(field, delta) {
+  if (!__state.diagEnabled) return;
+  if (typeof __state.diag[field] === 'number') __state.diag[field] += (delta || 1);
+}
+
+function diagError(msg) {
+  if (!__state.diagEnabled) return;
+  __state.diag.lastError = String(msg || '').slice(0, 200);
+  __state.diag.lastErrorAt = Date.now();
+}
+
+function getDiagnosticsSnapshot() {
+  return Object.assign({
+    frameLoopRunning: __state.frameLoopRunning,
+    eventLoopRunning: __state.eventLoopRunning,
+    frameSendInFlight: __state.frameSendInFlight,
+    presentationActive: __state.presentationActive,
+    initialized: __state.initialized,
+    runToken: __state.runToken,
+    frameLoopToken: __state.frameLoopToken,
+    eventLoopToken: __state.eventLoopToken,
+    isTearingDown: __state.isTearingDown,
+  }, __state.diag);
+}
+
+// Build 5: diagnostics emit timer
+function clearDiagEmitTimer() {
+  if (!__state.diagEmitTimer) return;
+  try { clearTimeout(__state.diagEmitTimer); } catch {}
+  __state.diagEmitTimer = null;
+}
+
+function scheduleDiagEmit() {
+  if (!__state.diagEnabled) return;
+  clearDiagEmitTimer();
+  __state.diagEmitTimer = setTimeout(() => {
+    if (!__state.diagEnabled) return;
+    __state.diagLastEmitAt = Date.now();
+    emitToOwner(EVENT.HG_DIAGNOSTICS, getDiagnosticsSnapshot());
+    scheduleDiagEmit();
+  }, 1000);
+}
+
+// Build 5: lifecycle token helpers
+function nextRunToken() {
+  __state.runToken = (__state.runToken + 1) | 0;
+  return __state.runToken;
+}
+
+function isLiveToken(token) {
+  return token === __state.runToken && !__state.isTearingDown;
+}
+
+// Build 5: hardened teardown entry point
+function beginTeardown() {
+  if (__state.isTearingDown) return;
+  __state.isTearingDown = true;
+  diagBump('teardownCount');
+
+  // Invalidate all loop tokens so stale callbacks exit immediately
+  __state.frameLoopToken = (__state.frameLoopToken + 1) | 0;
+  __state.eventLoopToken = (__state.eventLoopToken + 1) | 0;
+
+  stopFrameLoopInternal();
+  clearDiagEmitTimer();
+  // Flush any pending hot props before teardown
+  try { flushHotPropertyChanges(); } catch {}
+  resetHotPropQueue();
+}
+
 function stopFrameLoopInternal() {
   __state.frameLoopRunning = false;
   __state.eventLoopRunning = false;
   __state.frameSendInFlight = false;
   clearFrameLoopTimer();
   clearEventLoopTimer();
+  clearHotPropFlushTimer();
+  releaseImportedSharedTextureCache();
 }
 
 function loadAddonOrThrow(ctx) {
@@ -233,13 +460,24 @@ function handleAddonEvents(events) {
   for (const eventItem of list) {
     const eventName = String((eventItem && eventItem.event) || '');
     if (eventName === 'property-change') {
-      emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
-        name: eventItem && eventItem.name ? String(eventItem.name) : '',
-        value: eventItem ? eventItem.value : undefined,
-      });
+      const propName = eventItem && eventItem.name ? String(eventItem.name) : '';
+      const propValue = eventItem ? eventItem.value : undefined;
+      diagBump('propertyEventsTotal');
+
+      // Build 4: track playback state for adaptive pacing
+      if (propName === 'pause') __state.playbackPaused = !!propValue;
+      if (propName === 'eof-reached') __state.playbackEof = !!propValue;
+
+      // Build 4: coalesce hot properties, emit others immediately
+      if (HOT_PROPERTIES.has(propName)) {
+        queueHotPropertyChange(propName, propValue);
+      } else {
+        emitToOwner(EVENT.HG_PROPERTY_CHANGE, { name: propName, value: propValue });
+      }
       continue;
     }
     if (eventName === 'file-loaded') {
+      __state.playbackEof = false;
       emitToOwner(EVENT.HG_FILE_LOADED, { ok: true });
       continue;
     }
@@ -251,24 +489,82 @@ function handleAddonEvents(events) {
   }
 }
 
-function scheduleNextFrameLoop(ctx, delayMs) {
+// Build 4: adaptive pacing helpers
+function getNextEventLoopDelayMs() {
+  if (!__state.presentationActive) return 100;
+  if (__state.playbackPaused && __state.playbackEof) return 100;
+  if (__state.playbackPaused) return 50;
+  return 12;
+}
+
+function getIdleFrameLoopDelayMs() {
+  if (!__state.presentationActive) return 100;
+  if (__state.playbackPaused && __state.playbackEof) return 100;
+  if (__state.playbackPaused) return 32;
+  return 8;
+}
+
+// Build 4: imported shared texture reuse
+function getOrCreateImportedSharedTexture(handleBuf, width, height) {
+  const key = makeImportedTextureKey(handleBuf, width, height);
+
+  if (__state.importedSharedTexture && __state.importedSharedTextureKey === key) {
+    diagBump('importCacheHits');
+    return __state.importedSharedTexture;
+  }
+
+  // Release previous cached import
+  if (__state.importedSharedTexture) {
+    diagBump('importCacheResets');
+    try { __state.importedSharedTexture.release(); } catch {}
+    __state.importedSharedTexture = null;
+  }
+
+  diagBump('importCacheMisses');
+
+  const imported = sharedTexture.importSharedTexture({
+    textureInfo: {
+      pixelFormat: 'bgra',
+      codedSize: { width, height },
+      visibleRect: { x: 0, y: 0, width, height },
+      handle: { ntHandle: handleBuf },
+    },
+    allReferencesReleased: () => {},
+  });
+
+  __state.importedSharedTexture = imported;
+  __state.importedSharedTextureKey = key;
+  __state.importedSharedTextureMeta = { width, height };
+
+  return imported;
+}
+
+// Build 5: token-aware scheduling
+function scheduleNextFrameLoop(ctx, delayMs, token) {
   if (!__state.frameLoopRunning) return;
+  if (token !== undefined && token !== __state.frameLoopToken) return;
   clearFrameLoopTimer();
+  const capturedToken = __state.frameLoopToken;
   __state.frameLoopTimer = setTimeout(() => {
-    void frameLoopTick(ctx);
+    void frameLoopTick(ctx, capturedToken);
   }, Math.max(0, Number(delayMs) || 0));
 }
 
-function scheduleNextEventLoop(ctx, delayMs) {
+function scheduleNextEventLoop(ctx, delayMs, token) {
   if (!__state.eventLoopRunning) return;
+  if (token !== undefined && token !== __state.eventLoopToken) return;
   clearEventLoopTimer();
+  const capturedToken = __state.eventLoopToken;
   __state.eventLoopTimer = setTimeout(() => {
-    void eventLoopTick(ctx);
+    void eventLoopTick(ctx, capturedToken);
   }, Math.max(4, Number(delayMs) || 16));
 }
 
-async function eventLoopTick(ctx) {
+async function eventLoopTick(ctx, token) {
   if (!__state.eventLoopRunning) return;
+  if (token !== __state.eventLoopToken) return;
+
+  diagBump('eventLoopTicks');
 
   try {
     if (!__state.addon || !__state.initialized) {
@@ -277,6 +573,7 @@ async function eventLoopTick(ctx) {
     }
 
     if (!ensureLiveOwner(ctx)) {
+      diagBump('ownerLostCount');
       stopFrameLoopInternal();
       try { __state.addon.destroyPlayer && __state.addon.destroyPlayer(); } catch {}
       __state.initialized = false;
@@ -285,22 +582,29 @@ async function eventLoopTick(ctx) {
     }
 
     if (typeof __state.addon.pollEvents === 'function') {
+      diagBump('pollEventsCalls');
+      if (__state.diagEnabled) __state.diag.lastEventPollAt = Date.now();
       const events = __state.addon.pollEvents();
       handleAddonEvents(events);
     }
   } catch (err) {
+    diagBump('pollEventsErrors');
+    diagError(toErrorString(err));
     emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
       name: '__error__',
       value: toErrorString(err),
     });
   }
 
-  // Build 2: event polling stays responsive even if frame sending stalls.
-  scheduleNextEventLoop(ctx, 12);
+  // Build 4: adaptive event polling delay
+  scheduleNextEventLoop(ctx, getNextEventLoopDelayMs(), token);
 }
 
-async function frameLoopTick(ctx) {
+async function frameLoopTick(ctx, token) {
   if (!__state.frameLoopRunning) return;
+  if (token !== __state.frameLoopToken) return;
+
+  diagBump('frameLoopTicks');
 
   try {
     if (!__state.addon || !__state.initialized) {
@@ -309,6 +613,7 @@ async function frameLoopTick(ctx) {
     }
 
     if (!ensureLiveOwner(ctx)) {
+      diagBump('ownerLostCount');
       stopFrameLoopInternal();
       try { __state.addon.destroyPlayer && __state.addon.destroyPlayer(); } catch {}
       __state.initialized = false;
@@ -316,10 +621,18 @@ async function frameLoopTick(ctx) {
       return;
     }
 
+    // Build 4: skip frame production when renderer is hidden (unless force-once)
+    if (!__state.presentationActive && !__state.forcePresentOnce) {
+      diagBump('frameSendSkippedHidden');
+      scheduleNextFrameLoop(ctx, 100, token);
+      return;
+    }
+    if (__state.forcePresentOnce) __state.forcePresentOnce = false;
+
     // Build 2: do not overlap sends on the same shared texture handle.
-    // If a send is still in flight, retry soon but don't hammer.
     if (__state.frameSendInFlight) {
-      scheduleNextFrameLoop(ctx, 2);
+      diagBump('frameSendSkippedBusy');
+      scheduleNextFrameLoop(ctx, 2, token);
       return;
     }
 
@@ -328,8 +641,8 @@ async function frameLoopTick(ctx) {
       let ready = false;
       try { ready = !!__state.addon.hasFrameReady(); } catch {}
       if (!ready) {
-        // Back off when idle (no frame pending)
-        scheduleNextFrameLoop(ctx, 8);
+        diagBump('frameReadyFalse');
+        scheduleNextFrameLoop(ctx, getIdleFrameLoopDelayMs(), token);
         return;
       }
     }
@@ -337,10 +650,12 @@ async function frameLoopTick(ctx) {
     const handleBuf = (__state.addon.renderFrame && __state.addon.renderFrame()) || null;
 
     if (!handleBuf) {
-      // No frame was actually produced (race or no update flag). Back off a bit.
-      scheduleNextFrameLoop(ctx, 8);
+      diagBump('renderFrameNull');
+      scheduleNextFrameLoop(ctx, getIdleFrameLoopDelayMs(), token);
       return;
     }
+
+    diagBump('framesProduced');
 
     if (sharedTexture && isLiveFrame(__state.ownerFrame)) {
       const size = (__state.addon.getSize && __state.addon.getSize()) || {};
@@ -348,15 +663,8 @@ async function frameLoopTick(ctx) {
       const height = Number(size.height) || 0;
 
       if (width > 0 && height > 0) {
-        const imported = sharedTexture.importSharedTexture({
-          textureInfo: {
-            pixelFormat: 'bgra',
-            codedSize: { width, height },
-            visibleRect: { x: 0, y: 0, width, height },
-            handle: { ntHandle: handleBuf },
-          },
-          allReferencesReleased: () => {},
-        });
+        // Build 4: reuse cached imported shared texture
+        const imported = getOrCreateImportedSharedTexture(handleBuf, width, height);
 
         __state.frameSendInFlight = true;
         try {
@@ -364,21 +672,29 @@ async function frameLoopTick(ctx) {
             frame: __state.ownerFrame,
             importedSharedTexture: imported,
           });
+          diagBump('framesSent');
+          if (__state.diagEnabled) __state.diag.lastFrameSentAt = Date.now();
+        } catch (err) {
+          diagBump('frameSendErrors');
+          diagError(toErrorString(err));
+          // Cache may be stale — release so next tick re-imports
+          releaseImportedSharedTextureCache();
         } finally {
           __state.frameSendInFlight = false;
-          try { imported.release(); } catch {}
+          // NOTE: Do NOT release imported here — it's cached for reuse
         }
 
-        // If we just delivered a frame, run again quickly.
-        scheduleNextFrameLoop(ctx, 1);
+        scheduleNextFrameLoop(ctx, 1, token);
         return;
       }
     }
 
-    // Shared texture unavailable or invalid size → retry, but don't busy-spin.
-    scheduleNextFrameLoop(ctx, 8);
+    // Shared texture unavailable or invalid size → retry with adaptive backoff.
+    scheduleNextFrameLoop(ctx, getIdleFrameLoopDelayMs(), token);
     return;
   } catch (err) {
+    diagBump('frameSendErrors');
+    diagError(toErrorString(err));
     emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
       name: '__error__',
       value: toErrorString(err),
@@ -386,23 +702,28 @@ async function frameLoopTick(ctx) {
   }
 
   // Error path backoff
-  scheduleNextFrameLoop(ctx, 16);
+  scheduleNextFrameLoop(ctx, 16, token);
 }
 
 function teardownPlayerOnly() {
-  stopFrameLoopInternal();
+  beginTeardown();
+  diagBump('destroyPlayerCalls');
   if (__state.addon) {
     try {
       if (typeof __state.addon.destroyPlayer === 'function') __state.addon.destroyPlayer();
       else if (typeof __state.addon.destroy === 'function') __state.addon.destroy();
-    } catch {}
+    } catch (err) {
+      diagBump('destroyPlayerErrors');
+      diagError(toErrorString(err));
+    }
   }
   __state.initialized = false;
   __state.observedProperties.clear();
+  __state.isTearingDown = false;
 }
 
 function teardownEverything() {
-  stopFrameLoopInternal();
+  beginTeardown();
   if (__state.addon) {
     try {
       if (typeof __state.addon.destroyAll === 'function') __state.addon.destroyAll();
@@ -411,6 +732,7 @@ function teardownEverything() {
   }
   __state.initialized = false;
   __state.observedProperties.clear();
+  __state.isTearingDown = false;
 }
 
 async function probe(ctx, evt) {
@@ -464,6 +786,16 @@ async function initGpu(ctx, evt, args) {
     });
 
     __state.initialized = true;
+
+    // Build 4+5: reset transport/lifecycle state on init
+    __state.presentationActive = true;
+    __state.playbackPaused = false;
+    __state.playbackEof = false;
+    __state.forcePresentOnce = false;
+    __state.isTearingDown = false;
+    releaseImportedSharedTextureCache();
+    resetHotPropQueue();
+
     await observeDefaults();
 
     return {
@@ -519,12 +851,25 @@ async function startFrameLoop(ctx, evt) {
       return { ok: true, alreadyRunning: true };
     }
 
+    // Build 5: fresh tokens for this run
+    __state.frameLoopToken = (__state.frameLoopToken + 1) | 0;
+    __state.eventLoopToken = (__state.eventLoopToken + 1) | 0;
+    __state.isTearingDown = false;
+
     __state.frameLoopRunning = true;
     __state.eventLoopRunning = true;
     __state.frameSendInFlight = false;
 
-    void frameLoopTick(ctx);
-    void eventLoopTick(ctx);
+    // Build 5: reset diagnostics on start
+    if (__state.diagEnabled) {
+      resetDiagnostics();
+      __state.diag.startedAt = Date.now();
+    }
+
+    const frameToken = __state.frameLoopToken;
+    const eventToken = __state.eventLoopToken;
+    void frameLoopTick(ctx, frameToken);
+    void eventLoopTick(ctx, eventToken);
 
     return { ok: true };
   } catch (err) {
@@ -532,7 +877,8 @@ async function startFrameLoop(ctx, evt) {
   }
 }
 
-async function stopFrameLoop() {
+async function stopFrameLoop(ctx, evt) {
+  if (ctx && evt) setOwnerFromEvent(ctx, evt);
   stopFrameLoopInternal();
   return { ok: true };
 }
@@ -623,6 +969,54 @@ async function observeProperty(ctx, evt, name) {
   }
 }
 
+// Build 4: presentation visibility hint from renderer
+async function setPresentationActive(ctx, evt, active) {
+  setOwnerFromEvent(ctx, evt);
+  const wasActive = __state.presentationActive;
+  __state.presentationActive = !!active;
+
+  // When becoming active again, force one frame send so the renderer gets a fresh frame
+  if (!wasActive && __state.presentationActive) {
+    __state.forcePresentOnce = true;
+  }
+
+  // When becoming inactive, release cached texture to free GPU memory
+  if (wasActive && !__state.presentationActive) {
+    releaseImportedSharedTextureCache();
+  }
+
+  return { ok: true, presentationActive: __state.presentationActive };
+}
+
+// Build 5: diagnostics IPC methods
+async function getDiagnostics(ctx, evt) {
+  setOwnerFromEvent(ctx, evt);
+  return { ok: true, diagnostics: getDiagnosticsSnapshot() };
+}
+
+async function setDiagnosticsEnabled(ctx, evt, enabled) {
+  setOwnerFromEvent(ctx, evt);
+  const wasEnabled = __state.diagEnabled;
+  __state.diagEnabled = !!enabled;
+
+  if (!wasEnabled && __state.diagEnabled) {
+    resetDiagnostics();
+    __state.diag.startedAt = Date.now();
+    scheduleDiagEmit();
+  }
+  if (wasEnabled && !__state.diagEnabled) {
+    clearDiagEmitTimer();
+  }
+
+  return { ok: true, diagEnabled: __state.diagEnabled };
+}
+
+async function resetDiagnosticsCommand(ctx, evt) {
+  setOwnerFromEvent(ctx, evt);
+  resetDiagnostics();
+  return { ok: true };
+}
+
 async function destroy(_ctx, _evt) {
   teardownPlayerOnly();
   return { ok: true };
@@ -648,4 +1042,8 @@ module.exports = {
   observeProperty,
   destroy,
   destroyAll,
+  setPresentationActive,
+  getDiagnostics,
+  setDiagnosticsEnabled,
+  resetDiagnostics: resetDiagnosticsCommand,
 };

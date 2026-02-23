@@ -55,6 +55,12 @@
     // Build 3 audit state (renderer presentation)
     var pageVisible = (typeof document !== 'undefined') ? (document.visibilityState !== 'hidden') : true;
 
+    // Build 5: diagnostics state
+    var diagOverlay = null;
+    var diagEnabled = false;
+    var offDiagnostics = null;
+    var lastDiagSnapshot = null;
+
     var drawCache = {
       valid: false,
       canvasW: 0,
@@ -330,6 +336,8 @@
 
     function onVisibilityChange() {
       pageVisible = (document.visibilityState !== 'hidden');
+      // Build 4: notify main process of visibility change
+      hg.setPresentationActive(pageVisible).catch(function () {});
       if (pageVisible && pendingFrame && !framePumpRaf) {
         scheduleFramePump();
       }
@@ -453,6 +461,69 @@
       hotPublish.timer = setTimeout(function () {
         flushHotUiPublish();
       }, Math.max(0, dueIn));
+    }
+
+    // ── Build 5: Diagnostics overlay (F8 toggle) ──
+
+    function createDiagOverlay() {
+      if (diagOverlay || !hostEl) return;
+      diagOverlay = document.createElement('div');
+      diagOverlay.style.cssText = 'position:absolute;top:8px;left:8px;z-index:100;background:rgba(0,0,0,0.75);color:#0f0;font:11px/1.4 monospace;padding:6px 10px;pointer-events:none;white-space:pre;border-radius:4px;max-width:420px;overflow:hidden;';
+      diagOverlay.textContent = '[HG DIAG] waiting…';
+      hostEl.appendChild(diagOverlay);
+    }
+
+    function removeDiagOverlay() {
+      if (!diagOverlay) return;
+      try { diagOverlay.remove(); } catch (e) {}
+      diagOverlay = null;
+    }
+
+    function updateDiagOverlay(snap) {
+      if (!diagOverlay || !snap) return;
+      var lines = [
+        'FLoop: ' + (snap.frameLoopTicks || 0) + '  ELoop: ' + (snap.eventLoopTicks || 0),
+        'Produced: ' + (snap.framesProduced || 0) + '  Sent: ' + (snap.framesSent || 0) + '  Errors: ' + (snap.frameSendErrors || 0),
+        'Hidden: ' + (snap.frameSendSkippedHidden || 0) + '  Busy: ' + (snap.frameSendSkippedBusy || 0),
+        'Cache H/M/R: ' + (snap.importCacheHits || 0) + '/' + (snap.importCacheMisses || 0) + '/' + (snap.importCacheResets || 0),
+        'HotQ: ' + (snap.hotPropsQueued || 0) + '  HotF: ' + (snap.hotPropsFlushed || 0),
+        'Props: ' + (snap.propertyEventsTotal || 0) + '  Poll: ' + (snap.pollEventsCalls || 0),
+        'Active: ' + (snap.presentationActive ? 'Y' : 'N') + '  Token: ' + (snap.runToken || 0) + '/' + (snap.frameLoopToken || 0),
+      ];
+      if (snap.lastError) lines.push('ERR: ' + snap.lastError);
+      diagOverlay.textContent = lines.join('\n');
+    }
+
+    function toggleDiagnostics() {
+      diagEnabled = !diagEnabled;
+      if (diagEnabled) {
+        createDiagOverlay();
+        hg.setDiagnosticsEnabled(true).catch(function () {});
+        offDiagnostics = hg.onDiagnostics(function (snap) {
+          lastDiagSnapshot = snap;
+          updateDiagOverlay(snap);
+        });
+      } else {
+        hg.setDiagnosticsEnabled(false).catch(function () {});
+        if (typeof offDiagnostics === 'function') { offDiagnostics(); offDiagnostics = null; }
+        removeDiagOverlay();
+        lastDiagSnapshot = null;
+      }
+    }
+
+    function onDiagKeydown(e) {
+      if (e.key === 'F8' && !e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey) {
+        e.preventDefault();
+        toggleDiagnostics();
+      }
+    }
+
+    // Wire F8 key listener
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', onDiagKeydown);
+      cleanupFns.push(function () {
+        try { document.removeEventListener('keydown', onDiagKeydown); } catch (e) {}
+      });
     }
 
     function drawFrame(videoFrame) {
@@ -1054,6 +1125,9 @@
       invalidateDrawCache();
       window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: filePath });
 
+      // Build 4: ensure main knows we're visible for frame production
+      hg.setPresentationActive(pageVisible).catch(function () {});
+
       createCanvas();
 
       suppressEof = true;
@@ -1169,6 +1243,14 @@
 
       if (hotPublish.timer) { clearTimeout(hotPublish.timer); hotPublish.timer = null; }
       hotPublish.queued = false;
+
+      // Build 5: clean up diagnostics
+      if (typeof offDiagnostics === 'function') { offDiagnostics(); offDiagnostics = null; }
+      removeDiagOverlay();
+      diagEnabled = false;
+
+      // Build 4: notify main we're going away
+      hg.setPresentationActive(false).catch(function () {});
 
       emit('shutdown');
 

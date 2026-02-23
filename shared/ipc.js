@@ -674,6 +674,18 @@ const CHANNEL = {
   /** Destroy holy grail player instance (keeps process alive). Returns: { ok } */
   HG_DESTROY: 'holyGrail:destroy',
 
+  /** Set presentation active state (renderer visibility hint). Args: boolean. Returns: { ok, presentationActive } */
+  HG_SET_PRESENTATION_ACTIVE: 'holyGrail:setPresentationActive',
+
+  /** Get diagnostics snapshot. Returns: { ok, diagnostics } */
+  HG_GET_DIAGNOSTICS: 'holyGrail:getDiagnostics',
+
+  /** Enable/disable diagnostics. Args: boolean. Returns: { ok, diagEnabled } */
+  HG_SET_DIAGNOSTICS_ENABLED: 'holyGrail:setDiagnosticsEnabled',
+
+  /** Reset diagnostics counters. Returns: { ok } */
+  HG_RESET_DIAGNOSTICS: 'holyGrail:resetDiagnostics',
+
   // ========================================
   // Player Core (Tankoban Pro)
   // ========================================
@@ -1069,6 +1081,9 @@ const EVENT = {
 
   /** Holy grail file loaded. Payload: { ok?: boolean } */
   HG_FILE_LOADED: 'holyGrail:fileLoaded',
+
+  /** Holy grail diagnostics snapshot. Payload: diagnostics object */
+  HG_DIAGNOSTICS: 'holyGrail:diagnostics',
 
   // ========================================
   // Dynamic/Templated Events
