@@ -261,6 +261,7 @@
           lastResizeH = h;
           applyRenderDefaults();
           observeProperties();
+          startStatePoll();
         }
         return res;
       });
@@ -321,6 +322,51 @@
     var offVideoFrame = hg.onVideoFrame(function (videoFrame) {
       queueVideoFrame(videoFrame);
     });
+
+    // ── State polling fallback ──
+    // The native addon's pollEvents() doesn't return property-change events
+    // (file-loaded and end-file work, but mpv property observations are lost).
+    // Work around this by polling getState() + getTrackList() on an interval.
+    var pollTimer = null;
+    var lastPollState = null;
+
+    function startStatePoll() {
+      if (pollTimer) return;
+      pollTimer = setInterval(pollStateTick, 250);
+    }
+
+    function stopStatePoll() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    function pollStateTick() {
+      if (destroyed || !gpuInitialized) return;
+
+      hg.getState().then(function (res) {
+        if (!res || !res.ok || !res.state || destroyed) return;
+        var s = res.state;
+
+        // Synthesize property-change events for values that differ
+        if (s.timePos !== undefined) applyPropertyChange('time-pos', s.timePos);
+        if (s.duration !== undefined) applyPropertyChange('duration', s.duration);
+        if (s.paused !== undefined) applyPropertyChange('pause', s.paused);
+        if (s.eofReached !== undefined) applyPropertyChange('eof-reached', s.eofReached);
+        if (s.volume !== undefined) applyPropertyChange('volume', s.volume);
+        if (s.muted !== undefined) applyPropertyChange('mute', s.muted);
+        if (s.speed !== undefined) applyPropertyChange('speed', s.speed);
+      }).catch(function () {});
+
+      // Poll track list less frequently (every ~4th tick ≈ 1s)
+      if (!pollTimer) return;
+      if (!startStatePoll._trackCounter) startStatePoll._trackCounter = 0;
+      startStatePoll._trackCounter++;
+      if (startStatePoll._trackCounter % 4 === 0) {
+        hg.getTrackList().then(function (res) {
+          if (!res || !res.ok || !Array.isArray(res.tracks) || destroyed) return;
+          applyPropertyChange('track-list', res.tracks);
+        }).catch(function () {});
+      }
+    }
 
     // ── Property change dispatch ──
 
@@ -621,6 +667,7 @@
       if (pendingFrame) { closeFrameSafe(pendingFrame); pendingFrame = null; }
       if (resizeTimer) clearTimeout(resizeTimer);
       if (resizeObserver) { try { resizeObserver.disconnect(); } catch (e) {} }
+      stopStatePoll();
 
       // Disconnect HG event listeners
       if (typeof offPropertyChange === 'function') offPropertyChange();
