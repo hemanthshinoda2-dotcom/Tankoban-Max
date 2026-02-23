@@ -1642,6 +1642,9 @@ COMMON ANCHORS
             <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M11 1L4 8l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Library
           </button>
+          <button id="webTabOverflowBtn" class="webTabOverflowBtn hidden" type="button" title="Show hidden tabs" aria-label="Show hidden tabs">
+            <span aria-hidden="true">&#187;</span>
+          </button>
           <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
           <div class="winControls">
             <button id="webWinMinBtn" class="winCtrl" title="Minimize" aria-label="Minimize">
@@ -1685,6 +1688,26 @@ COMMON ANCHORS
             </select>
             <div id="webOmniSuggest" class="webOmniSuggest hidden" role="listbox" aria-label="Address suggestions"></div>
           </div>
+          <div id="webSiteInfoPopover" class="webSiteInfoPopover hidden" role="dialog" aria-label="Site information" aria-hidden="true">
+            <div class="webSiteInfoHead">
+              <div id="webSiteInfoOrigin" class="webSiteInfoOrigin">No site loaded</div>
+              <div id="webSiteInfoSecurity" class="webSiteInfoSecurity">Security unknown</div>
+            </div>
+            <div class="webSiteInfoSection">
+              <div class="webSiteInfoLabel">Permissions</div>
+              <div id="webSiteInfoPermissions" class="webSiteInfoPermissions"></div>
+            </div>
+            <div class="webSiteInfoSection">
+              <div class="webSiteInfoLabel">Data & blocking</div>
+              <button id="webSiteInfoUsageBtn" class="btn btn-ghost btn-sm" type="button">Cookie/storage usage</button>
+              <div id="webSiteInfoUsageText" class="navMuted">Usage unknown.</div>
+              <div id="webSiteInfoAdblock" class="navMuted">Blocked requests: unavailable</div>
+            </div>
+            <div class="webSiteInfoActions">
+              <button id="webSiteInfoClearDataBtn" class="btn btn-ghost btn-sm" type="button">Clear site data</button>
+              <button id="webSiteInfoResetPermsBtn" class="btn btn-ghost btn-sm" type="button">Reset permissions for this site</button>
+            </div>
+          </div>
           <button id="webBookmarkBtn" class="webNavAction" title="Toggle bookmark" aria-label="Toggle bookmark">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13.1l.7-4-2.9-2.8 4-.6z"/></svg>
           </button>
@@ -1712,6 +1735,13 @@ COMMON ANCHORS
 
         <!-- Load bar (thin accent line) -->
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
+
+        <div id="webTabQuickPanel" class="webTabQuickPanel hidden" role="dialog" aria-modal="true" aria-label="Search open tabs">
+          <div class="webTabQuickPanelCard">
+            <input id="webTabQuickSearch" class="webTabQuickSearch" type="text" placeholder="Search tabs" autocomplete="off" spellcheck="false" aria-label="Search tabs" />
+            <div id="webTabQuickList" class="webTabQuickList" role="listbox" aria-label="Matching tabs"></div>
+          </div>
+        </div>
 
         <!-- Content area (relative wrapper for floating find bar) -->
         <div class="webContentArea">
@@ -1851,6 +1881,55 @@ COMMON ANCHORS
 
         <div id="settingsPanelBrowser" class="settingsPanel hidden" role="tabpanel" aria-labelledby="settingsTabBrowser" data-settings-panel="browser">
           <div class="muted tiny">Browser configuration and management controls.</div>
+
+          <div id="settingsBrowserBehaviorSection" class="webHubSection">
+            <div class="webHubSectionHeading">Startup &amp; Behavior</div>
+            <div class="webHubChecklist">
+              <label for="webHubStartupMode" class="settingsLabel">On startup</label>
+              <select id="webHubStartupMode" class="select">
+                <option value="continue" selected>Continue where you left off</option>
+                <option value="new_tab">Open new tab page</option>
+                <option value="custom_url">Open custom URL</option>
+              </select>
+
+              <label for="webHubStartupCustomUrl" class="settingsLabel">Startup custom URL</label>
+              <input id="webHubStartupCustomUrl" class="search webHubSearch" type="text" placeholder="https://example.com" autocomplete="off" />
+
+              <label for="webHubHomeUrl" class="settingsLabel">Home button URL</label>
+              <input id="webHubHomeUrl" class="search webHubSearch" type="text" placeholder="Leave blank for source home" autocomplete="off" />
+
+              <label for="webHubNewTabBehavior" class="settingsLabel">New tab page behavior</label>
+              <select id="webHubNewTabBehavior" class="select">
+                <option value="tankoban_home" selected>Tankoban browser home</option>
+                <option value="browser_home">Browser source tiles</option>
+                <option value="blank">Blank page</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="settingsBrowserDownloadsSection" class="webHubSection">
+            <div class="webHubSectionHeading">Downloads</div>
+            <div class="webHubChecklist">
+              <label for="webHubDownloadBehavior" class="settingsLabel">Download behavior</label>
+              <select id="webHubDownloadBehavior" class="select">
+                <option value="ask" selected>Ask every time where to save</option>
+                <option value="auto">Always use default folder</option>
+              </select>
+              <label><input id="webHubDownloadFolderHint" type="checkbox" checked /> Show default-folder mode hints in UI</label>
+            </div>
+          </div>
+
+          <div id="settingsBrowserPrivacyTogglesSection" class="webHubSection">
+            <div class="webHubSectionHeading">Privacy Toggles</div>
+            <div class="webHubChecklist">
+              <label><input id="webHubPrivacyDoNotTrack" type="checkbox" /> Send &ldquo;Do Not Track&rdquo; requests</label>
+              <div class="settingsLabel">Clear on exit</div>
+              <label><input id="webHubClearOnExitHistory" type="checkbox" /> Browsing history</label>
+              <label><input id="webHubClearOnExitDownloads" type="checkbox" /> Download history</label>
+              <label><input id="webHubClearOnExitCookies" type="checkbox" /> Cookies and site data</label>
+              <label><input id="webHubClearOnExitCache" type="checkbox" /> Cache</label>
+            </div>
+          </div>
 
           <div id="settingsBrowserSourcesSection" class="webHubSection">
             <div class="webHubSectionHeading">Sources</div>
@@ -2069,5 +2148,4 @@ COMMON ANCHORS
   <script src="./ui/command_palette.js"></script>
 </body>
 </html>
-
 

@@ -319,8 +319,13 @@ async function requestDestinationFolder(ctx, payload, senderWebContents) {
 
   var allowedRoots = getRootsByMode(ctx, selectedMode);
   var allowed = false;
-  for (var i = 0; i < allowedRoots.length; i++) {
-    if (isPathWithin(allowedRoots[i], folderPath)) { allowed = true; break; }
+  if (!selectedMode) {
+    // Non-library extension flow: allow explicit external folder picks and keep history tracked.
+    allowed = true;
+  } else {
+    for (var i = 0; i < allowedRoots.length; i++) {
+      if (isPathWithin(allowedRoots[i], folderPath)) { allowed = true; break; }
+    }
   }
   if (!allowed) return { ok: false, error: 'Destination outside allowed library folders' };
 
@@ -556,12 +561,14 @@ function setupDownloadHandler(ctx) {
           persistRouteFailure({
             cancelled: /^cancelled$/i.test(msg),
             error: msg,
+            state: 'failed',
           });
           try {
             ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
               id: null,
               filename: filename,
               error: msg,
+              state: /^cancelled$/i.test(msg) ? 'cancelled' : 'failed',
             });
           } catch {}
         }
@@ -643,6 +650,7 @@ function setupDownloadHandler(ctx) {
               id: null,
               filename: filename,
               error: route.cancelled ? 'Cancelled' : route.error,
+              state: route.cancelled ? 'cancelled' : 'failed',
             });
           } catch {}
           return;
@@ -830,6 +838,7 @@ function setupDownloadHandler(ctx) {
             try {
               ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
                 ok: true,
+                state: 'completed',
                 id: dlId,
                 filename: filename,
                 destination: finalDestination,
@@ -840,6 +849,7 @@ function setupDownloadHandler(ctx) {
             try {
               ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
                 id: dlId,
+                state: (doneState === 'cancelled') ? 'cancelled' : (doneState === 'interrupted' ? 'interrupted' : 'failed'),
                 filename: filename,
                 error: (doneState === 'cancelled') ? 'Cancelled' : ('Download ' + doneState),
               });
@@ -857,6 +867,7 @@ function setupDownloadHandler(ctx) {
             id: null,
             filename: filename,
             error: msg,
+            state: 'failed',
           });
         } catch {}
       });
@@ -996,7 +1007,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
   if (!/^https?:\/\//i.test(url)) {
     await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', downloadUrl: url });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL' });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', state: 'failed' });
     } catch {}
     return;
   }
@@ -1022,7 +1033,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     activeDownloadItems.delete(dlId);
     await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), downloadUrl: url });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error') });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), state: 'failed' });
     } catch {}
     return;
   }
@@ -1044,7 +1055,8 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
         id: dlId,
         filename: filename,
-        error: route.cancelled ? 'Cancelled' : route.error
+        error: route.cancelled ? 'Cancelled' : route.error,
+        state: route.cancelled ? 'cancelled' : 'failed'
       });
     } catch {}
     return;
@@ -1055,7 +1067,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     var httpErr = 'HTTP ' + Number(res.status || 0) + (res.statusText ? (' ' + String(res.statusText)) : '');
     await pushFailedDownload(ctx, { id: dlId, filename: filename, destination: route.destination, library: route.library, error: httpErr, downloadUrl: String(res.url || url) });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: httpErr });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: httpErr, state: 'failed' });
     } catch {}
     return;
   }
@@ -1194,6 +1206,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     try {
       ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
         id: dlId,
+        state: stateName || 'failed',
         filename: filename,
         error: String(errMsg || 'Download failed'),
       });
@@ -1226,6 +1239,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     try {
       ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
         ok: true,
+        state: 'completed',
         id: dlId,
         filename: filename,
         destination: route.destination,
