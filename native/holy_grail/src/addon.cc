@@ -809,8 +809,11 @@ Napi::Value RenderFrame(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (!g_mpvGl) return env.Null();
 
-    // Check if mpv has a new frame
+    // Only render when mpv has a new frame — skip duplicate renders.
+    // This matches frame delivery to the video's native frame rate (e.g. 23.976fps)
+    // instead of re-rendering the same frame ~1000 times/sec.
     uint64_t flags = p_mpv_render_context_update(g_mpvGl);
+    if (!(flags & MPV_RENDER_UPDATE_FRAME)) return env.Null();
 
     // Make ANGLE context current
     if (!p_eglMakeCurrent(g_eglDisplay, g_eglSurface, g_eglSurface, g_eglContext)) {

@@ -47,6 +47,72 @@
       sourceHeight: 0,
     };
 
+    // ── Performance logger (2-second intervals) ──
+    var perfLog = {
+      intervalId: null,
+      lastFrameCount: 0,
+      lastDropped: 0,
+      lastTimestamp: 0,
+      drawTimes: [],       // collect draw times per interval
+      arrivalTimes: [],    // track frame arrival timestamps for jitter analysis
+    };
+
+    function startPerfLog() {
+      perfLog.lastFrameCount = renderStats.frameCount;
+      perfLog.lastDropped = renderStats.droppedFrames;
+      perfLog.lastTimestamp = performance.now();
+      perfLog.drawTimes = [];
+      perfLog.arrivalTimes = [];
+      if (perfLog.intervalId) clearInterval(perfLog.intervalId);
+      perfLog.intervalId = setInterval(function () {
+        var now = performance.now();
+        var elapsed = (now - perfLog.lastTimestamp) / 1000;
+        var frames = renderStats.frameCount - perfLog.lastFrameCount;
+        var dropped = renderStats.droppedFrames - perfLog.lastDropped;
+        var fps = elapsed > 0 ? (frames / elapsed).toFixed(1) : '0';
+        var avgDraw = perfLog.drawTimes.length > 0
+          ? (perfLog.drawTimes.reduce(function (a, b) { return a + b; }, 0) / perfLog.drawTimes.length).toFixed(2)
+          : '—';
+        var maxDraw = perfLog.drawTimes.length > 0
+          ? Math.max.apply(null, perfLog.drawTimes).toFixed(2)
+          : '—';
+
+        // Frame interval jitter: std deviation of inter-frame arrival times
+        var jitter = '—';
+        if (perfLog.arrivalTimes.length > 2) {
+          var intervals = [];
+          for (var i = 1; i < perfLog.arrivalTimes.length; i++) {
+            intervals.push(perfLog.arrivalTimes[i] - perfLog.arrivalTimes[i - 1]);
+          }
+          var mean = intervals.reduce(function (a, b) { return a + b; }, 0) / intervals.length;
+          var variance = intervals.reduce(function (a, b) { return a + (b - mean) * (b - mean); }, 0) / intervals.length;
+          jitter = Math.sqrt(variance).toFixed(2);
+        }
+
+        console.log(
+          '%c[HG PERF]%c FPS: ' + fps +
+          ' | Drawn: ' + frames +
+          ' | Dropped: ' + dropped +
+          ' | Draw avg: ' + avgDraw + 'ms, max: ' + maxDraw + 'ms' +
+          ' | Jitter: ' + jitter + 'ms' +
+          ' | Total: ' + renderStats.frameCount + ' frames, ' + renderStats.droppedFrames + ' dropped' +
+          ' | Canvas: ' + (canvas ? canvas.width + 'x' + canvas.height : '—') +
+          ' | Source: ' + renderStats.sourceWidth + 'x' + renderStats.sourceHeight,
+          'color: #0f0; font-weight: bold;', 'color: inherit;'
+        );
+
+        perfLog.lastFrameCount = renderStats.frameCount;
+        perfLog.lastDropped = renderStats.droppedFrames;
+        perfLog.lastTimestamp = now;
+        perfLog.drawTimes = [];
+        perfLog.arrivalTimes = [];
+      }, 2000);
+    }
+
+    function stopPerfLog() {
+      if (perfLog.intervalId) { clearInterval(perfLog.intervalId); perfLog.intervalId = null; }
+    }
+
     var state = {
       ready: false,
       paused: true,
@@ -193,6 +259,7 @@
       var drawMs = performance.now() - t0;
       renderStats.frameCount += 1;
       renderStats.lastDrawTimeMs = drawMs;
+      if (perfLog.intervalId) perfLog.drawTimes.push(drawMs);
       renderStats.sourceWidth = srcW;
       renderStats.sourceHeight = srcH;
 
@@ -240,6 +307,7 @@
         closeFrameSafe(videoFrame);
         return;
       }
+      if (perfLog.intervalId) perfLog.arrivalTimes.push(performance.now());
       if (pendingFrame) {
         renderStats.droppedFrames += 1;
         closeFrameSafe(pendingFrame);
@@ -317,6 +385,7 @@
       emit('file-loaded');
       window.TankoPlayer.state.set({ ready: true, fileLoaded: true });
       console.log('[hg-backend] file loaded');
+      startPerfLog();
     });
 
     var offVideoFrame = hg.onVideoFrame(function (videoFrame) {
@@ -659,6 +728,7 @@
     function destroy() {
       if (destroyed) return;
       destroyed = true;
+      stopPerfLog();
 
       emit('shutdown');
 

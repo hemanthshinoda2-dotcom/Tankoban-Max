@@ -74,7 +74,8 @@ videoProgress IPC calls
     modeComicsBtn: qs('modeComicsBtn'),
     modeBooksBtn: qs('modeBooksBtn'),
     modeVideosBtn: qs('modeVideosBtn'),
-    qtPlayerToggleBtn: qs('qtPlayerToggleBtn'),
+    playerHgBtn: qs('playerHgBtn'),
+    playerQtBtn: qs('playerQtBtn'),
     libTitle: qs('libTitle'),
 
     libraryView: qs('libraryView'),
@@ -353,7 +354,7 @@ videoProgress IPC calls
       // Tankoban Plus Build 5.4B: preferred languages for track selection (mpv only)
       preferredAudioLanguage: null,
       preferredSubtitleLanguage: null,
-      forceQtPlayer: true,
+      forceQtPlayer: false,
       autoAdvance: true,
       respectSubtitleStyles: true,
       subtitleHudLiftPx: 40,
@@ -1044,8 +1045,8 @@ async function refreshChaptersFromPlayer(){
           ? 'Embedded Holy Grail engine active.'
           : `Embedded Holy Grail engine active (${routeReason}; ${openReason}).`;
       } else if (nextEngine === 'qt') {
-        el.videoEngineBadge.textContent = 'Qt';
-        el.videoEngineBadge.title = `Qt engine active (${routeReason}; ${openReason}).`;
+        el.videoEngineBadge.textContent = 'Qt (fallback)';
+        el.videoEngineBadge.title = `Qt fallback player active (${routeReason}; ${openReason}).`;
       } else {
         el.videoEngineBadge.textContent = 'No Engine';
         el.videoEngineBadge.title = 'No active engine.';
@@ -2941,10 +2942,6 @@ function closeTracksPanel(){
                 const s = vs.settings && typeof vs.settings === 'object' ? vs.settings : vs;
                 applyVideoSettings(s);
               }
-              // Current-cycle safety: keep Qt as the default route unless explicitly overridden.
-              state.settings.forceQtPlayer = true;
-              persistVideoSettings({ forceQtPlayer: true });
-
               // Apply display names (RENAME-VIDEO)
               state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
 
@@ -3062,9 +3059,8 @@ function closeTracksPanel(){
     if (typeof s.preferredSubtitleLanguage === 'string' || s.preferredSubtitleLanguage === null) {
       state.settings.preferredSubtitleLanguage = (typeof s.preferredSubtitleLanguage === 'string' && s.preferredSubtitleLanguage.trim()) ? s.preferredSubtitleLanguage.trim() : null;
     }
-    if (typeof s.forceQtPlayer === 'boolean') {
-      state.settings.forceQtPlayer = !!s.forceQtPlayer;
-    }
+    // Embedded HG is now the primary player. Ignore legacy persisted forceQtPlayer=true.
+    // The toggle button still works — user can switch to Qt, and that choice persists.
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.
 if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
     (typeof s.preferredSubLanguage === 'string' || s.preferredSubLanguage === null)) {
@@ -5152,24 +5148,6 @@ function getEpisodeById(epId){
           safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
         },
       },
-      {
-        label: 'Open with Embedded',
-        disabled: eps.length === 0,
-        onClick: () => {
-          const ep = pickResumeEpisode(sid) || eps[0];
-          if (!ep) return;
-          safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume')));
-        },
-      },
-      {
-        label: 'Open with Qt',
-        disabled: eps.length === 0,
-        onClick: () => {
-          const ep = pickResumeEpisode(sid) || eps[0];
-          if (!ep) return;
-          safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume')));
-        },
-      },
       { separator: true },
       {
         label: showFinished ? 'Mark as in progress' : 'Mark as finished',
@@ -5251,24 +5229,6 @@ function getEpisodeById(epId){
           openVideoShow(sid);
         },
       },
-      {
-        label: 'Open with Embedded',
-        disabled: eps.length === 0,
-        onClick: () => {
-          const ep = pickResumeEpisode(sid) || eps[0];
-          if (!ep) return;
-          safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume')));
-        },
-      },
-      {
-        label: 'Open with Qt',
-        disabled: eps.length === 0,
-        onClick: () => {
-          const ep = pickResumeEpisode(sid) || eps[0];
-          if (!ep) return;
-          safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume')));
-        },
-      },
       { separator: true },
       {
         label: 'Rescan this show',
@@ -5330,14 +5290,6 @@ function getEpisodeById(epId){
         onClick: () => {
           safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
         },
-      },
-      {
-        label: 'Open with Embedded',
-        onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); },
-      },
-      {
-        label: 'Open with Qt',
-        onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); },
       },
       { separator: true },
       {
@@ -5401,14 +5353,6 @@ function getEpisodeById(epId){
         onClick: () => {
           safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start')));
         },
-      },
-      {
-        label: 'Open with Embedded',
-        onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); },
-      },
-      {
-        label: 'Open with Qt',
-        onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); },
       },
       { separator: true },
       {
@@ -6160,8 +6104,6 @@ function getEpisodeById(epId){
         openCtxMenu(ev, [
           { label: 'Play / Continue', onClick: () => { safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'resume'))); } },
           { label: 'Play from beginning', onClick: () => { safe(() => playViaShell(ep, buildPlaybackOpts(ep, 'start'))); } },
-          { label: 'Open with Embedded', onClick: () => { safe(() => playViaEmbedded(ep, buildPlaybackOpts(ep, 'resume'))); } },
-          { label: 'Open with Qt', onClick: () => { safe(() => playViaQt(ep, buildPlaybackOpts(ep, 'resume'))); } },
           { separator: true },
           { label: 'Clear from Continue Watching', onClick: () => { safe(() => clearContinueShow(String(ep.showId || ''), ep.id)); } },
         ]);
@@ -10379,30 +10321,36 @@ function bindKeyboard(){
 
     function updateQtToggleUi() {
       try {
-        const btn = el.qtPlayerToggleBtn;
-        if (!btn) return;
+        var hgBtn = el.playerHgBtn;
+        var qtBtn = el.playerQtBtn;
+        if (!hgBtn || !qtBtn) return;
 
-        const hgReady = !!state.holyGrailAvailable;
-        const useQt = getQtPlayerPreference();
+        var hgReady = !!state.holyGrailAvailable;
+        var useQt = getQtPlayerPreference();
 
         if (!hgReady) {
-          btn.classList.add('active');
-          btn.textContent = 'Qt';
-          btn.title = state.holyGrailAvailError
-            ? `Embedded unavailable: ${state.holyGrailAvailError}`
-            : 'Embedded unavailable';
-          try { btn.setAttribute('disabled', 'disabled'); } catch {}
-          try { btn.style.pointerEvents = 'none'; } catch {}
+          // HG unavailable — force Qt active, disable HG button
+          hgBtn.classList.remove('active');
+          qtBtn.classList.add('active');
+          try { hgBtn.setAttribute('disabled', 'disabled'); } catch {}
+          hgBtn.title = state.holyGrailAvailError
+            ? 'Unavailable: ' + state.holyGrailAvailError
+            : 'Unavailable';
+          qtBtn.title = 'Qt player (only option)';
           return;
         }
 
-        try { btn.removeAttribute('disabled'); } catch {}
-        try { btn.style.pointerEvents = ''; } catch {}
-        btn.classList.toggle('active', useQt);
-        btn.textContent = useQt ? 'Qt' : 'In-App';
-        btn.title = useQt
-          ? 'Using Qt player. Click to switch to in-app embedded player.'
-          : 'Using in-app embedded player. Click to force Qt player.';
+        try { hgBtn.removeAttribute('disabled'); } catch {}
+        hgBtn.title = 'Holy Grail embedded player';
+        qtBtn.title = 'External Qt player';
+
+        if (useQt) {
+          hgBtn.classList.remove('active');
+          qtBtn.classList.add('active');
+        } else {
+          hgBtn.classList.add('active');
+          qtBtn.classList.remove('active');
+        }
       } catch {}
     }
 
@@ -10466,18 +10414,22 @@ function bindKeyboard(){
     el.modeVideosBtn?.addEventListener('click', () => setMode('videos'));
 
     updateQtToggleUi();
-    el.qtPlayerToggleBtn?.addEventListener('click', () => {
-      const canEmbed = !!state.holyGrailAvailable;
-      if (!canEmbed) {
-        try { toast(state.holyGrailAvailError ? `Embedded unavailable: ${state.holyGrailAvailError}` : 'Embedded unavailable', 2600); } catch {}
+    el.playerHgBtn?.addEventListener('click', function () {
+      if (!state.holyGrailAvailable) {
+        try { toast(state.holyGrailAvailError ? 'Embedded unavailable: ' + state.holyGrailAvailError : 'Embedded unavailable', 2600); } catch {}
         updateQtToggleUi();
         return;
       }
-
-      const nextUseQt = !getQtPlayerPreference();
-      setQtPlayerPreference(nextUseQt);
+      if (!getQtPlayerPreference()) return; // already active
+      setQtPlayerPreference(false);
       updateQtToggleUi();
-      try { toast(nextUseQt ? 'Player mode: Qt' : 'Player mode: In-App', 1300); } catch {}
+      try { toast('Player: Holy Grail', 1300); } catch {}
+    });
+    el.playerQtBtn?.addEventListener('click', function () {
+      if (getQtPlayerPreference()) return; // already active
+      setQtPlayerPreference(true);
+      updateQtToggleUi();
+      try { toast('Player: Qt', 1300); } catch {}
     });
 
     // Video library UI bindings (BUILD 97)

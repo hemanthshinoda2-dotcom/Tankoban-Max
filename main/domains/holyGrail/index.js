@@ -288,9 +288,11 @@ async function frameLoopTick(ctx) {
   }
 
   if (!__state.frameLoopRunning) return;
+  // Poll at ~250Hz — sufficient to catch every frame up to 120fps content.
+  // renderFrame() returns null instantly when no new frame is ready (native flag check).
   __state.frameLoopTimer = setTimeout(() => {
     void frameLoopTick(ctx);
-  }, 0);
+  }, 4);
 }
 
 function teardownPlayerOnly() {
