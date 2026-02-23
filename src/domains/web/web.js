@@ -1408,16 +1408,19 @@
   // CHROMIUM_PARITY: Per-tab omnibox state (C2)
   function saveOmniState() {
     if (!el.urlDisplay) return;
-    var focused = (document.activeElement === el.urlDisplay);
-    if (!focused) return;
     var tab = getActiveTab();
     if (!tab) return;
     var runtime = ensureTabRuntime(tab);
+    var focused = (document.activeElement === el.urlDisplay);
+    var selStart = Number(el.urlDisplay.selectionStart);
+    var selEnd = Number(el.urlDisplay.selectionEnd);
+    if (!isFinite(selStart) || selStart < 0) selStart = 0;
+    if (!isFinite(selEnd) || selEnd < selStart) selEnd = selStart;
     runtime.omniState = {
       text: el.urlDisplay.value,
-      selStart: el.urlDisplay.selectionStart,
-      selEnd: el.urlDisplay.selectionEnd,
-      focused: true
+      selStart: selStart,
+      selEnd: selEnd,
+      focused: !!focused
     };
   }
 
@@ -1429,17 +1432,19 @@
     if (!tab || !el.urlDisplay) return;
     var runtime = ensureTabRuntime(tab);
     var saved = runtime.omniState;
-    runtime.omniState = null;
-    if (!saved || !saved.focused) return;
+    if (!saved) return;
     state._omniRestoreInProgress = true;
     el.urlDisplay.value = saved.text;
-    try { el.urlDisplay.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) {}
-    el.urlDisplay.focus();
+    if (saved.focused) {
+      try { el.urlDisplay.setSelectionRange(saved.selStart, saved.selEnd); } catch (e) {}
+      el.urlDisplay.focus();
+    }
     setTimeout(function () { state._omniRestoreInProgress = false; }, 50);
   }
 
-  function applyOmniSuggestion(item) {
+  function applyOmniSuggestion(item, opts) {
     if (!item || !item.url || !el.urlDisplay) return;
+    var o = opts || {};
     if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = String(item.url);
     else el.urlDisplay.textContent = String(item.url);
     setOmniIconForUrl(String(item.url));
@@ -1452,42 +1457,112 @@
     if (!query) return [];
     var out = [];
     var seen = Object.create(null);
+    var historyFrequency = Object.create(null);
+    for (var hf = 0; hf < state.browsingHistory.length; hf++) {
+      var hu = String(state.browsingHistory[hf] && state.browsingHistory[hf].url || '').trim().toLowerCase();
+      if (!hu) continue;
+      historyFrequency[hu] = Number(historyFrequency[hu] || 0) + 1;
+    }
 
-    function push(url, title, kind) {
-      var u = String(url || '').trim();
-      if (!u) return;
-      var key = u.toLowerCase();
-      if (seen[key]) return;
-      var t = String(title || '').trim();
-      if (query) {
-        var h = (u + ' ' + t).toLowerCase();
-        if (h.indexOf(query) === -1) return;
+    function push(scored) {
+      if (!scored || !scored.url) return;
+      var key = String(scored.url).toLowerCase();
+      if (seen[key]) {
+        if (scored.score > seen[key].score) seen[key] = scored;
+        return;
       }
-      seen[key] = 1;
-      out.push({
-        url: u,
-        title: t || siteNameFromUrl(u) || u,
-        kind: kind || 'page'
-      });
+      seen[key] = scored;
+      out.push(scored);
     }
 
     for (var i = 0; i < state.tabs.length; i++) {
       var tab = state.tabs[i];
       if (!tab || tab.type === 'torrent') continue;
-      push(tab.url || tab.homeUrl, tab.title || tab.sourceName, 'tab');
-      if (out.length >= 10) break;
+      var u = String(tab.url || tab.homeUrl || '').trim();
+      var scoredTab = scoreOmniCandidate(query, u, tab.title || tab.sourceName, 'tab', { tabId: tab.id });
+      push(scoredTab);
     }
-    for (var b = 0; b < state.bookmarks.length && out.length < 10; b++) {
+    for (var b = 0; b < state.bookmarks.length; b++) {
       var bm = state.bookmarks[b];
       if (!bm) continue;
-      push(bm.url, bm.title, 'bookmark');
+      push(scoreOmniCandidate(query, bm.url, bm.title, 'bookmark', {}));
     }
-    for (var h = 0; h < state.browsingHistory.length && out.length < 10; h++) {
+    for (var h = 0; h < state.browsingHistory.length; h++) {
       var hi = state.browsingHistory[h];
       if (!hi) continue;
-      push(hi.url, hi.title, 'history');
+      var huRaw = String(hi.url || '').trim();
+      var huKey = huRaw.toLowerCase();
+      push(scoreOmniCandidate(query, huRaw, hi.title, 'history', {
+        recencyRank: h,
+        frequency: Number(historyFrequency[huKey] || 0)
+      }));
     }
-    return out.slice(0, 8);
+
+    // direct URL heuristics
+    var heuristic = resolveOmniInputToUrl(input);
+    if (heuristic && /^https?:\/\//i.test(heuristic)) {
+      push({
+        url: heuristic,
+        title: 'Go to ' + stripUrlPrefix(heuristic),
+        kind: 'url',
+        provider: 'heuristic',
+        score: 140
+      });
+    }
+
+    out.sort(function (a, b) { return Number(b.score || 0) - Number(a.score || 0); });
+    var top = out.slice(0, 7);
+    top.push({
+      url: getSearchQueryUrl(input),
+      title: input,
+      kind: 'search',
+      provider: getActiveSearchEngine(),
+      score: 0,
+      query: input
+    });
+    return top;
+  }
+
+  function fetchSearchSuggestions(rawInput, requestId) {
+    var input = String(rawInput || '').trim();
+    if (!input || input.length < 2 || typeof fetch !== 'function') return;
+    var endpoint = getSearchSuggestionEndpoint(input);
+    fetch(endpoint, { method: 'GET' }).then(function (res) {
+      if (!res || !res.ok) return null;
+      return res.json();
+    }).then(function (payload) {
+      if (!payload || requestId !== state.omniSuggestRequestId) return;
+      var textList = [];
+      if (Array.isArray(payload) && Array.isArray(payload[1])) {
+        textList = payload[1];
+      } else if (Array.isArray(payload)) {
+        for (var i = 0; i < payload.length; i++) {
+          if (payload[i] && payload[i].phrase) textList.push(payload[i].phrase);
+        }
+      }
+      if (!textList.length) return;
+      var seen = Object.create(null);
+      for (var j = 0; j < state.omniSuggestItems.length; j++) {
+        seen[String(state.omniSuggestItems[j].url || '').toLowerCase()] = 1;
+      }
+      for (var k = 0; k < textList.length && state.omniSuggestItems.length < 10; k++) {
+        var q = String(textList[k] || '').trim();
+        if (!q) continue;
+        var searchUrl = getSearchQueryUrl(q);
+        var key = searchUrl.toLowerCase();
+        if (seen[key]) continue;
+        seen[key] = 1;
+        state.omniSuggestItems.push({
+          url: searchUrl,
+          title: q,
+          kind: 'search',
+          provider: getActiveSearchEngine(),
+          score: -10,
+          query: q
+        });
+      }
+      renderOmniSuggestions();
+    }).catch(function () {});
   }
 
   function renderOmniSuggestions() {
@@ -1499,12 +1574,29 @@
     var html = '';
     for (var i = 0; i < state.omniSuggestItems.length; i++) {
       var s = state.omniSuggestItems[i];
-      var kind = String(s.kind || 'page');
+      var kind = String(s.kind || 'url');
       var activeCls = i === state.omniSuggestActiveIndex ? ' active' : '';
+      var provider = String(s.provider || 'history');
+      var badge = (kind === 'switch-tab') ? 'tab' : provider;
+      var icon = '<span class="webOmniSuggestTypeIcon type-url" aria-hidden="true">🔗</span>';
+      if (kind === 'search') icon = '<span class="webOmniSuggestTypeIcon type-search" aria-hidden="true">🔎</span>';
+      if (kind === 'switch-tab') icon = '<span class="webOmniSuggestTypeIcon type-tab" aria-hidden="true">🗂</span>';
+      var host = '';
+      var path = '';
+      var parts = parseOmniUrlParts(s.url);
+      if (parts) {
+        host = parts.host;
+        path = parts.path;
+      }
+      var main = (kind === 'search')
+        ? ('<span class="webOmniSuggestSearchText">' + escapeHtml(s.title || '') + '</span>')
+        : ('<span class="webOmniSuggestHost">' + escapeHtml(host || (s.title || s.url)) + '</span>' +
+          '<span class="webOmniSuggestPath">' + escapeHtml(path || '') + '</span>');
       html += '' +
         '<button type="button" class="webOmniSuggestItem' + activeCls + '" data-omni-suggest-idx="' + i + '">' +
-          '<span class="webHubBadge">' + escapeHtml(kind) + '</span>' +
-          '<span class="webOmniSuggestMain">' + escapeHtml(s.title || s.url) + '</span>' +
+          icon +
+          '<span class="webHubBadge webOmniProviderBadge">' + escapeHtml(badge) + '</span>' +
+          '<span class="webOmniSuggestMain">' + main + '</span>' +
           '<span class="webOmniSuggestSub">' + escapeHtml(s.url) + '</span>' +
         '</button>';
     }
@@ -1518,19 +1610,34 @@
         var idx = Number(this.getAttribute('data-omni-suggest-idx'));
         if (!isFinite(idx) || idx < 0 || idx >= state.omniSuggestItems.length) return;
         var item = state.omniSuggestItems[idx];
+        state.omniSuggestActiveIndex = idx;
         applyOmniSuggestion(item);
-        openUrlFromOmni(String(item && item.url ? item.url : ''));
+        openOmniSuggestion(item, { newTab: false });
       };
     }
+  }
+
+  function openOmniSuggestion(item, opts) {
+    var o = opts || {};
+    if (!item) return;
+    if (item.kind === 'switch-tab' && item.tabId) {
+      activateTab(item.tabId);
+      closeOmniSuggestions();
+      return;
+    }
+    openUrlFromOmni(String(item.url || ''), { newTab: !!o.newTab });
   }
 
   function refreshOmniSuggestionsFromInput() {
     if (!el.urlDisplay) return;
     var raw = String(el.urlDisplay.value || '').trim();
+    state.omniSuggestRequestId += 1;
+    var requestId = state.omniSuggestRequestId;
     state.omniSuggestItems = buildOmniSuggestions(raw);
     state.omniSuggestActiveIndex = state.omniSuggestItems.length ? 0 : -1;
     state.omniSuggestOpen = !!state.omniSuggestItems.length;
     renderOmniSuggestions();
+    fetchSearchSuggestions(raw, requestId);
     updateOmniGhostText(); // CHROMIUM_PARITY: refresh inline autocomplete
   }
 
@@ -6302,13 +6409,16 @@
 
       el.urlDisplay.addEventListener('keydown', function (e) {
         var key = String((e && e.key) || '');
-        // CHROMIUM_PARITY: Tab or Right-arrow at end of input accepts ghost text
-        if (key === 'Tab' && _omniGhostCompletion) {
+        if (key === 'Tab' && state.omniSuggestOpen && state.omniSuggestItems.length) {
           e.preventDefault();
-          acceptOmniGhost();
-          refreshOmniSuggestionsFromInput();
+          if (state.omniSuggestActiveIndex < 0) state.omniSuggestActiveIndex = 0;
+          else state.omniSuggestActiveIndex = (state.omniSuggestActiveIndex + 1) % state.omniSuggestItems.length;
+          applyOmniSuggestion(state.omniSuggestItems[state.omniSuggestActiveIndex], { keepOpen: true });
+          renderOmniSuggestions();
+          updateOmniGhostText();
           return;
         }
+        // CHROMIUM_PARITY: Right-arrow at end of input accepts ghost text
         if (key === 'ArrowRight' && _omniGhostCompletion && el.urlDisplay.selectionStart === el.urlDisplay.value.length) {
           e.preventDefault();
           acceptOmniGhost();
@@ -6331,9 +6441,8 @@
         if (e.key === 'Enter') {
           if (state.omniSuggestOpen && state.omniSuggestItems.length && state.omniSuggestActiveIndex >= 0) {
             var selected = state.omniSuggestItems[state.omniSuggestActiveIndex];
-            var suggestedUrl = String(selected && selected.url ? selected.url : '');
             var newTabFromSuggest = !!(e.altKey || e.shiftKey);
-            openUrlFromOmni(suggestedUrl, { newTab: newTabFromSuggest });
+            openOmniSuggestion(selected, { newTab: newTabFromSuggest });
             try { e.preventDefault(); } catch (ep0) {}
             try { el.urlDisplay.blur(); } catch (eb0) {}
             return;
@@ -6351,8 +6460,9 @@
 
         if (e.key === 'Escape') {
           closeOmniSuggestions();
-          // Revert to current tab URL
-          updateUrlDisplay();
+          if (document.activeElement === el.urlDisplay) {
+            updateUrlDisplay();
+          }
           try { el.urlDisplay.blur(); } catch (err2) {}
           e.preventDefault();
           return;

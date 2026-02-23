@@ -529,9 +529,10 @@
   display: none !important;
 }
 .webOmniSuggestItem {
-  display: flex;
+  display: grid;
+  grid-template-columns: 20px auto 1fr;
   align-items: center;
-  gap: 8px;
+  column-gap: 8px;
   width: 100%;
   border: none;
   background: transparent;
@@ -544,10 +545,39 @@
 .webOmniSuggestItem.active {
   background: rgba(var(--chrome-rgb), .10);
 }
+.webOmniSuggestTypeIcon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(var(--chrome-rgb), .08);
+  font-size: 11px;
+}
+.webOmniProviderBadge {
+  font-size: 10px;
+  opacity: .85;
+  text-transform: uppercase;
+}
 .webOmniSuggestMain {
-  flex: 1;
   min-width: 0;
+  display: inline-flex;
+  gap: 5px;
+  align-items: baseline;
   font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.webOmniSuggestHost {
+  font-weight: 600;
+}
+.webOmniSuggestPath {
+  opacity: .65;
+  font-size: 11px;
+}
+.webOmniSuggestSearchText {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
