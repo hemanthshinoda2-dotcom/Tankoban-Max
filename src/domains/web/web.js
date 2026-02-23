@@ -138,6 +138,17 @@
     hubAdblockUpdateBtn: qs('webHubAdblockUpdateBtn'),
     hubAdblockStatsBtn: qs('webHubAdblockStatsBtn'),
     hubAdblockInfo: qs('webHubAdblockInfo'),
+    hubStartupMode: qs('webHubStartupMode'),
+    hubStartupCustomUrl: qs('webHubStartupCustomUrl'),
+    hubHomeUrl: qs('webHubHomeUrl'),
+    hubNewTabBehavior: qs('webHubNewTabBehavior'),
+    hubDownloadBehavior: qs('webHubDownloadBehavior'),
+    hubDownloadFolderHint: qs('webHubDownloadFolderHint'),
+    hubPrivacyDoNotTrack: qs('webHubPrivacyDoNotTrack'),
+    hubClearOnExitHistory: qs('webHubClearOnExitHistory'),
+    hubClearOnExitDownloads: qs('webHubClearOnExitDownloads'),
+    hubClearOnExitCookies: qs('webHubClearOnExitCookies'),
+    hubClearOnExitCache: qs('webHubClearOnExitCache'),
     // Torrent tab panel
     torrentPanel: qs('webTorrentPanel'),
     torrentPanelInner: qs('webTorrentPanelInner')
@@ -195,7 +206,28 @@
       defaultSearchEngine: 'yandex',
       parityV1Enabled: true,
       adblockEnabled: true,
-      restoreLastSession: true
+      restoreLastSession: true,
+      startup: {
+        mode: 'continue',
+        customUrl: ''
+      },
+      home: {
+        homeUrl: '',
+        newTabBehavior: 'tankoban_home'
+      },
+      downloads: {
+        behavior: 'ask',
+        folderModeHint: true
+      },
+      privacy: {
+        doNotTrack: false,
+        clearOnExit: {
+          history: false,
+          downloads: false,
+          cookies: false,
+          cache: false
+        }
+      }
     },
     // FEAT-TOR
     torActive: false,
@@ -2119,22 +2151,18 @@
     }
     return api.webBrowserSettings.get().then(function (res) {
       if (!res || !res.ok || !res.settings) return;
-      var settings = res.settings || {};
-      state.browserSettings = {
-        defaultSearchEngine: String(settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
-        parityV1Enabled: settings.parityV1Enabled !== false,
-        adblockEnabled: settings.adblockEnabled !== false,
-        restoreLastSession: settings.restoreLastSession !== false
-      };
+      state.browserSettings = normalizeBrowserSettingsForUi(res.settings || {});
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
       if (api.webAdblock && typeof api.webAdblock.setEnabled === 'function') {
         api.webAdblock.setEnabled({ enabled: state.browserSettings.adblockEnabled !== false }).catch(function () {});
       }
     }).catch(function () {
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
     });
   }
 
@@ -2143,17 +2171,72 @@
     var payload = (patch && typeof patch === 'object') ? patch : {};
     api.webBrowserSettings.save(payload).then(function (res) {
       if (!res || !res.ok || !res.settings) return;
-      state.browserSettings = {
-        defaultSearchEngine: String(res.settings.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
-        parityV1Enabled: res.settings.parityV1Enabled !== false,
-        adblockEnabled: res.settings.adblockEnabled !== false,
-        restoreLastSession: res.settings.restoreLastSession !== false
-      };
+      state.browserSettings = normalizeBrowserSettingsForUi(res.settings);
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
       syncSearchEngineSelect();
       syncOmniPlaceholder();
+      syncBrowserSettingsControls();
       scheduleSessionSave();
     }).catch(function () {});
+  }
+
+  function normalizeBrowserSettingsForUi(settings) {
+    var src = (settings && typeof settings === 'object') ? settings : {};
+    var startup = (src.startup && typeof src.startup === 'object') ? src.startup : {};
+    var home = (src.home && typeof src.home === 'object') ? src.home : {};
+    var downloads = (src.downloads && typeof src.downloads === 'object') ? src.downloads : {};
+    var privacy = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
+    var clearOnExit = (privacy.clearOnExit && typeof privacy.clearOnExit === 'object') ? privacy.clearOnExit : {};
+    return {
+      defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
+      parityV1Enabled: src.parityV1Enabled !== false,
+      adblockEnabled: src.adblockEnabled !== false,
+      restoreLastSession: src.restoreLastSession !== false,
+      startup: {
+        mode: String(startup.mode || 'continue').trim().toLowerCase() || 'continue',
+        customUrl: String(startup.customUrl || '').trim()
+      },
+      home: {
+        homeUrl: String(home.homeUrl || '').trim(),
+        newTabBehavior: String(home.newTabBehavior || 'tankoban_home').trim().toLowerCase() || 'tankoban_home'
+      },
+      downloads: {
+        behavior: String(downloads.behavior || 'ask').trim().toLowerCase() || 'ask',
+        folderModeHint: downloads.folderModeHint !== false
+      },
+      privacy: {
+        doNotTrack: !!privacy.doNotTrack,
+        clearOnExit: {
+          history: !!clearOnExit.history,
+          downloads: !!clearOnExit.downloads,
+          cookies: !!clearOnExit.cookies,
+          cache: !!clearOnExit.cache
+        }
+      }
+    };
+  }
+
+  function syncBrowserSettingsControls() {
+    var cfg = state.browserSettings || {};
+    var startup = cfg.startup || {};
+    var home = cfg.home || {};
+    var downloads = cfg.downloads || {};
+    var privacy = cfg.privacy || {};
+    var clearOnExit = privacy.clearOnExit || {};
+    if (el.hubStartupMode) el.hubStartupMode.value = startup.mode || 'continue';
+    if (el.hubStartupCustomUrl) {
+      el.hubStartupCustomUrl.value = startup.customUrl || '';
+      el.hubStartupCustomUrl.disabled = (startup.mode || 'continue') !== 'custom_url';
+    }
+    if (el.hubHomeUrl) el.hubHomeUrl.value = home.homeUrl || '';
+    if (el.hubNewTabBehavior) el.hubNewTabBehavior.value = home.newTabBehavior || 'tankoban_home';
+    if (el.hubDownloadBehavior) el.hubDownloadBehavior.value = downloads.behavior || 'ask';
+    if (el.hubDownloadFolderHint) el.hubDownloadFolderHint.checked = downloads.folderModeHint !== false;
+    if (el.hubPrivacyDoNotTrack) el.hubPrivacyDoNotTrack.checked = !!privacy.doNotTrack;
+    if (el.hubClearOnExitHistory) el.hubClearOnExitHistory.checked = !!clearOnExit.history;
+    if (el.hubClearOnExitDownloads) el.hubClearOnExitDownloads.checked = !!clearOnExit.downloads;
+    if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = !!clearOnExit.cookies;
+    if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = !!clearOnExit.cache;
   }
 
   function loadDestinations() {
@@ -5595,6 +5678,63 @@
       });
       syncSearchEngineSelect();
     }
+
+    if (el.hubStartupMode) {
+      el.hubStartupMode.addEventListener('change', function () {
+        var mode = String(el.hubStartupMode.value || 'continue').trim();
+        saveBrowserSettings({ startup: { mode: mode } });
+      });
+    }
+
+    if (el.hubStartupCustomUrl) {
+      el.hubStartupCustomUrl.addEventListener('blur', function () {
+        saveBrowserSettings({ startup: { customUrl: String(el.hubStartupCustomUrl.value || '').trim() } });
+      });
+    }
+
+    if (el.hubHomeUrl) {
+      el.hubHomeUrl.addEventListener('blur', function () {
+        saveBrowserSettings({ home: { homeUrl: String(el.hubHomeUrl.value || '').trim() } });
+      });
+    }
+
+    if (el.hubNewTabBehavior) {
+      el.hubNewTabBehavior.addEventListener('change', function () {
+        saveBrowserSettings({ home: { newTabBehavior: String(el.hubNewTabBehavior.value || 'tankoban_home').trim() } });
+      });
+    }
+
+    if (el.hubDownloadBehavior) {
+      el.hubDownloadBehavior.addEventListener('change', function () {
+        saveBrowserSettings({ downloads: { behavior: String(el.hubDownloadBehavior.value || 'ask').trim() } });
+      });
+    }
+
+    if (el.hubDownloadFolderHint) {
+      el.hubDownloadFolderHint.addEventListener('change', function () {
+        saveBrowserSettings({ downloads: { folderModeHint: !!el.hubDownloadFolderHint.checked } });
+      });
+    }
+
+    if (el.hubPrivacyDoNotTrack) {
+      el.hubPrivacyDoNotTrack.addEventListener('change', function () {
+        saveBrowserSettings({ privacy: { doNotTrack: !!el.hubPrivacyDoNotTrack.checked } });
+      });
+    }
+
+    function bindClearOnExitToggle(elm, key) {
+      if (!elm) return;
+      elm.addEventListener('change', function () {
+        var patch = { privacy: { clearOnExit: {} } };
+        patch.privacy.clearOnExit[key] = !!elm.checked;
+        saveBrowserSettings(patch);
+      });
+    }
+
+    bindClearOnExitToggle(el.hubClearOnExitHistory, 'history');
+    bindClearOnExitToggle(el.hubClearOnExitDownloads, 'downloads');
+    bindClearOnExitToggle(el.hubClearOnExitCookies, 'cookies');
+    bindClearOnExitToggle(el.hubClearOnExitCache, 'cache');
 
     if (el.findInput) {
       el.findInput.addEventListener('input', function () {
