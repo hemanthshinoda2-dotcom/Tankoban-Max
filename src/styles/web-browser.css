@@ -1408,6 +1408,40 @@
    Toast + context menu (shared helpers)
    ══════════════════════════════════════════ */
 
+#contextMenu.contextMenu {
+  min-width: 210px;
+  max-width: 320px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--chrome-rgb), .14);
+  background: rgba(var(--surface-rgb), .94);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, .5);
+}
+
+#contextMenu.contextMenu .contextMenuItem {
+  min-height: 30px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  transition: background .12s ease, color .12s ease, opacity .12s ease;
+}
+
+#contextMenu.contextMenu .contextMenuItem:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+#contextMenu.contextMenu .contextMenuItem:disabled:hover {
+  background: transparent;
+}
+
+#contextMenu.contextMenu .contextMenuSep {
+  margin: 5px 6px;
+  background: rgba(var(--chrome-rgb), .16);
+}
+
 #webToast.videoToast {
   position: fixed;
   top: 16px;
