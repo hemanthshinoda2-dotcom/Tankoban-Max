@@ -1882,6 +1882,55 @@ COMMON ANCHORS
         <div id="settingsPanelBrowser" class="settingsPanel hidden" role="tabpanel" aria-labelledby="settingsTabBrowser" data-settings-panel="browser">
           <div class="muted tiny">Browser configuration and management controls.</div>
 
+          <div id="settingsBrowserBehaviorSection" class="webHubSection">
+            <div class="webHubSectionHeading">Startup &amp; Behavior</div>
+            <div class="webHubChecklist">
+              <label for="webHubStartupMode" class="settingsLabel">On startup</label>
+              <select id="webHubStartupMode" class="select">
+                <option value="continue" selected>Continue where you left off</option>
+                <option value="new_tab">Open new tab page</option>
+                <option value="custom_url">Open custom URL</option>
+              </select>
+
+              <label for="webHubStartupCustomUrl" class="settingsLabel">Startup custom URL</label>
+              <input id="webHubStartupCustomUrl" class="search webHubSearch" type="text" placeholder="https://example.com" autocomplete="off" />
+
+              <label for="webHubHomeUrl" class="settingsLabel">Home button URL</label>
+              <input id="webHubHomeUrl" class="search webHubSearch" type="text" placeholder="Leave blank for source home" autocomplete="off" />
+
+              <label for="webHubNewTabBehavior" class="settingsLabel">New tab page behavior</label>
+              <select id="webHubNewTabBehavior" class="select">
+                <option value="tankoban_home" selected>Tankoban browser home</option>
+                <option value="browser_home">Browser source tiles</option>
+                <option value="blank">Blank page</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="settingsBrowserDownloadsSection" class="webHubSection">
+            <div class="webHubSectionHeading">Downloads</div>
+            <div class="webHubChecklist">
+              <label for="webHubDownloadBehavior" class="settingsLabel">Download behavior</label>
+              <select id="webHubDownloadBehavior" class="select">
+                <option value="ask" selected>Ask every time where to save</option>
+                <option value="auto">Always use default folder</option>
+              </select>
+              <label><input id="webHubDownloadFolderHint" type="checkbox" checked /> Show default-folder mode hints in UI</label>
+            </div>
+          </div>
+
+          <div id="settingsBrowserPrivacyTogglesSection" class="webHubSection">
+            <div class="webHubSectionHeading">Privacy Toggles</div>
+            <div class="webHubChecklist">
+              <label><input id="webHubPrivacyDoNotTrack" type="checkbox" /> Send &ldquo;Do Not Track&rdquo; requests</label>
+              <div class="settingsLabel">Clear on exit</div>
+              <label><input id="webHubClearOnExitHistory" type="checkbox" /> Browsing history</label>
+              <label><input id="webHubClearOnExitDownloads" type="checkbox" /> Download history</label>
+              <label><input id="webHubClearOnExitCookies" type="checkbox" /> Cookies and site data</label>
+              <label><input id="webHubClearOnExitCache" type="checkbox" /> Cache</label>
+            </div>
+          </div>
+
           <div id="settingsBrowserSourcesSection" class="webHubSection">
             <div class="webHubSectionHeading">Sources</div>
             <div class="webHubSectionActions">
