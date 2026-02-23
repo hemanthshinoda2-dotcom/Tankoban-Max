@@ -130,8 +130,11 @@
     backBtn.textContent = '\u2190'; // ←
     backBtn.title = 'Back';
     backBtn.addEventListener('click', function () {
-      // Standalone: open file dialog or quit
-      if (window.PlayerBridge && window.PlayerBridge.openFileDialog) {
+      if (window.TankoPlayer._embedded && window.TankoPlayer._onExit) {
+        // Embedded: return to video library
+        window.TankoPlayer._onExit();
+      } else if (window.PlayerBridge && window.PlayerBridge.openFileDialog) {
+        // Standalone: open file dialog
         window.PlayerBridge.openFileDialog().then(function (path) {
           if (path && window._loadFile) window._loadFile(path);
         });

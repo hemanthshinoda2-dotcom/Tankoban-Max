@@ -1608,15 +1608,19 @@ async function refreshChaptersFromPlayer(){
 
     stopProgressPoll();
 
-    try { await 
+    try { await
 // AI_EXIT_PATH: final save should be triggered during teardown / before leaving player to avoid missing the last poll tick.
 saveNow(true); } catch {}
+    // Destroy player_hg boot instance (cleans up adapter + UI modules internally)
+    try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
     try { await state.player.destroy(); } catch {}
+    try { destroyPlayerHgEmbed(); } catch {}
 
     state.player = null;
+    state._playerHgInstance = null;
     state._playerEventsBoundFor = null;
     document.body.classList.remove('mpvEngine');
-        document.body.classList.remove('mpvDetached');
+    document.body.classList.remove('mpvDetached');
   }
 
 // ══════ SECTION: Context Menu & Panels ══════
@@ -3655,7 +3659,7 @@ function ensureContinueEpisodesLoaded() {
       const fallback = state.shows.filter(s => String(s.rootId || '') === rid).length;
       return fallback || (Number.isFinite(nn) ? nn : 0);
     }
-    // Fallback if ids aren’t available.
+    // Fallback if ids aren't available.
     if (rid) return state.shows.filter(s => String(s.rootId || '') === rid).length;
     return 0;
   };
@@ -6384,6 +6388,9 @@ function getEpisodeById(epId){
     const host = el.mpvHost;
     if (!host) return null;
 
+    // Hide old video.js stage overlays so they don't conflict with player_hg's Shadow DOM UI
+    document.body.classList.add('playerHgEmbed');
+
     const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
     shadow.innerHTML = ''; // Clear any previous contents
 
@@ -6418,6 +6425,7 @@ function getEpisodeById(epId){
   }
 
   function destroyPlayerHgEmbed() {
+    document.body.classList.remove('playerHgEmbed');
     const host = el.mpvHost;
     if (!host || !host.shadowRoot) return;
     host.shadowRoot.innerHTML = '';
@@ -6429,7 +6437,7 @@ function getEpisodeById(epId){
     state._lastEnsurePlayerError = '';
 
     const canHolyGrail = !!(state.holyGrailAvailable
-      && typeof window.createHolyGrailAdapter === 'function'
+      && window.TankoPlayer && typeof window.TankoPlayer.boot === 'function'
       && Tanko.api?.holyGrail);
 
     const setEngineUi = (isMpv, isCanvas) => {
@@ -6479,21 +6487,32 @@ function getEpisodeById(epId){
     }
 
     // Swap engines (best-effort cleanup)
+    try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
     try { state.player?.destroy?.(); } catch {}
+    try { destroyPlayerHgEmbed(); } catch {}
     state.player = null;
+    state._playerHgInstance = null;
     state._playerEventsBoundFor = null;
 
     try {
-      state.player = window.createHolyGrailAdapter({
-        hostEl: el.mpvHost || null,
-        renderQuality: state.settings.renderQuality,
-        videoSyncDisplayResample: !!state.settings.videoSyncDisplayResample,
+      const shadow = createPlayerHgEmbed();
+      if (!shadow) throw new Error('Shadow DOM creation failed');
+      const bootResult = window.TankoPlayer.boot({
+        root: shadow,
+        backend: 'holy_grail',
+        embedded: true,
+        holyGrailBridge: Tanko.api.holyGrail,
+        onExit: () => { safe(() => showVideoLibrary()); },
       });
-      try { applyRenderQuality(state.settings.renderQuality, { persist: false, announce: false }); } catch {}
+      bootResult.initAdapter();
+      state.player = bootResult.getAdapter();
+      state._playerHgInstance = bootResult;
+      if (!state.player) throw new Error('Adapter creation failed');
       try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
       try { state.player?.setSubtitleHudLift?.(Number(state.settings.subtitleHudLiftPx || 40)); } catch {}
     } catch (e) {
       state._lastEnsurePlayerError = String((e && e.message) || e || 'init_failed');
+      try { destroyPlayerHgEmbed(); } catch {}
       setEngineUi(false, false);
       toast(`Canvas player failed to start${e && e.message ? ': ' + e.message : ''}`);
       return null;
@@ -7206,7 +7225,7 @@ async function openVideo(v, opts = {}) {
     && state.holyGrailAvailable
     && api
     && api.holyGrail
-    && typeof window.createHolyGrailAdapter === 'function');
+    && window.TankoPlayer && typeof window.TankoPlayer.boot === 'function');
 
   if (!canHolyGrail) {
     try { await state.player?.destroy?.(); } catch {}
@@ -7285,13 +7304,11 @@ async function openVideo(v, opts = {}) {
   // If a previous file is loaded in the same adapter instance, tear it down first.
   try { await player.unload?.(); } catch {}
 
-  const loadRes = await player.load(String(v.path), {
-    startSeconds: start,
-    videoId: String((v && v.id) || ''),
-    showId: String((v && v.showId) || ''),
-    renderQuality: state.settings.renderQuality,
-    videoSyncDisplayResample: !!state.settings.videoSyncDisplayResample,
-  });
+  const loadRes = await player.load(String(v.path));
+  // Resume position: seek after load (player_hg adapter takes path only)
+  if (loadRes && loadRes.ok && start > 2) {
+    try { await player.seekTo(start); } catch {}
+  }
 
   if (!loadRes || loadRes.ok === false) {
     const err = String((loadRes && loadRes.error) || 'unknown_error');
@@ -7531,8 +7548,11 @@ async function openVideoQtFallback(v, opts = {}) {
 
     // Prevent orphan mpv surface windows when leaving the player view.
     if (state.player?.kind === 'mpv') {
+      try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
       safe(() => state.player?.destroy?.());
+      try { destroyPlayerHgEmbed(); } catch {}
       state.player = null;
+      state._playerHgInstance = null;
       state._playerEventsBoundFor = null;
       document.body.classList.remove('mpvEngine');
         document.body.classList.remove('mpvDetached');
@@ -8318,7 +8338,7 @@ function adjustVolume(delta){
   let videoScrubMoveRaf = 0;
   let videoScrubPendingClientX = null;
 
-  // Light throttled “live seek” while dragging
+  // Light throttled "live seek" while dragging
   let videoScrubLiveSeekTimer = null;
   let videoScrubLiveSeekSec = null;
 
@@ -8595,6 +8615,8 @@ function adjustVolume(delta){
 
     // BUILD 67: Enhanced diagnostics for right-click context menu debugging
     function handleCanvasContextMenu(e) {
+      // player_hg embed mode: let the Shadow DOM handle its own context menu
+      if (document.body.classList.contains('playerHgEmbed')) return;
       console.log('[BUILD69 CTX] handleCanvasContextMenu called');
       if (!e) {
         console.log('[BUILD69 CTX] No event object');
@@ -8731,6 +8753,8 @@ function adjustVolume(delta){
       // Non-canvas mpv can swallow bubbling events; keep a capture + document fallback there.
       const handleVideoContextMenu = (e) => {
         if (!e) return;
+        // player_hg embed mode: let the Shadow DOM handle its own context menu
+        if (document.body.classList.contains('playerHgEmbed')) return;
 
         // Cooldown guard
         const now = Date.now();
@@ -9290,7 +9314,8 @@ function adjustVolume(delta){
         el.videoStage?.addEventListener('click', (e) => {
           if (e.button !== 0) return;          // left click only
           if (!state.player) return;
-          if (state.seekDragging) return;      // don’t interrupt scrub drag
+          if (document.body.classList.contains('playerHgEmbed')) return;
+          if (state.seekDragging) return;      // don't interrupt scrub drag
           const t = e.target;
           if (isPlayerInteractiveTarget(t)) return;
 
@@ -9315,6 +9340,7 @@ function adjustVolume(delta){
       el.videoStage?.addEventListener('click', (e) => {
         if (e.button !== 0) return;
         if (!state.player) return;
+        if (document.body.classList.contains('playerHgEmbed')) return;
         if (state.seekDragging) return;
         const t = e.target;
         if (isPlayerInteractiveTarget(t)) return;
@@ -9333,7 +9359,7 @@ function adjustVolume(delta){
       if (_leftMenuTimer) { clearTimeout(_leftMenuTimer); _leftMenuTimer = null; }
       if (_clickHudToggleTimer) { clearTimeout(_clickHudToggleTimer); _clickHudToggleTimer = null; } // Build 60
       const t = e.target;
-      if (isPlayerInteractiveTarget(t)) return;
+      if (!document.body.classList.contains('playerHgEmbed') && isPlayerInteractiveTarget(t)) return;
       toggleFullscreen();
     });
 

@@ -25,6 +25,7 @@
     // Store root for modules to use in getElementById lookups
     window.TankoPlayer._root = root;
     window.TankoPlayer._embedded = embedded;
+    window.TankoPlayer._onExit = opts.onExit || null;
 
     var stageEl = root.getElementById('playerStage');
     if (!stageEl) throw new Error('[boot] #playerStage not found in root');
@@ -571,17 +572,19 @@
         }
       });
 
-      // Double-click: toggle fullscreen (standalone only)
+      // Double-click: toggle fullscreen (standalone only — embedded uses video.js handler)
       stageEl.addEventListener('dblclick', function (e) {
         if (e.button !== 0) return;
+        if (opts.embedded) return;
         if (window.PlayerBridge && window.PlayerBridge.toggleFullscreen) {
           window.PlayerBridge.toggleFullscreen();
         }
       });
 
-      // Mouse wheel: volume ±5% (standalone only)
+      // Mouse wheel: volume ±5% (standalone only — embedded uses video.js handler)
       stageEl.addEventListener('wheel', function (e) {
         if (!adapter) return;
+        if (opts.embedded) return;
         var s = window.TankoPlayer.state.get();
         if (!s.fileLoaded) return;
         e.preventDefault();
@@ -627,6 +630,7 @@
       window._loadFile = null;
       window.TankoPlayer._root = null;
       window.TankoPlayer._embedded = false;
+      window.TankoPlayer._onExit = null;
       if (embedded) {
         window.PlayerBridge = null;
       }

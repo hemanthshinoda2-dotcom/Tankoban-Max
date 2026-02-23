@@ -52,9 +52,13 @@
 
     stripEl.appendChild(titleLabel);
     stripEl.appendChild(spacer);
-    stripEl.appendChild(minimizeBtn);
-    stripEl.appendChild(fullscreenBtn);
-    stripEl.appendChild(closeBtn);
+    // Window controls are standalone-only; embedded mode uses the main app's chrome
+    var embedded = window.TankoPlayer._embedded;
+    if (!embedded) {
+      stripEl.appendChild(minimizeBtn);
+      stripEl.appendChild(fullscreenBtn);
+      stripEl.appendChild(closeBtn);
+    }
 
     return stripEl;
   }

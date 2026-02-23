@@ -1041,3 +1041,30 @@ body.mpvEngine .videoToast {
   font-size: 12px;
   padding: 0 8px;
 }
+
+/* ── player_hg Shadow DOM embed mode ──
+   When player_hg runs inside #mpvHost's Shadow DOM, hide all old video.js
+   stage overlays and re-enable pointer events on the host element.
+   Integration logic (progress tracking, auto-advance) still runs behind
+   the scenes — writing to hidden elements is harmless. */
+body.playerHgEmbed #videoStage > :not(#mpvHost) {
+  display: none !important;
+}
+body.playerHgEmbed .videoStage::after {
+  display: none !important;
+}
+body.playerHgEmbed .mpvHost {
+  pointer-events: auto !important;
+}
+/* Prevent outer cursor:none from leaking into Shadow DOM via inheritance.
+   player_hg manages its own cursor hiding inside the shadow root. */
+body.playerHgEmbed .videoStage.hideCursor {
+  cursor: auto;
+}
+body.playerHgEmbed .videoStage.hideCursor #mpvHost {
+  cursor: auto;
+}
+/* Hide old video.js player bar — player_hg has its own HUD/top strip */
+body.playerHgEmbed .videoPlayerBar {
+  display: none !important;
+}
