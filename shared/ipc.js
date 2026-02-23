@@ -436,6 +436,9 @@ const CHANNEL = {
   /** Read file contents. Returns: Buffer */
   FILE_READ: 'file:read',
 
+  /** List video files in a folder. Returns: string[] */
+  FILE_LIST_FOLDER_VIDEOS: 'file:list-folder-videos',
+
   // ========================================
   // CBR (RAR archives)
   // ========================================

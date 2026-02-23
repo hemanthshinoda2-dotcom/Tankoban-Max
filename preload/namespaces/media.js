@@ -27,6 +27,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
 
     files: {
       read: (path) => ipcRenderer.invoke(CHANNEL.FILE_READ, path),
+      listFolderVideos: (folderPath) => ipcRenderer.invoke(CHANNEL.FILE_LIST_FOLDER_VIDEOS, folderPath),
     },
 
     clipboard: {

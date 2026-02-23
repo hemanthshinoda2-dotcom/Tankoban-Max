@@ -7246,11 +7246,10 @@ async function openVideo(v, opts = {}) {
   // If a previous file is loaded in the same adapter instance, tear it down first.
   try { await player.unload?.(); } catch {}
 
-  const loadRes = await player.load(String(v.path));
-  // Resume position: seek after load (player_hg adapter takes path only)
-  if (loadRes && loadRes.ok && start > 2) {
-    try { await player.seekTo(start); } catch {}
-  }
+  // Pass startSeconds to the adapter — it pauses mpv before loading, then
+  // retries seeking in its poll loop until the position lands.  Once within
+  // tolerance it unpauses automatically.  No visible jump from 0:00.
+  const loadRes = await player.load(String(v.path), { startSeconds: start });
 
   if (!loadRes || loadRes.ok === false) {
     const err = String((loadRes && loadRes.error) || 'unknown_error');
@@ -10115,8 +10114,21 @@ function bindKeyboard(){
       }
 
 
+      // Ctrl+S = screenshot (must be before plain S handler)
+      if (e.ctrlKey && !e.altKey && !e.metaKey && lower === 's') {
+        e.preventDefault(); e.stopPropagation();
+        try {
+          if (window.TankoPlayer && window.TankoPlayer._takeScreenshot) {
+            window.TankoPlayer._takeScreenshot();
+          } else {
+            hudNotice('Screenshot not available');
+          }
+        } catch { hudNotice('Screenshot failed'); }
+        return;
+      }
+
       // BUILD41C: quick track cycling keys (only when not typing in inputs)
-      // A = next audio track, S = next subtitle track
+      // A = next audio track, S = next subtitle track, T = tracks drawer, I = diagnostics
       if (!e.altKey && !e.ctrlKey && !e.metaKey) {
         if (lower === 'a') {
           e.preventDefault(); e.stopPropagation();
@@ -10128,6 +10140,20 @@ function bindKeyboard(){
           e.preventDefault(); e.stopPropagation();
           await cycleSubtitleTrackHotkey();
           showHud();
+          return;
+        }
+        if (lower === 't') {
+          e.preventDefault(); e.stopPropagation();
+          if (window.TankoPlayer && window.TankoPlayer.tracksDrawer) {
+            window.TankoPlayer.tracksDrawer.toggle();
+          }
+          return;
+        }
+        if (lower === 'i') {
+          e.preventDefault(); e.stopPropagation();
+          if (window.TankoPlayer && window.TankoPlayer.diagnostics) {
+            window.TankoPlayer.diagnostics.toggle();
+          }
           return;
         }
       }

@@ -87,13 +87,27 @@
       if (window.TankoPlayer._setSpeed) window.TankoPlayer._setSpeed(1.0);
     });
 
+    // ── Playlist submenu ──
+    var playlistSub = addSubmenu(menuEl, 'Playlist');
+    addItem(playlistSub, 'Previous Episode', function () {
+      if (window.TankoPlayer.playlist) window.TankoPlayer.playlist.prevEpisode();
+    });
+    addItem(playlistSub, 'Next Episode', function () {
+      if (window.TankoPlayer.playlist) window.TankoPlayer.playlist.nextEpisode();
+    });
+    addSeparator(playlistSub);
+    addItem(playlistSub, 'Playlist\u2026', function () {
+      if (window.TankoPlayer.playlist) window.TankoPlayer.playlist.toggle();
+    });
+
     // ── Video submenu ──
     var videoSub = addSubmenu(menuEl, 'Video');
 
     var aspectSub = addSubmenu(videoSub, 'Aspect Ratio');
     var aspectPresets = [
       ['Default', 'auto'], ['16:9', '16:9'], ['4:3', '4:3'],
-      ['21:9', '21:9'], ['2.35:1', '2.35:1'], ['1:1', '1:1'],
+      ['21:9', '21:9'], ['2.35:1', '2.35:1'], ['9:16', '9:16'],
+      ['3:2', '3:2'], ['1:1', '1:1'],
     ];
     for (var a = 0; a < aspectPresets.length; a++) {
       (function (label, val) {

@@ -34,6 +34,13 @@
     var lastResizeH = 0;
     var cleanupFns = [];
 
+    // Pending seek state (TankobanPlus pattern): queue a seek target that the
+    // poll loop retries every 200ms until the position lands within tolerance.
+    var _pendingSeekSec = null;
+    var _pendingSeekIssuedAt = 0;
+    var _pendingSeekAttempts = 0;
+    var _pendingSeekUnpause = false;
+
     var canvas = null;
     var ctx2d = null;
     var pendingFrame = null;
@@ -423,6 +430,35 @@
         if (s.volume !== undefined) applyPropertyChange('volume', s.volume);
         if (s.muted !== undefined) applyPropertyChange('mute', s.muted);
         if (s.speed !== undefined) applyPropertyChange('speed', s.speed);
+
+        // Pending seek retry: re-issue seek every 200ms until position lands
+        // within 1s of target.  Modeled on TankobanPlus video_player_adapter.
+        try {
+          if (_pendingSeekSec !== null) {
+            var tgt = Number(_pendingSeekSec);
+            var nowMs = Date.now();
+            var durSec = toFiniteNumber(s.duration, 0);
+            var timeSec = toFiniteNumber(s.timePos, 0);
+            var readyForSeek = durSec > 0;
+            if (readyForSeek && Number.isFinite(tgt)) {
+              if (_pendingSeekIssuedAt === 0 || (nowMs - _pendingSeekIssuedAt > 200)) {
+                _pendingSeekIssuedAt = nowMs;
+                _pendingSeekAttempts += 1;
+                hg.command(['seek', String(Math.max(0, tgt)), 'absolute']).catch(function () {});
+              }
+              if (Number.isFinite(timeSec) && Math.abs(timeSec - tgt) < 1) {
+                var shouldUnpause = _pendingSeekUnpause;
+                _pendingSeekSec = null;
+                _pendingSeekIssuedAt = 0;
+                _pendingSeekAttempts = 0;
+                _pendingSeekUnpause = false;
+                if (shouldUnpause) {
+                  hg.setProperty('pause', 'no').catch(function () {});
+                }
+              }
+            }
+          }
+        } catch (e) {}
       }).catch(function () {});
 
       // Poll track list less frequently (every ~4th tick ≈ 1s)
@@ -628,7 +664,7 @@
 
     // ── Adapter methods ──
 
-    function load(filePath) {
+    function load(filePath, loadOpts) {
       loadSeq += 1;
       firstFrameEmitted = false;
       loadStartedAtMs = Date.now();
@@ -643,9 +679,22 @@
       suppressEof = true;
       setTimeout(function () { suppressEof = false; }, 500);
 
+      // Queue pending seek if startSeconds is provided (TankobanPlus pattern).
+      // The poll loop will retry seeking every 200ms until the position lands.
+      var startSec = (loadOpts && Number.isFinite(Number(loadOpts.startSeconds)))
+        ? Number(loadOpts.startSeconds) : 0;
+      _pendingSeekSec = (startSec > 2) ? startSec : null;
+      _pendingSeekIssuedAt = 0;
+      _pendingSeekAttempts = 0;
+      _pendingSeekUnpause = (startSec > 2);
+
       return ensureGpu().then(function (gpuRes) {
         if (!gpuRes || !gpuRes.ok) {
           return { ok: false, error: 'GPU init failed: ' + ((gpuRes && gpuRes.error) || 'unknown') };
+        }
+        // Pause before load to avoid briefly playing from 00:00 before seek lands.
+        if (_pendingSeekSec !== null) {
+          hg.setProperty('pause', 'yes').catch(function () {});
         }
         return hg.loadFile(filePath);
       }).then(function (loadRes) {
