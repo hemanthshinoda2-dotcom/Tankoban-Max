@@ -52,6 +52,38 @@
     var pollInFlight = false;
     var pollTrackCounter = 0;
 
+    // Build 3 audit state (renderer presentation)
+    var pageVisible = (typeof document !== 'undefined') ? (document.visibilityState !== 'hidden') : true;
+
+    var drawCache = {
+      valid: false,
+      canvasW: 0,
+      canvasH: 0,
+      srcW: 0,
+      srcH: 0,
+      aspectRatio: null,
+      crop: null,
+      dx: 0,
+      dy: 0,
+      dw: 0,
+      dh: 0,
+      needsClear: true,
+      flipY: true,
+    };
+
+    var renderPressure = {
+      droppedFrames: 0,
+      lastDropAt: 0,
+      consecutiveReplacements: 0,
+    };
+
+    var hotPublish = {
+      timer: null,
+      queued: false,
+      lastUiPushAt: 0,
+      minIntervalMs: 80,
+    };
+
     // Pending seek state (TankobanPlus pattern): queue a seek target that the
     // poll loop retries every 200ms until the position lands within tolerance.
     var _pendingSeekSec = null;
@@ -136,11 +168,18 @@
           ' | Dropped: ' + dropped +
           ' | Draw avg: ' + avgDraw + 'ms, max: ' + maxDraw + 'ms' +
           ' | Jitter: ' + jitter + 'ms' +
+          ' | Pressure: ' + renderPressure.droppedFrames + ' total, ' + renderPressure.consecutiveReplacements + ' consec' +
           ' | Total: ' + renderStats.frameCount + ' frames, ' + renderStats.droppedFrames + ' dropped' +
           ' | Canvas: ' + (canvas ? canvas.width + 'x' + canvas.height : '—') +
           ' | Source: ' + renderStats.sourceWidth + 'x' + renderStats.sourceHeight,
           'color: #0f0; font-weight: bold;', 'color: inherit;'
         );
+
+        emit('perf', {
+          droppedFrames: renderPressure.droppedFrames,
+          consecutiveReplacements: renderPressure.consecutiveReplacements,
+          lastDropAt: renderPressure.lastDropAt,
+        });
 
         perfLog.lastFrameCount = renderStats.frameCount;
         perfLog.lastDropped = renderStats.droppedFrames;
@@ -211,16 +250,18 @@
       canvas.style.background = '#000';
       canvas.setAttribute('aria-label', 'Video');
 
-      ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: false });
+      ctx2d = canvas.getContext('2d', { alpha: false, desynchronized: true });
       if (ctx2d) {
         ctx2d.imageSmoothingEnabled = true;
-        try { ctx2d.imageSmoothingQuality = 'high'; } catch (e) {}
+        try { ctx2d.imageSmoothingQuality = 'low'; } catch (e) {}
+        ctx2d.fillStyle = '#000';
       }
 
       hostEl.appendChild(canvas);
       canvasSizeDirty = true;
       syncCanvasSize(true);
       setupResizeObserver();
+      setupVisibilityObserver();
     }
 
     function markCanvasSizeDirty() {
@@ -246,6 +287,7 @@
       if (canvas.height !== pxH) { canvas.height = pxH; changed = true; }
 
       canvasSizeDirty = false;
+      if (changed) invalidateDrawCache();
       return changed;
     }
 
@@ -284,30 +326,174 @@
       }, 80);
     }
 
+    // ── Build 3: Visibility observer ──
+
+    function onVisibilityChange() {
+      pageVisible = (document.visibilityState !== 'hidden');
+      if (pageVisible && pendingFrame && !framePumpRaf) {
+        scheduleFramePump();
+      }
+    }
+
+    function setupVisibilityObserver() {
+      if (typeof document === 'undefined' || !document.addEventListener) return;
+      document.addEventListener('visibilitychange', onVisibilityChange);
+      cleanupFns.push(function () {
+        try { document.removeEventListener('visibilitychange', onVisibilityChange); } catch (e) {}
+      });
+    }
+
+    // ── Build 3: Geometry cache ──
+
+    function invalidateDrawCache() {
+      drawCache.valid = false;
+    }
+
+    function parseAspectOverride(aspect) {
+      if (!aspect || aspect === 'auto') return 0;
+      var parts = String(aspect).split(':');
+      if (parts.length === 2) {
+        var w = Number(parts[0]);
+        var h = Number(parts[1]);
+        if (Number.isFinite(w) && Number.isFinite(h) && h > 0) return w / h;
+      }
+      var n = Number(aspect);
+      if (Number.isFinite(n) && n > 0) return n;
+      return 0;
+    }
+
+    function getOrComputeDrawGeometry(srcW, srcH) {
+      if (!canvas) return null;
+
+      var canvasW = canvas.width || 0;
+      var canvasH = canvas.height || 0;
+      if (canvasW <= 0 || canvasH <= 0 || srcW <= 0 || srcH <= 0) return null;
+
+      var aspect = state.aspectRatio || 'auto';
+      var crop = state.crop || 'none';
+
+      if (drawCache.valid &&
+          drawCache.canvasW === canvasW &&
+          drawCache.canvasH === canvasH &&
+          drawCache.srcW === srcW &&
+          drawCache.srcH === srcH &&
+          drawCache.aspectRatio === aspect &&
+          drawCache.crop === crop) {
+        return drawCache;
+      }
+
+      // Compute destination rect (letterbox/pillarbox fit)
+      var videoAspect = srcW / srcH;
+      var targetAspect = videoAspect;
+
+      if (aspect && aspect !== 'auto') {
+        var parsed = parseAspectOverride(aspect);
+        if (parsed > 0) targetAspect = parsed;
+      }
+
+      var dx = 0, dy = 0, dw = canvasW, dh = canvasH;
+      var canvasAspect = canvasW / canvasH;
+      if (canvasAspect > targetAspect) {
+        // pillarbox
+        dh = canvasH;
+        dw = Math.max(1, Math.round(dh * targetAspect));
+        dx = Math.round((canvasW - dw) / 2);
+        dy = 0;
+      } else if (canvasAspect < targetAspect) {
+        // letterbox
+        dw = canvasW;
+        dh = Math.max(1, Math.round(dw / targetAspect));
+        dx = 0;
+        dy = Math.round((canvasH - dh) / 2);
+      }
+
+      drawCache.valid = true;
+      drawCache.canvasW = canvasW;
+      drawCache.canvasH = canvasH;
+      drawCache.srcW = srcW;
+      drawCache.srcH = srcH;
+      drawCache.aspectRatio = aspect;
+      drawCache.crop = crop;
+      drawCache.dx = dx;
+      drawCache.dy = dy;
+      drawCache.dw = dw;
+      drawCache.dh = dh;
+      drawCache.needsClear = !(dx === 0 && dy === 0 && dw === canvasW && dh === canvasH);
+      drawCache.flipY = true;
+
+      return drawCache;
+    }
+
+    // ── Build 3: Hot UI publish throttle ──
+
+    function flushHotUiPublish() {
+      hotPublish.timer = null;
+      hotPublish.queued = false;
+      hotPublish.lastUiPushAt = Date.now();
+      window.TankoPlayer.state.set({
+        timeSec: state.timeSec,
+        durationSec: state.durationSec,
+        paused: state.paused,
+      });
+    }
+
+    function scheduleHotUiPublish() {
+      if (destroyed) return;
+      var now = Date.now();
+      var dueIn = hotPublish.minIntervalMs - (now - hotPublish.lastUiPushAt);
+      if (dueIn <= 0 && !hotPublish.timer) {
+        flushHotUiPublish();
+        return;
+      }
+      if (hotPublish.timer) {
+        hotPublish.queued = true;
+        return;
+      }
+      hotPublish.queued = true;
+      hotPublish.timer = setTimeout(function () {
+        flushHotUiPublish();
+      }, Math.max(0, dueIn));
+    }
+
     function drawFrame(videoFrame) {
-      if (!videoFrame || !ctx2d || !canvas) return;
+      if (!videoFrame) return;
+      if (!ctx2d || !canvas) { closeFrameSafe(videoFrame); return; }
+
+      // Build 3: hidden page — drop frame quickly
+      if (!pageVisible) {
+        closeFrameSafe(videoFrame);
+        return;
+      }
 
       var srcW = Math.max(1, toFiniteNumber(videoFrame.displayWidth || videoFrame.codedWidth, 1));
       var srcH = Math.max(1, toFiniteNumber(videoFrame.displayHeight || videoFrame.codedHeight, 1));
-      var dstW = Math.max(1, canvas.width);
-      var dstH = Math.max(1, canvas.height);
 
-      var scale = Math.min(dstW / srcW, dstH / srcH);
-      var drawW = Math.max(1, Math.round(srcW * scale));
-      var drawH = Math.max(1, Math.round(srcH * scale));
-      var dx = Math.floor((dstW - drawW) / 2);
-      var dy = Math.floor((dstH - drawH) / 2);
+      var geom = getOrComputeDrawGeometry(srcW, srcH);
+      if (!geom) {
+        closeFrameSafe(videoFrame);
+        return;
+      }
 
       var t0 = performance.now();
-      ctx2d.fillStyle = '#000';
-      ctx2d.fillRect(0, 0, dstW, dstH);
 
-      // SharedTexture → VideoFrame arrives vertically inverted. Flip it.
-      ctx2d.save();
-      ctx2d.translate(0, dstH);
-      ctx2d.scale(1, -1);
-      ctx2d.drawImage(videoFrame, dx, dstH - dy - drawH, drawW, drawH);
-      ctx2d.restore();
+      try {
+        // Build 3: only clear when bars / uncovered regions exist
+        if (geom.needsClear) {
+          ctx2d.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // SharedTexture → VideoFrame arrives vertically inverted. Flip it.
+        ctx2d.save();
+        ctx2d.translate(0, canvas.height);
+        ctx2d.scale(1, -1);
+        var flippedDy = canvas.height - (geom.dy + geom.dh);
+        ctx2d.drawImage(videoFrame, geom.dx, flippedDy, geom.dw, geom.dh);
+        ctx2d.restore();
+      } catch (err) {
+        console.error('[hg-backend] draw error:', err);
+      } finally {
+        closeFrameSafe(videoFrame);
+      }
 
       var drawMs = performance.now() - t0;
       renderStats.frameCount += 1;
@@ -342,6 +528,7 @@
 
     function scheduleFramePump() {
       if (framePumpRaf || destroyed) return;
+      if (!pageVisible) return;
       framePumpRaf = requestAnimationFrame(function () {
         framePumpRaf = 0;
         if (destroyed) {
@@ -350,12 +537,9 @@
         }
         var frame = pendingFrame;
         pendingFrame = null;
-        if (!frame) return;
-        try {
-          drawFrame(frame);
-        } finally {
-          closeFrameSafe(frame);
-          if (pendingFrame && !destroyed) scheduleFramePump();
+        if (frame) drawFrame(frame);
+        if (pendingFrame && pageVisible && !framePumpRaf && !destroyed) {
+          scheduleFramePump();
         }
       });
     }
@@ -369,9 +553,21 @@
       if (perfLog.intervalId) perfLog.arrivalTimes.push(performance.now());
       if (pendingFrame) {
         renderStats.droppedFrames += 1;
+        renderPressure.droppedFrames += 1;
+        renderPressure.lastDropAt = Date.now();
+        renderPressure.consecutiveReplacements += 1;
         closeFrameSafe(pendingFrame);
+      } else {
+        renderPressure.consecutiveReplacements = 0;
       }
       pendingFrame = videoFrame;
+
+      // Build 3: when hidden, close frame immediately instead of drawing
+      if (!pageVisible) {
+        closeFrameSafe(pendingFrame);
+        pendingFrame = null;
+        return;
+      }
       scheduleFramePump();
     }
 
@@ -632,7 +828,7 @@
         if (t !== state.timeSec) {
           state.timeSec = t;
           emit('time', t);
-          window.TankoPlayer.state.set({ timeSec: t });
+          scheduleHotUiPublish();
         }
         return;
       }
@@ -642,7 +838,7 @@
         if (d !== state.durationSec) {
           state.durationSec = d;
           emit('duration', d);
-          window.TankoPlayer.state.set({ durationSec: d });
+          scheduleHotUiPublish();
         }
         return;
       }
@@ -745,6 +941,7 @@
 
         if (nextAspect !== state.aspectRatio) {
           state.aspectRatio = nextAspect;
+          invalidateDrawCache();
           emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
         }
         return;
@@ -756,6 +953,7 @@
 
         if (nextCrop !== state.crop) {
           state.crop = nextCrop;
+          invalidateDrawCache();
           emit('transforms', { aspectRatio: state.aspectRatio, crop: state.crop });
         }
         return;
@@ -853,6 +1051,7 @@
       state.eofReached = false;
       state.timeSec = 0;
       state.durationSec = 0;
+      invalidateDrawCache();
       window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: filePath });
 
       createCanvas();
@@ -954,6 +1153,7 @@
         state.timeSec = 0;
         state.durationSec = 0;
         endedEmittedForLoadSeq = 0;
+        invalidateDrawCache();
         window.TankoPlayer.state.set({ ready: false, fileLoaded: false, filePath: null });
         return { ok: true };
       });
@@ -966,6 +1166,9 @@
       destroyed = true;
       stopPerfLog();
       hideResumeOverlay();
+
+      if (hotPublish.timer) { clearTimeout(hotPublish.timer); hotPublish.timer = null; }
+      hotPublish.queued = false;
 
       emit('shutdown');
 
