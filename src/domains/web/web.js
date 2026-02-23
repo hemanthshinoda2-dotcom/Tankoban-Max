@@ -859,6 +859,7 @@
 
       wv.addEventListener('did-start-loading', function () {
         emit('loading', { tabId: tabId, loading: true });
+        if (healthState !== 'healthy') emitHealth('recovered', { via: 'did-start-loading' });
       });
 
       wv.addEventListener('did-stop-loading', function () {
@@ -906,6 +907,29 @@
 
       wv.addEventListener('did-fail-load', handleLoadFail);
       wv.addEventListener('did-fail-provisional-load', handleLoadFail);
+
+      // Process health signals from Electron webview guest process
+      wv.addEventListener('render-process-gone', function (ev) {
+        var reason = String((ev && ev.reason) || '').trim().toLowerCase();
+        if (reason === 'unresponsive') {
+          emitHealth('unresponsive', { reason: reason, exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        } else {
+          emitHealth('crashed', { reason: reason || 'render-process-gone', exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        }
+      });
+
+      wv.addEventListener('unresponsive', function () {
+        emitHealth('unresponsive', { reason: 'unresponsive-event' });
+      });
+
+      wv.addEventListener('responsive', function () {
+        emitHealth('recovered', { reason: 'responsive-event' });
+      });
+
+      // Backward compatibility for older Electron where crash emits directly.
+      wv.addEventListener('crashed', function () {
+        emitHealth('crashed', { reason: 'crashed-event' });
+      });
 
       // DIAG: Forward guest-page console logs (incl. preload) to host console
       wv.addEventListener('console-message', function (ev) {
@@ -1586,10 +1610,41 @@
       lastVisibleUrl: u,
       lastCommittedUrl: u,
       lastError: null,
+      health: {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      },
       securityState: inferSecurityStateFromUrl(u),
       isBlocked: false,
       omniState: null // CHROMIUM_PARITY: per-tab omnibox state (C2)
     };
+  }
+
+  function ensureRuntimeHealth(runtime) {
+    if (!runtime || typeof runtime !== 'object') return null;
+    if (!runtime.health || typeof runtime.health !== 'object') {
+      runtime.health = {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      };
+    }
+    return runtime.health;
+  }
+
+  function isRuntimeInBadHealth(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return false;
+    return health.state === 'crashed' || health.state === 'unresponsive';
   }
 
   function ensureTabRuntime(tab) {
@@ -2510,6 +2565,95 @@
     if (showHome || showTorrent) {
       webTabs.hideAll().catch(function () {});
     }
+
+    renderRuntimeHealthPanel(activeTab, showWebview);
+  }
+
+  function getRuntimeHealthMessage(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return { title: 'Tab issue', detail: 'This tab encountered an issue.' };
+    if (health.state === 'crashed') {
+      return {
+        title: 'Aw, Snap! This tab crashed.',
+        detail: 'Chromium renderer process stopped unexpectedly. Reload this tab to recover.'
+      };
+    }
+    if (health.state === 'unresponsive') {
+      return {
+        title: 'Page is unresponsive',
+        detail: 'The renderer is not responding right now. Wait for recovery or reload the tab.'
+      };
+    }
+    return {
+      title: 'Tab recovered',
+      detail: 'The renderer process is responsive again.'
+    };
+  }
+
+  function renderRuntimeHealthPanel(activeTab, canShow) {
+    if (!el.viewContainer) return;
+    var panel = el.viewContainer.querySelector('.webCrashPanel');
+    var runtime = activeTab ? ensureTabRuntime(activeTab) : null;
+    var broken = !!(activeTab && activeTab.type !== 'torrent' && isRuntimeInBadHealth(runtime));
+
+    if (!canShow || !broken) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'webCrashPanel';
+      panel.innerHTML = '<div class="webCrashPanelInner">'
+        + '<div class="webCrashGlyph" aria-hidden="true">:(</div>'
+        + '<h2 class="webCrashTitle"></h2>'
+        + '<p class="webCrashDetail"></p>'
+        + '<div class="webCrashMeta"></div>'
+        + '<div class="webCrashActions">'
+        + '<button type="button" class="btn webCrashAction" data-crash-action="reload">Reload</button>'
+        + '<button type="button" class="btn secondary webCrashAction" data-crash-action="close">Close tab</button>'
+        + '</div></div>';
+      panel.addEventListener('click', function (ev) {
+        var btn = ev && ev.target && ev.target.closest ? ev.target.closest('[data-crash-action]') : null;
+        if (!btn) return;
+        var action = String(btn.getAttribute('data-crash-action') || '');
+        var tabId = Number(btn.getAttribute('data-tab-id') || 0);
+        if (!tabId) return;
+        if (action === 'reload') {
+          activateTab(tabId);
+          reloadCurrentTab();
+        } else if (action === 'close') {
+          closeTab(tabId);
+          renderContinue();
+        }
+      });
+      el.viewContainer.appendChild(panel);
+    }
+
+    var msg = getRuntimeHealthMessage(runtime);
+    var reason = (runtime && runtime.health && (runtime.health.lastCrashReason || runtime.health.lastUnresponsiveReason)) || '';
+    var meta = [];
+    if (reason) meta.push('Reason: ' + reason);
+    if (runtime && runtime.health) {
+      meta.push('Crashes: ' + Number(runtime.health.crashCount || 0));
+      meta.push('Unresponsive: ' + Number(runtime.health.unresponsiveCount || 0));
+      meta.push('Recovered: ' + Number(runtime.health.recoverCount || 0));
+    }
+
+    var titleEl = panel.querySelector('.webCrashTitle');
+    var detailEl = panel.querySelector('.webCrashDetail');
+    var metaEl = panel.querySelector('.webCrashMeta');
+    if (titleEl) titleEl.textContent = msg.title;
+    if (detailEl) detailEl.textContent = msg.detail;
+    if (metaEl) metaEl.textContent = meta.join('  ·  ');
+
+    var actionButtons = panel.querySelectorAll('[data-crash-action]');
+    for (var i = 0; i < actionButtons.length; i++) {
+      actionButtons[i].setAttribute('data-tab-id', String(activeTab.id));
+    }
+
+    panel.classList.remove('hidden');
+    webTabs.hideAll().catch(function () {});
   }
 
   function makeContinueTile(tab) {
@@ -2847,7 +2991,11 @@
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
       var isTorrent = t.type === 'torrent';
+      var runtime = ensureTabRuntime(t);
+      var health = ensureRuntimeHealth(runtime);
+      var isBroken = !isTorrent && isRuntimeInBadHealth(runtime);
       var loadingClass = t.loading ? ' loading' : '';
+      var brokenClass = isBroken ? ' broken' : '';
       var favSrc = isTorrent ? '' : getFaviconUrl(t.url || t.homeUrl || '');
       var favHtml;
       if (isTorrent) {
@@ -2858,6 +3006,8 @@
         } else {
           favHtml = '<span class="webTabFaviconFallback" style="font-size:11px" aria-hidden="true">&#9901;</span>';
         }
+      } else if (isBroken) {
+        favHtml = '<span class="webTabFaviconFallback webTabFaviconBroken" aria-hidden="true">!</span>';
       } else {
         favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       }
@@ -7006,6 +7156,56 @@
         renderTabs();
         renderBrowserHome();
         renderContinue();
+        syncLoadBar();
+        scheduleSessionSave();
+      });
+    }
+
+    if (webTabs.onHealthState) {
+      webTabs.onHealthState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        var runtime = ensureTabRuntime(tab);
+        var health = ensureRuntimeHealth(runtime);
+        var nextState = String((data && data.state) || '').trim().toLowerCase();
+        if (!nextState) return;
+
+        if (nextState === 'crashed' || nextState === 'unresponsive') {
+          tab.loading = false;
+          runtime.pendingUrl = '';
+          runtime.lastError = runtime.lastError || {
+            kind: nextState,
+            code: 0,
+            description: '',
+            url: String(tab.url || runtime.lastVisibleUrl || ''),
+            at: Date.now()
+          };
+        }
+
+        if (nextState === 'crashed') {
+          health.state = 'crashed';
+          health.crashCount = Number(health.crashCount || 0) + 1;
+          health.lastCrashReason = String((data && data.details && data.details.reason) || '');
+          tab.title = 'Crashed tab';
+          showToast('Tab crashed. Reload to restore.');
+        } else if (nextState === 'unresponsive') {
+          health.state = 'unresponsive';
+          health.unresponsiveCount = Number(health.unresponsiveCount || 0) + 1;
+          health.lastUnresponsiveReason = String((data && data.details && data.details.reason) || '');
+          tab.title = tab.title || 'Unresponsive tab';
+          showToast('Tab is unresponsive.');
+        } else if (nextState === 'recovered') {
+          if (health.state === 'crashed' || health.state === 'unresponsive') {
+            health.recoverCount = Number(health.recoverCount || 0) + 1;
+            showToast('Tab recovered.');
+          }
+          health.state = 'healthy';
+        }
+
+        health.lastChangedAt = Number((data && data.at) || Date.now()) || Date.now();
+        if (tab.id === state.activeTabId) updateUrlDisplay();
+        renderTabs();
+        renderBrowserHome();
         syncLoadBar();
         scheduleSessionSave();
       });
