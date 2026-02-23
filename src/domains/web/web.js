@@ -33,7 +33,11 @@
     browserView: qs('webBrowserView'),
     browserBackBtn: qs('webBrowserBackBtn'),
     browserTitle: qs('webBrowserTitle'),
+    tabOverflowBtn: qs('webTabOverflowBtn'),
     tabBar: qs('webTabBar'),
+    tabQuickPanel: qs('webTabQuickPanel'),
+    tabQuickSearch: qs('webTabQuickSearch'),
+    tabQuickList: qs('webTabQuickList'),
     navBack: qs('webNavBack'),
     navForward: qs('webNavForward'),
     navReload: qs('webNavReload'),
@@ -45,6 +49,15 @@
     omniIcon: qs('webOmniIcon'),
     omniGhost: qs('webOmniGhost'), // CHROMIUM_PARITY: ghost text overlay
     omniSuggest: qs('webOmniSuggest'),
+    siteInfoPopover: qs('webSiteInfoPopover'),
+    siteInfoOrigin: qs('webSiteInfoOrigin'),
+    siteInfoSecurity: qs('webSiteInfoSecurity'),
+    siteInfoPermissions: qs('webSiteInfoPermissions'),
+    siteInfoUsageBtn: qs('webSiteInfoUsageBtn'),
+    siteInfoUsageText: qs('webSiteInfoUsageText'),
+    siteInfoAdblock: qs('webSiteInfoAdblock'),
+    siteInfoClearDataBtn: qs('webSiteInfoClearDataBtn'),
+    siteInfoResetPermsBtn: qs('webSiteInfoResetPermsBtn'),
     findBar: qs('webFindBar'),
     findInput: qs('webFindInput'),
     findCount: qs('webFindCount'),
@@ -226,8 +239,11 @@
     },
     omniSuggestOpen: false,
     omniSuggestItems: [],
+    siteInfoOpen: false,
     omniSuggestActiveIndex: -1,
-    omniSuggestRequestId: 0,
+    tabQuickOpen: false,
+    tabQuickQuery: '',
+    tabQuickActiveIndex: -1,
     hubTorrentFilter: 'active',
   };
 
@@ -268,6 +284,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: false
     };
     state.tabs.push(tab);
@@ -475,7 +497,7 @@
       return true;
     }
     if (targetTab.mainTabId) {
-      webTabs.navigate({ tabId: targetTab.mainTabId, action: 'loadUrl', url: url }).catch(function () {});
+      navigateTabWithRuntime(targetTab, { tabId: targetTab.mainTabId, action: 'loadUrl', url: url }, 'request-load-url', { url: url });
       return true;
     }
     if (targetTab.id != null) {
@@ -567,7 +589,8 @@
       loading: [],
       nav: [],
       find: [],
-      loadFail: []
+      loadFail: [],
+      media: []
     };
 
     function emit(type, payload) {
@@ -789,6 +812,20 @@
     }
 
     function bindWebview(tabId, wv) {
+      var rec = tabs.get(Number(tabId)) || { tabId: tabId, webview: wv };
+
+      function emitMediaState(extra) {
+        var muted = false;
+        try { muted = !!(wv && wv.isAudioMuted && wv.isAudioMuted()); } catch (e0) {}
+        emit('media', {
+          tabId: tabId,
+          audible: !!(rec && rec.audible),
+          muted: muted,
+          mediaDetected: !!(rec && rec.mediaDetected),
+          reason: extra || ''
+        });
+      }
+
       function emitBestTitle() {
         var t = safeTitle(wv);
         if (!t) {
@@ -832,6 +869,7 @@
 
       wv.addEventListener('did-start-loading', function () {
         emit('loading', { tabId: tabId, loading: true });
+        if (healthState !== 'healthy') emitHealth('recovered', { via: 'did-start-loading' });
       });
 
       wv.addEventListener('did-stop-loading', function () {
@@ -863,17 +901,45 @@
         var tidx = rec._navTargetIndex;
         rec._navDirection = '';
         rec._navTargetIndex = null;
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), direction: dir, targetIndex: tidx, navKind: 'navigate' });
         emitNav(tabId, wv);
       });
 
       wv.addEventListener('did-navigate-in-page', function (ev) {
-        emit('url', { tabId: tabId, url: String((ev && ev.url) || '') });
+        emit('url', { tabId: tabId, url: String((ev && ev.url) || ''), navKind: 'in-page' });
+        emitNav(tabId, wv);
+      });
+
+      wv.addEventListener('did-redirect-navigation', function (ev) {
+        emit('url', { tabId: tabId, url: String((ev && ev.newURL) || ''), navKind: 'redirect' });
         emitNav(tabId, wv);
       });
 
       wv.addEventListener('did-fail-load', handleLoadFail);
       wv.addEventListener('did-fail-provisional-load', handleLoadFail);
+
+      // Process health signals from Electron webview guest process
+      wv.addEventListener('render-process-gone', function (ev) {
+        var reason = String((ev && ev.reason) || '').trim().toLowerCase();
+        if (reason === 'unresponsive') {
+          emitHealth('unresponsive', { reason: reason, exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        } else {
+          emitHealth('crashed', { reason: reason || 'render-process-gone', exitCode: Number(ev && ev.exitCode || 0) || 0 });
+        }
+      });
+
+      wv.addEventListener('unresponsive', function () {
+        emitHealth('unresponsive', { reason: 'unresponsive-event' });
+      });
+
+      wv.addEventListener('responsive', function () {
+        emitHealth('recovered', { reason: 'responsive-event' });
+      });
+
+      // Backward compatibility for older Electron where crash emits directly.
+      wv.addEventListener('crashed', function () {
+        emitHealth('crashed', { reason: 'crashed-event' });
+      });
 
       // DIAG: Forward guest-page console logs (incl. preload) to host console
       wv.addEventListener('console-message', function (ev) {
@@ -911,6 +977,19 @@
         showToast('[DIAG] ipc-msg: ' + (target || '(empty)').substring(0, 60));
         if (!target) return;
         routePopupFromMainTab(tabId, target, safeUrl(wv));
+      });
+
+
+      wv.addEventListener('media-started-playing', function () {
+        rec.audible = true;
+        rec.mediaDetected = true;
+        emitMediaState('started');
+      });
+
+      wv.addEventListener('media-paused', function () {
+        rec.audible = false;
+        rec.mediaDetected = true;
+        emitMediaState('paused');
       });
 
       wv.addEventListener('found-in-page', function (ev) {
@@ -968,10 +1047,10 @@
         if (parityUA) wv.setAttribute('useragent', parityUA);
         if (popupBridgePreload) wv.setAttribute('preload', popupBridgePreload);
         wv.src = url;
+        tabs.set(tabId, { tabId: tabId, webview: wv, audible: false, mediaDetected: false });
         bindWebview(tabId, wv);
 
         if (el.viewContainer) el.viewContainer.appendChild(wv);
-        tabs.set(tabId, { tabId: tabId, webview: wv });
         return Promise.resolve({ ok: true, tabId: tabId });
       },
 
@@ -1102,6 +1181,21 @@
         return Promise.resolve({ ok: true, tabs: ids });
       },
 
+      setMuted: function (payload) {
+        var tabId = Number(payload && payload.tabId);
+        var muted = !!(payload && payload.muted);
+        var rec = tabs.get(tabId);
+        if (!rec || !rec.webview) return Promise.resolve({ ok: false, error: 'Not found' });
+        try {
+          if (rec.webview.setAudioMuted) rec.webview.setAudioMuted(muted);
+          rec.mediaDetected = true;
+          emit('media', { tabId: tabId, audible: !!rec.audible, muted: muted, mediaDetected: true, reason: 'setMuted' });
+          return Promise.resolve({ ok: true, muted: muted });
+        } catch (err) {
+          return Promise.resolve({ ok: false, error: String(err && err.message || err || 'Mute failed') });
+        }
+      },
+
       findByWebContentsId: function (webContentsId) {
         var target = Number(webContentsId);
         if (!isFinite(target) || target <= 0) return null;
@@ -1122,6 +1216,7 @@
       onNavState: function (cb) { on('nav', cb); },
       onFindResult: function (cb) { on('find', cb); },
       onLoadFailed: function (cb) { on('loadFail', cb); },
+      onMediaState: function (cb) { on('media', cb); },
     };
   }
 
@@ -1353,75 +1448,8 @@
     if (typeof el.urlDisplay.value !== 'undefined') el.urlDisplay.value = String(item.url);
     else el.urlDisplay.textContent = String(item.url);
     setOmniIconForUrl(String(item.url));
-    if (!o.keepOpen) closeOmniSuggestions();
-  }
-
-  function parseOmniUrlParts(raw) {
-    var input = String(raw || '').trim();
-    if (!input) return null;
-    var normalized = input;
-    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(normalized)) normalized = 'https://' + normalized;
-    try {
-      var u = new URL(normalized);
-      return {
-        host: String(u.hostname || '').toLowerCase(),
-        path: String((u.pathname || '/') + (u.search || '') + (u.hash || '')),
-        full: String(u.href || '').toLowerCase()
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function scoreOmniCandidate(query, url, title, sourceKind, opts) {
-    var q = String(query || '').trim().toLowerCase();
-    if (!q) return null;
-    var rawUrl = String(url || '').trim();
-    if (!rawUrl) return null;
-    var t = String(title || '').trim();
-    var haystack = (rawUrl + ' ' + t).toLowerCase();
-    var directIndex = haystack.indexOf(q);
-    if (directIndex === -1) return null;
-
-    var parts = parseOmniUrlParts(rawUrl);
-    var host = parts ? parts.host : '';
-    var path = parts ? parts.path : '';
-    var score = 0;
-    if (parts) {
-      if (host === q) score += 800;
-      else if (host.indexOf(q) === 0) score += 520;
-      if (path === q || path.indexOf('/' + q) === 0) score += 260;
-      else if (path.indexOf(q) === 0) score += 180;
-      if (parts.full.indexOf(q) === 0) score += 120;
-    }
-    if (directIndex === 0) score += 60;
-
-    if (sourceKind === 'tab') score += 44;
-    else if (sourceKind === 'bookmark') score += 36;
-    else if (sourceKind === 'history') score += 24;
-
-    var meta = opts || {};
-    if (meta.recencyRank >= 0) score += Math.max(0, 40 - (meta.recencyRank * 2));
-    if (meta.frequency > 0) score += Math.min(50, meta.frequency * 8);
-
-    return {
-      url: rawUrl,
-      title: t || siteNameFromUrl(rawUrl) || rawUrl,
-      kind: sourceKind === 'tab' ? 'switch-tab' : 'url',
-      provider: sourceKind,
-      score: score,
-      tabId: meta.tabId || null
-    };
-  }
-
-  function getSearchSuggestionEndpoint(query) {
-    var q = encodeURIComponent(String(query || ''));
-    var engine = getActiveSearchEngine();
-    if (engine === 'google') return 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + q;
-    if (engine === 'bing') return 'https://api.bing.com/osjson.aspx?query=' + q;
-    if (engine === 'duckduckgo') return 'https://duckduckgo.com/ac/?q=' + q + '&type=list';
-    if (engine === 'yandex') return 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + q;
-    return 'https://duckduckgo.com/ac/?q=' + q + '&type=list';
+    closeOmniSuggestions();
+    closeTabQuickPanel();
   }
 
   function buildOmniSuggestions(input) {
@@ -1653,7 +1681,7 @@
       createTab(src0, resolvedUrl, { silentToast: true });
       return;
     }
-    webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: resolvedUrl }).catch(function () {});
+    navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: resolvedUrl }, 'request-load-url', { url: resolvedUrl });
   }
 
   function setOmniIconForUrl(url) {
@@ -1699,10 +1727,41 @@
       lastVisibleUrl: u,
       lastCommittedUrl: u,
       lastError: null,
+      health: {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      },
       securityState: inferSecurityStateFromUrl(u),
       isBlocked: false,
       omniState: null // CHROMIUM_PARITY: per-tab omnibox state (C2)
     };
+  }
+
+  function ensureRuntimeHealth(runtime) {
+    if (!runtime || typeof runtime !== 'object') return null;
+    if (!runtime.health || typeof runtime.health !== 'object') {
+      runtime.health = {
+        state: 'healthy',
+        lastChangedAt: 0,
+        crashCount: 0,
+        unresponsiveCount: 0,
+        recoverCount: 0,
+        lastCrashReason: '',
+        lastUnresponsiveReason: ''
+      };
+    }
+    return runtime.health;
+  }
+
+  function isRuntimeInBadHealth(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return false;
+    return health.state === 'crashed' || health.state === 'unresponsive';
   }
 
   function ensureTabRuntime(tab) {
@@ -1718,6 +1777,67 @@
       });
     }
     return rt;
+  }
+
+  function normalizeRuntimeEntries(entries) {
+    var out = [];
+    var list = Array.isArray(entries) ? entries : [];
+    for (var i = 0; i < list.length; i++) {
+      var raw = list[i];
+      if (typeof raw === 'string') raw = { url: raw, title: '' };
+      if (!raw || typeof raw !== 'object') continue;
+      var u = String(raw.url || '').trim();
+      if (!u) continue;
+      out.push({
+        url: u,
+        title: String(raw.title || '').trim()
+      });
+    }
+    return out;
+  }
+
+  function assertRuntimeHistoryInvariants(tab, reason) {
+    if (!tab) return;
+    var runtime = ensureTabRuntime(tab);
+    runtime.navEntries = normalizeRuntimeEntries(runtime.navEntries);
+
+    if (!runtime.navEntries.length) {
+      runtime.currentIndex = -1;
+    } else {
+      if (!isFinite(runtime.currentIndex)) runtime.currentIndex = runtime.navEntries.length - 1;
+      runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+    }
+
+    if (runtime.currentIndex >= 0) {
+      var active = runtime.navEntries[runtime.currentIndex];
+      if (!active || !active.url) {
+        console.warn('[web-runtime] invalid active entry after', reason || 'mutation');
+        runtime.currentIndex = Math.max(0, Math.min(runtime.currentIndex, runtime.navEntries.length - 1));
+      }
+    }
+  }
+
+  function reconcileRuntimeWithWebUrl(tab, webUrl, allowReplaceCurrent) {
+    var runtime = ensureTabRuntime(tab);
+    var url = String(webUrl || '').trim();
+    if (!url) return;
+    if (runtime.currentIndex < 0 || !runtime.navEntries.length) {
+      runtime.navEntries = [{ url: url, title: String(tab.title || '') }];
+      runtime.currentIndex = 0;
+      return;
+    }
+    var current = runtime.navEntries[runtime.currentIndex];
+    if (current && current.url === url) return;
+    if (allowReplaceCurrent && current) {
+      current.url = url;
+      return;
+    }
+    if (runtime.currentIndex < runtime.navEntries.length - 1) {
+      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    }
+    runtime.navEntries.push({ url: url, title: String(tab.title || '') });
+    if (runtime.navEntries.length > 250) runtime.navEntries.shift();
+    runtime.currentIndex = runtime.navEntries.length - 1;
   }
 
   function inferSecurityStateFromUrl(url) {
@@ -1772,41 +1892,102 @@
     return out;
   }
 
-  // CHROMIUM_PARITY: direction-aware history tracking for back/forward dropdown
-  function pushRuntimeCommittedUrl(tab, url, direction) {
+  function reduceRuntimeHistory(tab, action, payload) {
     var runtime = ensureTabRuntime(tab);
-    var u = String(url || '').trim();
-    if (!u) return;
-    runtime.lastVisibleUrl = u;
-    runtime.lastCommittedUrl = u;
-    runtime.pendingUrl = '';
-    runtime.securityState = inferSecurityStateFromUrl(u);
-    runtime.isBlocked = false;
-    runtime.lastError = null;
+    var data = payload || {};
+    var url = String(data.url || '').trim();
+    var targetIndex = Number(data.targetIndex);
 
-    if (direction === 'back') {
-      if (runtime.currentIndex > 0) runtime.currentIndex--;
-      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+    if (action === 'request-load-url') {
+      runtime.pendingUrl = url;
+      assertRuntimeHistoryInvariants(tab, action);
       return;
     }
-    if (direction === 'forward') {
-      if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
-      if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
+
+    if (action === 'request-go-index') {
+      if (runtime.navEntries.length && isFinite(targetIndex)) {
+        var safeIdx = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        runtime.pendingUrl = String(runtime.navEntries[safeIdx].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
       return;
     }
-    if (direction === 'index') return; // index handled directly in onUrlUpdated
 
-    // Normal new navigation
-    var current = runtime.navEntries[runtime.currentIndex];
-    if (current && current.url === u) return;
-    if (runtime.currentIndex < runtime.navEntries.length - 1) {
-      runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
+    if (action === 'request-back') {
+      if (runtime.currentIndex > 0 && runtime.navEntries[runtime.currentIndex - 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex - 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
     }
-    runtime.navEntries.push({ url: u, title: String(tab.title || '') });
-    if (runtime.navEntries.length > 250) {
-      runtime.navEntries.shift();
+
+    if (action === 'request-forward') {
+      if (runtime.currentIndex >= 0 && runtime.currentIndex < runtime.navEntries.length - 1 && runtime.navEntries[runtime.currentIndex + 1]) {
+        runtime.pendingUrl = String(runtime.navEntries[runtime.currentIndex + 1].url || '');
+      }
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
     }
-    runtime.currentIndex = runtime.navEntries.length - 1;
+
+    if (action === 'loading') {
+      runtime.pendingUrl = data.loading ? String(url || tab.url || runtime.lastVisibleUrl || '').trim() : '';
+      assertRuntimeHistoryInvariants(tab, action);
+      return;
+    }
+
+    if (action === 'commit') {
+      if (!url) return;
+      var direction = String(data.direction || '').trim();
+      var navKind = String(data.navKind || '').trim();
+      runtime.lastVisibleUrl = url;
+      runtime.lastCommittedUrl = url;
+      runtime.pendingUrl = '';
+      runtime.securityState = inferSecurityStateFromUrl(url);
+      runtime.isBlocked = false;
+      runtime.lastError = null;
+
+      if (direction === 'back') {
+        if (runtime.currentIndex > 0) runtime.currentIndex--;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'forward') {
+        if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (direction === 'index') {
+        if (isFinite(targetIndex) && runtime.navEntries.length) {
+          runtime.currentIndex = Math.max(0, Math.min(targetIndex, runtime.navEntries.length - 1));
+        }
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'in-page') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else if (navKind === 'redirect') {
+        reconcileRuntimeWithWebUrl(tab, url, true);
+      } else {
+        reconcileRuntimeWithWebUrl(tab, url, false);
+      }
+      assertRuntimeHistoryInvariants(tab, action + ':' + (direction || navKind || 'new'));
+      return;
+    }
+
+    if (action === 'load-fail') {
+      var failedUrl = String(data.failedUrl || tab.url || runtime.lastVisibleUrl || '').trim();
+      if (failedUrl) {
+        tab.url = failedUrl;
+        runtime.lastVisibleUrl = failedUrl;
+      }
+      runtime.pendingUrl = '';
+      runtime.isBlocked = !!data.isBlocked;
+      runtime.lastError = data.lastError || null;
+      runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+      reconcileRuntimeWithWebUrl(tab, failedUrl, true);
+      assertRuntimeHistoryInvariants(tab, action);
+    }
+  }
+
+  function navigateTabWithRuntime(tab, payload, runtimeAction, runtimeData) {
+    if (!tab || !tab.mainTabId) return;
+    if (runtimeAction) reduceRuntimeHistory(tab, runtimeAction, runtimeData || payload || {});
+    webTabs.navigate(payload).catch(function () {});
+    scheduleSessionSave();
   }
 
   function normalizeSourceInput(source, urlOverride) {
@@ -1842,7 +2023,17 @@
       title: String(tab.title || '').trim(),
       url: url,
       homeUrl: String(tab.homeUrl || url).trim() || url,
-      pinned: !!tab.pinned
+      pinned: !!tab.pinned,
+      audible: !!tab.audible,
+      muted: !!tab.muted,
+      mediaDetected: !!tab.mediaDetected,
+      lastActiveAt: Number(tab.lastActiveAt || 0) || Date.now(),
+      group: (tab.group && typeof tab.group === 'object') ? {
+        id: tab.group.id != null ? String(tab.group.id) : '',
+        color: String(tab.group.color || ''),
+        title: String(tab.group.title || '')
+      } : null,
+      overflowVisible: tab.overflowVisible !== false
     };
   }
 
@@ -1916,6 +2107,12 @@
     });
     if (restored) {
       restored.pinned = !!snap.pinned;
+      restored.audible = !!snap.audible;
+      restored.muted = !!snap.muted;
+      restored.mediaDetected = !!snap.mediaDetected;
+      restored.lastActiveAt = Number(snap.lastActiveAt || Date.now()) || Date.now();
+      restored.group = (snap.group && typeof snap.group === 'object') ? { id: String(snap.group.id || ''), color: String(snap.group.color || ''), title: String(snap.group.title || '') } : null;
+      restored.overflowVisible = snap.overflowVisible !== false;
       renderTabs();
       showToast('Reopened tab');
       scheduleSessionSave();
@@ -1964,7 +2161,15 @@
           titleOverride: s.title || '',
           forcedId: sidNum > 0 ? sidNum : null
         });
-        if (tab) tab.pinned = !!s.pinned;
+        if (tab) {
+          tab.pinned = !!s.pinned;
+          tab.audible = !!s.audible;
+          tab.muted = !!s.muted;
+          tab.mediaDetected = !!s.mediaDetected;
+          tab.lastActiveAt = Number(s.lastActiveAt || Date.now()) || Date.now();
+          tab.group = (s.group && typeof s.group === 'object') ? { id: String(s.group.id || ''), color: String(s.group.color || ''), title: String(s.group.title || '') } : null;
+          tab.overflowVisible = s.overflowVisible !== false;
+        }
       }
       if (maxId >= state.nextTabId) state.nextTabId = maxId + 1;
 
@@ -2477,6 +2682,95 @@
     if (showHome || showTorrent) {
       webTabs.hideAll().catch(function () {});
     }
+
+    renderRuntimeHealthPanel(activeTab, showWebview);
+  }
+
+  function getRuntimeHealthMessage(runtime) {
+    var health = ensureRuntimeHealth(runtime);
+    if (!health) return { title: 'Tab issue', detail: 'This tab encountered an issue.' };
+    if (health.state === 'crashed') {
+      return {
+        title: 'Aw, Snap! This tab crashed.',
+        detail: 'Chromium renderer process stopped unexpectedly. Reload this tab to recover.'
+      };
+    }
+    if (health.state === 'unresponsive') {
+      return {
+        title: 'Page is unresponsive',
+        detail: 'The renderer is not responding right now. Wait for recovery or reload the tab.'
+      };
+    }
+    return {
+      title: 'Tab recovered',
+      detail: 'The renderer process is responsive again.'
+    };
+  }
+
+  function renderRuntimeHealthPanel(activeTab, canShow) {
+    if (!el.viewContainer) return;
+    var panel = el.viewContainer.querySelector('.webCrashPanel');
+    var runtime = activeTab ? ensureTabRuntime(activeTab) : null;
+    var broken = !!(activeTab && activeTab.type !== 'torrent' && isRuntimeInBadHealth(runtime));
+
+    if (!canShow || !broken) {
+      if (panel) panel.classList.add('hidden');
+      return;
+    }
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'webCrashPanel';
+      panel.innerHTML = '<div class="webCrashPanelInner">'
+        + '<div class="webCrashGlyph" aria-hidden="true">:(</div>'
+        + '<h2 class="webCrashTitle"></h2>'
+        + '<p class="webCrashDetail"></p>'
+        + '<div class="webCrashMeta"></div>'
+        + '<div class="webCrashActions">'
+        + '<button type="button" class="btn webCrashAction" data-crash-action="reload">Reload</button>'
+        + '<button type="button" class="btn secondary webCrashAction" data-crash-action="close">Close tab</button>'
+        + '</div></div>';
+      panel.addEventListener('click', function (ev) {
+        var btn = ev && ev.target && ev.target.closest ? ev.target.closest('[data-crash-action]') : null;
+        if (!btn) return;
+        var action = String(btn.getAttribute('data-crash-action') || '');
+        var tabId = Number(btn.getAttribute('data-tab-id') || 0);
+        if (!tabId) return;
+        if (action === 'reload') {
+          activateTab(tabId);
+          reloadCurrentTab();
+        } else if (action === 'close') {
+          closeTab(tabId);
+          renderContinue();
+        }
+      });
+      el.viewContainer.appendChild(panel);
+    }
+
+    var msg = getRuntimeHealthMessage(runtime);
+    var reason = (runtime && runtime.health && (runtime.health.lastCrashReason || runtime.health.lastUnresponsiveReason)) || '';
+    var meta = [];
+    if (reason) meta.push('Reason: ' + reason);
+    if (runtime && runtime.health) {
+      meta.push('Crashes: ' + Number(runtime.health.crashCount || 0));
+      meta.push('Unresponsive: ' + Number(runtime.health.unresponsiveCount || 0));
+      meta.push('Recovered: ' + Number(runtime.health.recoverCount || 0));
+    }
+
+    var titleEl = panel.querySelector('.webCrashTitle');
+    var detailEl = panel.querySelector('.webCrashDetail');
+    var metaEl = panel.querySelector('.webCrashMeta');
+    if (titleEl) titleEl.textContent = msg.title;
+    if (detailEl) detailEl.textContent = msg.detail;
+    if (metaEl) metaEl.textContent = meta.join('  ·  ');
+
+    var actionButtons = panel.querySelectorAll('[data-crash-action]');
+    for (var i = 0; i < actionButtons.length; i++) {
+      actionButtons[i].setAttribute('data-tab-id', String(activeTab.id));
+    }
+
+    panel.classList.remove('hidden');
+    webTabs.hideAll().catch(function () {});
   }
 
   function makeContinueTile(tab) {
@@ -2671,10 +2965,141 @@
     closeDownloadsPanel();
     closeFindBar();
     closeOmniSuggestions();
+    closeTabQuickPanel();
     syncLoadBar();
   }
 
   // ---- Tabs management ----
+
+  function setTabMuteState(tabId, muted, silent) {
+    var idNum = Number(tabId);
+    if (!isFinite(idNum)) return;
+    var tab = null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i] && state.tabs[i].id === idNum) { tab = state.tabs[i]; break; }
+    }
+    if (!tab || tab.type === 'torrent' || !tab.mainTabId) return;
+    var nextMuted = !!muted;
+    webTabs.setMuted({ tabId: tab.mainTabId, muted: nextMuted }).then(function () {
+      tab.muted = nextMuted;
+      tab.mediaDetected = true;
+      renderTabs();
+      scheduleSessionSave();
+      if (!silent) showToast(nextMuted ? 'Tab muted' : 'Tab unmuted');
+    }).catch(function () {
+      showToast('Unable to change tab audio');
+    });
+  }
+
+  function scoreTabSearch(query, tab) {
+    var q = String(query || '').toLowerCase().trim();
+    if (!q) return 1;
+    var hay = String((tab && (tab.title || tab.sourceName || tab.url)) || '').toLowerCase();
+    if (!hay) return 0;
+    if (hay.indexOf(q) !== -1) return 100 - Math.max(0, hay.indexOf(q));
+    var qi = 0;
+    var gap = 0;
+    for (var i = 0; i < hay.length && qi < q.length; i++) {
+      if (hay.charAt(i) === q.charAt(qi)) qi++;
+      else if (qi > 0) gap++;
+    }
+    if (qi < q.length) return 0;
+    return Math.max(2, 60 - gap);
+  }
+
+  function getTabQuickMatches() {
+    var query = String(state.tabQuickQuery || '');
+    var rows = [];
+    for (var i = 0; i < state.tabs.length; i++) {
+      var tab = state.tabs[i];
+      if (!tab) continue;
+      var score = scoreTabSearch(query, tab);
+      if (score <= 0) continue;
+      rows.push({ tab: tab, score: score });
+    }
+    rows.sort(function (a, b) {
+      if (b.score !== a.score) return b.score - a.score;
+      return Number(b.tab.lastActiveAt || 0) - Number(a.tab.lastActiveAt || 0);
+    });
+    return rows;
+  }
+
+  function renderTabQuickPanel() {
+    if (!el.tabQuickPanel || !el.tabQuickList) return;
+    if (!state.tabQuickOpen) {
+      el.tabQuickPanel.classList.add('hidden');
+      return;
+    }
+    el.tabQuickPanel.classList.remove('hidden');
+    var matches = getTabQuickMatches();
+    if (!matches.length) {
+      state.tabQuickActiveIndex = -1;
+      el.tabQuickList.innerHTML = '<div class="webTabQuickEmpty">No matching tabs</div>';
+      return;
+    }
+    if (state.tabQuickActiveIndex < 0) state.tabQuickActiveIndex = 0;
+    if (state.tabQuickActiveIndex >= matches.length) state.tabQuickActiveIndex = matches.length - 1;
+    var html = '';
+    for (var i = 0; i < matches.length; i++) {
+      var t = matches[i].tab;
+      var active = i === state.tabQuickActiveIndex;
+      var audio = t.audible ? (t.muted ? ' 🔇' : ' 🔊') : '';
+      html += '<button class="webTabQuickItem' + (active ? ' active' : '') + '" type="button" role="option" data-quick-tab-id="' + t.id + '" aria-selected="' + (active ? 'true' : 'false') + '">'
+        + '<span class="webTabQuickMain">' + escapeHtml(t.title || t.sourceName || 'Tab') + audio + '</span>'
+        + '<span class="webTabQuickSub">' + escapeHtml(t.url || t.homeUrl || '') + '</span>'
+        + '</button>';
+    }
+    el.tabQuickList.innerHTML = html;
+    var items = el.tabQuickList.querySelectorAll('[data-quick-tab-id]');
+    for (var j = 0; j < items.length; j++) {
+      items[j].onclick = function () {
+        var id = Number(this.getAttribute('data-quick-tab-id'));
+        if (!isFinite(id)) return;
+        closeTabQuickPanel();
+        activateTab(id);
+      };
+    }
+  }
+
+  function openTabQuickPanel() {
+    if (!state.browserOpen) return;
+    state.tabQuickOpen = true;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = 0;
+    renderTabQuickPanel();
+    if (el.tabQuickSearch && el.tabQuickSearch.focus) {
+      el.tabQuickSearch.value = '';
+      el.tabQuickSearch.focus();
+    }
+  }
+
+  function closeTabQuickPanel() {
+    state.tabQuickOpen = false;
+    state.tabQuickQuery = '';
+    state.tabQuickActiveIndex = -1;
+    if (el.tabQuickPanel) el.tabQuickPanel.classList.add('hidden');
+  }
+
+  function syncTabOverflowAffordance() {
+    if (!el.tabBar) return;
+    var hasOverflow = (el.tabBar.scrollWidth - el.tabBar.clientWidth) > 4;
+    var tabEls = el.tabBar.querySelectorAll('.webTab');
+    for (var i = 0; i < tabEls.length; i++) {
+      var node = tabEls[i];
+      var id = Number(node.getAttribute('data-tab-id'));
+      var tab = null;
+      for (var j = 0; j < state.tabs.length; j++) { if (state.tabs[j] && state.tabs[j].id === id) { tab = state.tabs[j]; break; } }
+      if (!tab) continue;
+      var visible = true;
+      if (hasOverflow) {
+        var left = node.offsetLeft - el.tabBar.scrollLeft;
+        var right = left + node.offsetWidth;
+        visible = left >= 0 && right <= el.tabBar.clientWidth;
+      }
+      tab.overflowVisible = visible;
+    }
+    if (el.tabOverflowBtn) el.tabOverflowBtn.classList.toggle('hidden', !hasOverflow);
+  }
 
   function renderTabs() {
     if (!el.tabBar) return;
@@ -2683,7 +3108,11 @@
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
       var isTorrent = t.type === 'torrent';
+      var runtime = ensureTabRuntime(t);
+      var health = ensureRuntimeHealth(runtime);
+      var isBroken = !isTorrent && isRuntimeInBadHealth(runtime);
       var loadingClass = t.loading ? ' loading' : '';
+      var brokenClass = isBroken ? ' broken' : '';
       var favSrc = isTorrent ? '' : getFaviconUrl(t.url || t.homeUrl || '');
       var favHtml;
       if (isTorrent) {
@@ -2694,13 +3123,23 @@
         } else {
           favHtml = '<span class="webTabFaviconFallback" style="font-size:11px" aria-hidden="true">&#9901;</span>';
         }
+      } else if (isBroken) {
+        favHtml = '<span class="webTabFaviconFallback webTabFaviconBroken" aria-hidden="true">!</span>';
       } else {
         favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
       }
       var pinnedClass = t.pinned ? ' pinned' : '';
-      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
+      var groupAttr = '';
+      if (t.group && t.group.id) groupAttr = ' data-group-id="' + escapeHtml(String(t.group.id)) + '"';
+      var spinnerBadge = (!active && t.loading) ? '<span class="webTabBadge webTabBadgeLoading" title="Loading" aria-label="Loading"></span>' : '';
+      var audioBadge = '';
+      if (t.audible) {
+        audioBadge = '<span class="webTabBadge webTabBadgeAudio" title="' + (t.muted ? 'Muted' : 'Playing audio') + '" aria-label="' + (t.muted ? 'Muted' : 'Playing audio') + '">' + (t.muted ? '&#128263;' : '&#128266;') + '</span>';
+      }
+      html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + pinnedClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true"' + groupAttr + '>' +
         favHtml +
         (t.pinned ? '' : '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>') +
+        '<span class="webTabBadges">' + spinnerBadge + audioBadge + '</span>' +
         (t.pinned ? '' : '<button class="webTabClose" data-close-tab="' + t.id + '" title="Close">&times;</button>') +
         '</div>';
     }
@@ -2739,6 +3178,12 @@
     if (addBtn) {
       addBtn.onclick = function () {
         openTabPicker();
+      };
+    }
+
+    if (el.tabBar) {
+      el.tabBar.onscroll = function () {
+        syncTabOverflowAffordance();
       };
     }
 
@@ -2792,6 +3237,9 @@
             });
           } });
           items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+          if (t.mediaDetected || t.audible) {
+            items.push({ label: t.muted ? 'Unmute tab' : 'Mute tab', onClick: function () { setTabMuteState(id, !t.muted); } });
+          }
           items.push({ separator: true });
           items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
         }
@@ -2851,7 +3299,7 @@
             }
             if (dropTarget && dropTarget.mainTabId && dropTarget.type !== 'torrent') {
               activateTab(targetId);
-              webTabs.navigate({ tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }).catch(function () {});
+              navigateTabWithRuntime(dropTarget, { tabId: dropTarget.mainTabId, action: 'loadUrl', url: droppedUrl }, 'request-load-url', { url: droppedUrl });
             }
           }
           return;
@@ -2875,6 +3323,8 @@
       });
     }
 
+    syncTabOverflowAffordance();
+    if (state.tabQuickOpen) renderTabQuickPanel();
     syncLoadBar();
   }
 
@@ -3041,17 +3491,38 @@
       canResume: d.canResume != null ? !!d.canResume : null,
       canCancel: d.canCancel != null ? !!d.canCancel : null,
     };
-    if (out.state === 'downloading' || out.state === 'in_progress' || out.state === 'progressing') out.state = 'progressing';
-    if (out.state === 'paused') out.state = 'paused';
-    if (out.state === 'cancelled') out.state = 'cancelled';
+
+    var stateName = String(out.state || '').toLowerCase();
+    if (stateName === 'started' || stateName === 'downloading' || stateName === 'in_progress' || stateName === 'progressing') out.state = 'progressing';
+    else if (stateName === 'paused') out.state = 'paused';
+    else if (stateName === 'completed' || stateName === 'saved' || stateName === 'done') out.state = 'completed';
+    else if (stateName === 'cancelled' || stateName === 'canceled') out.state = 'cancelled';
+    else if (stateName === 'interrupted') out.state = 'interrupted';
+    else if (stateName === 'failed' || stateName === 'error') out.state = 'failed';
+    else if (out.error) out.state = 'failed';
+
     if (!out.transport) out.transport = 'electron-item';
     if (out.canPause == null) out.canPause = out.transport !== 'direct';
     if (out.canResume == null) out.canResume = out.transport !== 'direct';
     if (out.canCancel == null) out.canCancel = true;
     if (typeof out.progress === 'number') out.progress = Math.max(0, Math.min(1, out.progress));
     if (out.progress == null && out.totalBytes > 0 && out.receivedBytes >= 0) out.progress = Math.max(0, Math.min(1, out.receivedBytes / out.totalBytes));
-    if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    if (!out.id) {
+      var seed = String(out.destination || out.downloadUrl || out.filename || Date.now());
+      out.id = 'dl_' + seed.replace(/[^a-z0-9_\-.]+/gi, '_').slice(0, 42);
+    }
+    if (!out.filename) out.filename = 'Download';
     return out;
+  }
+
+  function isDownloadActiveState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress' || s === 'started';
+  }
+
+  function isDownloadTerminalState(stateStr) {
+    var s = String(stateStr || '').toLowerCase();
+    return s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted';
   }
 
   function recomputeDownloadingCount() {
@@ -3081,26 +3552,21 @@
 
   function upsertDownload(info) {
     if (!info) return;
-    var id = info.id != null ? String(info.id) : '';
-    var dest = info.destination || info.path || '';
-    dest = dest ? String(dest) : '';
-    var fn = info.filename != null ? String(info.filename) : '';
+    var norm = normalizeDownload(info);
+    if (!norm) return;
 
     var found = null;
     for (var i = 0; i < state.downloads.length; i++) {
       var d = state.downloads[i];
       if (!d) continue;
-      if (id && d.id === id) { found = d; break; }
-      if (!id && dest && d.destination === dest) { found = d; break; }
-      if (!id && fn && d.filename === fn && d.state === 'progressing') { found = d; break; }
+      if (norm.id && d.id === norm.id) { found = d; break; }
+      if (!norm.id && norm.destination && d.destination === norm.destination) { found = d; break; }
     }
 
     if (!found) {
-      found = normalizeDownload(info);
-      state.downloads.unshift(found);
+      state.downloads.unshift(norm);
     } else {
-      var n = normalizeDownload(Object.assign({}, found, info));
-      Object.assign(found, n);
+      Object.assign(found, normalizeDownload(Object.assign({}, found, info)));
     }
 
     if (state.downloads.length > 1000) state.downloads.length = 1000;
@@ -3125,6 +3591,38 @@
     }).catch(function () {});
   }
 
+  function doDownloadAction(id, action) {
+    if (!id || !api || !api.webSources) return;
+    if (action === 'pause' && api.webSources.pauseDownload) api.webSources.pauseDownload({ id: id }).catch(function () {});
+    else if (action === 'resume' && api.webSources.resumeDownload) api.webSources.resumeDownload({ id: id }).catch(function () {});
+    else if (action === 'cancel' && api.webSources.cancelDownload) api.webSources.cancelDownload({ id: id }).catch(function () {});
+    else if (action === 'retry' && api.webSources.downloadFromUrl) {
+      var item = null;
+      for (var i = 0; i < state.downloads.length; i++) { if (state.downloads[i] && state.downloads[i].id === id) { item = state.downloads[i]; break; } }
+      if (!item || !item.downloadUrl) { showToast('Retry unavailable'); return; }
+      api.webSources.downloadFromUrl({ url: item.downloadUrl, referer: item.pageUrl || '' }).catch(function () {});
+    }
+  }
+
+  function removeDownloadItem(id) {
+    if (!id) return;
+    var d = null;
+    for (var k = 0; k < state.downloads.length; k++) {
+      if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
+    }
+    if (!d || isDownloadActiveState(d.state)) {
+      showToast('Can\'t remove an active download');
+      return;
+    }
+    if (api && api.webSources && api.webSources.removeDownloadHistory) {
+      api.webSources.removeDownloadHistory({ id: id }).then(function () {
+        state.downloads = state.downloads.filter(function (x) { return x && x.id !== id; });
+        recomputeDownloadingCount();
+        scheduleDlRender();
+      }).catch(function () {});
+    }
+  }
+
   function renderDownloadList(targetEl, emptyEl, list, opts) {
     if (!targetEl || !emptyEl) return;
     opts = opts || {};
@@ -3142,47 +3640,50 @@
       var d = list[i];
       if (!d) continue;
 
-      var isActive = d.state === 'progressing' || d.state === 'paused';
+      var isActive = isDownloadActiveState(d.state);
       var isOk = d.state === 'completed';
+      var isCancelled = d.state === 'cancelled';
       var isBad = d.state === 'failed' || d.state === 'interrupted';
-
-      var stateTxt = isActive ? (d.state === 'paused' ? 'Paused' : 'Downloading') : (isOk ? 'Saved' : 'Failed');
+      var stateTxt = isActive ? (d.state === 'paused' ? 'Paused' : 'Downloading') : (isOk ? 'Saved' : (isCancelled ? 'Cancelled' : 'Failed'));
 
       var sub = '';
-      var libTag = d.library ? ('\u2192 ' + d.library) : '';
+      var libTag = d.library ? ('→ ' + d.library) : '';
       if (isActive) {
         var left = (d.totalBytes > 0 && d.receivedBytes >= 0) ? (formatBytes(d.receivedBytes) + ' / ' + formatBytes(d.totalBytes)) : '';
         var sp = formatSpeed(d.bytesPerSec);
         var eta = formatEta(d.receivedBytes, d.totalBytes, d.bytesPerSec);
         sub = libTag;
-        if (left) sub = (sub ? (sub + ' \u2022 ') : '') + left;
-        if (sp) sub = (sub ? (sub + ' \u2022 ') : '') + sp;
-        if (eta) sub = (sub ? (sub + ' \u2022 ') : '') + eta;
+        if (left) sub = (sub ? (sub + ' • ') : '') + left;
+        if (sp) sub = (sub ? (sub + ' • ') : '') + sp;
+        if (eta) sub = (sub ? (sub + ' • ETA ' + eta) : ('ETA ' + eta));
       } else if (isOk) {
         sub = libTag;
-        if (d.destination) sub = (sub ? (sub + ' \u2022 ') : '') + shortPath(d.destination);
+        if (d.destination) sub = (sub ? (sub + ' • ') : '') + shortPath(d.destination);
       } else {
-        sub = d.error ? d.error : 'Download failed';
+        sub = d.error ? d.error : (isCancelled ? 'Cancelled' : 'Download failed');
       }
 
       var p = null;
-      if (isActive && !opts.compact) {
-        if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
-        else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
-      }
+      if (isActive && !opts.compact) p = (typeof d.progress === 'number') ? Math.max(0, Math.min(1, d.progress)) : null;
       var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
       var iconUrl = faviconFor(d.pageUrl || d.downloadUrl);
       var canPauseAction = !!(d.canPause && api && api.webSources && api.webSources.pauseDownload);
       var canResumeAction = !!(d.canResume && api && api.webSources && api.webSources.resumeDownload);
       var canCancelAction = !!(d.canCancel && api && api.webSources && api.webSources.cancelDownload);
+      var canRetry = !!(api && api.webSources && api.webSources.downloadFromUrl && d.downloadUrl && !isActive && !isOk);
+      var canOpenFile = !!(isOk && d.destination && api && api.shell && api.shell.openPath);
+      var canOpenFolder = !!(d.destination && api && api.shell && api.shell.revealPath);
+
       var actionsHtml = '';
       if (isActive) {
         if (d.state === 'paused') {
-          if (canResumeAction) actionsHtml += '<button class="webDlAction" type="button" title="Resume" data-dl-action="resume">&#9654;</button>';
-        } else {
-          if (canPauseAction) actionsHtml += '<button class="webDlAction" type="button" title="Pause" data-dl-action="pause">&#10074;&#10074;</button>';
-        }
-        if (canCancelAction) actionsHtml += '<button class="webDlAction" type="button" title="Cancel" data-dl-action="cancel">&times;</button>';
+          if (canResumeAction) actionsHtml += '<button class="webDlAction" type="button" title="Resume" data-dl-action="resume">▶</button>';
+        } else if (canPauseAction) actionsHtml += '<button class="webDlAction" type="button" title="Pause" data-dl-action="pause">❚❚</button>';
+        if (canCancelAction) actionsHtml += '<button class="webDlAction" type="button" title="Cancel" data-dl-action="cancel">✕</button>';
+      } else {
+        if (canOpenFile) actionsHtml += '<button class="webDlAction" type="button" title="Open file" data-dl-action="open-file">Open</button>';
+        if (canOpenFolder) actionsHtml += '<button class="webDlAction" type="button" title="Open folder" data-dl-action="open-folder">Folder</button>';
+        if (canRetry) actionsHtml += '<button class="webDlAction" type="button" title="Retry" data-dl-action="retry">Retry</button>';
       }
 
       html += '' +
@@ -3201,99 +3702,63 @@
           '<div class="webDlRight">' +
             '<div class="webDlState' + (isBad ? ' webDlState--bad' : '') + '">' + escapeHtml(stateTxt) + '</div>' +
             (actionsHtml ? ('<div class="webDlActions">' + actionsHtml + '</div>') : '') +
-            (opts.allowRemove ? ('<button class="iconBtn webDlRemove" title="Remove" aria-label="Remove" data-dl-remove="1">&times;</button>') : '') +
+            (opts.allowRemove ? ('<button class="iconBtn webDlRemove" title="Remove" aria-label="Remove" data-dl-remove="1">×</button>') : '') +
           '</div>' +
         '</div>';
     }
 
     targetEl.innerHTML = html;
-
     var items = targetEl.querySelectorAll('.webDlItem');
     for (var j = 0; j < items.length; j++) {
-      items[j].onclick = function (e) {
-        var t = e && e.target;
-        if (t && t.getAttribute && t.getAttribute('data-dl-action')) return;
-        if (t && t.getAttribute && t.getAttribute('data-dl-remove') === '1') return;
-        var id = this.getAttribute('data-dl-id');
-        var d = null;
-        for (var k = 0; k < state.downloads.length; k++) {
-          if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
-        }
-        if (!d) return;
-        if (d.state === 'completed' && d.destination && api && api.shell && api.shell.revealPath) {
-          try { api.shell.revealPath(d.destination); } catch (err) {}
-        } else if (d.state === 'progressing') {
-          showToast('Download in progress');
-        } else if (d.destination && api && api.shell && api.shell.revealPath) {
-          try { api.shell.revealPath(d.destination); } catch (err2) {}
-        }
-      };
-
       var rm = items[j].querySelector('.webDlRemove');
-      if (rm) {
-        rm.onclick = function (e) {
-          try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
-          var p = this.parentElement;
-          while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
-          if (!p) return;
-          var id = p.getAttribute('data-dl-id');
-          var d = null;
-          for (var k = 0; k < state.downloads.length; k++) {
-            if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
-          }
-          if (!d || d.state === 'progressing') {
-            showToast('Can\'t remove an active download');
-            return;
-          }
-          if (api && api.webSources && api.webSources.removeDownloadHistory) {
-            api.webSources.removeDownloadHistory({ id: id }).then(function () {
-              state.downloads = state.downloads.filter(function (x) { return x && x.id !== id; });
-              recomputeDownloadingCount();
-              scheduleDlRender();
-            }).catch(function () {});
-          }
-        };
-      }
-
+      if (rm) rm.onclick = function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        var p = this.parentElement; while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
+        if (!p) return; removeDownloadItem(p.getAttribute('data-dl-id'));
+      };
       var actionBtns = items[j].querySelectorAll('[data-dl-action]');
       for (var ai = 0; ai < actionBtns.length; ai++) {
         actionBtns[ai].onclick = function (e) {
           try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
           var action = String(this.getAttribute('data-dl-action') || '');
-          var p = this.parentElement;
-          while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
+          var p = this.parentElement; while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
           if (!p) return;
           var id = p.getAttribute('data-dl-id');
-          if (!id || !api || !api.webSources) return;
-          if (action === 'pause' && api.webSources.pauseDownload) {
-            api.webSources.pauseDownload({ id: id }).catch(function () {});
-          } else if (action === 'resume' && api.webSources.resumeDownload) {
-            api.webSources.resumeDownload({ id: id }).catch(function () {});
-          } else if (action === 'cancel' && api.webSources.cancelDownload) {
-            api.webSources.cancelDownload({ id: id }).catch(function () {});
-          }
+          var d = null;
+          for (var k = 0; k < state.downloads.length; k++) { if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; } }
+          if (!d) return;
+          if (action === 'open-file' && d.destination && api && api.shell && api.shell.openPath) api.shell.openPath(d.destination).catch(function () {});
+          else if (action === 'open-folder' && d.destination && api && api.shell && api.shell.revealPath) api.shell.revealPath(d.destination).catch(function () {});
+          else doDownloadAction(id, action);
         };
       }
     }
   }
 
+  function getDownloadGroups() {
+    var active = [];
+    var terminal = [];
+    for (var i = 0; i < state.downloads.length; i++) {
+      var d = state.downloads[i];
+      if (!d) continue;
+      if (isDownloadActiveState(d.state)) active.push(d);
+      else terminal.push(d);
+    }
+    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+    terminal.sort(function (a, b) { return Number(b.finishedAt || b.startedAt || 0) - Number(a.finishedAt || a.startedAt || 0); });
+    return { active: active, terminal: terminal };
+  }
+
   function renderDownloadsPanel() {
     if (!el.dlList || !el.dlEmpty) return;
-    renderDownloadList(el.dlList, el.dlEmpty, state.downloads, { allowRemove: true });
+    var groups = getDownloadGroups();
+    renderDownloadList(el.dlList, el.dlEmpty, groups.active.concat(groups.terminal), { allowRemove: true });
   }
 
   function renderHomeDownloads() {
     if (!el.homeDlList || !el.homeDlEmpty) return;
-    var act = [];
-    var rest = [];
-    for (var i = 0; i < state.downloads.length; i++) {
-      var d = state.downloads[i];
-      if (!d) continue;
-      if (d.state === 'progressing' || d.state === 'paused') act.push(d);
-      else rest.push(d);
-    }
-    var list = act.concat(rest).slice(0, 8);
-    renderDownloadList(el.homeDlList, el.homeDlEmpty, list, { compact: true, allowRemove: true });
+    var groups = getDownloadGroups();
+    renderDownloadList(el.homeDlList, el.homeDlEmpty, groups.active.concat(groups.terminal).slice(0, 8), { compact: true, allowRemove: true });
   }
 
   function isDirectActiveState(stateStr) {
@@ -3857,14 +4322,7 @@
 
   function renderHubDirectActive() {
     if (!el.hubDirectActiveList || !el.hubDirectActiveEmpty) return;
-    var active = [];
-    for (var i = 0; i < state.downloads.length; i++) {
-      var d = state.downloads[i];
-      if (!d) continue;
-      if (!isDirectActiveState(d.state)) continue;
-      active.push(d);
-    }
-    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
+    var active = getDownloadGroups().active;
 
     if (!active.length) {
       el.hubDirectActiveList.innerHTML = '';
@@ -3877,17 +4335,22 @@
     for (var j = 0; j < active.length; j++) {
       var x = active[j];
       var pTxt = pctText(x.progress);
-      var sub = (x.library ? ('\u2192 ' + x.library) : 'Direct download') + (pTxt ? (' \u2022 ' + pTxt) : '');
+      var left = (x.totalBytes > 0) ? (formatBytes(x.receivedBytes || 0) + ' / ' + formatBytes(x.totalBytes || 0)) : '';
+      var speed = formatSpeed(x.bytesPerSec || 0);
+      var eta = formatEta(x.receivedBytes, x.totalBytes, x.bytesPerSec);
+      var sub = (x.library ? ('→ ' + x.library) : 'Direct download');
+      if (left) sub += ' • ' + left;
+      if (speed) sub += ' • ' + speed;
+      if (eta) sub += ' • ETA ' + eta;
+
       var pauseResume = '';
       var canPauseAction = !!(x.canPause && api && api.webSources && api.webSources.pauseDownload);
       var canResumeAction = !!(x.canResume && api && api.webSources && api.webSources.resumeDownload);
       var canCancelAction = !!(x.canCancel && api && api.webSources && api.webSources.cancelDownload);
-      if (canPauseAction || canResumeAction) {
-        if (String(x.state) === 'paused') {
-          if (canResumeAction) pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>';
-        } else if (canPauseAction) {
-          pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
-        }
+      if (String(x.state) === 'paused') {
+        if (canResumeAction) pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="resume" data-direct-id="' + escapeHtml(x.id) + '">Resume</button>';
+      } else if (canPauseAction) {
+        pauseResume = '<button class="btn btn-ghost btn-sm" data-direct-action="pause" data-direct-id="' + escapeHtml(x.id) + '">Pause</button>';
       }
 
       html += '' +
@@ -4097,7 +4560,7 @@
     for (var i = 0; i < state.downloads.length; i++) {
       var d = state.downloads[i];
       if (!d || !d.id) continue;
-      if (isDirectActiveState(d.state)) continue;
+      if (!isDownloadTerminalState(d.state)) continue;
       merged.push({
         id: 'direct:' + d.id,
         transport: 'direct',
@@ -4109,7 +4572,9 @@
         finishedAt: Number(d.finishedAt || 0) || null,
         library: d.library || '',
         error: d.error || '',
-        destination: d.destination || ''
+        destination: d.destination || '',
+        downloadUrl: d.downloadUrl || '',
+        pageUrl: d.pageUrl || ''
       });
     }
 
@@ -4153,7 +4618,14 @@
       var when = formatWhen(x.finishedAt || x.startedAt);
       var sub = (x.state || 'done') + (x.library ? (' \u2022 ' + x.library) : '') + (when ? (' \u2022 ' + when) : '');
       var badge = x.transport === 'torrent' ? 'Torrent' : 'Direct';
-      var removeBtn = '<button class="btn btn-ghost btn-sm" data-unified-remove-id="' + escapeHtml(x.id) + '">Remove</button>';
+      var actions = '';
+      if (x.transport === 'direct') {
+        var openFile = x.destination ? '<button class="btn btn-ghost btn-sm" data-unified-open-file-id="' + escapeHtml(x.id) + '">Open</button>' : '';
+        var openFolder = x.destination ? '<button class="btn btn-ghost btn-sm" data-unified-open-folder-id="' + escapeHtml(x.id) + '">Folder</button>' : '';
+        var retry = (x.state !== 'completed' && x.downloadUrl) ? '<button class="btn btn-ghost btn-sm" data-unified-retry-id="' + escapeHtml(x.id) + '">Retry</button>' : '';
+        actions = openFile + openFolder + retry;
+      }
+      actions += '<button class="btn btn-ghost btn-sm" data-unified-remove-id="' + escapeHtml(x.id) + '">Remove</button>';
       html += '' +
         '<div class="webHubItem" data-unified-open-id="' + escapeHtml(x.id) + '">' +
           '<div class="webHubItemTop">' +
@@ -4161,7 +4633,7 @@
             '<span class="webHubBadge">' + escapeHtml(badge) + '</span>' +
           '</div>' +
           '<div class="webHubItemSub">' + escapeHtml(sub) + (x.error ? (' \u2022 ' + escapeHtml(x.error)) : '') + '</div>' +
-          '<div class="webHubItemActions">' + removeBtn + '</div>' +
+          '<div class="webHubItemActions">' + actions + '</div>' +
         '</div>';
     }
     el.hubDownloadHistoryList.innerHTML = html;
@@ -4467,6 +4939,163 @@
     });
   }
 
+  function getActiveSiteOrigin() {
+    var tab = getActiveTab();
+    var url = String((tab && tab.url) || '').trim();
+    if (!url || url === 'about:blank') return '';
+    try {
+      return String(new URL(url).origin || '').trim().toLowerCase();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getPermissionDecision(origin, permission) {
+    var o = String(origin || '').trim().toLowerCase();
+    var p = String(permission || '').trim();
+    if (!o || !p) return 'ask';
+    for (var i = 0; i < state.permissions.length; i++) {
+      var r = state.permissions[i];
+      if (!r) continue;
+      if (String(r.origin || '').trim().toLowerCase() === o && String(r.permission || '').trim() === p) {
+        return String(r.decision || 'ask').trim().toLowerCase();
+      }
+    }
+    return 'ask';
+  }
+
+  function securitySummaryForTab(tab) {
+    var t = tab || getActiveTab();
+    var rawUrl = String((t && t.url) || '').trim();
+    if (!rawUrl) return 'No page loaded';
+    var scheme = '';
+    try { scheme = String(new URL(rawUrl).protocol || '').replace(':', '').toUpperCase(); } catch (e) {}
+    var runtime = ensureTabRuntime(t);
+    var sec = String((runtime && runtime.securityState) || '').trim().toLowerCase();
+    var stateLabel = 'Unknown';
+    if (sec === 'secure') stateLabel = 'Secure';
+    else if (sec === 'insecure') stateLabel = 'Not secure';
+    else if (sec === 'local') stateLabel = 'Local page';
+    else if (sec === 'internal') stateLabel = 'Internal page';
+    return (scheme ? (scheme + ' • ') : '') + stateLabel;
+  }
+
+  function renderSiteInfoPermissions(origin) {
+    if (!el.siteInfoPermissions) return;
+    var perms = ['notifications', 'geolocation', 'media', 'midi'];
+    var labels = {
+      notifications: 'Notifications',
+      geolocation: 'Location',
+      media: 'Camera/Mic',
+      midi: 'MIDI'
+    };
+    var html = '';
+    for (var i = 0; i < perms.length; i++) {
+      var p = perms[i];
+      var decision = getPermissionDecision(origin, p);
+      var checked = decision === 'allow' ? ' checked' : '';
+      html += '<div class="webSiteInfoPermRow">'
+        + '<span>' + escapeHtml(labels[p] || p) + '</span>'
+        + '<label><input type="checkbox" data-site-perm="' + escapeHtml(p) + '"' + checked + (origin ? '' : ' disabled') + ' /> Allow</label>'
+        + '</div>';
+    }
+    el.siteInfoPermissions.innerHTML = html;
+  }
+
+  function renderSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    var tab = getActiveTab();
+    var origin = getActiveSiteOrigin();
+    if (el.siteInfoOrigin) el.siteInfoOrigin.textContent = origin || 'No site loaded';
+    if (el.siteInfoSecurity) el.siteInfoSecurity.textContent = securitySummaryForTab(tab);
+    renderSiteInfoPermissions(origin);
+    if (el.siteInfoUsageText) el.siteInfoUsageText.textContent = 'Usage unknown.';
+    if (el.siteInfoAdblock) {
+      var blocked = Number(state.adblock && state.adblock.blockedCount || 0);
+      var suffix = origin ? 'Current-page breakdown unavailable' : 'No active site';
+      el.siteInfoAdblock.textContent = 'Blocked requests: ' + blocked + ' total • ' + suffix;
+    }
+  }
+
+  function openSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    renderSiteInfoPopover();
+    state.siteInfoOpen = true;
+    el.siteInfoPopover.classList.remove('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'false'); } catch (e) {}
+  }
+
+  function closeSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    state.siteInfoOpen = false;
+    el.siteInfoPopover.classList.add('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'true'); } catch (e) {}
+  }
+
+  function toggleSiteInfoPopover() {
+    if (state.siteInfoOpen) closeSiteInfoPopover();
+    else openSiteInfoPopover();
+  }
+
+  function loadSiteUsageSummary() {
+    if (!api.webData || typeof api.webData.usage !== 'function' || !el.siteInfoUsageText) return;
+    api.webData.usage().then(function (res) {
+      if (!res || !res.ok || !res.usage) {
+        el.siteInfoUsageText.textContent = 'Usage unavailable.';
+        return;
+      }
+      var u = res.usage || {};
+      el.siteInfoUsageText.textContent = 'Total profile storage: ' + formatByteSize(u.totalBytes || 0);
+    }).catch(function () {
+      el.siteInfoUsageText.textContent = 'Usage unavailable.';
+    });
+  }
+
+  function clearCurrentSiteData() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webData || typeof api.webData.clear !== 'function') return;
+    api.webData.clear({
+      from: 0,
+      to: Date.now(),
+      kinds: ['cookies', 'siteData'],
+      origin: origin
+    }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to clear site data');
+        return;
+      }
+      showToast('Site data cleared');
+      loadSiteUsageSummary();
+      loadDataUsage();
+    }).catch(function () {
+      showToast('Failed to clear site data');
+    });
+  }
+
+  function resetPermissionsForCurrentSite() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webPermissions || typeof api.webPermissions.reset !== 'function') return;
+    api.webPermissions.reset({ origin: origin }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to reset permissions');
+        return;
+      }
+      showToast('Permissions reset for site');
+      loadPermissions();
+      renderSiteInfoPopover();
+    }).catch(function () {
+      showToast('Failed to reset permissions');
+    });
+  }
+
   function clearSelectedBrowsingData() {
     if (!api.webData || typeof api.webData.clear !== 'function') return;
     var kinds = [];
@@ -4559,6 +5188,7 @@
         return ao.localeCompare(bo);
       });
       renderPermissions();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
     }).catch(function () {});
   }
 
@@ -4612,6 +5242,7 @@
       state.adblock.listUpdatedAt = Number(res.listUpdatedAt || 0) || 0;
       if (el.hubAdblockEnabled) el.hubAdblockEnabled.checked = !!state.adblock.enabled;
       renderAdblockInfo();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
     }).catch(function () {});
   }
 
@@ -4766,6 +5397,12 @@
       loading: false,
       canGoBack: false,
       canGoForward: false,
+      audible: false,
+      muted: false,
+      lastActiveAt: Date.now(),
+      group: opts.group || null,
+      overflowVisible: true,
+      mediaDetected: false,
       pinned: !!opts.pinned,
       openerTabId: opts.openerTabId || null, // CHROMIUM_PARITY: opener tracking
       runtime: createTabRuntime(startUrl)
@@ -4838,7 +5475,9 @@
     saveOmniState(); // CHROMIUM_PARITY: save omnibox state before switching
     state.activeTabId = tabId;
     state.showBrowserHome = false;
+    closeTabQuickPanel();
     var tab = getActiveTab();
+    if (tab) tab.lastActiveAt = Date.now();
     if (tab && tab.type === 'torrent') {
       // Torrent tab — no native WebContentsView, show DOM panel
       webTabs.hideAll().catch(function () {});
@@ -5024,6 +5663,7 @@
     else el.urlDisplay.textContent = u;
     setOmniIconForUrl(u);
     updateBookmarkButton();
+    if (state.siteInfoOpen) renderSiteInfoPopover();
   }
 
   // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
@@ -5213,6 +5853,11 @@
         hideContextMenu();
         return;
       }
+      if (state.tabQuickOpen) {
+        e.preventDefault();
+        closeTabQuickPanel();
+        return;
+      }
       if (isTipsOpen()) {
         e.preventDefault();
         hideTips();
@@ -5257,6 +5902,12 @@
       return;
     }
 
+    if (ctrl && e.shiftKey && lower === 'a') {
+      e.preventDefault();
+      openTabQuickPanel();
+      return;
+    }
+
     // Do not steal keys while typing (except Escape above)
     if (isTypingTarget(e.target)) return;
     if (ctrl && !e.shiftKey && (lower === 'j')) {
@@ -5284,7 +5935,7 @@
       e.preventDefault();
       var t0 = getActiveTab();
       if (t0 && t0.mainTabId) {
-        webTabs.navigate({ tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }).catch(function () {});
+        navigateTabWithRuntime(t0, { tabId: t0.mainTabId, action: (key === 'ArrowLeft') ? 'back' : 'forward' }, (key === 'ArrowLeft') ? 'request-back' : 'request-forward');
       }
       return;
     }
@@ -5313,7 +5964,7 @@
       e.preventDefault();
       var tab = getActiveTab();
       if (tab && tab.canGoBack && tab.mainTabId) {
-        webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+        navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
       } else {
         showToast('No back history');
       }
@@ -5393,8 +6044,9 @@
     var tab = getActiveTab();
     if (!tab) return;
     var runtime = ensureTabRuntime(tab);
-    var entries = runtime.navEntries;
+    var entries = normalizeRuntimeEntries(runtime.navEntries);
     var idx = runtime.currentIndex;
+    runtime.navEntries = entries;
     if (!entries || !entries.length) return;
 
     var items = [];
@@ -5408,7 +6060,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -5424,7 +6076,7 @@
             label: label,
             onClick: function () {
               if (tab.mainTabId != null) {
-                webTabs.navigate({ tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }).catch(function () {});
+                navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'goToIndex', index: entryIdx }, 'request-go-index', { targetIndex: entryIdx });
               }
             }
           });
@@ -5565,6 +6217,68 @@
       };
     }
 
+    if (el.tabOverflowBtn) {
+      el.tabOverflowBtn.onclick = function (evt) {
+        var items = [];
+        var hiddenTabs = [];
+        for (var i = 0; i < state.tabs.length; i++) {
+          if (state.tabs[i] && state.tabs[i].overflowVisible === false) hiddenTabs.push(state.tabs[i]);
+        }
+        if (hiddenTabs.length) {
+          for (var j = 0; j < hiddenTabs.length; j++) {
+            (function (t) {
+              items.push({ label: t.title || t.sourceName || 'Tab', onClick: function () { activateTab(t.id); } });
+            })(hiddenTabs[j]);
+          }
+          items.push({ separator: true });
+        }
+        items.push({ label: 'Scroll left', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: -220, behavior: 'smooth' }); } });
+        items.push({ label: 'Scroll right', onClick: function () { if (el.tabBar) el.tabBar.scrollBy({ left: 220, behavior: 'smooth' }); } });
+        var r = el.tabOverflowBtn.getBoundingClientRect();
+        showContextMenu(items, r.left, r.bottom + 4);
+      };
+    }
+
+    if (el.tabQuickSearch) {
+      el.tabQuickSearch.addEventListener('input', function () {
+        state.tabQuickQuery = String(el.tabQuickSearch.value || '');
+        state.tabQuickActiveIndex = 0;
+        renderTabQuickPanel();
+      });
+      el.tabQuickSearch.addEventListener('keydown', function (evt) {
+        var k = String(evt && evt.key || '');
+        if (k === 'ArrowDown' || k === 'ArrowUp') {
+          evt.preventDefault();
+          var rows = getTabQuickMatches();
+          if (!rows.length) return;
+          var delta = (k === 'ArrowDown') ? 1 : -1;
+          state.tabQuickActiveIndex = (state.tabQuickActiveIndex + delta + rows.length) % rows.length;
+          renderTabQuickPanel();
+          return;
+        }
+        if (k === 'Enter') {
+          evt.preventDefault();
+          var rows2 = getTabQuickMatches();
+          if (!rows2.length) return;
+          var pick = rows2[Math.max(0, Math.min(state.tabQuickActiveIndex, rows2.length - 1))];
+          if (!pick || !pick.tab) return;
+          closeTabQuickPanel();
+          activateTab(pick.tab.id);
+          return;
+        }
+        if (k === 'Escape') {
+          evt.preventDefault();
+          closeTabQuickPanel();
+        }
+      });
+    }
+
+    if (el.tabQuickPanel) {
+      el.tabQuickPanel.addEventListener('mousedown', function (evt) {
+        if (evt.target === el.tabQuickPanel) closeTabQuickPanel();
+      });
+    }
+
     // BUILD_WCV: navigation via IPC
     // CHROMIUM_PARITY: Long-press/right-click shows history dropdown
     if (el.navBack) {
@@ -5572,7 +6286,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'back' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'back' }, 'request-back');
         }
       };
       addNavLongPressHandler(el.navBack, function (e) {
@@ -5585,7 +6299,7 @@
         if (_navLongPressTriggered) { _navLongPressTriggered = false; return; }
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'forward' }).catch(function () {});
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'forward' }, 'request-forward');
         }
       };
       addNavLongPressHandler(el.navForward, function (e) {
@@ -5639,7 +6353,8 @@
       el.navHome.onclick = function () {
         var tab = getActiveTab();
         if (tab && tab.mainTabId) {
-          webTabs.navigate({ tabId: tab.mainTabId, action: 'loadUrl', url: tab.homeUrl || tab.url || '' }).catch(function () {});
+          var homeTargetUrl = String(tab.homeUrl || tab.url || '').trim();
+          navigateTabWithRuntime(tab, { tabId: tab.mainTabId, action: 'loadUrl', url: homeTargetUrl }, 'request-load-url', { url: homeTargetUrl });
         }
       };
     }
@@ -5671,6 +6386,10 @@
           e.dataTransfer.setData('text/uri-list', url);
           e.dataTransfer.effectAllowed = 'copyLink';
         } catch (err) {}
+      });
+      el.omniIcon.addEventListener('click', function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        toggleSiteInfoPopover();
       });
     }
 
@@ -6109,6 +6828,55 @@
       el.hubDownloadHistoryList.addEventListener('click', function (evt) {
         var t = evt && evt.target ? evt.target : null;
         if (!t) return;
+        var openFileBtn = t.closest ? t.closest('[data-unified-open-file-id]') : null;
+        if (openFileBtn) {
+          var ofid = String(openFileBtn.getAttribute('data-unified-open-file-id') || '');
+          if (ofid.indexOf('direct:') === 0) {
+            var did = ofid.slice('direct:'.length);
+            for (var di = 0; di < state.downloads.length; di++) {
+              var dd = state.downloads[di];
+              if (!dd || String(dd.id) !== did) continue;
+              if (dd.destination && api.shell && api.shell.openPath) {
+                try { api.shell.openPath(dd.destination); } catch (e) {}
+              }
+              break;
+            }
+          }
+          return;
+        }
+
+        var openFolderBtn = t.closest ? t.closest('[data-unified-open-folder-id]') : null;
+        if (openFolderBtn) {
+          var ofdid = String(openFolderBtn.getAttribute('data-unified-open-folder-id') || '');
+          if (ofdid.indexOf('direct:') === 0) {
+            var did2 = ofdid.slice('direct:'.length);
+            for (var dj = 0; dj < state.downloads.length; dj++) {
+              var dd2 = state.downloads[dj];
+              if (!dd2 || String(dd2.id) !== did2) continue;
+              if (dd2.destination && api.shell && api.shell.revealPath) {
+                try { api.shell.revealPath(dd2.destination); } catch (e2) {}
+              }
+              break;
+            }
+          }
+          return;
+        }
+
+        var retryBtn = t.closest ? t.closest('[data-unified-retry-id]') : null;
+        if (retryBtn) {
+          var rrid = String(retryBtn.getAttribute('data-unified-retry-id') || '');
+          if (rrid.indexOf('direct:') === 0 && api.webSources && api.webSources.downloadFromUrl) {
+            var did3 = rrid.slice('direct:'.length);
+            for (var dk = 0; dk < state.downloads.length; dk++) {
+              var dd3 = state.downloads[dk];
+              if (!dd3 || String(dd3.id) !== did3) continue;
+              if (dd3.downloadUrl) api.webSources.downloadFromUrl({ url: dd3.downloadUrl, referer: dd3.pageUrl || '' }).catch(function () {});
+              break;
+            }
+          }
+          return;
+        }
+
         var rm = t.closest ? t.closest('[data-unified-remove-id]') : null;
         if (rm) {
           var rid = String(rm.getAttribute('data-unified-remove-id') || '');
@@ -6306,6 +7074,54 @@
       });
     }
 
+
+    if (el.siteInfoUsageBtn) {
+      el.siteInfoUsageBtn.onclick = function () {
+        loadSiteUsageSummary();
+      };
+    }
+
+    if (el.siteInfoClearDataBtn) {
+      el.siteInfoClearDataBtn.onclick = function () {
+        clearCurrentSiteData();
+      };
+    }
+
+    if (el.siteInfoResetPermsBtn) {
+      el.siteInfoResetPermsBtn.onclick = function () {
+        resetPermissionsForCurrentSite();
+      };
+    }
+
+    if (el.siteInfoPermissions) {
+      el.siteInfoPermissions.addEventListener('change', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t || !t.matches || !t.matches('input[data-site-perm]')) return;
+        var permission = String(t.getAttribute('data-site-perm') || '').trim();
+        var origin = getActiveSiteOrigin();
+        if (!permission || !origin || !api.webPermissions || !api.webPermissions.set) return;
+        api.webPermissions.set({
+          origin: origin,
+          permission: permission,
+          decision: t.checked ? 'allow' : 'ask'
+        }).then(function (res) {
+          if (!res || !res.ok) showToast('Failed to update permission');
+          loadPermissions();
+        }).catch(function () {
+          showToast('Failed to update permission');
+        });
+      });
+    }
+
+    document.addEventListener('click', function (evt) {
+      if (!state.siteInfoOpen) return;
+      var t = evt && evt.target ? evt.target : null;
+      if (!t) return;
+      var insidePopover = el.siteInfoPopover && el.siteInfoPopover.contains && el.siteInfoPopover.contains(t);
+      var insideIcon = el.omniIcon && el.omniIcon.contains && el.omniIcon.contains(t);
+      if (!insidePopover && !insideIcon) closeSiteInfoPopover();
+    });
+
     if (el.hubDataUsageBtn) {
       el.hubDataUsageBtn.onclick = function () {
         loadDataUsage();
@@ -6469,8 +7285,14 @@
 
     if (api.webSources.onDownloadCompleted) {
       api.webSources.onDownloadCompleted(function (info) {
-        upsertDownload(info);
-        var cancelled = (info && (String(info.error || '') === 'Cancelled' || String(info.state || '') === 'cancelled'));
+        var stateName = String((info && info.state) || '').toLowerCase();
+        if (!stateName) {
+          if (info && info.ok) stateName = 'completed';
+          else if (String((info && info.error) || '').toLowerCase() === 'cancelled') stateName = 'cancelled';
+          else stateName = 'failed';
+        }
+        upsertDownload(Object.assign({}, info || {}, { state: stateName }));
+        var cancelled = stateName === 'cancelled';
         if (cancelled) {
           showToast('Download cancelled');
           showDlBar('Cancelled: ' + ((info && info.filename) ? info.filename : ''), null);
@@ -6585,21 +7407,12 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.url = data.url || '';
-      // CHROMIUM_PARITY: direction-aware history tracking
-      var direction = (data && data.direction) || '';
-      if (direction === 'index' && data.targetIndex != null) {
-        var runtime = ensureTabRuntime(tab);
-        runtime.currentIndex = Math.max(0, Math.min(Number(data.targetIndex), runtime.navEntries.length - 1));
-        if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = tab.url;
-        runtime.lastVisibleUrl = tab.url;
-        runtime.lastCommittedUrl = tab.url;
-        runtime.pendingUrl = '';
-        runtime.securityState = inferSecurityStateFromUrl(tab.url);
-        runtime.isBlocked = false;
-        runtime.lastError = null;
-      } else {
-        pushRuntimeCommittedUrl(tab, tab.url, direction);
-      }
+      reduceRuntimeHistory(tab, 'commit', {
+        url: tab.url,
+        direction: data && data.direction,
+        targetIndex: data && data.targetIndex,
+        navKind: data && data.navKind
+      });
       maybeRecordBrowsingHistory(tab, tab.url);
       if (tab.id === state.activeTabId) {
         updateUrlDisplay();
@@ -6614,12 +7427,10 @@
       var tab = getTabByMainId(data && data.tabId);
       if (!tab) return;
       tab.loading = !!data.loading;
-      var runtime = ensureTabRuntime(tab);
-      if (tab.loading) {
-        runtime.pendingUrl = String(tab.url || runtime.lastVisibleUrl || '').trim();
-      } else {
-        runtime.pendingUrl = '';
-      }
+      reduceRuntimeHistory(tab, 'loading', {
+        loading: tab.loading,
+        url: String(tab.url || '').trim()
+      });
       renderTabs();
       renderBrowserHome();
       syncLoadBar();
@@ -6638,6 +7449,18 @@
       }
     });
 
+    if (webTabs.onMediaState) {
+      webTabs.onMediaState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        tab.audible = !!(data && data.audible);
+        tab.muted = !!(data && data.muted);
+        tab.mediaDetected = !!(data && data.mediaDetected || tab.mediaDetected || tab.audible || tab.muted);
+        renderTabs();
+        scheduleSessionSave();
+      });
+    }
+
     if (webTabs.onLoadFailed) {
       webTabs.onLoadFailed(function (data) {
         var tab = getTabByMainId(data && data.tabId);
@@ -6645,20 +7468,17 @@
         var runtime = ensureTabRuntime(tab);
         var failure = (data && data.failure) ? data.failure : classifyLoadFailure(data && data.errorCode, data && data.errorDescription, data && data.url);
         var failedUrl = String((data && data.url) || tab.url || runtime.lastVisibleUrl || '').trim();
-        if (failedUrl) {
-          tab.url = failedUrl;
-          runtime.lastVisibleUrl = failedUrl;
-        }
-        runtime.pendingUrl = '';
-        runtime.isBlocked = !!failure.isBlocked;
-        runtime.lastError = {
-          kind: String(failure.kind || 'load_failed'),
-          code: Number(data && data.errorCode || 0),
-          description: String(data && data.errorDescription || ''),
-          url: failedUrl,
-          at: Date.now()
-        };
-        runtime.securityState = inferSecurityStateFromUrl(failedUrl);
+        reduceRuntimeHistory(tab, 'load-fail', {
+          failedUrl: failedUrl,
+          isBlocked: !!failure.isBlocked,
+          lastError: {
+            kind: String(failure.kind || 'load_failed'),
+            code: Number(data && data.errorCode || 0),
+            description: String(data && data.errorDescription || ''),
+            url: failedUrl,
+            at: Date.now()
+          }
+        });
         if (failure && failure.title) {
           tab.title = String(failure.title);
         }
@@ -6668,6 +7488,56 @@
         renderTabs();
         renderBrowserHome();
         renderContinue();
+        syncLoadBar();
+        scheduleSessionSave();
+      });
+    }
+
+    if (webTabs.onHealthState) {
+      webTabs.onHealthState(function (data) {
+        var tab = getTabByMainId(data && data.tabId);
+        if (!tab) return;
+        var runtime = ensureTabRuntime(tab);
+        var health = ensureRuntimeHealth(runtime);
+        var nextState = String((data && data.state) || '').trim().toLowerCase();
+        if (!nextState) return;
+
+        if (nextState === 'crashed' || nextState === 'unresponsive') {
+          tab.loading = false;
+          runtime.pendingUrl = '';
+          runtime.lastError = runtime.lastError || {
+            kind: nextState,
+            code: 0,
+            description: '',
+            url: String(tab.url || runtime.lastVisibleUrl || ''),
+            at: Date.now()
+          };
+        }
+
+        if (nextState === 'crashed') {
+          health.state = 'crashed';
+          health.crashCount = Number(health.crashCount || 0) + 1;
+          health.lastCrashReason = String((data && data.details && data.details.reason) || '');
+          tab.title = 'Crashed tab';
+          showToast('Tab crashed. Reload to restore.');
+        } else if (nextState === 'unresponsive') {
+          health.state = 'unresponsive';
+          health.unresponsiveCount = Number(health.unresponsiveCount || 0) + 1;
+          health.lastUnresponsiveReason = String((data && data.details && data.details.reason) || '');
+          tab.title = tab.title || 'Unresponsive tab';
+          showToast('Tab is unresponsive.');
+        } else if (nextState === 'recovered') {
+          if (health.state === 'crashed' || health.state === 'unresponsive') {
+            health.recoverCount = Number(health.recoverCount || 0) + 1;
+            showToast('Tab recovered.');
+          }
+          health.state = 'healthy';
+        }
+
+        health.lastChangedAt = Number((data && data.at) || Date.now()) || Date.now();
+        if (tab.id === state.activeTabId) updateUrlDisplay();
+        renderTabs();
+        renderBrowserHome();
         syncLoadBar();
         scheduleSessionSave();
       });
@@ -6805,6 +7675,13 @@
         }
       });
       _resizeObs.observe(el.viewContainer);
+    }
+
+    if (el.tabBar && typeof ResizeObserver !== 'undefined') {
+      var _tabResizeObs = new ResizeObserver(function () {
+        syncTabOverflowAffordance();
+      });
+      _tabResizeObs.observe(el.tabBar);
     }
 
     // Init

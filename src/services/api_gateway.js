@@ -538,12 +538,23 @@
       selectFiles: (...a) => ea.webTorrent?.selectFiles ? ea.webTorrent.selectFiles(...a) : Promise.resolve({ ok: false }),
       setDestination: (...a) => ea.webTorrent?.setDestination ? ea.webTorrent.setDestination(...a) : Promise.resolve({ ok: false }),
       streamFile: (...a) => ea.webTorrent?.streamFile ? ea.webTorrent.streamFile(...a) : Promise.resolve({ ok: false }),
+      addToVideoLibrary: (...a) => ea.webTorrent?.addToVideoLibrary ? ea.webTorrent.addToVideoLibrary(...a) : Promise.resolve({ ok: false }),
       onStarted: (...a) => ea.webTorrent?.onStarted ? ea.webTorrent.onStarted(...a) : undefined,
       onProgress: (...a) => ea.webTorrent?.onProgress ? ea.webTorrent.onProgress(...a) : undefined,
       onCompleted: (...a) => ea.webTorrent?.onCompleted ? ea.webTorrent.onCompleted(...a) : undefined,
       onUpdated: (...a) => ea.webTorrent?.onUpdated ? ea.webTorrent.onUpdated(...a) : undefined,
       onMetadata: (...a) => ea.webTorrent?.onMetadata ? ea.webTorrent.onMetadata(...a) : undefined,
       onStreamReady: (...a) => ea.webTorrent?.onStreamReady ? ea.webTorrent.onStreamReady(...a) : undefined,
+    },
+
+    // ========================================
+    // torProxy.*
+    // ========================================
+    torProxy: {
+      start: (...a) => ea.torProxy?.start ? ea.torProxy.start(...a) : Promise.resolve({ ok: false }),
+      stop: (...a) => ea.torProxy?.stop ? ea.torProxy.stop(...a) : Promise.resolve({ ok: false }),
+      getStatus: (...a) => ea.torProxy?.getStatus ? ea.torProxy.getStatus(...a) : Promise.resolve({ ok: false, active: false, bootstrapProgress: 0, port: 0 }),
+      onStatusChanged: (...a) => ea.torProxy?.onStatusChanged ? ea.torProxy.onStatusChanged(...a) : undefined,
     },
 
     // ========================================
