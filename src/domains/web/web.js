@@ -350,6 +350,19 @@
   }
 
   var WEBVIEW_POPUP_BRIDGE_CHANNEL = 'tanko:web-popup';
+
+  // CHROME_PARITY: remove Electron/Tankoban UA tokens so websites see the same
+  // UA family as Chrome and keep full-featured experiences enabled.
+  function getChromeParityUserAgent() {
+    var ua = '';
+    try { ua = String((navigator && navigator.userAgent) || ''); } catch (e) { ua = ''; }
+    if (!ua) return '';
+    return ua
+      .replace(/\sElectron\/[^\s]+/gi, '')
+      .replace(/\sTankoban[^\s]*/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+  }
   var POPUP_DEDUP_WINDOW_MS = 1200;
   var popupDedupMap = Object.create(null); // key -> ts
   var TORRENT_START_DEDUP_WINDOW_MS = 1600;
@@ -947,9 +960,11 @@
         var url = String((payload && payload.url) || '').trim() || 'about:blank';
         var tabId = nextTabId++;
         var wv = document.createElement('webview');
+        var parityUA = getChromeParityUserAgent();
         wv.className = 'webTabWebview hidden';
         wv.setAttribute('partition', 'persist:webmode');
         wv.setAttribute('allowpopups', '');
+        if (parityUA) wv.setAttribute('useragent', parityUA);
         if (popupBridgePreload) wv.setAttribute('preload', popupBridgePreload);
         wv.src = url;
         bindWebview(tabId, wv);
