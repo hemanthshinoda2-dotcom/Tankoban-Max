@@ -45,6 +45,15 @@
     omniIcon: qs('webOmniIcon'),
     omniGhost: qs('webOmniGhost'), // CHROMIUM_PARITY: ghost text overlay
     omniSuggest: qs('webOmniSuggest'),
+    siteInfoPopover: qs('webSiteInfoPopover'),
+    siteInfoOrigin: qs('webSiteInfoOrigin'),
+    siteInfoSecurity: qs('webSiteInfoSecurity'),
+    siteInfoPermissions: qs('webSiteInfoPermissions'),
+    siteInfoUsageBtn: qs('webSiteInfoUsageBtn'),
+    siteInfoUsageText: qs('webSiteInfoUsageText'),
+    siteInfoAdblock: qs('webSiteInfoAdblock'),
+    siteInfoClearDataBtn: qs('webSiteInfoClearDataBtn'),
+    siteInfoResetPermsBtn: qs('webSiteInfoResetPermsBtn'),
     findBar: qs('webFindBar'),
     findInput: qs('webFindInput'),
     findCount: qs('webFindCount'),
@@ -226,6 +235,7 @@
     },
     omniSuggestOpen: false,
     omniSuggestItems: [],
+    siteInfoOpen: false,
     omniSuggestActiveIndex: -1,
     hubTorrentFilter: 'active',
   };
@@ -4291,6 +4301,163 @@
     });
   }
 
+  function getActiveSiteOrigin() {
+    var tab = getActiveTab();
+    var url = String((tab && tab.url) || '').trim();
+    if (!url || url === 'about:blank') return '';
+    try {
+      return String(new URL(url).origin || '').trim().toLowerCase();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getPermissionDecision(origin, permission) {
+    var o = String(origin || '').trim().toLowerCase();
+    var p = String(permission || '').trim();
+    if (!o || !p) return 'ask';
+    for (var i = 0; i < state.permissions.length; i++) {
+      var r = state.permissions[i];
+      if (!r) continue;
+      if (String(r.origin || '').trim().toLowerCase() === o && String(r.permission || '').trim() === p) {
+        return String(r.decision || 'ask').trim().toLowerCase();
+      }
+    }
+    return 'ask';
+  }
+
+  function securitySummaryForTab(tab) {
+    var t = tab || getActiveTab();
+    var rawUrl = String((t && t.url) || '').trim();
+    if (!rawUrl) return 'No page loaded';
+    var scheme = '';
+    try { scheme = String(new URL(rawUrl).protocol || '').replace(':', '').toUpperCase(); } catch (e) {}
+    var runtime = ensureTabRuntime(t);
+    var sec = String((runtime && runtime.securityState) || '').trim().toLowerCase();
+    var stateLabel = 'Unknown';
+    if (sec === 'secure') stateLabel = 'Secure';
+    else if (sec === 'insecure') stateLabel = 'Not secure';
+    else if (sec === 'local') stateLabel = 'Local page';
+    else if (sec === 'internal') stateLabel = 'Internal page';
+    return (scheme ? (scheme + ' • ') : '') + stateLabel;
+  }
+
+  function renderSiteInfoPermissions(origin) {
+    if (!el.siteInfoPermissions) return;
+    var perms = ['notifications', 'geolocation', 'media', 'midi'];
+    var labels = {
+      notifications: 'Notifications',
+      geolocation: 'Location',
+      media: 'Camera/Mic',
+      midi: 'MIDI'
+    };
+    var html = '';
+    for (var i = 0; i < perms.length; i++) {
+      var p = perms[i];
+      var decision = getPermissionDecision(origin, p);
+      var checked = decision === 'allow' ? ' checked' : '';
+      html += '<div class="webSiteInfoPermRow">'
+        + '<span>' + escapeHtml(labels[p] || p) + '</span>'
+        + '<label><input type="checkbox" data-site-perm="' + escapeHtml(p) + '"' + checked + (origin ? '' : ' disabled') + ' /> Allow</label>'
+        + '</div>';
+    }
+    el.siteInfoPermissions.innerHTML = html;
+  }
+
+  function renderSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    var tab = getActiveTab();
+    var origin = getActiveSiteOrigin();
+    if (el.siteInfoOrigin) el.siteInfoOrigin.textContent = origin || 'No site loaded';
+    if (el.siteInfoSecurity) el.siteInfoSecurity.textContent = securitySummaryForTab(tab);
+    renderSiteInfoPermissions(origin);
+    if (el.siteInfoUsageText) el.siteInfoUsageText.textContent = 'Usage unknown.';
+    if (el.siteInfoAdblock) {
+      var blocked = Number(state.adblock && state.adblock.blockedCount || 0);
+      var suffix = origin ? 'Current-page breakdown unavailable' : 'No active site';
+      el.siteInfoAdblock.textContent = 'Blocked requests: ' + blocked + ' total • ' + suffix;
+    }
+  }
+
+  function openSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    renderSiteInfoPopover();
+    state.siteInfoOpen = true;
+    el.siteInfoPopover.classList.remove('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'false'); } catch (e) {}
+  }
+
+  function closeSiteInfoPopover() {
+    if (!el.siteInfoPopover) return;
+    state.siteInfoOpen = false;
+    el.siteInfoPopover.classList.add('hidden');
+    try { el.siteInfoPopover.setAttribute('aria-hidden', 'true'); } catch (e) {}
+  }
+
+  function toggleSiteInfoPopover() {
+    if (state.siteInfoOpen) closeSiteInfoPopover();
+    else openSiteInfoPopover();
+  }
+
+  function loadSiteUsageSummary() {
+    if (!api.webData || typeof api.webData.usage !== 'function' || !el.siteInfoUsageText) return;
+    api.webData.usage().then(function (res) {
+      if (!res || !res.ok || !res.usage) {
+        el.siteInfoUsageText.textContent = 'Usage unavailable.';
+        return;
+      }
+      var u = res.usage || {};
+      el.siteInfoUsageText.textContent = 'Total profile storage: ' + formatByteSize(u.totalBytes || 0);
+    }).catch(function () {
+      el.siteInfoUsageText.textContent = 'Usage unavailable.';
+    });
+  }
+
+  function clearCurrentSiteData() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webData || typeof api.webData.clear !== 'function') return;
+    api.webData.clear({
+      from: 0,
+      to: Date.now(),
+      kinds: ['cookies', 'siteData'],
+      origin: origin
+    }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to clear site data');
+        return;
+      }
+      showToast('Site data cleared');
+      loadSiteUsageSummary();
+      loadDataUsage();
+    }).catch(function () {
+      showToast('Failed to clear site data');
+    });
+  }
+
+  function resetPermissionsForCurrentSite() {
+    var origin = getActiveSiteOrigin();
+    if (!origin) {
+      showToast('No site is active');
+      return;
+    }
+    if (!api.webPermissions || typeof api.webPermissions.reset !== 'function') return;
+    api.webPermissions.reset({ origin: origin }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast('Failed to reset permissions');
+        return;
+      }
+      showToast('Permissions reset for site');
+      loadPermissions();
+      renderSiteInfoPopover();
+    }).catch(function () {
+      showToast('Failed to reset permissions');
+    });
+  }
+
   function clearSelectedBrowsingData() {
     if (!api.webData || typeof api.webData.clear !== 'function') return;
     var kinds = [];
@@ -4383,6 +4550,7 @@
         return ao.localeCompare(bo);
       });
       renderPermissions();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
     }).catch(function () {});
   }
 
@@ -4436,6 +4604,7 @@
       state.adblock.listUpdatedAt = Number(res.listUpdatedAt || 0) || 0;
       if (el.hubAdblockEnabled) el.hubAdblockEnabled.checked = !!state.adblock.enabled;
       renderAdblockInfo();
+      if (state.siteInfoOpen) renderSiteInfoPopover();
     }).catch(function () {});
   }
 
@@ -4848,6 +5017,7 @@
     else el.urlDisplay.textContent = u;
     setOmniIconForUrl(u);
     updateBookmarkButton();
+    if (state.siteInfoOpen) renderSiteInfoPopover();
   }
 
   // MERIDIAN_SPLIT: Split view (BUILD_WCV: uses bounds-based split instead of DOM)
@@ -5496,6 +5666,10 @@
           e.dataTransfer.effectAllowed = 'copyLink';
         } catch (err) {}
       });
+      el.omniIcon.addEventListener('click', function (e) {
+        try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
+        toggleSiteInfoPopover();
+      });
     }
 
     // Chrome-ish omnibox behavior
@@ -6126,6 +6300,54 @@
         openBrowser(src);
       });
     }
+
+
+    if (el.siteInfoUsageBtn) {
+      el.siteInfoUsageBtn.onclick = function () {
+        loadSiteUsageSummary();
+      };
+    }
+
+    if (el.siteInfoClearDataBtn) {
+      el.siteInfoClearDataBtn.onclick = function () {
+        clearCurrentSiteData();
+      };
+    }
+
+    if (el.siteInfoResetPermsBtn) {
+      el.siteInfoResetPermsBtn.onclick = function () {
+        resetPermissionsForCurrentSite();
+      };
+    }
+
+    if (el.siteInfoPermissions) {
+      el.siteInfoPermissions.addEventListener('change', function (evt) {
+        var t = evt && evt.target ? evt.target : null;
+        if (!t || !t.matches || !t.matches('input[data-site-perm]')) return;
+        var permission = String(t.getAttribute('data-site-perm') || '').trim();
+        var origin = getActiveSiteOrigin();
+        if (!permission || !origin || !api.webPermissions || !api.webPermissions.set) return;
+        api.webPermissions.set({
+          origin: origin,
+          permission: permission,
+          decision: t.checked ? 'allow' : 'ask'
+        }).then(function (res) {
+          if (!res || !res.ok) showToast('Failed to update permission');
+          loadPermissions();
+        }).catch(function () {
+          showToast('Failed to update permission');
+        });
+      });
+    }
+
+    document.addEventListener('click', function (evt) {
+      if (!state.siteInfoOpen) return;
+      var t = evt && evt.target ? evt.target : null;
+      if (!t) return;
+      var insidePopover = el.siteInfoPopover && el.siteInfoPopover.contains && el.siteInfoPopover.contains(t);
+      var insideIcon = el.omniIcon && el.omniIcon.contains && el.omniIcon.contains(t);
+      if (!insidePopover && !insideIcon) closeSiteInfoPopover();
+    });
 
     if (el.hubDataUsageBtn) {
       el.hubDataUsageBtn.onclick = function () {

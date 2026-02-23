@@ -55,6 +55,14 @@ async function clear(ctx, _evt, payload) {
   var kinds = normalizeKinds(payload);
   var from = Number(payload && payload.from || 0) || 0;
   var to = Number(payload && payload.to || Date.now()) || Date.now();
+  var rawOrigin = String(payload && payload.origin || '').trim();
+  var clearOrigin = '';
+  if (rawOrigin) {
+    try {
+      var u = new URL(rawOrigin);
+      if (/^https?:$/i.test(String(u.protocol || ''))) clearOrigin = String(u.origin || '');
+    } catch {}
+  }
   var cleared = {};
 
   if (kinds.has('history')) {
@@ -104,7 +112,7 @@ async function clear(ctx, _evt, payload) {
         await ses.clearStorageData({
           storages: ['cookies', 'localstorage', 'indexeddb', 'serviceworkers', 'filesystem'],
           quotas: ['temporary', 'persistent', 'syncable'],
-          origin: '',
+          origin: clearOrigin,
         });
         cleared.siteData = true;
       }
