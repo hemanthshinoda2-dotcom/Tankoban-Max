@@ -489,6 +489,65 @@
       showRecord(rightRec, leftW, rightW, 2);
     }
 
+    // ── Webview page context menu builder ──
+    function buildWebviewContextMenu(tabId, wv, params) {
+      var items = [];
+      var parentTab = getTabByMainId(tabId);
+      var linkUrl = String(params.linkURL || '').trim();
+      var srcUrl = String(params.srcURL || '').trim();
+      var selText = String(params.selectionText || '').trim();
+      var isEditable = !!params.isEditable;
+      var mediaType = String(params.mediaType || '').toLowerCase();
+
+      // Navigation
+      var canBack = false;
+      var canFwd = false;
+      try { canBack = wv.canGoBack(); } catch (e) {}
+      try { canFwd = wv.canGoForward(); } catch (e) {}
+      items.push({ label: 'Back', disabled: !canBack, onClick: function () { try { wv.goBack(); } catch (e) {} } });
+      items.push({ label: 'Forward', disabled: !canFwd, onClick: function () { try { wv.goForward(); } catch (e) {} } });
+      items.push({ label: 'Reload', onClick: function () { try { wv.reload(); } catch (e) {} } });
+      items.push({ separator: true });
+
+      // Link actions
+      if (linkUrl) {
+        items.push({ label: 'Open link in new tab', onClick: function () { routePopupUrl(linkUrl, parentTab, safeUrl(wv)); } });
+        items.push({ label: 'Copy link address', onClick: function () { copyText(linkUrl); showToast('Copied'); } });
+        items.push({ separator: true });
+      }
+
+      // Image actions
+      if (mediaType === 'image' && srcUrl) {
+        items.push({ label: 'Save image as\u2026', onClick: function () {
+          if (api && api.webSources && api.webSources.downloadFromUrl) {
+            api.webSources.downloadFromUrl({ url: srcUrl, referer: safeUrl(wv) });
+          }
+        } });
+        items.push({ label: 'Copy image address', onClick: function () { copyText(srcUrl); showToast('Copied'); } });
+        items.push({ separator: true });
+      }
+
+      // Text selection / editing
+      if (selText) {
+        items.push({ label: 'Copy', onClick: function () { try { wv.copy(); } catch (e) { copyText(selText); } } });
+      }
+      if (isEditable) {
+        items.push({ label: 'Paste', onClick: function () { try { wv.paste(); } catch (e) {} } });
+        items.push({ label: 'Cut', onClick: function () { try { wv.cut(); } catch (e) {} } });
+        items.push({ label: 'Select all', onClick: function () { try { wv.selectAll(); } catch (e) {} } });
+      }
+      if (selText || isEditable) {
+        items.push({ separator: true });
+      }
+
+      // Inspect element (always last)
+      items.push({ label: 'Inspect element', onClick: function () {
+        try { wv.inspectElement(params.x || 0, params.y || 0); } catch (e) {}
+      } });
+
+      return items;
+    }
+
     function bindWebview(tabId, wv) {
       wv.addEventListener('did-start-loading', function () {
         emit('loading', { tabId: tabId, loading: true });
@@ -557,6 +616,20 @@
             finalUpdate: !!result.finalUpdate
           }
         });
+      });
+
+      // Page context menu (right-click on webpage content)
+      wv.addEventListener('context-menu', function (ev) {
+        // Prevent native Chromium context menu from appearing
+        try { ev.preventDefault(); } catch (e) {}
+        var params = ev && ev.params ? ev.params : {};
+        var items = buildWebviewContextMenu(tabId, wv, params);
+        if (!items.length) return;
+        // Offset webview-relative coords to viewport coords
+        var rect = wv.getBoundingClientRect();
+        var vx = (params.x || 0) + rect.left;
+        var vy = (params.y || 0) + rect.top;
+        showContextMenu(items, vx, vy);
       });
     }
 
