@@ -1642,6 +1642,9 @@ COMMON ANCHORS
             <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M11 1L4 8l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Library
           </button>
+          <button id="webTabOverflowBtn" class="webTabOverflowBtn hidden" type="button" title="Show hidden tabs" aria-label="Show hidden tabs">
+            <span aria-hidden="true">&#187;</span>
+          </button>
           <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
           <div class="winControls">
             <button id="webWinMinBtn" class="winCtrl" title="Minimize" aria-label="Minimize">
@@ -1712,6 +1715,13 @@ COMMON ANCHORS
 
         <!-- Load bar (thin accent line) -->
         <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
+
+        <div id="webTabQuickPanel" class="webTabQuickPanel hidden" role="dialog" aria-modal="true" aria-label="Search open tabs">
+          <div class="webTabQuickPanelCard">
+            <input id="webTabQuickSearch" class="webTabQuickSearch" type="text" placeholder="Search tabs" autocomplete="off" spellcheck="false" aria-label="Search tabs" />
+            <div id="webTabQuickList" class="webTabQuickList" role="listbox" aria-label="Matching tabs"></div>
+          </div>
+        </div>
 
         <!-- Content area (relative wrapper for floating find bar) -->
         <div class="webContentArea">
@@ -2069,5 +2079,4 @@ COMMON ANCHORS
   <script src="./ui/command_palette.js"></script>
 </body>
 </html>
-
 

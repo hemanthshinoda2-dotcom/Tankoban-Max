@@ -7163,6 +7163,14 @@ async function openVideo(v, opts = {}) {
         ? 'user_pref_qt'
         : 'default_embedded';
 
+  const allowNoFrameQtFallback = (opts && typeof opts === 'object' && typeof opts.allowNoFrameQtFallback === 'boolean')
+    ? opts.allowNoFrameQtFallback
+    // Keep watchdog fallback active on default embedded path; force-embedded intentionally opts out.
+    : !explicitEmbedded;
+  const openOpts = (opts && typeof opts === 'object')
+    ? { ...opts, allowNoFrameQtFallback }
+    : { allowNoFrameQtFallback };
+
   const canHolyGrail = !!(!forceQt
     && state.holyGrailAvailable
     && api
@@ -7176,7 +7184,7 @@ async function openVideo(v, opts = {}) {
     document.body.classList.remove('mpvEngine');
     document.body.classList.remove('mpvDetached');
     const routeReason = forceQt ? requestedReason : 'probe_failed';
-    const qtOpts = (opts && typeof opts === 'object') ? { ...opts, _routeReason: routeReason } : { _routeReason: routeReason };
+    const qtOpts = { ...openOpts, _routeReason: routeReason };
     return openVideoQtFallback(v, qtOpts);
   }
 
@@ -7188,7 +7196,7 @@ async function openVideo(v, opts = {}) {
   const player = ensurePlayer();
   if (!player) {
     const initReason = state._lastEnsurePlayerError ? `init_failed:${state._lastEnsurePlayerError}` : 'init_failed';
-    const qtOpts = (opts && typeof opts === 'object') ? { ...opts, _routeReason: initReason } : { _routeReason: initReason };
+    const qtOpts = { ...openOpts, _routeReason: initReason };
     return openVideoQtFallback(v, qtOpts);
   }
 
@@ -7262,14 +7270,12 @@ async function openVideo(v, opts = {}) {
     document.body.classList.remove('inVideoPlayer');
     document.body.classList.remove('mpvEngine');
     document.body.classList.remove('mpvDetached');
-    const qtOpts = (opts && typeof opts === 'object')
-      ? { ...opts, _routeReason: `load_failed:${err}` }
-      : { _routeReason: `load_failed:${err}` };
+    const qtOpts = { ...openOpts, _routeReason: `load_failed:${err}` };
     return openVideoQtFallback(v, qtOpts);
   }
 
   setActivePlayerEngine('embedded', explicitEmbedded ? 'explicit_embedded' : 'default_embedded');
-  armEmbeddedFirstFrameWatch(v, opts, player);
+  armEmbeddedFirstFrameWatch(v, openOpts, player);
 
   applySettingsToPlayer();
   // Don't flash the HUD with 0:00 / 0:00 while the resume seek is in flight.
