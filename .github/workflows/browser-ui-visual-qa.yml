@@ -1,0 +1,32 @@
+name: Browser UI Visual QA
+
+on:
+  pull_request:
+    paths:
+      - 'src/domains/web/**'
+      - 'src/styles/web-browser.css'
+      - 'src/index.html'
+      - 'tools/browser_visual_qa_fixture.html'
+      - 'tools/visual-qa/**'
+      - 'qa/visual/browser-ui/**'
+      - 'package.json'
+
+jobs:
+  visual-qa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install system deps for Electron capture
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgtk-3-0 libatk1.0-0 libnss3 libxss1 libasound2t64
+      - name: Capture current screenshots
+        run: xvfb-run -a npm run visual:browser:capture
+      - name: Compare with baseline
+        run: npm run visual:browser:compare

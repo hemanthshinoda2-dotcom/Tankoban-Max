@@ -23,7 +23,11 @@
         "validate:player": "node tools/validate_player_artifacts.js",
         "build:holy-grail": "tools\\build_holy_grail.bat",
         "validate:holy-grail": "node tools/validate_holy_grail_artifacts.js",
-        "release:prep": "npm run build:player && npm run validate:player && npm run build:holy-grail && npm run validate:holy-grail"
+        "release:prep": "npm run build:player && npm run validate:player && npm run build:holy-grail && npm run validate:holy-grail",
+        "visual:browser:baseline": "electron tools/visual-qa/browser_ui_visual_qa.js capture-baseline",
+        "visual:browser:capture": "electron tools/visual-qa/browser_ui_visual_qa.js capture-current",
+        "visual:browser:compare": "node tools/visual-qa/browser_ui_compare.js",
+        "visual:browser:ci": "npm run visual:browser:capture && npm run visual:browser:compare"
     },
     "devDependencies": {
         "electron": "^40.6.0",
