@@ -162,6 +162,67 @@
     brave: SEARCH_ENGINES.brave.url
   };
 
+  function parseRuntimeDebugFlag(raw) {
+    if (raw == null) return null;
+    var v = String(raw).trim().toLowerCase();
+    if (!v) return null;
+    if (v === '1' || v === 'true' || v === 'yes' || v === 'on' || v === 'debug') return true;
+    if (v === '0' || v === 'false' || v === 'no' || v === 'off') return false;
+    return null;
+  }
+
+  function resolveRuntimeWebDebugFlag() {
+    var parsed = null;
+    try {
+      if (window && window.Tanko && window.Tanko.config) {
+        if (window.Tanko.config.webDebug !== undefined) {
+          parsed = parseRuntimeDebugFlag(window.Tanko.config.webDebug);
+          if (parsed != null) return parsed;
+        }
+        if (window.Tanko.config.debugWeb !== undefined) {
+          parsed = parseRuntimeDebugFlag(window.Tanko.config.debugWeb);
+          if (parsed != null) return parsed;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      if (window && window.__TANKO_WEB_DEBUG__ !== undefined) {
+        parsed = parseRuntimeDebugFlag(window.__TANKO_WEB_DEBUG__);
+        if (parsed != null) return parsed;
+      }
+    } catch (e2) {}
+
+    try {
+      var params = new URLSearchParams((window && window.location && window.location.search) || '');
+      if (params.has('webDebug')) {
+        parsed = parseRuntimeDebugFlag(params.get('webDebug'));
+        if (parsed != null) return parsed;
+      }
+    } catch (e3) {}
+
+    try {
+      if (window && window.localStorage) {
+        parsed = parseRuntimeDebugFlag(window.localStorage.getItem('tanko:webDebug'));
+        if (parsed != null) return parsed;
+      }
+    } catch (e4) {}
+
+    return false;
+  }
+
+  var WEB_RUNTIME_DEBUG = resolveRuntimeWebDebugFlag();
+
+  function logWebDebug(msg) {
+    if (!WEB_RUNTIME_DEBUG) return;
+    try { console.log(msg); } catch (e) {}
+  }
+
+  function logWebDebugWithArgs() {
+    if (!WEB_RUNTIME_DEBUG) return;
+    try { console.log.apply(console, arguments); } catch (e) {}
+  }
+
   // CHROMIUM_PARITY: Reload/Stop toggle SVGs
   var SVG_RELOAD = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 1 1 1.3 3.5"/><path d="M2 5v3.5H5.5" stroke-width="1.4"/></svg>';
   var SVG_STOP = '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/></svg>';
@@ -486,13 +547,13 @@
 
   function routePopupUrl(target, parentTab, referer) {
     var url = normalizePopupUrl(target);
-    console.log('[DIAG:route] routePopupUrl target=' + target + ' normalized=' + url + ' parentTab=' + (parentTab && parentTab.id));
+    logWebDebug('[DIAG:route] routePopupUrl target=' + target + ' normalized=' + url + ' parentTab=' + (parentTab && parentTab.id));
     if (!url) return false;
     var dedupKey = canonicalPopupDedupKey(url, parentTab || null);
-    if (shouldSkipDuplicatePopup(dedupKey)) { console.log('[DIAG:route] DEDUP skip'); return true; }
-    if (maybeStartTorrentFromUrl(url, referer || '')) { console.log('[DIAG:route] torrent intercept'); return true; }
+    if (shouldSkipDuplicatePopup(dedupKey)) { logWebDebug('[DIAG:route] DEDUP skip'); return true; }
+    if (maybeStartTorrentFromUrl(url, referer || '')) { logWebDebug('[DIAG:route] torrent intercept'); return true; }
     var navResult = navigateUrlInTab(parentTab || getActiveTab(), url);
-    console.log('[DIAG:route] navigateUrlInTab returned ' + navResult);
+    logWebDebug('[DIAG:route] navigateUrlInTab returned ' + navResult);
     return navResult;
   }
 
@@ -876,16 +937,16 @@
 
       // DIAG: Forward guest-page console logs (incl. preload) to host console
       wv.addEventListener('console-message', function (ev) {
+        if (!WEB_RUNTIME_DEBUG) return;
         var msg = ev && ev.message ? String(ev.message) : '';
         if (msg.indexOf('[DIAG') === 0 || msg.indexOf('[POPUP') === 0) {
-          console.log('[guest:' + tabId + '] ' + msg);
+          logWebDebug('[guest:' + tabId + '] ' + msg);
         }
       });
 
       wv.addEventListener('will-navigate', function (ev) {
         var target = String((ev && ev.url) || '').trim();
-        console.log('[DIAG:webview] will-navigate:', target);
-        showToast('[DIAG] will-navigate: ' + (target || '(empty)').substring(0, 60));
+        logWebDebugWithArgs('[DIAG:webview] will-navigate:', target);
         if (!target) return;
         if (maybeStartTorrentFromUrl(target, safeUrl(wv))) {
           try { ev.preventDefault(); } catch (e) {}
@@ -895,8 +956,7 @@
 
       wv.addEventListener('new-window', function (ev) {
         var target = String((ev && ev.url) || '').trim();
-        console.log('[DIAG:webview] new-window:', target);
-        showToast('[DIAG] new-window: ' + (target || '(empty)').substring(0, 60));
+        logWebDebugWithArgs('[DIAG:webview] new-window:', target);
         if (!target) return;
         try { ev.preventDefault(); } catch (e) {}
         routePopupFromMainTab(tabId, target, safeUrl(wv));
@@ -906,8 +966,7 @@
         if (!ev || ev.channel !== WEBVIEW_POPUP_BRIDGE_CHANNEL) return;
         var payload = (ev.args && ev.args.length) ? ev.args[0] : null;
         var target = payload && payload.url ? String(payload.url) : '';
-        console.log('[DIAG:webview] ipc-message popup-bridge:', target, 'reason:', payload && payload.reason);
-        showToast('[DIAG] ipc-msg: ' + (target || '(empty)').substring(0, 60));
+        logWebDebugWithArgs('[DIAG:webview] ipc-message popup-bridge:', target, 'reason:', payload && payload.reason);
         if (!target) return;
         routePopupFromMainTab(tabId, target, safeUrl(wv));
       });
@@ -943,11 +1002,13 @@
         }, 'webview:' + String(tabId));
         var items = buildWebviewContextMenu(tabId, wv, params);
         if (!items.length) return;
-        // DIAG: add coords as visible item so user can screenshot it
-        items.unshift({
-          label: 'px=' + (params.x|0) + ',' + (params.y|0) + ' rect=' + (rect.left|0) + ',' + (rect.top|0) + ' dpr=' + dpr,
-          disabled: true
-        });
+        if (WEB_RUNTIME_DEBUG) {
+          // DIAG: add coords as visible item so user can screenshot it
+          items.unshift({
+            label: 'px=' + (params.x|0) + ',' + (params.y|0) + ' rect=' + (rect.left|0) + ',' + (rect.top|0) + ' dpr=' + dpr,
+            disabled: true
+          });
+        }
         // Use raw (no DPR correction) — if dpr>1, try dpr-corrected
         var useVx = dpr > 1 ? dprVx : rawVx;
         var useVy = dpr > 1 ? dprVy : rawVy;
