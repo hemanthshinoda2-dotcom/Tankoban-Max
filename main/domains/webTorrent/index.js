@@ -595,14 +595,31 @@ async function selectFiles(ctx, _evt, payload) {
 
   if (!torrent.files || !torrent.files.length) return { ok: false, error: 'No files in torrent' };
 
+  var sequential = !!(payload && payload.sequential);
+  entry.sequential = sequential;
+
+  // Build priority-ordered list of selected file indices
+  var selectedFiles = [];
   for (var i = 0; i < torrent.files.length; i++) {
     if (selectedSet.has(i)) {
-      try { torrent.files[i].select(); } catch {}
+      selectedFiles.push(i);
       if (entry.files && entry.files[i]) entry.files[i].selected = true;
     } else {
       try { torrent.files[i].deselect(); } catch {}
       if (entry.files && entry.files[i]) entry.files[i].selected = false;
     }
+  }
+
+  // Select files — if sequential, assign descending priority so first file downloads first
+  for (var si = 0; si < selectedFiles.length; si++) {
+    var fileIdx = selectedFiles[si];
+    try {
+      if (sequential) {
+        torrent.files[fileIdx].select(selectedFiles.length - si);
+      } else {
+        torrent.files[fileIdx].select();
+      }
+    } catch {}
   }
 
   // If we were in metadata_ready state and now have a destination + files, start downloading

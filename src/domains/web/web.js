@@ -128,7 +128,10 @@
     hubAdblockEnabled: qs('webHubAdblockEnabled'),
     hubAdblockUpdateBtn: qs('webHubAdblockUpdateBtn'),
     hubAdblockStatsBtn: qs('webHubAdblockStatsBtn'),
-    hubAdblockInfo: qs('webHubAdblockInfo')
+    hubAdblockInfo: qs('webHubAdblockInfo'),
+    // Torrent tab panel
+    torrentPanel: qs('webTorrentPanel'),
+    torrentPanelInner: qs('webTorrentPanelInner')
   };
 
   var MAX_TABS = 8;
@@ -186,6 +189,7 @@
     browseSearchTimer: null,
     torrentActive: [],
     torrentHistory: [],
+    torrentTabEntries: {},  // tabId -> latest torrent entry snapshot
     closedTabs: [],
     restoreLastSession: true,
     sessionRestoreInProgress: false,
@@ -222,31 +226,74 @@
     }
   }
 
+  // ── Torrent tab creation ──
+
+  function createTorrentTab(torrentId, magnetOrUrl) {
+    if (state.tabs.length >= MAX_TABS) {
+      showToast('Tab limit reached');
+      return null;
+    }
+    var tabId = state.nextTabId++;
+    var tab = {
+      id: tabId,
+      type: 'torrent',
+      torrentId: String(torrentId || ''),
+      sourceId: null,
+      sourceName: 'Torrent',
+      title: 'Resolving...',
+      url: String(magnetOrUrl || ''),
+      homeUrl: '',
+      mainTabId: null,
+      loading: false,
+      canGoBack: false,
+      canGoForward: false,
+      pinned: false
+    };
+    state.tabs.push(tab);
+    state.activeTabId = tabId;
+    state.showBrowserHome = false;
+    state.torrentTabEntries[tabId] = null; // will be filled by onMetadata / refreshTorrentState
+    renderTabs();
+    renderBrowserHome();
+    renderContinue();
+    updateNavButtons();
+    updateUrlDisplay();
+    scheduleSessionSave();
+    // Immediately hide WebContentsViews and show torrent panel
+    webTabs.hideAll().catch(function () {});
+    if (el.torrentPanel) el.torrentPanel.classList.remove('hidden');
+    if (el.browserHomePanel) el.browserHomePanel.classList.add('hidden');
+    if (el.viewContainer) el.viewContainer.classList.add('hidden');
+    renderTorrentTab(tab);
+    return tab;
+  }
+
+  function findTorrentTabByTorrentId(torrentId) {
+    var tid = String(torrentId || '');
+    if (!tid) return null;
+    for (var i = 0; i < state.tabs.length; i++) {
+      if (state.tabs[i] && state.tabs[i].type === 'torrent' && state.tabs[i].torrentId === tid) return state.tabs[i];
+    }
+    return null;
+  }
+
   function maybeStartTorrentFromUrl(url, referer) {
     var target = String(url || '').trim();
-    if (!target || !api || !api.webTorrent || !api.webSources || !api.webSources.pickDestinationFolder) return false;
+    if (!target || !api || !api.webTorrent) return false;
 
     if (isMagnetUrl(target)) {
       try {
-        api.webSources.pickDestinationFolder({
-          kind: 'torrent',
-          suggestedFilename: 'magnet',
-          modeHint: 'videos',
-        }).then(function (picked) {
-          if (!picked || !picked.ok) {
-            if (picked && !picked.cancelled) showToast(String(picked.error || 'Destination not selected'));
-            return null;
-          }
-          return api.webTorrent.startMagnet({
-            magnetUri: target,
-            referer: String(referer || ''),
-            destinationRoot: String(picked.folderPath || ''),
-          });
+        api.webTorrent.startMagnet({
+          magnetUri: target,
+          referer: String(referer || ''),
         }).then(function (res) {
           if (!res) return;
-          if (res && res.ok) showToast('Torrent started');
-          else showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
-          refreshTorrentState();
+          if (res && res.ok) {
+            createTorrentTab(res.id, target);
+            refreshTorrentState();
+          } else {
+            showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
+          }
         }).catch(function () {
           showToast('Failed to start torrent');
         });
@@ -258,35 +305,17 @@
 
     if (isTorrentFileUrl(target)) {
       try {
-        var nameHint = 'torrent';
-        try {
-          var _u = new URL(target);
-          var _p = String(_u.pathname || '').trim();
-          if (_p) {
-            var _parts = _p.split('/');
-            nameHint = decodeURIComponent(_parts[_parts.length - 1] || 'torrent');
-          }
-        } catch (e0) {}
-
-        api.webSources.pickDestinationFolder({
-          kind: 'torrent',
-          suggestedFilename: nameHint,
-          modeHint: 'videos',
-        }).then(function (picked) {
-          if (!picked || !picked.ok) {
-            if (picked && !picked.cancelled) showToast(String(picked.error || 'Destination not selected'));
-            return null;
-          }
-          return api.webTorrent.startTorrentUrl({
-            url: target,
-            referer: String(referer || ''),
-            destinationRoot: String(picked.folderPath || ''),
-          });
+        api.webTorrent.startTorrentUrl({
+          url: target,
+          referer: String(referer || ''),
         }).then(function (res) {
           if (!res) return;
-          if (res && res.ok) showToast('Torrent started');
-          else showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
-          refreshTorrentState();
+          if (res && res.ok) {
+            createTorrentTab(res.id, target);
+            refreshTorrentState();
+          } else {
+            showToast((res && res.error) ? String(res.error) : 'Failed to start torrent');
+          }
         }).catch(function () {
           showToast('Failed to start torrent');
         });
@@ -848,6 +877,7 @@
 
   function snapshotTabForSession(tab) {
     if (!tab) return null;
+    if (tab.type === 'torrent') return null; // torrent tabs are transient, don't persist
     var url = String(tab.url || '').trim();
     if (!url) return null;
     return {
@@ -1433,9 +1463,20 @@
       el.browserHomeGrid.appendChild(card);
     }
 
-    var show = !!state.showBrowserHome;
-    el.browserHomePanel.classList.toggle('hidden', !show);
-    if (el.viewContainer) el.viewContainer.classList.toggle('hidden', show);
+    // Three-way content toggle: home panel / torrent panel / webview container
+    var activeTab = getActiveTab();
+    var showHome = !!state.showBrowserHome;
+    var showTorrent = !showHome && activeTab && activeTab.type === 'torrent';
+    var showWebview = !showHome && !showTorrent;
+
+    el.browserHomePanel.classList.toggle('hidden', !showHome);
+    if (el.torrentPanel) el.torrentPanel.classList.toggle('hidden', !showTorrent);
+    if (el.viewContainer) el.viewContainer.classList.toggle('hidden', !showWebview);
+
+    // WebContentsViews render ON TOP of DOM — must hide them when showing DOM panels
+    if (showHome || showTorrent) {
+      webTabs.hideAll().catch(function () {});
+    }
   }
 
   function makeContinueTile(tab) {
@@ -1636,9 +1677,21 @@
     for (var i = 0; i < state.tabs.length; i++) {
       var t = state.tabs[i];
       var active = (t.id === state.activeTabId);
+      var isTorrent = t.type === 'torrent';
       var loadingClass = t.loading ? ' loading' : '';
-      var favSrc = getFaviconUrl(t.url || t.homeUrl || '');
-      var favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
+      var favSrc = isTorrent ? '' : getFaviconUrl(t.url || t.homeUrl || '');
+      var favHtml;
+      if (isTorrent) {
+        var torrentEntry = state.torrentTabEntries[t.id];
+        var torrentState = torrentEntry ? String(torrentEntry.state || '') : 'resolving_metadata';
+        if (torrentState === 'resolving_metadata') {
+          favHtml = '<span class="webTabFaviconFallback" style="font-size:11px" aria-hidden="true">&#8635;</span>';
+        } else {
+          favHtml = '<span class="webTabFaviconFallback" style="font-size:11px" aria-hidden="true">&#9901;</span>';
+        }
+      } else {
+        favHtml = favSrc ? ('<img class="webTabFaviconImg" src="' + escapeHtml(favSrc) + '" referrerpolicy="no-referrer" />') : '<span class="webTabFaviconFallback" aria-hidden="true"></span>';
+      }
       html += '<div class="webTab' + (active ? ' active' : '') + loadingClass + '" data-tab-id="' + t.id + '" role="tab" aria-selected="' + (active ? 'true' : 'false') + '" draggable="true">' +
         favHtml +
         '<span class="webTabLabel">' + escapeHtml(t.title || t.sourceName || 'Tab') + '</span>' +
@@ -1707,20 +1760,22 @@
         items.push({ label: 'New tab', onClick: function () {
           openTabPicker();
         } });
-        items.push({ label: 'Duplicate tab', onClick: function () {
-          createTab({
-            id: t.sourceId || ('dup_' + Date.now()),
-            name: t.sourceName || siteNameFromUrl(t.url || t.homeUrl || '') || 'Tab',
-            url: t.homeUrl || t.url || 'about:blank',
-            color: getSourceColor(t.sourceId)
-          }, t.url || t.homeUrl || 'about:blank', {
-            titleOverride: t.title || '',
-            silentToast: true
-          });
-        } });
-        items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
-        items.push({ separator: true });
-        items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
+        if (t.type !== 'torrent') {
+          items.push({ label: 'Duplicate tab', onClick: function () {
+            createTab({
+              id: t.sourceId || ('dup_' + Date.now()),
+              name: t.sourceName || siteNameFromUrl(t.url || t.homeUrl || '') || 'Tab',
+              url: t.homeUrl || t.url || 'about:blank',
+              color: getSourceColor(t.sourceId)
+            }, t.url || t.homeUrl || 'about:blank', {
+              titleOverride: t.title || '',
+              silentToast: true
+            });
+          } });
+          items.push({ label: 'Reload', onClick: function () { if (state.activeTabId !== id) activateTab(id); if (t.mainTabId) webTabs.navigate({ tabId: t.mainTabId, action: 'reload' }).catch(function () {}); } });
+          items.push({ separator: true });
+          items.push({ label: 'Copy address', onClick: function () { copyText(t.url || ''); showToast('Copied'); } });
+        }
         items.push({ separator: true });
         items.push({ label: 'Close tab', onClick: function () { closeTab(id); } });
         items.push({ label: 'Close other tabs', onClick: function () {
@@ -2138,6 +2193,481 @@
     return s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'in_progress';
   }
 
+  // ── Torrent tab rendering ──
+
+  function renderTorrentTab(tab) {
+    if (!tab || tab.type !== 'torrent' || !el.torrentPanelInner) return;
+    var entry = state.torrentTabEntries[tab.id];
+    var torrentState = entry ? String(entry.state || '') : 'resolving_metadata';
+    var html = '';
+
+    if (torrentState === 'resolving_metadata') {
+      var hash = String(tab.url || '');
+      try { hash = new URL(tab.url).searchParams.get('xt') || tab.url; } catch (e) {}
+      html = '<div class="wtResolving">' +
+        '<div class="wtResolvingSpinner"></div>' +
+        '<div>Resolving torrent metadata...</div>' +
+        '<div class="wtResolvingHash">' + escapeHtml(hash) + '</div>' +
+        '</div>';
+    } else if (torrentState === 'metadata_ready') {
+      html = renderTorrentMetadataReady(tab, entry);
+    } else if (torrentState === 'downloading' || torrentState === 'paused') {
+      html = renderTorrentDownloading(tab, entry);
+    } else if (torrentState === 'completed' || torrentState === 'completed_pending' || torrentState === 'completed_with_errors') {
+      html = renderTorrentCompleted(tab, entry);
+    } else if (torrentState === 'error') {
+      html = '<div class="wtHeader"><div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div></div>' +
+        '<div class="wtMeta"><span style="color:#e57373">Error: ' + escapeHtml(entry.error || 'Unknown error') + '</span></div>' +
+        '<div class="wtActions"><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    } else {
+      html = '<div class="wtResolving"><div>Status: ' + escapeHtml(torrentState) + '</div></div>';
+    }
+
+    el.torrentPanelInner.innerHTML = html;
+    bindTorrentTabEvents(tab);
+  }
+
+  function renderTorrentMetadataReady(tab, entry) {
+    var files = entry.files || [];
+    var totalSize = 0;
+    var selectedCount = 0;
+    for (var i = 0; i < files.length; i++) {
+      totalSize += Number(files[i].length || 0);
+      if (files[i].selected !== false) selectedCount++;
+    }
+
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta">' +
+        '<span>' + files.length + ' file' + (files.length !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(totalSize) + '</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+      '</div></div>';
+
+    // File tree
+    html += '<div class="wtFileTree">';
+    html += buildFileTreeHtml(files, true);
+    html += '</div>';
+
+    // Sequential download toggle
+    html += '<label class="wtSequential"><input type="checkbox" id="wtSequentialCheck" /> Download in sequential order (for streaming)</label>';
+
+    // Save path — qBittorrent-style: path display + Browse button + mode shortcuts
+    html += '<div class="wtDestSection">';
+    html += '<div class="wtDestLabel">Save to</div>';
+    html += '<div class="wtSavePath">' +
+      '<span class="wtSavePathText" id="wtSavePathText">' + escapeHtml(_wtDestState.selectedPath || 'No folder selected') + '</span>' +
+      '<button class="wtBtn" data-wt-action="browse" style="padding:4px 12px;font-size:12px">Browse...</button>' +
+      '</div>';
+    html += '<div class="wtDestModes">';
+    var modes = ['videos', 'comics', 'books'];
+    for (var m = 0; m < modes.length; m++) {
+      var active = _wtDestState.mode === modes[m];
+      html += '<button class="wtDestModeBtn' + (active ? ' active' : '') + '" data-wt-dest-mode="' + modes[m] + '">' +
+        modes[m].charAt(0).toUpperCase() + modes[m].slice(1) + '</button>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Actions
+    html += '<div class="wtActions">' +
+      '<button class="wtBtn primary" data-wt-action="start" id="wtStartBtn">Start Download</button>' +
+      '<button class="wtBtn" data-wt-action="cancel">Cancel</button>' +
+      '</div>';
+
+    return html;
+  }
+
+  function renderTorrentDownloading(tab, entry) {
+    var pct = Math.round((entry.progress || 0) * 100);
+    var speedText = formatBytes(entry.downloadRate || 0) + '/s';
+    var isPaused = entry.state === 'paused';
+
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName">' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta">' +
+        '<span>' + pct + '%</span>' +
+        '<span>' + speedText + '</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(entry.downloaded || 0) + ' / ' + formatBytes(entry.totalSize || 0) + '</span>' +
+        (isPaused ? '<span style="color:var(--vx-accent,rgba(var(--chrome-rgb),.55))">Paused</span>' : '') +
+      '</div></div>';
+
+    // Overall progress bar
+    html += '<div class="wtProgressWrap"><div class="wtProgressFill" style="width:' + pct + '%"></div></div>';
+
+    // File tree with per-file progress (not editable)
+    var files = entry.files || [];
+    html += '<div class="wtFileTree">';
+    html += buildFileTreeHtml(files, false);
+    html += '</div>';
+
+    // Actions
+    html += '<div class="wtActions">';
+    if (isPaused) {
+      html += '<button class="wtBtn primary" data-wt-action="resume">Resume</button>';
+    } else {
+      html += '<button class="wtBtn" data-wt-action="pause">Pause</button>';
+    }
+    html += '<button class="wtBtn" data-wt-action="cancel">Cancel</button>';
+    html += '</div>';
+
+    return html;
+  }
+
+  function renderTorrentCompleted(tab, entry) {
+    var html = '<div class="wtHeader">' +
+      '<div class="wtName"><span class="wtCompleteIcon">&#10003;</span>' + escapeHtml(entry.name || 'Torrent') + '</div>' +
+      '<div class="wtMeta"><span>Complete!</span><span>' + formatBytes(entry.totalSize || entry.downloaded || 0) + '</span></div>' +
+      '</div>';
+
+    if (entry.routedFiles || entry.ignoredFiles || entry.failedFiles) {
+      html += '<div class="wtCompleteStats">';
+      if (entry.routedFiles) html += '<span>Routed: ' + entry.routedFiles + '</span>';
+      if (entry.ignoredFiles) html += '<span>Ignored: ' + entry.ignoredFiles + '</span>';
+      if (entry.failedFiles) html += '<span style="color:#e57373">Failed: ' + entry.failedFiles + '</span>';
+      html += '</div>';
+    }
+
+    // Show destination if set
+    if (entry.destinationRoot) {
+      html += '<div class="wtSavePath"><span class="wtSavePathText">' + escapeHtml(entry.destinationRoot) + '</span></div>';
+    }
+
+    // If completed_pending, show save path picker
+    if (entry.state === 'completed_pending') {
+      html += '<div class="wtDestSection"><div class="wtDestLabel">Save to</div>' +
+        '<div class="wtSavePath"><span class="wtSavePathText" id="wtSavePathText">' + escapeHtml(_wtDestState.selectedPath || 'No folder selected') + '</span>' +
+        '<button class="wtBtn" data-wt-action="browse" style="padding:4px 12px;font-size:12px">Browse...</button></div></div>';
+      html += '<div class="wtActions"><button class="wtBtn primary" data-wt-action="setDest">Route Files</button><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    } else {
+      html += '<div class="wtActions"><button class="wtBtn" data-wt-action="close">Close Tab</button></div>';
+    }
+
+    return html;
+  }
+
+  // ── File tree builder ──
+
+  function buildFileTreeHtml(files, editable) {
+    if (!files || !files.length) return '<div style="padding:12px;color:rgba(var(--chrome-rgb),.4);font-size:12px">No files</div>';
+
+    // Group files by folder path
+    var folders = {}; // folderPath -> [file]
+    var rootFiles = [];
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      var path = String(f.path || f.name || '');
+      var slashIdx = path.lastIndexOf('/');
+      if (slashIdx > 0) {
+        var folder = path.substring(0, slashIdx);
+        if (!folders[folder]) folders[folder] = [];
+        folders[folder].push(f);
+      } else {
+        rootFiles.push(f);
+      }
+    }
+
+    var html = '';
+    var folderKeys = Object.keys(folders).sort();
+
+    for (var fi = 0; fi < folderKeys.length; fi++) {
+      var folderPath = folderKeys[fi];
+      var folderFiles = folders[folderPath];
+      var folderSize = 0;
+      for (var fs = 0; fs < folderFiles.length; fs++) folderSize += Number(folderFiles[fs].length || 0);
+
+      html += '<div class="wtFolderRow" data-folder="' + escapeHtml(folderPath) + '">' +
+        '<svg class="wtFolderChevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 3l5 5-5 5"/></svg>' +
+        '<span>' + escapeHtml(folderPath) + '</span>' +
+        '<span class="wtFileSize">' + formatBytes(folderSize) + '</span>' +
+        '</div>';
+
+      for (var ffi = 0; ffi < folderFiles.length; ffi++) {
+        html += buildFileRowHtml(folderFiles[ffi], editable, folderPath);
+      }
+    }
+
+    // Root-level files
+    for (var ri = 0; ri < rootFiles.length; ri++) {
+      html += buildFileRowHtml(rootFiles[ri], editable, '');
+    }
+
+    return html;
+  }
+
+  function buildFileRowHtml(file, editable, folderPath) {
+    var name = String(file.name || file.path || '');
+    var displayName = name;
+    // Strip folder prefix from display name
+    if (folderPath && displayName.indexOf(folderPath + '/') === 0) {
+      displayName = displayName.substring(folderPath.length + 1);
+    }
+    var checked = file.selected !== false;
+    var pct = Math.round((Number(file.progress || 0)) * 100);
+
+    var html = '<div class="wtFileRow" data-file-index="' + file.index + '"' +
+      (folderPath ? ' data-folder="' + escapeHtml(folderPath) + '"' : '') + '>';
+
+    if (editable) {
+      html += '<input type="checkbox" class="wtFileCheck" data-file-index="' + file.index + '"' + (checked ? ' checked' : '') + ' />';
+    }
+
+    html += '<span class="wtFileName" title="' + escapeHtml(name) + '">' + escapeHtml(displayName) + '</span>';
+    html += '<span class="wtFileSize">' + formatBytes(file.length || 0) + '</span>';
+
+    if (!editable) {
+      html += '<div class="wtFileProgress"><div class="wtFileProgressFill" style="width:' + pct + '%"></div></div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  // ── Save path state ──
+
+  var _wtDestState = { mode: 'videos', selectedPath: '' };
+
+  function loadDefaultSavePath(mode) {
+    _wtDestState.mode = mode || 'videos';
+    if (!api.webSources || !api.webSources.listDestinationFolders) return;
+    api.webSources.listDestinationFolders({ mode: _wtDestState.mode, path: '' }).then(function (res) {
+      if (!res || !res.ok || !res.folders || !res.folders.length) return;
+      // Auto-select the first root folder of this mode
+      _wtDestState.selectedPath = String(res.folders[0].path || '');
+      var tab = getActiveTab();
+      if (tab && tab.type === 'torrent') renderTorrentTab(tab);
+    }).catch(function () {});
+  }
+
+  // ── Torrent tab event delegation ──
+
+  function bindTorrentTabEvents(tab) {
+    if (!el.torrentPanelInner) return;
+    el.torrentPanelInner.onclick = function (e) {
+      var target = e.target;
+      if (!target) return;
+
+      // Action buttons
+      var actionBtn = target.closest('[data-wt-action]');
+      if (actionBtn) {
+        var action = actionBtn.getAttribute('data-wt-action');
+        handleTorrentAction(tab, action);
+        return;
+      }
+
+      // Folder collapse toggle
+      var folderRow = target.closest('.wtFolderRow');
+      if (folderRow) {
+        folderRow.classList.toggle('collapsed');
+        var folderPath = folderRow.getAttribute('data-folder');
+        var sibling = folderRow.nextElementSibling;
+        while (sibling && sibling.classList.contains('wtFileRow')) {
+          if (sibling.getAttribute('data-folder') === folderPath) {
+            sibling.classList.toggle('hidden', folderRow.classList.contains('collapsed'));
+          }
+          sibling = sibling.nextElementSibling;
+        }
+        return;
+      }
+
+      // Mode quick-select buttons — switch to first root of that mode
+      var modeBtn = target.closest('[data-wt-dest-mode]');
+      if (modeBtn) {
+        var mode = modeBtn.getAttribute('data-wt-dest-mode');
+        loadDefaultSavePath(mode);
+        return;
+      }
+    };
+
+    // Checkbox change for file selection
+    el.torrentPanelInner.onchange = function (e) {
+      var target = e.target;
+      if (!target || !target.classList.contains('wtFileCheck')) return;
+      var fileIdx = parseInt(target.getAttribute('data-file-index'), 10);
+      var entry = state.torrentTabEntries[tab.id];
+      if (entry && entry.files) {
+        for (var i = 0; i < entry.files.length; i++) {
+          if (entry.files[i].index === fileIdx) {
+            entry.files[i].selected = !!target.checked;
+            break;
+          }
+        }
+      }
+    };
+  }
+
+  function handleTorrentAction(tab, action) {
+    var entry = state.torrentTabEntries[tab.id];
+    var torrentId = tab.torrentId;
+    if (!torrentId) return;
+
+    if (action === 'browse') {
+      // Open native OS folder picker
+      var browseApi = api.webSources && api.webSources.pickSaveFolder;
+      if (!browseApi) { showToast('Browse not available'); return; }
+      browseApi({ defaultPath: _wtDestState.selectedPath || '' }).then(function (res) {
+        if (!res || !res.ok || !res.path) return;
+        _wtDestState.selectedPath = res.path;
+        var pathEl = document.getElementById('wtSavePathText');
+        if (pathEl) pathEl.textContent = res.path;
+      }).catch(function () {});
+      return;
+    }
+
+    if (action === 'start') {
+      // Gather selected file indices
+      var selectedIndices = [];
+      if (entry && entry.files) {
+        for (var i = 0; i < entry.files.length; i++) {
+          if (entry.files[i].selected !== false) selectedIndices.push(entry.files[i].index);
+        }
+      }
+      if (!selectedIndices.length) {
+        showToast('Select at least one file');
+        return;
+      }
+      if (!_wtDestState.selectedPath) {
+        showToast('Pick a destination folder first');
+        return;
+      }
+      var seqCheck = document.getElementById('wtSequentialCheck');
+      var sequential = !!(seqCheck && seqCheck.checked);
+      api.webTorrent.selectFiles({
+        id: torrentId,
+        selectedIndices: selectedIndices,
+        destinationRoot: _wtDestState.selectedPath,
+        sequential: sequential
+      }).then(function (res) {
+        if (res && res.ok) {
+          showToast('Download started');
+          // Force immediate state update and re-render
+          if (entry) entry.state = 'downloading';
+          state.torrentTabEntries[tab.id] = entry;
+          renderTorrentTab(tab);
+          refreshTorrentState();
+        } else {
+          showToast((res && res.error) ? String(res.error) : 'Failed to start download');
+        }
+      }).catch(function () { showToast('Failed to start download'); });
+    } else if (action === 'pause') {
+      api.webTorrent.pause({ id: torrentId }).then(function () { refreshTorrentState(); }).catch(function () {});
+    } else if (action === 'resume') {
+      api.webTorrent.resume({ id: torrentId }).then(function () { refreshTorrentState(); }).catch(function () {});
+    } else if (action === 'cancel') {
+      api.webTorrent.cancel({ id: torrentId }).then(function () {
+        refreshTorrentState();
+        closeTab(tab.id);
+      }).catch(function () {});
+    } else if (action === 'close') {
+      closeTab(tab.id);
+    } else if (action === 'setDest') {
+      if (!_wtDestState.selectedPath) {
+        showToast('Pick a destination folder');
+        return;
+      }
+      api.webTorrent.setDestination({
+        id: torrentId,
+        destinationRoot: _wtDestState.selectedPath
+      }).then(function (res) {
+        if (res && res.ok) {
+          showToast('Files routed');
+          refreshTorrentState();
+        } else {
+          showToast((res && res.error) ? String(res.error) : 'Failed to set destination');
+        }
+      }).catch(function () { showToast('Failed to route files'); });
+    }
+  }
+
+  // ── Torrent tab IPC event updaters ──
+
+  // Preserve the user's local file checkbox state when merging backend updates.
+  // Backend sends selected=false for all files in metadata_ready (files deselected
+  // until user picks), but the user may have checked files locally.
+  function mergeLocalFileSelection(newEntry, prevEntry) {
+    if (!newEntry || !newEntry.files || !prevEntry || !prevEntry.files) return;
+    if (newEntry.state !== 'metadata_ready' && newEntry.state !== 'completed_pending') return;
+    var prevMap = {};
+    for (var i = 0; i < prevEntry.files.length; i++) {
+      prevMap[prevEntry.files[i].index] = prevEntry.files[i].selected;
+    }
+    for (var j = 0; j < newEntry.files.length; j++) {
+      var idx = newEntry.files[j].index;
+      if (prevMap[idx] !== undefined) {
+        newEntry.files[j].selected = prevMap[idx];
+      }
+    }
+  }
+
+  function updateTorrentTabFromEntry(torrentId, entryData) {
+    var tab = findTorrentTabByTorrentId(torrentId);
+    if (!tab) return;
+    var prevEntry = state.torrentTabEntries[tab.id];
+    var entry = normalizeTorrentEntry(entryData);
+    if (!entry) return;
+    mergeLocalFileSelection(entry, prevEntry);
+    state.torrentTabEntries[tab.id] = entry;
+    if (entry.name && tab.title !== entry.name) {
+      tab.title = entry.name;
+      renderTabs();
+    }
+    // When metadata first arrives: check all files by default + auto-select save path
+    var wasResolving = !prevEntry || prevEntry.state === 'resolving_metadata';
+    if (wasResolving && entry.state === 'metadata_ready') {
+      // Check all files by default (qBittorrent behavior)
+      if (entry.files) {
+        for (var fi = 0; fi < entry.files.length; fi++) entry.files[fi].selected = true;
+      }
+      loadDefaultSavePath(_wtDestState.mode);
+    }
+    // Only re-render if this is the active tab AND state actually changed.
+    // In metadata_ready, the user is interacting (checkboxes, dest picker) —
+    // don't blow away the DOM on every 800ms progress tick.
+    var stateChanged = !prevEntry || prevEntry.state !== entry.state;
+    if (state.activeTabId === tab.id && stateChanged) {
+      renderTorrentTab(tab);
+    }
+  }
+
+  function updateTorrentTabProgress(torrentId, entryData) {
+    var tab = findTorrentTabByTorrentId(torrentId);
+    if (!tab) return;
+    var prevEntry = state.torrentTabEntries[tab.id];
+    var entry = normalizeTorrentEntry(entryData);
+    if (!entry) return;
+    mergeLocalFileSelection(entry, prevEntry);
+    state.torrentTabEntries[tab.id] = entry;
+    if (state.activeTabId !== tab.id || !el.torrentPanelInner) return;
+    // If state changed (e.g. metadata_ready → downloading), do a full re-render
+    var stateChanged = prevEntry && prevEntry.state !== entry.state;
+    if (stateChanged) {
+      renderTorrentTab(tab);
+      return;
+    }
+    // Lightweight DOM update — only update progress values, not full re-render
+    var pct = Math.round((entry.progress || 0) * 100);
+    // Update overall progress bar
+    var fillEl = el.torrentPanelInner.querySelector('.wtProgressFill');
+    if (fillEl) fillEl.style.width = pct + '%';
+    // Update meta text
+    var metaEl = el.torrentPanelInner.querySelector('.wtMeta');
+    if (metaEl) {
+      metaEl.innerHTML = '<span>' + pct + '%</span>' +
+        '<span>' + formatBytes(entry.downloadRate || 0) + '/s</span>' +
+        '<span>' + entry.numPeers + ' peer' + (entry.numPeers !== 1 ? 's' : '') + '</span>' +
+        '<span>' + formatBytes(entry.downloaded || 0) + ' / ' + formatBytes(entry.totalSize || 0) + '</span>' +
+        (entry.state === 'paused' ? '<span style="color:var(--vx-accent,rgba(var(--chrome-rgb),.55))">Paused</span>' : '');
+    }
+    // Update per-file progress bars
+    if (entry.files) {
+      for (var i = 0; i < entry.files.length; i++) {
+        var fileFill = el.torrentPanelInner.querySelector('.wtFileRow[data-file-index="' + entry.files[i].index + '"] .wtFileProgressFill');
+        if (fileFill) fileFill.style.width = Math.round((entry.files[i].progress || 0) * 100) + '%';
+      }
+    }
+  }
+
   function isTorrentActiveState(stateStr) {
     var s = String(stateStr || '').toLowerCase();
     return s === 'downloading' || s === 'paused' || s === 'checking';
@@ -2215,14 +2745,20 @@
       state: String(t.state || ''),
       progress: Number(t.progress || 0),
       downloadRate: Number(t.downloadRate || 0),
+      uploadSpeed: Number(t.uploadSpeed || 0),
       uploaded: Number(t.uploaded || 0),
       downloaded: Number(t.downloaded || 0),
+      totalSize: Number(t.totalSize || 0),
+      numPeers: Number(t.numPeers || 0),
       startedAt: Number(t.startedAt || 0),
       finishedAt: t.finishedAt != null ? Number(t.finishedAt) : null,
       error: String(t.error || ''),
       routedFiles: Number(t.routedFiles || 0),
       ignoredFiles: Number(t.ignoredFiles || 0),
       failedFiles: Number(t.failedFiles || 0),
+      metadataReady: !!t.metadataReady,
+      files: Array.isArray(t.files) ? t.files : null,
+      destinationRoot: t.destinationRoot ? String(t.destinationRoot) : '',
     };
   }
 
@@ -2986,7 +3522,11 @@
     state.activeTabId = tabId;
     state.showBrowserHome = false;
     var tab = getActiveTab();
-    if (tab && tab.mainTabId) {
+    if (tab && tab.type === 'torrent') {
+      // Torrent tab — no native WebContentsView, show DOM panel
+      webTabs.hideAll().catch(function () {});
+      renderTorrentTab(tab);
+    } else if (tab && tab.mainTabId) {
       webTabs.activate({ tabId: tab.mainTabId }).catch(function () {});
       // Defer bounds report to let layout settle
       setTimeout(reportBoundsForActiveTab, 30);
@@ -3027,7 +3567,12 @@
     if (idx === -1) return;
 
     var tab = state.tabs[idx];
-    pushClosedTab(tab);
+    if (tab.type !== 'torrent') pushClosedTab(tab);
+
+    // Clean up torrent tab state
+    if (tab.type === 'torrent') {
+      delete state.torrentTabEntries[tabId];
+    }
 
     // MERIDIAN_SPLIT: unsplit if closing a tab involved in split
     if (state.split && (tabId === state.activeTabId || tabId === state.splitTabId)) {
@@ -3037,7 +3582,7 @@
       if (splitBtnEl) splitBtnEl.classList.remove('active');
     }
 
-    // BUILD_WCV: destroy view in main process
+    // BUILD_WCV: destroy view in main process (torrent tabs have no mainTabId)
     if (tab.mainTabId) {
       webTabs.close({ tabId: tab.mainTabId }).catch(function () {});
     }
@@ -4438,20 +4983,33 @@
     if (api.webTorrent && api.webTorrent.onStarted) {
       api.webTorrent.onStarted(function (info) {
         refreshTorrentState();
-        var label = (info && info.name) ? String(info.name) : '';
-        showToast(label ? ('Torrent started: ' + label) : 'Torrent started');
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onMetadata) {
+      api.webTorrent.onMetadata(function (info) {
+        if (info && info.id) {
+          updateTorrentTabFromEntry(info.id, info);
+        }
+        refreshTorrentState();
       });
     }
 
     if (api.webTorrent && api.webTorrent.onProgress) {
-      api.webTorrent.onProgress(function () {
+      api.webTorrent.onProgress(function (info) {
         renderHubTorrentActive();
+        if (info && info.id) {
+          updateTorrentTabProgress(info.id, info);
+        }
       });
     }
 
     if (api.webTorrent && api.webTorrent.onCompleted) {
       api.webTorrent.onCompleted(function (info) {
         refreshTorrentState();
+        if (info && info.id) {
+          updateTorrentTabFromEntry(info.id, info);
+        }
         var stateName = String(info && info.state || '').toLowerCase();
         var label = (info && info.name) ? String(info.name) : '';
         if (stateName === 'completed' || stateName === 'completed_with_errors') {
@@ -4462,6 +5020,19 @@
           var err = String(info && info.error || '');
           showToast(err ? err : 'Torrent failed');
         }
+      });
+    }
+
+    if (api.webTorrent && api.webTorrent.onUpdated) {
+      api.webTorrent.onUpdated(function (data) {
+        // WEB_TORRENTS_UPDATED sends { torrents: [...], history: [...] }
+        if (data && Array.isArray(data.torrents)) {
+          for (var ti = 0; ti < data.torrents.length; ti++) {
+            var t = data.torrents[ti];
+            if (t && t.id) updateTorrentTabFromEntry(t.id, t);
+          }
+        }
+        refreshTorrentState();
       });
     }
 

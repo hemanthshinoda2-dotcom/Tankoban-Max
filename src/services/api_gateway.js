@@ -432,6 +432,7 @@
       resumeDownload: (...a) => ea.webSources?.resumeDownload ? ea.webSources.resumeDownload(...a) : Promise.resolve({ ok: false }),
       cancelDownload: (...a) => ea.webSources?.cancelDownload ? ea.webSources.cancelDownload(...a) : Promise.resolve({ ok: false }),
       pickDestinationFolder: (...a) => ea.webSources?.pickDestinationFolder ? ea.webSources.pickDestinationFolder(...a) : Promise.resolve({ ok: false, cancelled: true }),
+      pickSaveFolder: (...a) => ea.webSources?.pickSaveFolder ? ea.webSources.pickSaveFolder(...a) : Promise.resolve({ ok: false }),
       listDestinationFolders: (...a) => ea.webSources?.listDestinationFolders ? ea.webSources.listDestinationFolders(...a) : Promise.resolve({ ok: false, folders: [] }),
       resolveDestinationPicker: (...a) => ea.webSources?.resolveDestinationPicker ? ea.webSources.resolveDestinationPicker(...a) : Promise.resolve({ ok: false }),
       onUpdated: (...a) => ea.webSources?.onUpdated ? ea.webSources.onUpdated(...a) : undefined,
@@ -534,10 +535,15 @@
       getHistory: (...a) => ea.webTorrent?.getHistory ? ea.webTorrent.getHistory(...a) : Promise.resolve({ ok: false, torrents: [] }),
       clearHistory: (...a) => ea.webTorrent?.clearHistory ? ea.webTorrent.clearHistory(...a) : Promise.resolve({ ok: false }),
       removeHistory: (...a) => ea.webTorrent?.removeHistory ? ea.webTorrent.removeHistory(...a) : Promise.resolve({ ok: false }),
+      selectFiles: (...a) => ea.webTorrent?.selectFiles ? ea.webTorrent.selectFiles(...a) : Promise.resolve({ ok: false }),
+      setDestination: (...a) => ea.webTorrent?.setDestination ? ea.webTorrent.setDestination(...a) : Promise.resolve({ ok: false }),
+      streamFile: (...a) => ea.webTorrent?.streamFile ? ea.webTorrent.streamFile(...a) : Promise.resolve({ ok: false }),
       onStarted: (...a) => ea.webTorrent?.onStarted ? ea.webTorrent.onStarted(...a) : undefined,
       onProgress: (...a) => ea.webTorrent?.onProgress ? ea.webTorrent.onProgress(...a) : undefined,
       onCompleted: (...a) => ea.webTorrent?.onCompleted ? ea.webTorrent.onCompleted(...a) : undefined,
       onUpdated: (...a) => ea.webTorrent?.onUpdated ? ea.webTorrent.onUpdated(...a) : undefined,
+      onMetadata: (...a) => ea.webTorrent?.onMetadata ? ea.webTorrent.onMetadata(...a) : undefined,
+      onStreamReady: (...a) => ea.webTorrent?.onStreamReady ? ea.webTorrent.onStreamReady(...a) : undefined,
     },
 
     // ========================================

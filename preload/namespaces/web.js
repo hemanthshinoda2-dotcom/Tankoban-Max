@@ -18,6 +18,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       pickDestinationFolder: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_PICK_FOLDER, payload),
       listDestinationFolders: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_PICKER_LIST_FOLDERS, payload),
       resolveDestinationPicker: (payload) => ipcRenderer.invoke(CHANNEL.WEB_DOWNLOAD_PICKER_RESOLVE, payload),
+      pickSaveFolder: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PICK_SAVE_FOLDER, payload),
       onUpdated: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_SOURCES_UPDATED, (_evt, data) => cb(data));

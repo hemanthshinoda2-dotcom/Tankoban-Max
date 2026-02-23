@@ -1124,3 +1124,293 @@
   align-items: center;
   gap: 8px;
 }
+
+
+/* ══════════════════════════════════════════
+   Torrent tab panel
+   ══════════════════════════════════════════ */
+
+.webTorrentPanel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px;
+  background: transparent;
+}
+.webTorrentPanel.hidden {
+  display: none !important;
+}
+.webTorrentPanelInner {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Resolving state */
+.wtResolving {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 80px 20px;
+  color: rgba(var(--chrome-rgb), .45);
+  font-size: 13px;
+}
+.wtResolvingSpinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(var(--chrome-rgb), .10);
+  border-top-color: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  border-radius: 50%;
+  animation: wtSpin .8s linear infinite;
+}
+@keyframes wtSpin { to { transform: rotate(360deg); } }
+.wtResolvingHash {
+  font-family: monospace;
+  font-size: 11px;
+  opacity: .5;
+  word-break: break-all;
+  max-width: 400px;
+  text-align: center;
+}
+
+/* Header */
+.wtHeader {
+  margin-bottom: 16px;
+}
+.wtName {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(var(--chrome-rgb), .85);
+  word-break: break-word;
+  margin-bottom: 6px;
+}
+.wtMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(var(--chrome-rgb), .45);
+}
+.wtMeta span {
+  white-space: nowrap;
+}
+
+/* Overall progress bar */
+.wtProgressWrap {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(var(--chrome-rgb), .08);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.wtProgressFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  transition: width .4s ease;
+}
+
+/* File tree container */
+.wtFileTree {
+  border: 1px solid rgba(var(--chrome-rgb), .08);
+  border-radius: 12px;
+  background: rgba(var(--chrome-rgb), .03);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+/* Folder row */
+.wtFolderRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--chrome-rgb), .65);
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .05);
+}
+.wtFolderRow:hover {
+  background: rgba(var(--chrome-rgb), .04);
+}
+.wtFolderChevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform .15s;
+  color: rgba(var(--chrome-rgb), .35);
+}
+.wtFolderRow.collapsed .wtFolderChevron {
+  transform: rotate(-90deg);
+}
+.wtFolderRow.collapsed ~ .wtFileRow {
+  display: none;
+}
+
+/* File row */
+.wtFileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  color: rgba(var(--chrome-rgb), .7);
+  border-bottom: 1px solid rgba(var(--chrome-rgb), .04);
+}
+.wtFileRow:last-child {
+  border-bottom: none;
+}
+.wtFileRow:hover {
+  background: rgba(var(--chrome-rgb), .03);
+}
+.wtFileCheck {
+  flex-shrink: 0;
+  accent-color: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+}
+.wtFileName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wtFileSize {
+  flex-shrink: 0;
+  color: rgba(var(--chrome-rgb), .35);
+  font-size: 11px;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* Per-file progress */
+.wtFileProgress {
+  flex-shrink: 0;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(var(--chrome-rgb), .08);
+  overflow: hidden;
+}
+.wtFileProgressFill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  transition: width .4s ease;
+}
+
+/* Destination section */
+.wtDestSection {
+  margin-bottom: 16px;
+  border: 1px solid rgba(var(--chrome-rgb), .08);
+  border-radius: 12px;
+  background: rgba(var(--chrome-rgb), .03);
+  padding: 14px;
+}
+.wtDestLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(var(--chrome-rgb), .55);
+  margin-bottom: 10px;
+}
+.wtDestModes {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.wtDestModeBtn {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: transparent;
+  color: rgba(var(--chrome-rgb), .55);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.wtDestModeBtn:hover {
+  background: rgba(var(--chrome-rgb), .06);
+}
+.wtDestModeBtn.active {
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  color: #fff;
+  border-color: transparent;
+}
+/* Save path row — qBittorrent-style */
+.wtSavePath {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wtSavePathText {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(var(--chrome-rgb), .04);
+  color: rgba(var(--chrome-rgb), .55);
+  font-size: 11px;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Sequential download toggle */
+.wtSequential {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(var(--chrome-rgb), .55);
+  margin-bottom: 12px;
+}
+
+/* Actions */
+.wtActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.wtBtn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--chrome-rgb), .10);
+  background: transparent;
+  color: rgba(var(--chrome-rgb), .7);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.wtBtn:hover {
+  background: rgba(var(--chrome-rgb), .06);
+}
+.wtBtn.primary {
+  background: var(--vx-accent, rgba(var(--chrome-rgb), .55));
+  color: #fff;
+  border-color: transparent;
+}
+.wtBtn.primary:hover {
+  filter: brightness(1.1);
+}
+.wtBtn:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+/* Completed state */
+.wtCompleteIcon {
+  color: #4caf50;
+  font-size: 18px;
+  margin-right: 6px;
+}
+.wtCompleteStats {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: rgba(var(--chrome-rgb), .45);
+  margin-bottom: 12px;
+}

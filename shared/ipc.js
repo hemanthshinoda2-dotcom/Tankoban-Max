@@ -930,6 +930,9 @@ const CHANNEL = {
   /** Stream a torrent file to a destination path. Args: { id, fileIndex, destinationPath }. Returns: { ok, path? } */
   WEB_TORRENT_STREAM_FILE: 'webTorrent:streamFile',
 
+  /** Open native OS folder picker dialog. Args: { defaultPath? }. Returns: { ok, path? } or { ok:false, cancelled } */
+  WEB_PICK_SAVE_FOLDER: 'web:pickSaveFolder',
+
   // ========================================
   // Audiobooks (FEAT-AUDIOBOOK)
   // ========================================

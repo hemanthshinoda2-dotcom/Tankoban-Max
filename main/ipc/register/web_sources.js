@@ -19,6 +19,20 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PICKER_LIST_FOLDERS, function (e, payload) { return d.listDestinationFolders(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_DOWNLOAD_PICKER_RESOLVE, function (e, payload) { return d.resolveDestinationPicker(ctx, e, payload); });
 
+  // Native OS folder picker dialog
+  ipcMain.handle(CHANNEL.WEB_PICK_SAVE_FOLDER, async function (_e, payload) {
+    var { dialog } = require('electron');
+    var opts = { title: 'Select save folder', properties: ['openDirectory', 'createDirectory'] };
+    if (payload && payload.defaultPath) opts.defaultPath = String(payload.defaultPath);
+    try {
+      var result = await dialog.showOpenDialog(ctx.win(), opts);
+      if (result.canceled || !result.filePaths || !result.filePaths.length) return { ok: false, cancelled: true };
+      return { ok: true, path: result.filePaths[0] };
+    } catch (e) {
+      return { ok: false, error: String(e.message || e) };
+    }
+  });
+
   // Set up download handler for the webview partition
   d.setupDownloadHandler(ctx);
 };
