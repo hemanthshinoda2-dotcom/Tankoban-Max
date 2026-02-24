@@ -152,6 +152,17 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       setDestination: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SET_DESTINATION, payload),
       streamFile: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_STREAM_FILE, payload),
       addToVideoLibrary: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_ADD_TO_VIDEO_LIBRARY, payload),
+      // FEAT-BROWSER: New torrent capabilities from Aspect browser
+      remove: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_REMOVE, payload),
+      pauseAll: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_PAUSE_ALL),
+      resumeAll: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_RESUME_ALL),
+      getPeers: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_GET_PEERS, payload),
+      getDhtNodes: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_GET_DHT_NODES),
+      selectSaveFolder: () => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_SELECT_SAVE_FOLDER),
+      resolveMetadata: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_RESOLVE_METADATA, payload),
+      startConfigured: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_START_CONFIGURED, payload),
+      cancelResolve: (payload) => ipcRenderer.invoke(CHANNEL.WEB_TORRENT_CANCEL_RESOLVE, payload),
+      openFolder: (payload) => ipcRenderer.send(CHANNEL.WEB_TORRENT_OPEN_FOLDER, payload),
       onStarted: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENT_STARTED, (_evt, data) => cb(data));
@@ -176,6 +187,14 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.WEB_TORRENT_STREAM_READY, (_evt, data) => cb(data));
       },
+      onMagnetDetected: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_MAGNET_DETECTED, (_evt, data) => cb(data));
+      },
+      onTorrentFileDetected: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_TORRENT_FILE_DETECTED, (_evt, data) => cb(data));
+      },
     },
 
     // FEAT-TOR: Tor proxy
@@ -186,6 +205,29 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       onStatusChanged: (cb) => {
         if (typeof cb !== 'function') return;
         ipcRenderer.on(EVENT.TOR_PROXY_STATUS_CHANGED, (_evt, data) => cb(data));
+      },
+    },
+
+    // FEAT-BROWSER: Search history / omnibox suggestions
+    webSearch: {
+      suggest: (input) => ipcRenderer.invoke(CHANNEL.WEB_SEARCH_SUGGEST, input),
+      add: (query) => ipcRenderer.send(CHANNEL.WEB_SEARCH_ADD, query),
+    },
+
+    // FEAT-BROWSER: Browser utility actions
+    webBrowserActions: {
+      ctxAction: (payload) => ipcRenderer.send(CHANNEL.WEB_CTX_ACTION, payload),
+      printPdf: (payload) => ipcRenderer.invoke(CHANNEL.WEB_PRINT_PDF, payload),
+      capturePage: (payload) => ipcRenderer.invoke(CHANNEL.WEB_CAPTURE_PAGE, payload),
+      downloadOpenFile: (payload) => ipcRenderer.send(CHANNEL.WEB_DOWNLOAD_OPEN_FILE, payload),
+      downloadShowInFolder: (payload) => ipcRenderer.send(CHANNEL.WEB_DOWNLOAD_SHOW_IN_FOLDER, payload),
+      onContextMenu: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_CTX_MENU, (_evt, data) => cb(data));
+      },
+      onCreateTab: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.WEB_CREATE_TAB, (_evt, data) => cb(data));
       },
     },
   };

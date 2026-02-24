@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { session } = require('electron');
+const { session, dialog, shell } = require('electron');
 
 const HISTORY_FILE = 'web_torrent_history.json';
 const MAX_HISTORY = 1000;
@@ -18,6 +18,7 @@ var WebTorrentCtor = null;
 var webTorrentCtorPromise = null;
 var client = null;
 var activeById = new Map(); // id -> { torrent, entry, interval? }
+var pendingById = new Map(); // resolveId -> { torrent, torrentBuf, info }
 var historyCache = null;
 
 function findActiveBySource(opts) {
@@ -67,8 +68,9 @@ async function ensureClient() {
     wtLog('ensureClient: constructor loaded, type=' + typeof WebTorrentCtor);
   }
   // Disable UTP (native addon) to avoid segfaults with Electron 40's Node v24.
-  wtLog('ensureClient: calling new WebTorrent({ utp: false })...');
-  client = new WebTorrentCtor({ utp: false });
+  // natUpnp/natPmp: false prevents NatAPI from blocking the event loop during port mapping.
+  wtLog('ensureClient: calling new WebTorrent({ utp: false, natUpnp: false, natPmp: false })...');
+  client = new WebTorrentCtor({ utp: false, natUpnp: false, natPmp: false });
   wtLog('ensureClient: client created OK');
   client.on('error', function (err) {
     wtLog('CLIENT ERROR: ' + (err && err.message || err));
@@ -907,6 +909,258 @@ async function addToVideoLibrary(ctx, evt, payload) {
   return { ok: true, showPath: showPath };
 }
 
+// ── FEAT-BROWSER: New capabilities from Aspect browser ──
+
+function getPeerList(torrent) {
+  var peers = [];
+  try {
+    var wires = torrent.wires || [];
+    for (var i = 0; i < wires.length; i++) {
+      var w = wires[i];
+      if (!w) continue;
+      peers.push({
+        ip: String(w.remoteAddress || '?'),
+        client: String(w.peerExtendedHandshake && w.peerExtendedHandshake.v || 'Unknown'),
+        progress: Number(w.peerPieces ? (w.peerPieces.buffer ? w.peerPieces.count / (torrent.pieces ? torrent.pieces.length : 1) : 0) : 0),
+        dlSpeed: Number(w.downloadSpeed ? w.downloadSpeed() : 0),
+        ulSpeed: Number(w.uploadSpeed ? w.uploadSpeed() : 0),
+      });
+    }
+  } catch {}
+  return peers;
+}
+
+function buildTrackerList(torrent) {
+  if (!torrent) return [];
+  var trackers = [];
+  try {
+    var announces = torrent.announce || [];
+    for (var i = 0; i < announces.length; i++) {
+      trackers.push({ url: String(announces[i]), status: 'working', peers: 0 });
+    }
+  } catch {}
+  return trackers;
+}
+
+async function remove(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  if (!id) return { ok: false, error: 'Missing id' };
+  // Cancel if active, then remove from history
+  if (activeById.has(id)) await cancel(ctx, _evt, payload);
+  var c = ensureHistory(ctx);
+  c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === String(id)); });
+  c.updatedAt = Date.now();
+  writeHistory(ctx);
+  emitUpdated(ctx);
+  return { ok: true };
+}
+
+async function pauseAll(ctx) {
+  activeById.forEach(function (rec) {
+    if (rec.entry.state === 'downloading' || rec.entry.state === 'seeding') {
+      try { rec.torrent.pause(); } catch {}
+      rec.entry.state = 'paused';
+      upsertHistory(ctx, rec.entry);
+    }
+  });
+  emitUpdated(ctx);
+  return { ok: true };
+}
+
+async function resumeAll(ctx) {
+  activeById.forEach(function (rec) {
+    if (rec.entry.state === 'paused') {
+      try { rec.torrent.resume(); } catch {}
+      rec.entry.state = rec.entry.progress >= 1 ? 'seeding' : 'downloading';
+      upsertHistory(ctx, rec.entry);
+    }
+  });
+  emitUpdated(ctx);
+  return { ok: true };
+}
+
+async function getPeers(ctx, _evt, payload) {
+  var id = payload && payload.id ? String(payload.id) : '';
+  var rec = activeById.get(id);
+  if (!rec || !rec.torrent) return { ok: true, peers: [] };
+  return { ok: true, peers: getPeerList(rec.torrent) };
+}
+
+async function getDhtNodes(ctx) {
+  if (!client) return 0;
+  try {
+    return client.dht ? (client.dht.nodes ? client.dht.nodes.count || client.dht.nodes.length || 0 : 0) : 0;
+  } catch { return 0; }
+}
+
+async function selectSaveFolder(ctx) {
+  if (!ctx.win || ctx.win.isDestroyed()) return { ok: false, error: 'No window' };
+  var result = await dialog.showOpenDialog(ctx.win, {
+    title: 'Select save folder',
+    defaultPath: require('electron').app.getPath('downloads'),
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled || !result.filePaths || !result.filePaths.length) {
+    return { ok: false, cancelled: true };
+  }
+  return { ok: true, path: result.filePaths[0] };
+}
+
+async function resolveMetadata(ctx, _evt, payload) {
+  var input = String(payload && payload.source || payload || '').trim();
+  if (!input) return { ok: false, error: 'No source provided' };
+
+  var cl = await ensureClient();
+  var resolveId = 'res_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+
+  // If source is a file path (not a magnet URI), read the torrent file
+  var addSource;
+  if (input.indexOf('magnet:') === 0) {
+    addSource = input;
+  } else {
+    try { addSource = await fs.promises.readFile(input); } catch (e) {
+      return { ok: false, error: 'Cannot read torrent file: ' + (e.message || e) };
+    }
+  }
+
+  return new Promise(function (resolve) {
+    var resolved = false;
+    var torrent;
+
+    try {
+      torrent = cl.add(addSource, {
+        path: path.join(os.tmpdir(), 'tanko-resolve-' + resolveId)
+      });
+    } catch (err) {
+      return resolve({ ok: false, error: String(err && err.message || err) });
+    }
+
+    function finish() {
+      if (resolved) return;
+      resolved = true;
+
+      // Deselect all files to prevent data download
+      if (torrent.files) {
+        torrent.files.forEach(function (f) { try { f.deselect(); } catch {} });
+      }
+
+      var info = {
+        name: String(torrent.name || ''),
+        infoHash: String(torrent.infoHash || ''),
+        totalSize: Number(torrent.length || 0),
+        files: buildFileList(torrent),
+        trackers: buildTrackerList(torrent),
+        magnetUri: String(torrent.magnetURI || input)
+      };
+
+      pendingById.set(resolveId, {
+        torrent: torrent,
+        torrentBuf: torrent.torrentFile || null,
+        info: info
+      });
+
+      wtLog('metadata resolved: ' + info.name + ' (' + info.files.length + ' files)');
+      resolve({
+        ok: true, resolveId: resolveId,
+        name: info.name, infoHash: info.infoHash,
+        totalSize: info.totalSize, files: info.files
+      });
+    }
+
+    if (torrent.files && torrent.files.length > 0 && torrent.ready) {
+      finish();
+    } else {
+      torrent.on('ready', finish);
+    }
+
+    torrent.on('error', function (err) {
+      if (resolved) return;
+      resolved = true;
+      try { torrent.destroy({ destroyStore: true }); } catch {}
+      resolve({ ok: false, error: String(err && err.message || err) });
+    });
+
+    // Timeout after 120s
+    setTimeout(function () {
+      if (!resolved) {
+        resolved = true;
+        try { torrent.destroy({ destroyStore: true }); } catch {}
+        resolve({ ok: false, error: 'Metadata resolution timed out (120s)' });
+      }
+    }, 120000);
+  });
+}
+
+async function startConfigured(ctx, _evt, payload) {
+  var resolveId = payload && payload.resolveId ? String(payload.resolveId) : '';
+  var pending = pendingById.get(resolveId);
+  if (!pending) return { ok: false, error: 'No pending resolve with that ID' };
+
+  var savePath = String(payload && payload.savePath || '').trim() || require('electron').app.getPath('downloads');
+  var selectedFiles = payload && Array.isArray(payload.selectedFiles) ? payload.selectedFiles : null;
+
+  // Save info before destroying the temp torrent
+  var torrentBuf = pending.torrentBuf;
+  var magnetUri = pending.info.magnetUri;
+  var infoName = pending.info.name;
+  var infoHash = pending.info.infoHash;
+  var totalSize = pending.info.totalSize;
+
+  // Destroy the metadata-only torrent
+  try { pending.torrent.destroy({ destroyStore: true }); } catch {}
+  pendingById.delete(resolveId);
+
+  // Create entry and re-add with the correct save path
+  var entry = createEntry({
+    destinationRoot: savePath,
+    magnetUri: magnetUri,
+    name: infoName,
+    infoHash: infoHash,
+    totalSize: totalSize
+  });
+
+  var cl = await ensureClient();
+  var source = torrentBuf || magnetUri;
+  var torrent;
+
+  try {
+    torrent = cl.add(source, { path: path.join(savePath, infoName || entry.id) });
+  } catch (err) {
+    return { ok: false, error: String(err && err.message || err) };
+  }
+
+  bindTorrent(ctx, torrent, entry);
+
+  // If specific files were selected, apply selection after binding
+  if (selectedFiles && selectedFiles.length > 0) {
+    // Wait for metadata to be ready before selecting files
+    var waitForReady = torrent.files && torrent.files.length > 0
+      ? Promise.resolve()
+      : new Promise(function (resolve) { torrent.once('ready', resolve); });
+    waitForReady.then(function () {
+      selectFiles(ctx, _evt, { id: entry.id, selectedIndices: selectedFiles, destinationRoot: savePath });
+    });
+  }
+
+  wtLog('startConfigured: ' + infoName + ' → ' + savePath);
+  return { ok: true, id: entry.id };
+}
+
+async function cancelResolve(ctx, _evt, payload) {
+  var resolveId = payload && payload.resolveId ? String(payload.resolveId) : '';
+  var pending = pendingById.get(resolveId);
+  if (!pending) return { ok: true };
+  try { pending.torrent.destroy({ destroyStore: true }); } catch {}
+  pendingById.delete(resolveId);
+  wtLog('resolve cancelled: ' + resolveId);
+  return { ok: true };
+}
+
+function openFolder(ctx, _evt, payload) {
+  var savePath = String(payload && payload.savePath || payload || '').trim();
+  if (savePath) shell.showItemInFolder(savePath);
+}
+
 module.exports = {
   startMagnet,
   startTorrentUrl,
@@ -922,4 +1176,15 @@ module.exports = {
   setDestination,
   streamFile,
   addToVideoLibrary,
+  // FEAT-BROWSER: New capabilities
+  remove,
+  pauseAll,
+  resumeAll,
+  getPeers,
+  getDhtNodes,
+  selectSaveFolder,
+  resolveMetadata,
+  startConfigured,
+  cancelResolve,
+  openFolder,
 };

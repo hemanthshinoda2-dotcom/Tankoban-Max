@@ -15,4 +15,15 @@ module.exports = function register({ ipcMain, CHANNEL, ctx, domains }) {
   ipcMain.handle(CHANNEL.WEB_TORRENT_SET_DESTINATION, function (e, payload) { return d.setDestination(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_STREAM_FILE, function (e, payload) { return d.streamFile(ctx, e, payload); });
   ipcMain.handle(CHANNEL.WEB_TORRENT_ADD_TO_VIDEO_LIBRARY, function (e, payload) { return d.addToVideoLibrary(ctx, e, payload); });
+  // FEAT-BROWSER: New torrent capabilities
+  ipcMain.handle(CHANNEL.WEB_TORRENT_REMOVE, function (e, payload) { return d.remove(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_PAUSE_ALL, function () { return d.pauseAll(ctx); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_RESUME_ALL, function () { return d.resumeAll(ctx); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_GET_PEERS, function (e, payload) { return d.getPeers(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_GET_DHT_NODES, function () { return d.getDhtNodes(ctx); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_SELECT_SAVE_FOLDER, function () { return d.selectSaveFolder(ctx); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_RESOLVE_METADATA, function (e, payload) { return d.resolveMetadata(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_START_CONFIGURED, function (e, payload) { return d.startConfigured(ctx, e, payload); });
+  ipcMain.handle(CHANNEL.WEB_TORRENT_CANCEL_RESOLVE, function (e, payload) { return d.cancelResolve(ctx, e, payload); });
+  ipcMain.on(CHANNEL.WEB_TORRENT_OPEN_FOLDER, function (e, payload) { d.openFolder(ctx, e, payload); });
 };

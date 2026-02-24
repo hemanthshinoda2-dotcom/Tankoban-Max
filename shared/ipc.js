@@ -851,8 +851,67 @@ const CHANNEL = {
   /** Add torrent to video library. Args: { id, destinationRoot }. Returns: { ok, showPath? } */
   WEB_TORRENT_ADD_TO_VIDEO_LIBRARY: 'webTorrent:addToVideoLibrary',
 
+  /** Cancel active torrent + remove from history. Args: { id }. Returns: { ok } */
+  WEB_TORRENT_REMOVE: 'webTorrent:remove',
+
+  /** Pause all active torrents. Returns: { ok } */
+  WEB_TORRENT_PAUSE_ALL: 'webTorrent:pauseAll',
+
+  /** Resume all paused torrents. Returns: { ok } */
+  WEB_TORRENT_RESUME_ALL: 'webTorrent:resumeAll',
+
+  /** Get peer list for a torrent. Args: { id }. Returns: { ok, peers } */
+  WEB_TORRENT_GET_PEERS: 'webTorrent:getPeers',
+
+  /** Get DHT node count. Returns: number */
+  WEB_TORRENT_GET_DHT_NODES: 'webTorrent:getDhtNodes',
+
+  /** Open folder picker for torrent save location. Returns: { ok, path? } or { ok:false, cancelled } */
+  WEB_TORRENT_SELECT_SAVE_FOLDER: 'webTorrent:selectSaveFolder',
+
+  /** Resolve metadata only (two-step add). Args: source (magnet URI or file path). Returns: { ok, resolveId, name, infoHash, totalSize, files } */
+  WEB_TORRENT_RESOLVE_METADATA: 'webTorrent:resolveMetadata',
+
+  /** Start download with user-selected files/path after metadata resolve. Args: { resolveId, savePath?, selectedFiles? }. Returns: { ok, id? } */
+  WEB_TORRENT_START_CONFIGURED: 'webTorrent:startConfigured',
+
+  /** Cancel a pending metadata resolution. Args: { resolveId }. Returns: { ok } */
+  WEB_TORRENT_CANCEL_RESOLVE: 'webTorrent:cancelResolve',
+
+  /** Show torrent save folder in OS file manager. Args: { savePath }. Returns: void */
+  WEB_TORRENT_OPEN_FOLDER: 'webTorrent:openFolder',
+
   /** Open native OS folder picker dialog. Args: { defaultPath? }. Returns: { ok, path? } or { ok:false, cancelled } */
   WEB_PICK_SAVE_FOLDER: 'web:pickSaveFolder',
+
+  // ========================================
+  // Web Search History (omnibox suggestions)
+  // ========================================
+
+  /** Get omnibox suggestions for input. Args: input string. Returns: [{ type, text, url?, favicon? }] */
+  WEB_SEARCH_SUGGEST: 'webSearch:suggest',
+
+  /** Record a search query. Args: query string. Returns: void */
+  WEB_SEARCH_ADD: 'webSearch:add',
+
+  // ========================================
+  // Web Browser Actions
+  // ========================================
+
+  /** Dispatch context menu action to a webContents. Args: { webContentsId, action, payload? }. Returns: void */
+  WEB_CTX_ACTION: 'web:ctxAction',
+
+  /** Print page to PDF. Args: { webContentsId }. Returns: { ok, path? } */
+  WEB_PRINT_PDF: 'web:printPdf',
+
+  /** Screenshot page. Args: { webContentsId }. Returns: { ok, path? } */
+  WEB_CAPTURE_PAGE: 'web:capturePage',
+
+  /** Open a downloaded file. Args: { savePath }. Returns: void */
+  WEB_DOWNLOAD_OPEN_FILE: 'webDownload:openFile',
+
+  /** Show downloaded file in OS file manager. Args: { savePath }. Returns: void */
+  WEB_DOWNLOAD_SHOW_IN_FOLDER: 'webDownload:showInFolder',
 
   // ========================================
   // Tor Proxy (FEAT-TOR)
@@ -1021,6 +1080,16 @@ const EVENT = {
   WEB_TORRENTS_UPDATED: 'webTorrent:listUpdated',
   WEB_TORRENT_METADATA: 'webTorrent:metadata',
   WEB_TORRENT_STREAM_READY: 'webTorrent:streamReady',
+
+  // FEAT-BROWSER: Events from main process for integrated browser
+  /** Context menu params forwarded from webContents. Payload: { webContentsId, screenX, screenY, x, y, linkURL, srcURL, ... } */
+  WEB_CTX_MENU: 'web:contextMenu',
+  /** New-window request → create tab. Payload: { url, disposition } */
+  WEB_CREATE_TAB: 'web:createTab',
+  /** Magnet link intercepted. Payload: magnetUri string */
+  WEB_MAGNET_DETECTED: 'web:magnetDetected',
+  /** .torrent file downloaded to temp. Payload: filePath string */
+  WEB_TORRENT_FILE_DETECTED: 'web:torrentFileDetected',
 
   // FEAT-TOR
   /** Tor proxy status changed. Payload: { active, bootstrapProgress? } */
