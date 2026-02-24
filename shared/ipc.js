@@ -574,119 +574,6 @@ const CHANNEL = {
   MPV_SET_VISIBLE: 'mpv:setVisible',
 
   // ========================================
-  // libmpv (native addon bridge)
-  // ========================================
-  
-  /** Probe libmpv availability. Returns: { available: boolean } */
-  LIBMPV_PROBE: 'libmpv:probe',
-  
-  /** Create libmpv instance. Returns: { handleId: string } */
-  LIBMPV_CREATE: 'libmpv:create',
-  
-  /** Create renderless libmpv instance. Returns: { handleId: string } */
-  LIBMPV_CREATE_RENDERLESS: 'libmpv:createRenderless',
-  
-  /** Destroy libmpv instance. Returns: void */
-  LIBMPV_DESTROY: 'libmpv:destroy',
-  
-  /** Send command to libmpv. Returns: void */
-  LIBMPV_COMMAND: 'libmpv:command',
-  
-  /** Set libmpv property as string. Returns: void */
-  LIBMPV_SET_PROPERTY_STRING: 'libmpv:setPropertyString',
-  
-  /** Get libmpv property as string. Returns: string value */
-  LIBMPV_GET_PROPERTY_STRING: 'libmpv:getPropertyString',
-  
-  /** Create render context. Returns: void */
-  LIBMPV_RENDER_CREATE_CONTEXT: 'libmpv:renderCreateContext',
-  
-  /** Free render context. Returns: void */
-  LIBMPV_RENDER_FREE_CONTEXT: 'libmpv:renderFreeContext',
-  
-  /** Render frame to RGBA. Returns: { buffer: Buffer, width: number, height: number } */
-  LIBMPV_RENDER_FRAME_RGBA: 'libmpv:renderFrameRGBA',
-  
-  /** Attach shared buffer for rendering. Returns: void */
-  LIBMPV_RENDER_ATTACH_SHARED_BUFFER: 'libmpv:renderAttachSharedBuffer',
-  
-  /** Detach shared buffer. Returns: void */
-  LIBMPV_RENDER_DETACH_SHARED_BUFFER: 'libmpv:renderDetachSharedBuffer',
-  
-  /** Render to shared buffer. Returns: void */
-  LIBMPV_RENDER_TO_SHARED_BUFFER: 'libmpv:renderToSharedBuffer',
-  
-  /** Enable render update events. Returns: void */
-  LIBMPV_RENDER_ENABLE_UPDATE_EVENTS: 'libmpv:renderEnableUpdateEvents',
-  
-  /** Disable render update events. Returns: void */
-  LIBMPV_RENDER_DISABLE_UPDATE_EVENTS: 'libmpv:renderDisableUpdateEvents',
-  
-  /** Create embedded libmpv instance. Returns: { handleId: string } */
-  LIBMPV_CREATE_EMBEDDED: 'libmpv:createEmbedded',
-  
-  /** Set libmpv bounds. Returns: void */
-  LIBMPV_SET_BOUNDS: 'libmpv:setBounds',
-  
-  /** Set libmpv visibility. Returns: void */
-  LIBMPV_SET_VISIBLE: 'libmpv:setVisible',
-
-  // ========================================
-  // Holy Grail (native mpv + sharedTexture bridge)
-  // ========================================
-
-  /** Probe holy grail availability. Returns: { ok, error?, addonPath?, mpvPath?, eglPath?, glesPath?, sharedTexture? } */
-  HG_PROBE: 'holyGrail:probe',
-
-  /** Initialize holy grail GPU pipeline. Args: { width?, height? }. Returns: { ok, error?, width?, height? } */
-  HG_INIT: 'holyGrail:init',
-
-  /** Resize holy grail GPU surface. Args: { width, height }. Returns: { ok, error?, width?, height?, unchanged? } */
-  HG_RESIZE: 'holyGrail:resize',
-
-  /** Load file in holy grail player. Args: filePath. Returns: { ok, error? } */
-  HG_LOAD: 'holyGrail:load',
-
-  /** Start holy grail frame loop. Returns: { ok, error?, alreadyRunning? } */
-  HG_START_FRAME_LOOP: 'holyGrail:startFrameLoop',
-
-  /** Stop holy grail frame loop. Returns: { ok } */
-  HG_STOP_FRAME_LOOP: 'holyGrail:stopFrameLoop',
-
-  /** Send mpv command via holy grail. Args: command array. Returns: { ok, error? } */
-  HG_COMMAND: 'holyGrail:command',
-
-  /** Get holy grail mpv property. Args: name. Returns: { ok, value?, error? } */
-  HG_GET_PROPERTY: 'holyGrail:getProperty',
-
-  /** Set holy grail mpv property. Args: name, value. Returns: { ok, error? } */
-  HG_SET_PROPERTY: 'holyGrail:setProperty',
-
-  /** Get holy grail state. Returns: { ok, state?, error? } */
-  HG_GET_STATE: 'holyGrail:getState',
-
-  /** Get holy grail track list. Returns: { ok, tracks?, error? } */
-  HG_GET_TRACK_LIST: 'holyGrail:getTrackList',
-
-  /** Observe holy grail property changes. Args: name. Returns: { ok, id?, error? } */
-  HG_OBSERVE_PROPERTY: 'holyGrail:observeProperty',
-
-  /** Destroy holy grail player instance (keeps process alive). Returns: { ok } */
-  HG_DESTROY: 'holyGrail:destroy',
-
-  /** Set presentation active state (renderer visibility hint). Args: boolean. Returns: { ok, presentationActive } */
-  HG_SET_PRESENTATION_ACTIVE: 'holyGrail:setPresentationActive',
-
-  /** Get diagnostics snapshot. Returns: { ok, diagnostics } */
-  HG_GET_DIAGNOSTICS: 'holyGrail:getDiagnostics',
-
-  /** Enable/disable diagnostics. Args: boolean. Returns: { ok, diagEnabled } */
-  HG_SET_DIAGNOSTICS_ENABLED: 'holyGrail:setDiagnosticsEnabled',
-
-  /** Reset diagnostics counters. Returns: { ok } */
-  HG_RESET_DIAGNOSTICS: 'holyGrail:resetDiagnostics',
-
-  // ========================================
   // Player Core (Tankoban Pro)
   // ========================================
 
@@ -1086,18 +973,6 @@ const EVENT = {
   /** Folder thumbnail updated. Payload: { folderPath, thumbPath, timestamp } */
   VIDEO_FOLDER_THUMBNAIL_UPDATED: 'video:folderThumbnailUpdated',
 
-  /** Holy grail property change. Payload: { name: string, value: any } */
-  HG_PROPERTY_CHANGE: 'holyGrail:propertyChange',
-
-  /** Holy grail reached EOF. Payload: { ok?: boolean, reason?: string } */
-  HG_EOF: 'holyGrail:eof',
-
-  /** Holy grail file loaded. Payload: { ok?: boolean } */
-  HG_FILE_LOADED: 'holyGrail:fileLoaded',
-
-  /** Holy grail diagnostics snapshot. Payload: diagnostics object */
-  HG_DIAGNOSTICS: 'holyGrail:diagnostics',
-
   // ========================================
   // Dynamic/Templated Events
   // ========================================
@@ -1161,12 +1036,6 @@ const EVENT = {
   /** Audiobook scan status update. Payload: { scanning: boolean, progress?: object } */
   AUDIOBOOK_SCAN_STATUS: 'audiobook:scanStatus',
 
-  /**
-   * libmpv render update event (dynamic per handle).
-   * @param {string|number} handleId - The libmpv handle ID
-   * @returns {string} Channel name like 'libmpv:renderUpdate:42'
-   */
-  libmpvRenderUpdate: (handleId) => `libmpv:renderUpdate:${handleId}`,
 };
 
 // Export as CommonJS for Build 74/75 compatibility
