@@ -576,6 +576,57 @@ function hasShowLibraryFlag(argv) {
   return (Array.isArray(argv) ? argv : []).some(a => String(a).trim() === '--show-library');
 }
 
+const APP_SECTION_ALIASES = Object.freeze({
+  comics: 'comic',
+  'comic-reader': 'comic',
+  reader: 'comic',
+  books: 'book',
+  'book-reader': 'book',
+  audiobooks: 'audiobook',
+  'audiobook-reader': 'audiobook',
+  videos: 'video',
+  'video-player': 'video',
+  web: 'browser',
+  'web-browser': 'browser',
+});
+
+function normalizeAppSection(raw) {
+  const key = String(raw || '').trim().toLowerCase();
+  if (!key) return '';
+  const mapped = APP_SECTION_ALIASES[key] || key;
+  if (
+    mapped === 'shell' ||
+    mapped === 'library' ||
+    mapped === 'comic' ||
+    mapped === 'book' ||
+    mapped === 'audiobook' ||
+    mapped === 'video' ||
+    mapped === 'browser' ||
+    mapped === 'torrent'
+  ) return mapped;
+  return '';
+}
+
+function extractAppSectionFromArgv(argv) {
+  for (const raw of (Array.isArray(argv) ? argv : [])) {
+    const token = String(raw || '').trim();
+    if (!token) continue;
+    if (!token.startsWith('--')) continue;
+    if (token.startsWith('--app-section=')) return normalizeAppSection(token.slice('--app-section='.length));
+    if (token.startsWith('--app=')) return normalizeAppSection(token.slice('--app='.length));
+    if (token.startsWith('--section=')) return normalizeAppSection(token.slice('--section='.length));
+  }
+  return '';
+}
+
+function resolveBootAppSection(opts) {
+  const fromOpts = normalizeAppSection(opts && opts.appSection);
+  if (fromOpts) return fromOpts;
+  const fromEnv = normalizeAppSection(process.env.TANKOBAN_APP_SECTION);
+  if (fromEnv) return fromEnv;
+  return normalizeAppSection(extractAppSectionFromArgv(process.argv));
+}
+
 function getPrimaryWindow() {
   try {
     const w = BrowserWindow.getFocusedWindow();
@@ -639,6 +690,8 @@ function flushPendingOpenPaths(targetWindow) {
 // Window creation
 function createWindow(opts = {}) {
   const openBookId = (opts && opts.openBookId) ? String(opts.openBookId) : '';
+  const appSection = resolveBootAppSection(opts);
+  const debug = String(process.env.MANGA_SCROLLER_DEBUG || '') === '1';
   // BUILD14: Create borderless fullscreen window (kiosk mode)
   const w = new BrowserWindow({
     width: 1200,
@@ -730,7 +783,17 @@ function createWindow(opts = {}) {
     flushPendingOpenPaths(w);
   });
 
-  w.loadFile(path.join(APP_ROOT, 'src', 'index.html'), openBookId ? { query: { book: openBookId } } : {})
+  const query = {};
+  if (debug) query.debug = '1';
+  if (openBookId) {
+    // Keep both keys for backward compatibility while new code uses openBookId.
+    query.openBookId = openBookId;
+    query.book = openBookId;
+  }
+  if (appSection && appSection !== 'shell') query.appSection = appSection;
+  const loadOpts = Object.keys(query).length ? { query } : undefined;
+
+  w.loadFile(path.join(APP_ROOT, 'src', 'index.html'), loadOpts)
     .then(() => {
       // FIX-WIN-CTRL: show first, then maximize â€” maximize before show is unreliable on Windows 11
       w.show();

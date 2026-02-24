@@ -2,6 +2,22 @@
 
 Detailed reference for navigating and modifying the codebase. See `CLAUDE.md` for rules and workflow.
 
+## Standalone Section Boots
+
+The repository now supports section-focused entrypoints under `apps/`:
+1. `apps/library-app/main.js`
+2. `apps/comic-reader-app/main.js`
+3. `apps/book-reader-app/main.js`
+4. `apps/audiobook-app/main.js`
+5. `apps/video-player-app/main.js`
+6. `apps/browser-app/main.js`
+7. `apps/torrent-app/main.js`
+
+These are thin launchers that set `TANKOBAN_APP_SECTION` and delegate to the
+same integrated runtime. Runtime section activation happens in:
+1. `main/index.js` (injects `?appSection=...` in renderer load query)
+2. `src/state/app_section_boot.js` (applies section startup behavior)
+
 ## The `el` Objects — Four Separate Scopes
 
 Each domain has its OWN `el` object caching DOM refs. They are NOT the same object:

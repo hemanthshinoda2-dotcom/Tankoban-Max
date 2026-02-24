@@ -8948,11 +8948,36 @@ function respondToPermissionPrompt(action) {
         openNewTab();
       }
     }
+
+    function openTorrentWorkspace() {
+      var torrentTabId = null;
+      for (var i = 0; i < state.tabs.length; i++) {
+        var tab = state.tabs[i];
+        if (tab && tab.type === 'torrent') {
+          torrentTabId = tab.id;
+          break;
+        }
+      }
+      if (torrentTabId != null) activateTab(torrentTabId);
+      else openDefaultBrowserEntry();
+
+      // Keep torrent controls immediately accessible in standalone torrent mode.
+      openHubPanelSection('browser');
+      try {
+        if (el.hubMagnetInput && typeof el.hubMagnetInput.focus === 'function') {
+          el.hubMagnetInput.focus();
+          if (typeof el.hubMagnetInput.select === 'function') el.hubMagnetInput.select();
+        }
+      } catch (e) {}
+    }
+
     window.Tanko = window.Tanko || {};
     window.Tanko.web = {
       openBrowser: openBrowser,
       openHome: openHome,
       openDefault: openDefaultBrowserEntry,
+      openHubSection: openHubPanelSection,
+      openTorrentWorkspace: openTorrentWorkspace,
       isBrowserOpen: function () { return !!state.browserOpen; },
       openAddSourceDialog: function () { openAddSourceDialog(null); }
     };

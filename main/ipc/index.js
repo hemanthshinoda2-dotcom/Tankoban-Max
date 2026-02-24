@@ -270,6 +270,38 @@ function winFromEvt(evt) {
   return win;
 }
 
+function normalizeAppSection(raw) {
+  const key = String(raw || '').trim().toLowerCase();
+  if (!key) return '';
+  const aliases = {
+    comics: 'comic',
+    'comic-reader': 'comic',
+    reader: 'comic',
+    books: 'book',
+    'book-reader': 'book',
+    audiobooks: 'audiobook',
+    'audiobook-reader': 'audiobook',
+    videos: 'video',
+    'video-player': 'video',
+    web: 'browser',
+    'web-browser': 'browser',
+  };
+  const mapped = aliases[key] || key;
+  if (
+    mapped === 'shell' ||
+    mapped === 'library' ||
+    mapped === 'comic' ||
+    mapped === 'book' ||
+    mapped === 'audiobook' ||
+    mapped === 'video' ||
+    mapped === 'browser' ||
+    mapped === 'torrent'
+  ) return mapped;
+  return '';
+}
+
+const __bootAppSection = normalizeAppSection(process.env.TANKOBAN_APP_SECTION);
+
 function createWindow(opts = {}) {
   const openBookId = (opts && opts.openBookId) ? String(opts.openBookId) : '';
 
@@ -335,6 +367,7 @@ function createWindow(opts = {}) {
   const query = {};
   if (debug) query.debug = '1';
   if (openBookId) query.openBookId = openBookId;
+  if (__bootAppSection && __bootAppSection !== 'shell') query.appSection = __bootAppSection;
 
   w.__tankobanDidFinishLoad = false;
 
