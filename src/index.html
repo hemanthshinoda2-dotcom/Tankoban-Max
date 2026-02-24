@@ -1622,162 +1622,304 @@ COMMON ANCHORS
         </div>
       </div>
 
-      <!-- Chrome-layout browser view (overlay, hidden by default) -->
+      <!-- FEAT-BROWSER: Aspect-based browser view (overlay, hidden by default) -->
       <div id="webBrowserView" class="webBrowserView hidden">
 
-        <!-- Row 1: Tab strip (Chrome title bar — tabs + library back + window controls) -->
-        <div class="webTabStrip">
-          <div class="webTabStripDrag"></div>
-          <button id="webBrowserBackBtn" class="webLibBtn" title="Back to library" aria-label="Back to library">
-            <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M11 1L4 8l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <!-- Row 1: Tab strip -->
+        <div id="web-tab-bar">
+          <div id="web-tab-bar-drag"></div>
+          <button id="web-library-back" class="web-lib-btn" title="Back to library" aria-label="Back to library">
+            <svg viewBox="0 0 16 16" width="14" height="14"><path d="M11 1L4 8l7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Library
           </button>
-          <button id="webTabOverflowBtn" class="webTabOverflowBtn hidden" type="button" title="Show hidden tabs" aria-label="Show hidden tabs">
-            <span aria-hidden="true">&#187;</span>
-          </button>
-          <div id="webTabBar" class="webTabBar" role="tablist" aria-label="Open pages"></div>
-          <div class="winControls">
-            <button id="webWinMinBtn" class="winCtrl" title="Minimize" aria-label="Minimize">
+          <div id="web-tabs-container">
+            <button id="web-btn-new-tab" class="nav-btn" title="New tab (Ctrl+T)">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div class="web-win-controls">
+            <button id="web-win-min" class="winCtrl" title="Minimize" aria-label="Minimize">
               <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
             </button>
-            <button id="webWinMaxBtn" class="winCtrl" title="Maximize" aria-label="Maximize">
+            <button id="web-win-max" class="winCtrl" title="Maximize" aria-label="Maximize">
               <svg viewBox="0 0 10 10" width="10" height="10"><rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
             </button>
-            <button id="webWinCloseBtn" class="winCtrl winCtrl--close" title="Close" aria-label="Close">
+            <button id="web-win-close" class="winCtrl winCtrl--close" title="Close" aria-label="Close">
               <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg>
             </button>
           </div>
         </div>
 
-        <!-- Row 2: Navigation bar (Chrome-style: nav buttons + omnibox + actions) -->
-        <div class="webNavBar">
-          <button id="webNavBack" class="webNavBtn" title="Back" aria-label="Navigate back" disabled>
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
-          </button>
-          <button id="webNavForward" class="webNavBtn" title="Forward" aria-label="Navigate forward" disabled>
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg>
-          </button>
-          <button id="webNavReload" class="webNavBtn" title="Reload" aria-label="Reload page">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8a5.5 5.5 0 1 1 1.3 3.5"/><path d="M2 5v3.5H5.5" stroke-width="1.4"/></svg>
-          </button>
-          <button id="webNavHome" class="webNavBtn" title="Source home page" aria-label="Source home">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 7L8 2.5 13.5 7"/><path d="M4 8.5V13h3v-3h2v3h3V8.5"/></svg>
-          </button>
-          <div class="webOmni" role="group" aria-label="Address bar">
-            <span id="webOmniIcon" class="webOmniIcon" aria-hidden="true"></span>
-            <div class="webOmniInputWrap">
-              <input id="webUrlDisplay" class="webUrlDisplay" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Address" />
-              <span id="webOmniGhost" class="webOmniGhost" aria-hidden="true"></span>
+        <!-- Row 2: Toolbar (nav + URL bar + actions) -->
+        <div id="web-toolbar">
+          <div id="web-nav-buttons">
+            <button id="web-btn-back" class="nav-btn" title="Go back (Alt+Left)" disabled>
+              <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 3L5.5 8l5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="web-btn-forward" class="nav-btn" title="Go forward (Alt+Right)" disabled>
+              <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.5 3L10.5 8l-5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="web-btn-reload" class="nav-btn" title="Reload (Ctrl+R)">
+              <svg id="web-icon-reload" width="16" height="16" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 11-1.3-3.5M13.5 2v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg id="web-icon-stop" width="16" height="16" viewBox="0 0 16 16" style="display:none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+
+          <div id="web-url-bar-wrapper">
+            <span id="web-omni-icon" class="web-omni-icon" aria-hidden="true"></span>
+            <div class="web-omni-input-wrap">
+              <input id="web-url-bar" type="text" placeholder="Search or enter URL" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Address">
+              <span id="web-omni-ghost" class="web-omni-ghost" aria-hidden="true"></span>
             </div>
-            <select id="webSearchEngineSelect" class="webSearchEngineSelect" aria-label="Default search engine">
+            <select id="web-search-engine-select" class="web-search-engine-select" aria-label="Default search engine">
               <option value="yandex">Yandex</option>
               <option value="google">Google</option>
               <option value="duckduckgo">DuckDuckGo</option>
               <option value="bing">Bing</option>
               <option value="brave">Brave</option>
             </select>
-            <div id="webOmniSuggest" class="webOmniSuggest hidden" role="listbox" aria-label="Address suggestions"></div>
+            <div id="web-omni-dropdown" style="display:none"></div>
           </div>
-          <div id="webSiteInfoPopover" class="webSiteInfoPopover hidden" role="dialog" aria-label="Site information" aria-hidden="true">
-            <div class="webSiteInfoHead">
-              <div id="webSiteInfoOrigin" class="webSiteInfoOrigin">No site loaded</div>
-              <div id="webSiteInfoSecurity" class="webSiteInfoSecurity">Security unknown</div>
-            </div>
-            <div class="webSiteInfoSection">
-              <div class="webSiteInfoLabel">Permissions</div>
-              <div id="webSiteInfoPermissions" class="webSiteInfoPermissions"></div>
-            </div>
-            <div class="webSiteInfoSection">
-              <div class="webSiteInfoLabel">Data & blocking</div>
-              <button id="webSiteInfoUsageBtn" class="btn btn-ghost btn-sm" type="button">Cookie/storage usage</button>
-              <div id="webSiteInfoUsageText" class="navMuted">Usage unknown.</div>
-              <div id="webSiteInfoAdblock" class="navMuted">Blocked requests: unavailable</div>
-            </div>
-            <div class="webSiteInfoActions">
-              <button id="webSiteInfoClearDataBtn" class="btn btn-ghost btn-sm" type="button">Clear site data</button>
-              <button id="webSiteInfoResetPermsBtn" class="btn btn-ghost btn-sm" type="button">Reset permissions for this site</button>
-            </div>
-          </div>
-          <button id="webBookmarkBtn" class="webNavAction" title="Toggle bookmark" aria-label="Toggle bookmark">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.2 4.4 13.1l.7-4-2.9-2.8 4-.6z"/></svg>
+
+          <button id="web-btn-bookmark" class="nav-btn" title="Bookmark this page (Ctrl+D)">
+            <svg id="web-icon-bookmark-outline" width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg>
+            <svg id="web-icon-bookmark-filled" width="16" height="16" viewBox="0 0 16 16" style="display:none"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="#8ab4f8" stroke-width="1.4" fill="#8ab4f8" stroke-linejoin="round"/></svg>
           </button>
-          <button id="webFindBtn" class="webNavAction" title="Find in page (Ctrl+F)" aria-label="Find in page">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+
+          <button id="web-btn-tor" class="nav-btn" title="Toggle Tor (Ctrl+Shift+T)">
+            <svg id="web-icon-tor" width="16" height="16" viewBox="0 0 16 16">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/>
+              <circle cx="8" cy="8" r="3.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
+              <circle cx="8" cy="8" r="1.2" fill="currentColor"/>
+            </svg>
+            <span id="web-tor-badge" class="tor-badge" style="display:none"></span>
           </button>
-          <button id="webDlBtn" class="webNavAction" title="Downloads (Ctrl+J)" aria-label="Downloads">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m-3-3l3 3 3-3M3 12h10"/></svg>
-            <span id="webDlBadge" class="webDlBadge hidden" aria-hidden="true"></span>
-          </button>
-          <div id="webDlPill" class="webDlPill hidden" style="display:none" aria-hidden="true"></div>
-          <!-- FEAT-TOR: Tor proxy toggle -->
-          <button id="webTorBtn" class="webNavAction" title="Tor Proxy (off)" aria-label="Toggle Tor proxy">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="3" ry="6"/><ellipse cx="8" cy="8" rx="6" ry="6"/><line x1="2" y1="6" x2="14" y2="6"/><line x1="2" y1="10" x2="14" y2="10"/></svg>
-          </button>
-          <!-- Three-dot menu (Chrome-style kebab) -->
-          <button id="webMenuBtn" class="webNavAction" title="Menu" aria-label="Menu">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>
-          </button>
-          <!-- Split button hidden from nav bar, triggered via menu -->
-          <button id="webSplitBtn" class="webNavBtn" style="display:none" title="Split view" aria-label="Split view">
-            <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><line x1="8" y1="2" x2="8" y2="14"/></svg>
+
+          <button id="web-btn-menu" class="nav-btn" title="Menu">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="3" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="13" r="1.2" fill="currentColor"/></svg>
           </button>
         </div>
 
-        <!-- Load bar (thin accent line) -->
-        <div id="webLoadBar" class="webLoadBar hidden" aria-hidden="true"></div>
+        <!-- Row 3: Bookmark bar -->
+        <div id="web-bookmark-bar">
+          <div id="web-bookmark-bar-items"></div>
+          <button id="web-bookmark-bar-overflow" class="nav-btn" style="display:none" title="More bookmarks">
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
 
-        <div id="webTabQuickPanel" class="webTabQuickPanel hidden" role="dialog" aria-modal="true" aria-label="Search open tabs">
-          <div class="webTabQuickPanelCard">
-            <input id="webTabQuickSearch" class="webTabQuickSearch" type="text" placeholder="Search tabs" autocomplete="off" spellcheck="false" aria-label="Search tabs" />
-            <div id="webTabQuickList" class="webTabQuickList" role="listbox" aria-label="Matching tabs"></div>
+        <!-- Three-dot menu panel -->
+        <div id="web-menu-panel" style="display:none">
+          <div class="menu-item" data-action="new-tab">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            <span>New tab</span>
+            <span class="menu-shortcut">Ctrl+T</span>
+          </div>
+          <div class="menu-separator"></div>
+          <div class="menu-item" data-action="downloads">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7.5L8 11l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Downloads</span>
+            <span class="menu-shortcut">Ctrl+J</span>
+          </div>
+          <div class="menu-item" data-action="history">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 4.5V8l2.5 2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>History</span>
+            <span class="menu-shortcut">Ctrl+H</span>
+          </div>
+          <div class="menu-item" data-action="bookmarks">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg>
+            <span>Bookmarks</span>
+            <span class="menu-shortcut">Ctrl+B</span>
+          </div>
+          <div class="menu-separator"></div>
+          <div class="menu-item" data-action="print-pdf">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 1h8v4h3v6h-3v4H4v-4H1V5h3V1z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/><path d="M5 9h6M5 11h6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+            <span>Print page as PDF</span>
+            <span class="menu-shortcut">Ctrl+P</span>
+          </div>
+          <div class="menu-item" data-action="screenshot">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 3.5V2.5h5v1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            <span>Screenshot full page</span>
+            <span class="menu-shortcut">Ctrl+Shift+S</span>
+          </div>
+          <div class="menu-separator"></div>
+          <div class="menu-item" data-action="torrent">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 5v4M6.5 7.5L8 9l1.5-1.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Tankoban Torrent</span>
           </div>
         </div>
 
-        <!-- Content area (relative wrapper for floating find bar) -->
-        <div class="webContentArea">
+        <!-- Downloads panel (slides down from toolbar) -->
+        <div id="web-downloads-panel" style="display:none">
+          <div id="web-downloads-header">
+            <span>Downloads</span>
+            <button id="web-downloads-close" class="find-btn" title="Close">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <div id="web-downloads-list">
+            <div id="web-downloads-empty">No downloads yet</div>
+          </div>
+        </div>
+
+        <!-- History panel -->
+        <div id="web-history-panel" style="display:none">
+          <div id="web-history-header">
+            <span>History</span>
+            <div id="web-history-header-actions">
+              <input id="web-history-search" type="text" placeholder="Search history..." spellcheck="false" autocomplete="off">
+              <button id="web-history-clear-all" class="find-btn" title="Clear all history">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 4h8M5.5 4V3h3v1M4 4v7.5h6V4" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <button id="web-history-close" class="find-btn" title="Close">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="web-history-list">
+            <div id="web-history-empty">No history yet</div>
+          </div>
+        </div>
+
+        <!-- Bookmarks panel -->
+        <div id="web-bookmarks-panel" style="display:none">
+          <div id="web-bookmarks-header">
+            <span>Bookmarks</span>
+            <div id="web-bookmarks-header-actions">
+              <input id="web-bookmarks-search" type="text" placeholder="Search bookmarks..." spellcheck="false" autocomplete="off">
+              <button id="web-bookmarks-close" class="find-btn" title="Close">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="web-bookmarks-list">
+            <div id="web-bookmarks-empty">No bookmarks yet</div>
+          </div>
+        </div>
+
+        <!-- Loading bar -->
+        <div id="web-loading-bar"><div id="web-loading-bar-fill"></div></div>
+
+        <!-- Content area -->
+        <div id="web-content-area">
           <!-- Find bar (floating top-right over content) -->
-          <div id="webFindBar" class="webFindBar hidden" role="group" aria-label="Find in page">
-            <input id="webFindInput" class="search webFindInput" type="search" placeholder="Find in page..." autocomplete="off" />
-            <div id="webFindCount" class="webFindCount">0 / 0</div>
-            <button id="webFindPrevBtn" class="btn btn-ghost btn-sm" type="button" title="Previous match">Prev</button>
-            <button id="webFindNextBtn" class="btn btn-ghost btn-sm" type="button" title="Next match">Next</button>
-            <button id="webFindCloseBtn" class="btn btn-ghost btn-sm" type="button" title="Close find">&times;</button>
+          <div id="web-find-bar" style="display:none">
+            <input id="web-find-input" type="text" placeholder="Find in page" spellcheck="false" autocomplete="off">
+            <span id="web-find-matches"></span>
+            <button id="web-find-prev" class="find-btn" title="Previous match (Shift+Enter)">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 9l4-4 4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="web-find-next" class="find-btn" title="Next match (Enter)">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button id="web-find-close" class="find-btn" title="Close (Esc)">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            </button>
           </div>
-          <div id="webBrowserHomePanel" class="webBrowserHomePanel hidden" aria-label="Browser home">
-            <div class="webBrowserHomeHead">
-              <div class="webBrowserHomeTitle">Sources</div>
-              <button id="webBrowserHomeAddSourceBtn" class="btn btn-ghost btn-sm" type="button">Add source...</button>
+
+          <div id="web-zoom-indicator" style="display:none">100%</div>
+
+          <!-- Web sources home panel (new-tab page) -->
+          <div id="web-home-panel" style="display:none">
+            <div class="web-home-head">
+              <div class="web-home-title">Sources</div>
+              <button id="web-home-add-source" class="find-btn" type="button">Add source...</button>
             </div>
-            <div id="webBrowserHomeGrid" class="webBrowserHomeGrid"></div>
-            <div id="webBrowserHomeEmpty" class="muted tiny hidden">No sources yet. Add one to get started.</div>
+            <div id="web-home-grid"></div>
+            <div id="web-home-empty" style="display:none">No sources yet. Add one to get started.</div>
           </div>
-          <div id="webTorrentPanel" class="webTorrentPanel hidden">
-            <div id="webTorrentPanelInner" class="webTorrentPanelInner"></div>
+
+          <!-- Torrent manager (qBittorrent-style panel) -->
+          <div id="torrent-container" style="display:none">
+            <div id="tt-toolbar">
+              <button id="tt-btn-add" class="tt-btn" title="Add torrent (magnet link)">
+                <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                <span>Add</span>
+              </button>
+              <button id="tt-btn-resume" class="tt-btn" title="Resume selected">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M4 2.5l8 4.5-8 4.5z" fill="currentColor"/></svg>
+              </button>
+              <button id="tt-btn-pause" class="tt-btn" title="Pause selected">
+                <svg width="14" height="14" viewBox="0 0 14 14"><rect x="3" y="2" width="3" height="10" rx="0.5" fill="currentColor"/><rect x="8" y="2" width="3" height="10" rx="0.5" fill="currentColor"/></svg>
+              </button>
+              <button id="tt-btn-delete" class="tt-btn" title="Delete selected">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 4h8M5.5 4V3h3v1M4 4v7.5h6V4" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div class="tt-sep"></div>
+              <button id="tt-btn-resume-all" class="tt-btn" title="Resume all">
+                <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 2.5l5 4.5-5 4.5z" fill="currentColor"/><path d="M8 2.5l5 4.5-5 4.5z" fill="currentColor"/></svg>
+              </button>
+              <button id="tt-btn-pause-all" class="tt-btn" title="Pause all">
+                <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/><rect x="5" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/><rect x="9" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/></svg>
+              </button>
+              <div class="tt-spacer"></div>
+              <input id="tt-search" type="text" placeholder="Filter torrents..." spellcheck="false" autocomplete="off">
+            </div>
+            <div id="tt-body">
+              <div id="tt-sidebar">
+                <div class="tt-filter active" data-filter="all"><span class="tt-filter-label">All</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="downloading"><span class="tt-filter-label">Downloading</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="seeding"><span class="tt-filter-label">Seeding</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="completed"><span class="tt-filter-label">Completed</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="paused"><span class="tt-filter-label">Paused</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="active"><span class="tt-filter-label">Active</span><span class="tt-filter-count">0</span></div>
+                <div class="tt-filter" data-filter="errored"><span class="tt-filter-label">Errored</span><span class="tt-filter-count">0</span></div>
+              </div>
+              <div id="tt-center">
+                <div id="tt-table-wrap">
+                  <table id="tt-table">
+                    <thead>
+                      <tr>
+                        <th class="tt-col-num">#</th>
+                        <th class="tt-col-name">Name</th>
+                        <th class="tt-col-size">Size</th>
+                        <th class="tt-col-progress">Progress</th>
+                        <th class="tt-col-status">Status</th>
+                        <th class="tt-col-seeds">Seeds</th>
+                        <th class="tt-col-peers">Peers</th>
+                        <th class="tt-col-dlspeed">Down Speed</th>
+                        <th class="tt-col-ulspeed">Up Speed</th>
+                        <th class="tt-col-eta">ETA</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tt-tbody"></tbody>
+                  </table>
+                  <div id="tt-empty">No torrents. Click <b>Add</b> or paste a magnet link on any page.</div>
+                </div>
+                <div id="tt-props">
+                  <div id="tt-props-tabs">
+                    <div class="tt-ptab active" data-ptab="general">General</div>
+                    <div class="tt-ptab" data-ptab="content">Content</div>
+                    <div class="tt-ptab" data-ptab="peers">Peers</div>
+                    <div class="tt-ptab" data-ptab="trackers">Trackers</div>
+                  </div>
+                  <div id="tt-props-body">
+                    <div id="tt-prop-general" class="tt-prop-panel active"></div>
+                    <div id="tt-prop-content" class="tt-prop-panel"></div>
+                    <div id="tt-prop-peers" class="tt-prop-panel"></div>
+                    <div id="tt-prop-trackers" class="tt-prop-panel"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div id="tt-statusbar">
+              <span id="tt-status-dl">&#8595; 0 B/s</span>
+              <span class="tt-status-sep">|</span>
+              <span id="tt-status-ul">&#8593; 0 B/s</span>
+              <span class="tt-status-sep">|</span>
+              <span id="tt-status-dht">DHT: 0 nodes</span>
+              <span class="tt-status-sep">|</span>
+              <span id="tt-status-active">0 active</span>
+            </div>
           </div>
-          <div id="webViewContainer" class="webViewContainer"></div>
+
+          <!-- Webview container (webviews created dynamically by tabs module) -->
+          <div id="web-webview-container"></div>
         </div>
 
-        <!-- Download shelf (Chrome-style bottom bar) -->
-        <div id="webDlBar" class="webDlBar hidden" role="status" aria-live="polite">
-          <div class="webDlBarInner">
-            <svg class="webDlBarIcon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8m-3-3l3 3 3-3M3 12h10"/></svg>
-            <div id="webDlBarText" class="webDlBarText"></div>
-            <div id="webDlBarProgress" class="webDlBarProgress hidden">
-              <div id="webDlBarProgressFill" class="webDlBarProgressFill"></div>
-            </div>
-            <button id="webDlBarClose" class="webDlBarClose" title="Dismiss" aria-label="Dismiss">&times;</button>
-          </div>
-        </div>
-
-        <!-- Downloads panel (floating, anchored to DL button) -->
-        <div id="webDlPanel" class="webDlPanel hidden" role="dialog" aria-label="Downloads" aria-hidden="true">
-          <div class="webDlPanelTop">
-            <div class="webDlPanelTitle">Downloads</div>
-            <button id="webDlClearBtn" class="btn btn-ghost btn-sm">Clear</button>
-          </div>
-          <div id="webDlList" class="webDlList"></div>
-          <div id="webDlEmpty" class="muted tiny webDlEmpty hidden">No downloads yet.</div>
-        </div>
+        <!-- Overlays -->
+        <div id="web-menu-overlay" style="display:none"></div>
+        <div id="web-context-menu" style="display:none"></div>
 
       </div>
 
