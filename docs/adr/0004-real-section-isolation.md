@@ -1,6 +1,6 @@
 # ADR-0004: Real Section Isolation
 
-**Status:** Deferred (pending browser integration)
+**Status:** Partially resolved
 **Date:** 2026-02-24
 
 ## Problem
@@ -9,7 +9,7 @@ The restructuring added `apps/`, `packages/feature-*/`, section smoke checks, an
 
 ### What's broken
 
-1. **Section apps crash on boot** — `main/index.js` accesses `app.isPackaged` synchronously at module load time, before Electron's `app` object is ready. Every `npm run start:browser`, `start:video`, etc. fails with `TypeError: Cannot read properties of undefined`.
+1. ~~**Section apps crash on boot**~~ **RESOLVED** — Verified 2026-02-24: `app.isPackaged` is a static property available immediately on `require('electron')`, no `app.whenReady()` needed. Section apps (`npm run start:browser`, etc.) boot correctly.
 
 2. **All IPC handlers load unconditionally** — `main/ipc/index.js` registers all 40+ handler modules regardless of `TANKOBAN_APP_SECTION`. Browser mode loads comic archive handlers, video scan handlers, everything.
 
