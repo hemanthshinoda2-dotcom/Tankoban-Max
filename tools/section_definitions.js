@@ -39,7 +39,7 @@ const SECTIONS = Object.freeze({
     appEntry: 'apps/browser-app/main.js',
     featurePackage: 'packages/feature-browser/index.js',
     fixtures: ['qa/fixtures/browser/sources.json'],
-    keyFiles: ['src/domains/web/web.js', 'main/domains/webSources/index.js', 'preload/namespaces/web.js'],
+    keyFiles: ['src/domains/web/web.js', 'main/domains/webSources/index.js', 'main/domains/webSearchHistory/index.js', 'preload/namespaces/web.js'],
   },
   torrent: {
     startScript: 'start:torrent',

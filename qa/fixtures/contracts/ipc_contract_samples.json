@@ -1,19 +1,48 @@
-﻿{
+{
   "channelRequests": {
     "LIBRARY_SCAN": [ { "force": true } ],
     "VIDEO_SCAN": [ { "force": true } ],
     "BOOKS_SCAN": [ { "force": true } ],
-    "WINDOW_SET_FULLSCREEN": [ true ]
+    "WINDOW_SET_FULLSCREEN": [ true ],
+    "WEB_TORRENT_START_MAGNET": [ { "magnetUri": "magnet:?xt=urn:btih:abc123" } ],
+    "WEB_TORRENT_REMOVE": [ { "id": "torrent-abc123" } ],
+    "WEB_TORRENT_PAUSE_ALL": [],
+    "WEB_TORRENT_RESUME_ALL": [],
+    "WEB_TORRENT_GET_PEERS": [ { "id": "torrent-abc123" } ],
+    "WEB_TORRENT_GET_DHT_NODES": [],
+    "WEB_TORRENT_SELECT_SAVE_FOLDER": [],
+    "WEB_TORRENT_RESOLVE_METADATA": [ "magnet:?xt=urn:btih:def456" ],
+    "WEB_TORRENT_START_CONFIGURED": [ { "resolveId": "resolve-001", "savePath": "D:/Downloads", "selectedFiles": [0, 2, 5] } ],
+    "WEB_TORRENT_CANCEL_RESOLVE": [ { "resolveId": "resolve-001" } ],
+    "WEB_SEARCH_SUGGEST": [ "one piece" ],
+    "WEB_PRINT_PDF": [ { "webContentsId": 42 } ],
+    "WEB_CAPTURE_PAGE": [ { "webContentsId": 42 } ]
   },
   "channelResponses": {
     "LIBRARY_SCAN": { "ok": true },
     "VIDEO_SCAN": { "ok": true },
     "BOOKS_SCAN": { "ok": true },
-    "WINDOW_SET_FULLSCREEN": true
+    "WINDOW_SET_FULLSCREEN": true,
+    "WEB_TORRENT_REMOVE": { "ok": true },
+    "WEB_TORRENT_PAUSE_ALL": { "ok": true },
+    "WEB_TORRENT_RESUME_ALL": { "ok": true },
+    "WEB_TORRENT_GET_PEERS": { "ok": true, "peers": [ { "ip": "192.168.1.10", "port": 6881, "client": "qBittorrent/4.6.2" } ] },
+    "WEB_TORRENT_GET_DHT_NODES": 42,
+    "WEB_TORRENT_SELECT_SAVE_FOLDER": { "ok": true, "path": "D:/Torrents" },
+    "WEB_TORRENT_RESOLVE_METADATA": { "ok": true, "resolveId": "resolve-001", "name": "Example Torrent", "files": [ { "name": "file1.mkv", "length": 1073741824, "selected": false } ] },
+    "WEB_TORRENT_START_CONFIGURED": { "ok": true, "id": "torrent-def456" },
+    "WEB_TORRENT_CANCEL_RESOLVE": { "ok": true },
+    "WEB_SEARCH_SUGGEST": [ { "type": "search", "text": "one piece manga" }, { "type": "bookmark", "text": "One Piece Wiki", "url": "https://onepiece.fandom.com", "favicon": "" } ],
+    "WEB_PRINT_PDF": { "ok": true, "path": "D:/Downloads/page.pdf" },
+    "WEB_CAPTURE_PAGE": { "ok": true, "path": "D:/Downloads/screenshot.png" }
   },
   "events": {
     "APP_OPEN_FILES": { "paths": ["D:/fixtures/Volume-001.cbz"], "source": "argv" },
     "VIDEO_UPDATED": { "updatedAt": 1735689600000 },
-    "BOOKS_UPDATED": { "updatedAt": 1735689600000 }
+    "BOOKS_UPDATED": { "updatedAt": 1735689600000 },
+    "WEB_CTX_MENU": { "webContentsId": 42, "params": { "mediaType": "none", "linkURL": "", "srcURL": "", "selectionText": "" } },
+    "WEB_CREATE_TAB": { "url": "https://example.com" },
+    "WEB_MAGNET_DETECTED": { "magnetUri": "magnet:?xt=urn:btih:abc123", "webContentsId": 42 },
+    "WEB_TORRENT_FILE_DETECTED": { "url": "https://example.com/file.torrent", "webContentsId": 42 }
   }
 }
