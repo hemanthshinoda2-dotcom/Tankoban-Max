@@ -369,58 +369,6 @@
     },
 
     // ========================================
-    // libmpv.*
-    // ========================================
-    libmpv: {
-      probe: (...a) => ea.libmpv?.probe ? ea.libmpv.probe(...a) : (ea.libmpvProbe ? ea.libmpvProbe(...a) : undefined),
-      createRenderless: (...a) => ea.libmpv?.createRenderless ? ea.libmpv.createRenderless(...a) : ea.libmpvCreateRenderless(...a),
-      destroy: (...a) => ea.libmpv?.destroy ? ea.libmpv.destroy(...a) : ea.libmpvDestroy(...a),
-      command: (...a) => ea.libmpv?.command ? ea.libmpv.command(...a) : ea.libmpvCommand(...a),
-      setPropertyString: (...a) => ea.libmpv?.setPropertyString ? ea.libmpv.setPropertyString(...a) : ea.libmpvSetPropertyString(...a),
-      getPropertyString: (...a) => ea.libmpv?.getPropertyString ? ea.libmpv.getPropertyString(...a) : ea.libmpvGetPropertyString(...a),
-      renderCreateContext: (...a) => ea.libmpv?.renderCreateContext ? ea.libmpv.renderCreateContext(...a) : ea.libmpvRenderCreateContext(...a),
-      renderFreeContext: (...a) => ea.libmpv?.renderFreeContext ? ea.libmpv.renderFreeContext(...a) : ea.libmpvRenderFreeContext(...a),
-      renderFrameRGBA: (...a) => ea.libmpv?.renderFrameRGBA ? ea.libmpv.renderFrameRGBA(...a) : ea.libmpvRenderFrameRGBA(...a),
-      renderAttachSharedBuffer: (...a) => ea.libmpv?.renderAttachSharedBuffer ? ea.libmpv.renderAttachSharedBuffer(...a) : ea.libmpvRenderAttachSharedBuffer(...a),
-      renderDetachSharedBuffer: (...a) => ea.libmpv?.renderDetachSharedBuffer ? ea.libmpv.renderDetachSharedBuffer(...a) : ea.libmpvRenderDetachSharedBuffer(...a),
-      renderToSharedBuffer: (...a) => ea.libmpv?.renderToSharedBuffer ? ea.libmpv.renderToSharedBuffer(...a) : ea.libmpvRenderToSharedBuffer(...a),
-      renderEnableUpdateEvents: (...a) => ea.libmpv?.renderEnableUpdateEvents ? ea.libmpv.renderEnableUpdateEvents(...a) : ea.libmpvRenderEnableUpdateEvents(...a),
-      renderDisableUpdateEvents: (...a) => ea.libmpv?.renderDisableUpdateEvents ? ea.libmpv.renderDisableUpdateEvents(...a) : ea.libmpvRenderDisableUpdateEvents(...a),
-      onRenderUpdate: (handleId, handler) => ea.libmpv?.onRenderUpdate ? ea.libmpv.onRenderUpdate(handleId, handler) : ea.onLibmpvRenderUpdate(handleId, handler),
-      createEmbedded: (...a) => ea.libmpv?.createEmbedded ? ea.libmpv.createEmbedded(...a) : ea.libmpvCreateEmbedded(...a),
-      setBounds: (...a) => ea.libmpv?.setBounds ? ea.libmpv.setBounds(...a) : ea.libmpvSetBounds(...a),
-      setVisible: (...a) => ea.libmpv?.setVisible ? ea.libmpv.setVisible(...a) : ea.libmpvSetVisible(...a),
-    },
-
-    // ========================================
-    // holyGrail.*
-    // ========================================
-    holyGrail: {
-      probe: (...a) => ea.holyGrail?.probe ? ea.holyGrail.probe(...a) : undefined,
-      initGpu: (...a) => ea.holyGrail?.initGpu ? ea.holyGrail.initGpu(...a) : undefined,
-      resizeSurface: (...a) => ea.holyGrail?.resizeSurface ? ea.holyGrail.resizeSurface(...a) : undefined,
-      loadFile: (...a) => ea.holyGrail?.loadFile ? ea.holyGrail.loadFile(...a) : undefined,
-      startFrameLoop: (...a) => ea.holyGrail?.startFrameLoop ? ea.holyGrail.startFrameLoop(...a) : undefined,
-      stopFrameLoop: (...a) => ea.holyGrail?.stopFrameLoop ? ea.holyGrail.stopFrameLoop(...a) : undefined,
-      command: (...a) => ea.holyGrail?.command ? ea.holyGrail.command(...a) : undefined,
-      getProperty: (...a) => ea.holyGrail?.getProperty ? ea.holyGrail.getProperty(...a) : undefined,
-      setProperty: (...a) => ea.holyGrail?.setProperty ? ea.holyGrail.setProperty(...a) : undefined,
-      getState: (...a) => ea.holyGrail?.getState ? ea.holyGrail.getState(...a) : undefined,
-      getTrackList: (...a) => ea.holyGrail?.getTrackList ? ea.holyGrail.getTrackList(...a) : undefined,
-      observeProperty: (...a) => ea.holyGrail?.observeProperty ? ea.holyGrail.observeProperty(...a) : undefined,
-      destroy: (...a) => ea.holyGrail?.destroy ? ea.holyGrail.destroy(...a) : undefined,
-      onPropertyChange: (...a) => ea.holyGrail?.onPropertyChange ? ea.holyGrail.onPropertyChange(...a) : undefined,
-      onEof: (...a) => ea.holyGrail?.onEof ? ea.holyGrail.onEof(...a) : undefined,
-      onFileLoaded: (...a) => ea.holyGrail?.onFileLoaded ? ea.holyGrail.onFileLoaded(...a) : undefined,
-      onVideoFrame: (...a) => ea.holyGrail?.onVideoFrame ? ea.holyGrail.onVideoFrame(...a) : undefined,
-      setPresentationActive: (...a) => ea.holyGrail?.setPresentationActive ? ea.holyGrail.setPresentationActive(...a) : undefined,
-      getDiagnostics: (...a) => ea.holyGrail?.getDiagnostics ? ea.holyGrail.getDiagnostics(...a) : undefined,
-      setDiagnosticsEnabled: (...a) => ea.holyGrail?.setDiagnosticsEnabled ? ea.holyGrail.setDiagnosticsEnabled(...a) : undefined,
-      resetDiagnostics: (...a) => ea.holyGrail?.resetDiagnostics ? ea.holyGrail.resetDiagnostics(...a) : undefined,
-      onDiagnostics: (...a) => ea.holyGrail?.onDiagnostics ? ea.holyGrail.onDiagnostics(...a) : undefined,
-    },
-    
-    // ========================================
     // webSources.* (BUILD_WEB)
     // ========================================
     webSources: {

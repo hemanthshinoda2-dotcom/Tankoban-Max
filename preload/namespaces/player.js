@@ -1,4 +1,4 @@
-// Preload namespaces: player, build14, mpv, libmpv
+// Preload namespaces: player, build14, mpv
 module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
 
   // Shared helper for async IPC with error wrapping
@@ -68,50 +68,6 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       },
 
       probe: async () => invoke(CHANNEL.MPV_IS_AVAILABLE),
-    },
-
-    libmpv: {
-      probe: async () => invoke(CHANNEL.LIBMPV_PROBE),
-      create: async () => invoke(CHANNEL.LIBMPV_CREATE),
-      createRenderless: async () => invoke(CHANNEL.LIBMPV_CREATE_RENDERLESS),
-      destroy: async (handleId) => invoke(CHANNEL.LIBMPV_DESTROY, String(handleId || '')),
-      command: async (handleId, args) => invoke(CHANNEL.LIBMPV_COMMAND, String(handleId || ''), args || []),
-      setPropertyString: async (handleId, name, value) => invoke(CHANNEL.LIBMPV_SET_PROPERTY_STRING, String(handleId || ''), String(name || ''), String(value || '')),
-      getPropertyString: async (handleId, name) => invoke(CHANNEL.LIBMPV_GET_PROPERTY_STRING, String(handleId || ''), String(name || '')),
-      renderCreateContext: async (handleId) => invoke(CHANNEL.LIBMPV_RENDER_CREATE_CONTEXT, String(handleId || '')),
-      renderFreeContext: async (handleId) => invoke(CHANNEL.LIBMPV_RENDER_FREE_CONTEXT, String(handleId || '')),
-      renderFrameRGBA: async (handleId, width, height) => invoke(CHANNEL.LIBMPV_RENDER_FRAME_RGBA, String(handleId || ''), Number(width || 0), Number(height || 0)),
-      renderAttachSharedBuffer: async (handleId, sharedBuffer, width, height) => invoke(CHANNEL.LIBMPV_RENDER_ATTACH_SHARED_BUFFER, String(handleId || ''), sharedBuffer, Number(width || 0), Number(height || 0)),
-
-      renderDetachSharedBuffer: async (handleId) => {
-        try {
-          const res = await ipcRenderer.invoke(CHANNEL.LIBMPV_RENDER_DETACH_SHARED_BUFFER, String(handleId || ''));
-          return (res && typeof res === 'object') ? res : { ok: true };
-        } catch (e) {
-          return { ok: false, error: String(e && e.message ? e.message : e) };
-        }
-      },
-
-      renderToSharedBuffer: async (handleId) => invoke(CHANNEL.LIBMPV_RENDER_TO_SHARED_BUFFER, String(handleId || '')),
-      renderEnableUpdateEvents: async (handleId) => invoke(CHANNEL.LIBMPV_RENDER_ENABLE_UPDATE_EVENTS, String(handleId || '')),
-      renderDisableUpdateEvents: async (handleId) => invoke(CHANNEL.LIBMPV_RENDER_DISABLE_UPDATE_EVENTS, String(handleId || '')),
-
-      onRenderUpdate: (handleId, handler) => {
-        if (typeof handler !== 'function') return () => {};
-        const hid = String(handleId || '');
-        const channel = EVENT.libmpvRenderUpdate(hid);
-        const fn = (_evt, payload) => {
-          try { handler(payload); } catch {}
-        };
-        ipcRenderer.on(channel, fn);
-        return () => {
-          try { ipcRenderer.removeListener(channel, fn); } catch {}
-        };
-      },
-
-      createEmbedded: async (bounds) => invoke(CHANNEL.LIBMPV_CREATE_EMBEDDED, bounds || {}),
-      setBounds: async (handleId, bounds) => invoke(CHANNEL.LIBMPV_SET_BOUNDS, String(handleId || ''), bounds || {}),
-      setVisible: async (handleId, visible) => invoke(CHANNEL.LIBMPV_SET_VISIBLE, String(handleId || ''), !!visible),
     },
   };
 };
