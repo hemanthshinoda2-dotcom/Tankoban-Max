@@ -12,6 +12,7 @@
     var getActiveWebview = function () { var fn = dep('getActiveWebview'); return fn ? fn.apply(null, arguments) : null; };
     var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
     var ensureWebview = function () { var fn = dep('ensureWebview'); return fn ? fn.apply(null, arguments) : null; };
+    var openBrowserForTab = function () { var fn = dep('openBrowserForTab'); return fn && fn.apply(null, arguments); };
     var siteNameFromUrl = function () { var fn = dep('siteNameFromUrl'); return fn ? fn.apply(null, arguments) : ''; };
     var updateNavButtons = function () { var fn = dep('updateNavButtons'); return fn && fn.apply(null, arguments); };
 
@@ -88,6 +89,14 @@
       return 'https://www.' + raw + '.com';
     }
 
+    function ensureBrowserSurface(tabId) {
+      if (tabId == null) return;
+      // If the user navigates from Tankoban home/new-tab UI, force the content
+      // area back to the active webview so pages are actually visible.
+      if (!state.showBrowserHome && state.browserOpen) return;
+      try { openBrowserForTab(tabId); } catch (e) {}
+    }
+
     // ── Navigate ──
 
     function navigateUrl(raw, opts) {
@@ -101,13 +110,15 @@
       }
 
       if (o.newTab) {
-        createTab(null, url, { switchTo: true });
+        var newTab = createTab(null, url, { switchTo: true });
+        if (newTab && newTab.id != null) ensureBrowserSurface(newTab.id);
         return;
       }
 
       var tab = getActiveTab();
       if (!tab) {
-        createTab(null, url, { switchTo: true });
+        var created = createTab(null, url, { switchTo: true });
+        if (created && created.id != null) ensureBrowserSurface(created.id);
         return;
       }
 
@@ -115,8 +126,10 @@
       var wv = tab.webview || ensureWebview(tab, url);
       if (wv) {
         wv.loadURL(url);
+        ensureBrowserSurface(tab.id);
       } else {
-        createTab(null, url, { switchTo: true });
+        var fallbackTab = createTab(null, url, { switchTo: true });
+        if (fallbackTab && fallbackTab.id != null) ensureBrowserSurface(fallbackTab.id);
       }
     }
 

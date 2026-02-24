@@ -490,7 +490,6 @@ function setupDownloadHandler(ctx) {
   if (downloadHandlerBound) return;
   downloadHandlerBound = true;
   try {
-    var ses = session.fromPartition('persist:webmode');
     var ipc = require('../../../shared/ipc');
 
     // Reconcile persisted history: any lingering "downloading" entries become interrupted.
@@ -510,7 +509,7 @@ function setupDownloadHandler(ctx) {
       return changed;
     }).catch(function () {});
 
-    ses.on('will-download', function (_event, item, _webContents) {
+    function onWillDownload(_event, item, _webContents) {
       var filename = item.getFilename();
       var ext = path.extname(filename).toLowerCase();
 
@@ -871,7 +870,11 @@ function setupDownloadHandler(ctx) {
           });
         } catch {}
       });
-    });
+    }
+
+    // Bind the handler to both the legacy and Aspect Browser session partitions.
+    session.fromPartition('persist:webmode').on('will-download', onWillDownload);
+    session.fromPartition('persist:browser').on('will-download', onWillDownload);
     // BUILD_WCV: popup handling moved to webTabs domain (per-view setWindowOpenHandler)
   } catch (err) {
     console.error('[BUILD_WEB] Failed to set up download handler:', err);

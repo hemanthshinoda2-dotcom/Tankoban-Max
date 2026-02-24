@@ -43,6 +43,9 @@
   display: none !important;
 }
 
+/* Hide app chrome when browser is the active surface */
+body:has(.webBrowserView:not(.hidden)) .bgFx { display: none; }
+body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 
 /* ══════════════════════════════════════════
    Tab bar

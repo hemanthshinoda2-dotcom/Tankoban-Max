@@ -146,7 +146,7 @@
       if (!root) return;
       if (!root.dataset.aspectEmbedPrepared) {
         root.dataset.aspectEmbedPrepared = '1';
-        try { root.style.position = root.style.position || 'relative'; } catch (_e) {}
+        /* Keep the CSS position:fixed — do not override to relative */
         Array.prototype.forEach.call(root.children || [], function (child) {
           if (!child || child.id === 'aspectEmbedMountRoot') return;
           child.dataset.aspectEmbedHiddenByHost = '1';

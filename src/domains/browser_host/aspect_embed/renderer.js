@@ -358,6 +358,29 @@ function bindWebviewEvents(tab) {
     } catch (e) { /* webview not ready */ }
   });
 
+  // ── Magnet link interception ──
+
+  wv.addEventListener('will-navigate', function (e) {
+    var url = e.url || '';
+    if (/^magnet:/i.test(url)) {
+      try { e.preventDefault(); } catch (_e) {}
+      openTorrentTab(url);
+    }
+  });
+
+  // ── Popup / new-window handling ──
+
+  wv.addEventListener('new-window', function (e) {
+    try { e.preventDefault(); } catch (_e) {}
+    var url = (e.url || '').trim();
+    if (!url || url === 'about:blank') return;
+    if (/^magnet:/i.test(url)) {
+      openTorrentTab(url);
+      return;
+    }
+    createTab(url, true);
+  });
+
 }
 
 // ── Loading state helpers ──
@@ -1732,13 +1755,15 @@ function openTorrentTab(source) {
 }
 
 // Listen for magnet links detected by main process
-window.aspect.onMagnetDetected(function (uri) {
-  openTorrentTab(uri);
+window.aspect.onMagnetDetected(function (data) {
+  var uri = (data && typeof data === 'object') ? (data.magnetUri || data.magnet || '') : String(data || '');
+  if (uri) openTorrentTab(uri);
 });
 
 // Listen for .torrent files downloaded
-window.aspect.onTorrentFileDetected(function (filePath) {
-  openTorrentTab(filePath);
+window.aspect.onTorrentFileDetected(function (data) {
+  var filePath = (data && typeof data === 'object') ? (data.filePath || data.path || '') : String(data || '');
+  if (filePath) openTorrentTab(filePath);
 });
 
 // ── Bookmark bar ──
