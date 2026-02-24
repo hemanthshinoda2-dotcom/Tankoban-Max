@@ -311,10 +311,7 @@ function createWindow(opts = {}) {
       try { await archivesDomain.cbzCloseAllForOwner(cbzOwnerId); } catch {}
     })();
 
-    (async () => {
-      // BUILD31_LIBMPV_WINDOW_CLEANUP (TankobanPlus Build 31)
-      // Best-effort: close any embedded libmpv players created by this renderer window.
-    })();  });
+  });
 
   w.setMenuBarVisibility(false);
   w.setMenu(null);
