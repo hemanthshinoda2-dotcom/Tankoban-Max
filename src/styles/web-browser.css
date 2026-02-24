@@ -20,6 +20,7 @@
   --wb-purple: #bb86fc;
   --wb-purple-dim: rgba(187, 134, 252, 0.5);
   --wb-disabled: #5f6368;
+  --wb-active-press: #4a4d52;
   --wb-text-secondary: #bdc1c6;
 }
 
@@ -180,7 +181,7 @@
   top: 8px;
   bottom: 8px;
   width: 1px;
-  background: #5f6368;
+  background: var(--wb-disabled);
 }
 
 /* Tab loading spinner (replaces favicon while loading) */
@@ -1209,8 +1210,8 @@
 }
 
 #web-btn-tor.tor-active {
-  background: rgba(187, 134, 252, 0.25);
-  color: #bb86fc;
+  background: var(--wb-purple-dim);
+  color: var(--wb-purple);
 }
 
 #web-btn-tor.tor-active:hover {
@@ -1235,11 +1236,11 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1.5px solid #35363a;
+  border: 1.5px solid var(--wb-surface-raised);
 }
 
 .tor-badge.connected {
-  background: #bb86fc;
+  background: var(--wb-purple);
   display: block !important;
 }
 
@@ -1520,7 +1521,7 @@
   white-space: nowrap;
 }
 .tt-btn:hover { background: var(--wb-border); }
-.tt-btn:active { background: #4a4d52; }
+.tt-btn:active { background: var(--wb-active-press); }
 .tt-btn svg { flex-shrink: 0; }
 
 .tt-sep {
@@ -1559,7 +1560,7 @@
   width: 180px;
   flex-shrink: 0;
   background: var(--wb-surface);
-  border-right: 1px solid #3c4043;
+  border-right: 1px solid var(--wb-border);
   padding: 8px 0;
   overflow-y: auto;
 }
@@ -1627,7 +1628,7 @@
 
 #tt-table td {
   padding: 5px 8px;
-  border-bottom: 1px solid #35363a;
+  border-bottom: 1px solid var(--wb-surface-raised);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1668,10 +1669,10 @@
 }
 
 .tt-progress-fill.downloading { background: var(--wb-accent); }
-.tt-progress-fill.seeding     { background: #81c995; }
+.tt-progress-fill.seeding     { background: var(--wb-success); }
 .tt-progress-fill.paused      { background: #f9ab00; }
-.tt-progress-fill.completed   { background: #81c995; }
-.tt-progress-fill.error       { background: #f28b82; }
+.tt-progress-fill.completed   { background: var(--wb-success); }
+.tt-progress-fill.error       { background: var(--wb-error); }
 
 .tt-progress-text {
   position: absolute;
@@ -1712,7 +1713,7 @@
 #tt-props {
   height: 200px;
   flex-shrink: 0;
-  border-top: 1px solid #3c4043;
+  border-top: 1px solid var(--wb-border);
   display: flex;
   flex-direction: column;
   background: var(--wb-surface);
@@ -1866,7 +1867,7 @@
 .tt-peers-table td {
   padding: 3px 8px;
   font-size: 12px;
-  border-bottom: 1px solid #35363a;
+  border-bottom: 1px solid var(--wb-surface-raised);
 }
 
 /* Trackers table */
@@ -1882,7 +1883,7 @@
 .tt-trackers-table td {
   padding: 3px 8px;
   font-size: 12px;
-  border-bottom: 1px solid #35363a;
+  border-bottom: 1px solid var(--wb-surface-raised);
 }
 
 /* ── Status bar ── */
@@ -1893,13 +1894,13 @@
   gap: 8px;
   padding: 4px 14px;
   background: var(--wb-surface);
-  border-top: 1px solid #3c4043;
+  border-top: 1px solid var(--wb-border);
   font-size: 11px;
   color: var(--wb-muted);
   flex-shrink: 0;
 }
 
-.tt-status-sep { color: #3c4043; }
+.tt-status-sep { color: var(--wb-border); }
 
 /* ── Add torrent dialog (modal) ── */
 
@@ -1981,7 +1982,7 @@
   cursor: pointer;
   font-size: 12px;
 }
-#tt-add-browse:hover { background: #4a4d52; }
+#tt-add-browse:hover { background: var(--wb-active-press); }
 
 .tt-add-buttons {
   display: flex;
@@ -2002,11 +2003,11 @@
   background: var(--wb-border);
   color: var(--wb-text);
 }
-.tt-add-btn.cancel:hover { background: #4a4d52; }
+.tt-add-btn.cancel:hover { background: var(--wb-active-press); }
 
 .tt-add-btn.primary {
   background: var(--wb-accent);
-  color: #202124;
+  color: var(--wb-bg);
   font-weight: 500;
 }
 .tt-add-btn.primary:hover { background: #aecbfa; }
@@ -2110,7 +2111,7 @@
 .tt-spinner {
   width: 16px;
   height: 16px;
-  border: 2px solid #3c4043;
+  border: 2px solid var(--wb-border);
   border-top-color: var(--wb-accent);
   border-radius: 50%;
   animation: tt-spin 0.8s linear infinite;
@@ -2150,7 +2151,7 @@
 #torrent-container ::-webkit-scrollbar { width: 8px; height: 8px; }
 #torrent-container ::-webkit-scrollbar-track { background: transparent; }
 #torrent-container ::-webkit-scrollbar-thumb { background: var(--wb-border); border-radius: 4px; }
-#torrent-container ::-webkit-scrollbar-thumb:hover { background: #5f6368; }
+#torrent-container ::-webkit-scrollbar-thumb:hover { background: var(--wb-disabled); }
 
 
 /* ══════════════════════════════════════════
@@ -2422,5 +2423,5 @@
   border-radius: 4px;
 }
 #webBrowserView ::-webkit-scrollbar-thumb:hover {
-  background: #5f6368;
+  background: var(--wb-disabled);
 }

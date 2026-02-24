@@ -196,25 +196,25 @@
   // BUILD_WEB: Web mode deferred loader
   let webModulesPromise = null;
   async function ensureWebModulesLoaded() {
-    console.log('[DBG-WEB-DFR] ensureWebModulesLoaded called, alreadyLoaded=', !!window.__tankoWebModulesLoaded, 'hasPromise=', !!webModulesPromise);
     if (window.__tankoWebModulesLoaded) return;
     if (!webModulesPromise) {
       webModulesPromise = (async () => {
         const activationStart = perf.now();
-        console.log('[DBG-WEB-DFR] loading web module group scripts...');
+        // Group: all feature modules (no cross-deps, parallel download+execute)
         await loadScriptGroup([
           './domains/web/web_contract.js',
           './domains/web/web_module_tabs_state.js',
           './domains/web/web_module_nav_omnibox.js',
           './domains/web/web_module_downloads.js',
+          './domains/web/web_module_panels.js',
+          './domains/web/web_module_context_menu.js',
+          './domains/web/web_module_find.js',
           './domains/web/web_module_torrent_tab.js',
           './domains/web/web_module_hub.js',
           './domains/web/web_module_standalone.js',
         ]);
-        console.log('[DBG-WEB-DFR] group done, registered modules=', Object.keys(window.__tankoWebModules || {}));
-        console.log('[DBG-WEB-DFR] loading web.js...');
+        // Sequential: orchestrator must load after all modules register
         await loadScriptOnce('./domains/web/web.js');
-        console.log('[DBG-WEB-DFR] web.js loaded, Tanko.web=', window.Tanko && window.Tanko.web);
         window.__tankoWebModulesLoaded = true;
 
         const elapsed = Math.round(perf.now() - activationStart);
