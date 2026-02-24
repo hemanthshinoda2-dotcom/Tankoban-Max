@@ -5,360 +5,785 @@
     var state = bridge.state;
     var el = bridge.el;
     var api = bridge.api;
-    var webTabs = bridge.webTabs;
+
+    // Cross-module deps (wired by orchestrator after all modules init)
     function dep(name) { return (bridge.deps || {})[name]; }
-    var escapeHtml = function () { var fn = dep('escapeHtml'); return fn ? fn.apply(null, arguments) : ''; };
-    var shortPath = function () { var fn = dep('shortPath'); return fn ? fn.apply(null, arguments) : ''; };
-    var getSourceColor = function () { var fn = dep('getSourceColor'); return fn ? fn.apply(null, arguments) : '#555'; };
-    var getSourceById = function () { var fn = dep('getSourceById'); return fn ? fn.apply(null, arguments) : null; };
-    var siteNameFromUrl = function () { var fn = dep('siteNameFromUrl'); return fn ? fn.apply(null, arguments) : ''; };
-    var getFaviconUrl = function () { var fn = dep('getFaviconUrl'); return fn ? fn.apply(null, arguments) : ''; };
+    var closeFind = function () { var fn = dep('closeFind'); return fn && fn.apply(null, arguments); };
+    var bindFindEvents = function () { var fn = dep('bindFindEvents'); return fn && fn.apply(null, arguments); };
+    var updateBookmarkIcon = function () { var fn = dep('updateBookmarkIcon'); return fn && fn.apply(null, arguments); };
     var showToast = function () { var fn = dep('showToast'); return fn && fn.apply(null, arguments); };
-    var renderTabs = function () { var fn = dep('renderTabs'); return fn && fn.apply(null, arguments); };
-    var syncLoadBar = function () { var fn = dep('syncLoadBar'); return fn && fn.apply(null, arguments); };
-    var syncReloadStopButton = function () { var fn = dep('syncReloadStopButton'); return fn && fn.apply(null, arguments); };
-    var updateNavButtons = function () { var fn = dep('updateNavButtons'); return fn && fn.apply(null, arguments); };
-    var updateUrlDisplay = function () { var fn = dep('updateUrlDisplay'); return fn && fn.apply(null, arguments); };
-    var scheduleSessionSave = function () { var fn = dep('scheduleSessionSave'); return fn && fn.apply(null, arguments); };
-    var openBrowserForTab = function () { var fn = dep('openBrowserForTab'); return fn && fn.apply(null, arguments); };
-    var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
-    var getActiveTab = function () { var fn = dep('getActiveTab'); return fn ? fn.apply(null, arguments) : null; };
-    var ensureTabRuntime = function () { var fn = dep('ensureTabRuntime'); return fn ? fn.apply(null, arguments) : null; };
-    var closeOmniSuggestions = function () { var fn = dep('closeOmniSuggestions'); return fn && fn.apply(null, arguments); };
-    var setOmniIconForUrl = function () { var fn = dep('setOmniIconForUrl'); return fn && fn.apply(null, arguments); };
-    var isWebModeActive = function () { var fn = dep('isWebModeActive'); return fn ? fn.apply(null, arguments) : false; };
-    var renderHubAll = function () { var fn = dep('renderHubAll'); return fn && fn.apply(null, arguments); };
-    var renderDownloadsPanel = function () { var fn = dep('renderDownloadsPanel'); return fn && fn.apply(null, arguments); };
-    var renderHomeDownloads = function () { var fn = dep('renderHomeDownloads'); return fn && fn.apply(null, arguments); };
+
+    var MAX_TABS = 50;
+    var MAX_CLOSED_TABS = 25;
+    var loadingBarTimer = null;
+
+    // ── Utilities ──
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function siteNameFromUrl(url) {
+      try {
+        var host = new URL(String(url || '')).hostname;
+        return host.replace(/^www\./, '');
+      } catch (e) { return ''; }
+    }
+
+    // ── Tab state queries ──
 
     function getActiveTab() {
-        if (!state.activeTabId) return null;
-        for (var i = 0; i < state.tabs.length; i++) {
-          if (state.tabs[i].id === state.activeTabId) return state.tabs[i];
-        }
+      if (state.activeTabId == null) return null;
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === state.activeTabId) return state.tabs[i];
+      }
+      return null;
+    }
+
+    function getActiveWebview() {
+      var tab = getActiveTab();
+      return (tab && tab.webview) ? tab.webview : null;
+    }
+
+    // ── Tab creation ──
+
+    function createTab(source, url, opts) {
+      if (!opts) opts = {};
+      var switchTo = opts.switchTo !== false;
+
+      var norm = normalizeSourceInput(source, url);
+      var tabUrl = String(url || norm.url || '').trim();
+      var id = (opts.forcedId && opts.forcedId > 0) ? opts.forcedId : state.nextTabId++;
+      if (id >= state.nextTabId) state.nextTabId = id + 1;
+
+      if (state.tabs.length >= MAX_TABS) {
+        showToast('Tab limit reached (' + MAX_TABS + ')');
         return null;
       }
 
-      // BUILD_WCV: find tab by main-process tabId
-      function getTabByMainId(mainTabId) {
-        for (var i = 0; i < state.tabs.length; i++) {
-          if (state.tabs[i].mainTabId === mainTabId) return state.tabs[i];
-        }
-        return null;
+      // Create <webview> element (skip for blank/home tabs)
+      var wv = null;
+      if (tabUrl && tabUrl !== 'about:blank') {
+        wv = document.createElement('webview');
+        wv.setAttribute('src', tabUrl);
+        wv.setAttribute('partition', 'persist:webmode');
+        wv.setAttribute('allowpopups', '');
+        wv.setAttribute('webpreferences', 'contextIsolation=yes');
+        if (el.webviewContainer) el.webviewContainer.appendChild(wv);
       }
 
-      function createTabRuntime(url) {
-        var u = String(url || '').trim();
-        var entries = [];
-        if (u) entries.push({ url: u, title: '' });
-        return {
-          navEntries: entries,
-          currentIndex: entries.length ? 0 : -1,
-          pendingUrl: '',
-          lastVisibleUrl: u,
-          lastCommittedUrl: u,
-          lastError: null,
-          securityState: inferSecurityStateFromUrl(u),
-          isBlocked: false,
-          omniState: null // CHROMIUM_PARITY: per-tab omnibox state (C2)
-        };
+      // Create tab bar element
+      var tabEl = document.createElement('div');
+      tabEl.className = 'tab';
+      tabEl.dataset.tabId = id;
+      tabEl.innerHTML =
+        '<div class="tab-spinner"></div>' +
+        '<img class="tab-favicon" style="display:none">' +
+        '<span class="tab-title">' + escapeHtml(opts.titleOverride || norm.name || 'New Tab') + '</span>' +
+        '<button class="tab-close" title="Close tab (Ctrl+W)">' +
+          '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>' +
+        '</button>';
+      if (el.tabsContainer && el.btnNewTab) {
+        el.tabsContainer.insertBefore(tabEl, el.btnNewTab);
+      } else if (el.tabsContainer) {
+        el.tabsContainer.appendChild(tabEl);
       }
 
-      function ensureTabRuntime(tab) {
-        if (!tab) return createTabRuntime('');
-        if (!tab.runtime || typeof tab.runtime !== 'object') {
-          tab.runtime = createTabRuntime(tab.url || tab.homeUrl || '');
-        }
-        // CHROMIUM_PARITY: Migrate legacy string navEntries to { url, title } objects
-        var rt = tab.runtime;
-        if (rt.navEntries && rt.navEntries.length > 0 && typeof rt.navEntries[0] === 'string') {
-          rt.navEntries = rt.navEntries.map(function (e) {
-            return typeof e === 'string' ? { url: e, title: '' } : e;
-          });
-        }
-        return rt;
+      // Tab data object
+      var tab = {
+        id: id,
+        webview: wv,
+        element: tabEl,
+        title: opts.titleOverride || norm.name || 'New Tab',
+        favicon: '',
+        url: tabUrl,
+        homeUrl: norm.url || tabUrl,
+        sourceId: norm.id || '',
+        sourceName: norm.name || '',
+        sourceColor: norm.color || '#555',
+        pinned: false,
+        loading: false,
+        type: 'browser'
+      };
+      state.tabs.push(tab);
+
+      // Tab element events
+      tabEl.addEventListener('click', function (e) {
+        if (!e.target.closest('.tab-close')) switchTab(id);
+      });
+      tabEl.addEventListener('mousedown', function (e) {
+        if (e.button === 1) { e.preventDefault(); closeTab(id); }
+      });
+      tabEl.querySelector('.tab-close').addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeTab(id);
+      });
+
+      // Bind webview events
+      if (wv) {
+        bindWebviewEvents(tab);
+        bindFindEvents(tab);
       }
 
-      function inferSecurityStateFromUrl(url) {
-        var raw = String(url || '').trim();
-        if (!raw) return 'unknown';
-        if (raw.indexOf('https://') === 0) return 'secure';
-        if (raw.indexOf('http://') === 0) return 'insecure';
-        if (/^(file|about|chrome|data):/i.test(raw)) return 'internal';
-        return 'unknown';
+      // Switch to new tab
+      if (switchTo) {
+        switchTab(id);
+        if (!tabUrl || tabUrl === 'about:blank') {
+          setTimeout(function () { if (el.urlBar) el.urlBar.focus(); }, 50);
+        }
       }
 
-      function classifyLoadFailure(errorCode, errorDescription, failedUrl) {
-        var code = Number(errorCode || 0);
-        var desc = String(errorDescription || '').trim();
-        var lower = desc.toLowerCase();
-        var host = '';
-        try { host = new URL(String(failedUrl || '')).hostname; } catch (e) {}
+      if (!opts.skipSessionSave) scheduleSessionSave();
+      if (!opts.silentToast && opts.toastText) showToast(opts.toastText);
 
-        var out = {
-          kind: 'load_failed',
-          isBlocked: false,
-          title: '',
-          toast: ''
-        };
+      return tab;
+    }
 
-        if (code === -20 || code === -21 || lower.indexOf('blocked') !== -1 || lower.indexOf('client blocked') !== -1) {
-          out.kind = 'blocked';
-          out.isBlocked = true;
-        } else if (code === -105 || code === -137 || code === -300 || lower.indexOf('name not resolved') !== -1 || lower.indexOf('dns') !== -1) {
-          out.kind = 'dns';
-        } else if (code <= -200 && code >= -299) {
-          out.kind = 'tls';
-        } else if (code === -118 || code === -7 || lower.indexOf('timed out') !== -1) {
-          out.kind = 'timeout';
-        } else if (code === -106 || lower.indexOf('internet disconnected') !== -1) {
-          out.kind = 'offline';
+    function closeTab(id) {
+      var idx = -1;
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === id) { idx = i; break; }
+      }
+      if (idx === -1) return;
+
+      var tab = state.tabs[idx];
+      var wasActive = (state.activeTabId === id);
+
+      // Save to closed-tab history
+      pushClosedTab(tab);
+
+      // Remove DOM elements
+      if (tab.element) tab.element.remove();
+      if (tab.webview) tab.webview.remove();
+      if (tab.type === 'torrent' && el.torrentContainer) {
+        el.torrentContainer.style.display = 'none';
+      }
+      state.tabs.splice(idx, 1);
+
+      // Switch to neighbour or create new blank tab
+      if (wasActive) {
+        if (state.tabs.length > 0) {
+          var newIdx = Math.min(idx, state.tabs.length - 1);
+          switchTab(state.tabs[newIdx].id);
+        } else {
+          state.activeTabId = null;
+          createTab(null, '', { switchTo: true });
         }
-
-        if (out.kind === 'blocked') out.title = 'Blocked';
-        else if (out.kind === 'dns') out.title = 'DNS error';
-        else if (out.kind === 'tls') out.title = 'TLS error';
-        else if (out.kind === 'timeout') out.title = 'Timed out';
-        else if (out.kind === 'offline') out.title = 'Offline';
-        else out.title = 'Load failed';
-
-        if (host) out.title += ' - ' + host;
-
-        if (out.kind === 'blocked') out.toast = 'Blocked: ' + (host || 'site');
-        else if (desc) out.toast = 'Load failed: ' + desc;
-        else out.toast = out.title;
-
-        return out;
       }
 
-      // CHROMIUM_PARITY: direction-aware history tracking for back/forward dropdown
-      function pushRuntimeCommittedUrl(tab, url, direction) {
-        var runtime = ensureTabRuntime(tab);
-        var u = String(url || '').trim();
-        if (!u) return;
-        runtime.lastVisibleUrl = u;
-        runtime.lastCommittedUrl = u;
-        runtime.pendingUrl = '';
-        runtime.securityState = inferSecurityStateFromUrl(u);
-        runtime.isBlocked = false;
-        runtime.lastError = null;
+      scheduleSessionSave();
+    }
 
-        if (direction === 'back') {
-          if (runtime.currentIndex > 0) runtime.currentIndex--;
-          if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
-          return;
-        }
-        if (direction === 'forward') {
-          if (runtime.currentIndex < runtime.navEntries.length - 1) runtime.currentIndex++;
-          if (runtime.navEntries[runtime.currentIndex]) runtime.navEntries[runtime.currentIndex].url = u;
-          return;
-        }
-        if (direction === 'index') return; // index handled directly in onUrlUpdated
+    function switchTab(id) {
+      var tab = null;
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
+      }
+      if (!tab) return;
 
-        // Normal new navigation
-        var current = runtime.navEntries[runtime.currentIndex];
-        if (current && current.url === u) return;
-        if (runtime.currentIndex < runtime.navEntries.length - 1) {
-          runtime.navEntries = runtime.navEntries.slice(0, runtime.currentIndex + 1);
-        }
-        runtime.navEntries.push({ url: u, title: String(tab.title || '') });
-        if (runtime.navEntries.length > 250) {
-          runtime.navEntries.shift();
-        }
-        runtime.currentIndex = runtime.navEntries.length - 1;
+      state.activeTabId = id;
+
+      // Update tab bar + webview visibility
+      for (var j = 0; j < state.tabs.length; j++) {
+        var t = state.tabs[j];
+        var isActive = t.id === id;
+        if (t.element) t.element.classList.toggle('active', isActive);
+        if (t.webview) t.webview.classList.toggle('active', isActive);
       }
 
-      function normalizeSourceInput(source, urlOverride) {
-        if (source && typeof source === 'object') {
-          var objUrl = String(source.url || urlOverride || '').trim();
-          return {
-            id: source.id != null ? source.id : ('src_' + Date.now()),
-            name: String(source.name || siteNameFromUrl(objUrl) || 'New Tab'),
-            url: objUrl || String(urlOverride || 'about:blank').trim(),
-            color: String(source.color || '#555')
-          };
-        }
-
-        var asUrl = String(source || urlOverride || '').trim();
-        if (!asUrl) asUrl = 'about:blank';
-        return {
-          id: 'src_' + Date.now(),
-          name: siteNameFromUrl(asUrl) || 'New Tab',
-          url: asUrl,
-          color: '#555'
-        };
+      // Show/hide torrent container
+      if (el.torrentContainer) {
+        el.torrentContainer.style.display = (tab.type === 'torrent') ? '' : 'none';
       }
 
-      function snapshotTabForSession(tab) {
-        if (!tab) return null;
-        if (tab.type === 'torrent') return null; // torrent tabs are transient, don't persist
-        var url = String(tab.url || '').trim();
-        if (!url) return null;
-        return {
-          id: String(tab.id || ''),
-          sourceId: tab.sourceId != null ? String(tab.sourceId) : '',
-          sourceName: String(tab.sourceName || '').trim(),
-          title: String(tab.title || '').trim(),
-          url: url,
-          homeUrl: String(tab.homeUrl || url).trim() || url,
-          pinned: !!tab.pinned
-        };
+      // Close find bar on tab switch
+      closeFind();
+
+      // Sync toolbar to active tab
+      if (tab.type === 'torrent') {
+        if (el.urlBar) el.urlBar.value = 'tanko://torrents';
+        setLoadingUI(false);
+        if (el.btnBack) el.btnBack.disabled = true;
+        if (el.btnForward) el.btnForward.disabled = true;
+      } else if (tab.webview) {
+        try {
+          if (el.urlBar) el.urlBar.value = tab.webview.getURL() || tab.url || '';
+        } catch (e) {
+          if (el.urlBar) el.urlBar.value = tab.url || '';
+        }
+        syncLoadingState(tab);
+        updateNavButtons();
+      } else {
+        // Home page (no webview)
+        if (el.urlBar) el.urlBar.value = '';
+        setLoadingUI(false);
+        updateNavButtons();
       }
 
-      function buildSessionPayload() {
-        var tabs = [];
-        for (var i = 0; i < state.tabs.length; i++) {
-          var snap = snapshotTabForSession(state.tabs[i]);
-          if (snap) tabs.push(snap);
-          if (tabs.length >= MAX_TABS) break;
-        }
-        var closedTabs = [];
-        for (var j = 0; j < state.closedTabs.length; j++) {
-          var closed = snapshotTabForSession(state.closedTabs[j]);
-          if (closed) closedTabs.push(closed);
-          if (closedTabs.length >= MAX_CLOSED_TABS) break;
-        }
-        return {
-          tabs: tabs,
-          activeTabId: state.activeTabId != null ? String(state.activeTabId) : '',
-          closedTabs: closedTabs,
-          restoreLastSession: state.restoreLastSession !== false,
-          updatedAt: Date.now()
-        };
-      }
+      updateBookmarkIcon();
+      bridge.emit('tab:switched', { tabId: id, tab: tab });
+    }
 
-      function scheduleSessionSave(immediate) {
-        if (state.sessionRestoreInProgress) return;
-        if (!api.webSession || typeof api.webSession.save !== 'function') return;
-        var runSave = function () {
-          state.sessionSaveTimer = null;
-          api.webSession.save({ state: buildSessionPayload() }).catch(function () {});
-        };
-        if (immediate) {
-          if (state.sessionSaveTimer) {
-            try { clearTimeout(state.sessionSaveTimer); } catch (e) {}
-            state.sessionSaveTimer = null;
+    function cycleTab(direction) {
+      if (state.tabs.length < 2) return;
+      var idx = -1;
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === state.activeTabId) { idx = i; break; }
+      }
+      if (idx === -1) return;
+      var next = (idx + direction + state.tabs.length) % state.tabs.length;
+      switchTab(state.tabs[next].id);
+    }
+
+    // ── Webview event binding (per-tab) ──
+
+    function bindWebviewEvents(tab) {
+      var wv = tab.webview;
+      if (!wv) return;
+
+      wv.addEventListener('did-navigate', function (e) {
+        tab.url = e.url;
+        if (tab.id === state.activeTabId) {
+          if (el.urlBar) el.urlBar.value = e.url;
+          updateNavButtons();
+          updateBookmarkIcon();
+        }
+        scheduleSessionSave();
+      });
+
+      wv.addEventListener('did-navigate-in-page', function (e) {
+        if (e.isMainFrame) {
+          tab.url = e.url;
+          if (tab.id === state.activeTabId) {
+            if (el.urlBar) el.urlBar.value = e.url;
+            updateNavButtons();
+            updateBookmarkIcon();
           }
-          runSave();
-          return;
         }
-        if (state.sessionSaveTimer) return;
-        state.sessionSaveTimer = setTimeout(runSave, 260);
-      }
+      });
 
-      function pushClosedTab(tab) {
-        var snap = snapshotTabForSession(tab);
-        if (!snap) return;
-        state.closedTabs.unshift(snap);
-        if (state.closedTabs.length > MAX_CLOSED_TABS) state.closedTabs.length = MAX_CLOSED_TABS;
-      }
+      wv.addEventListener('page-title-updated', function (e) {
+        tab.title = e.title;
+        var titleSpan = tab.element ? tab.element.querySelector('.tab-title') : null;
+        if (titleSpan) titleSpan.textContent = e.title;
+      });
 
-      function reopenClosedTab() {
-        if (!state.closedTabs.length) {
-          showToast('No recently closed tab');
-          return;
-        }
-        var snap = state.closedTabs.shift();
-        if (!snap) return;
-        var src = {
-          id: snap.sourceId || ('restored_' + Date.now()),
-          name: snap.sourceName || siteNameFromUrl(snap.url) || 'Tab',
-          url: snap.homeUrl || snap.url,
-          color: '#555'
-        };
-        var restored = createTab(src, snap.url, {
-          silentToast: true,
-          toastText: 'Reopened tab',
-          skipHistory: true,
-          titleOverride: snap.title || '',
-          forcedId: Number(snap.id || 0) || null
-        });
-        if (restored) {
-          restored.pinned = !!snap.pinned;
-          renderTabs();
-          showToast('Reopened tab');
-          scheduleSessionSave();
-        }
-      }
-
-      function loadSessionAndRestore() {
-        if (!api.webSession || typeof api.webSession.get !== 'function') return;
-        state.sessionRestoreInProgress = true;
-        api.webSession.get().then(function (res) {
-          var data = (res && res.ok && res.state) ? res.state : null;
-          if (!data || typeof data !== 'object') return;
-
-          var settingsAllowRestore = !(state.browserSettings && state.browserSettings.restoreLastSession === false);
-          state.restoreLastSession = settingsAllowRestore && (data.restoreLastSession !== false);
-          state.closedTabs = [];
-          if (Array.isArray(data.closedTabs)) {
-            for (var c = 0; c < data.closedTabs.length; c++) {
-              var cs = snapshotTabForSession(data.closedTabs[c]);
-              if (!cs) continue;
-              state.closedTabs.push(cs);
-              if (state.closedTabs.length >= MAX_CLOSED_TABS) break;
-            }
+      wv.addEventListener('page-favicon-updated', function (e) {
+        if (e.favicons && e.favicons.length > 0) {
+          tab.favicon = e.favicons[0];
+          if (tab.element) {
+            var img = tab.element.querySelector('.tab-favicon');
+            if (img) { img.src = e.favicons[0]; img.style.display = ''; }
+            var spinner = tab.element.querySelector('.tab-spinner');
+            if (spinner) spinner.style.display = 'none';
           }
+        }
+      });
 
-          if (!state.restoreLastSession) return;
-          if (!Array.isArray(data.tabs) || !data.tabs.length) return;
+      wv.addEventListener('did-start-loading', function () {
+        tab.loading = true;
+        if (tab.id === state.activeTabId) {
+          setLoadingUI(true);
+          showLoadingBar();
+        }
+        if (tab.element) {
+          var spinner = tab.element.querySelector('.tab-spinner');
+          var img = tab.element.querySelector('.tab-favicon');
+          if (spinner) spinner.style.display = '';
+          tab.favicon = '';
+          if (img) { img.style.display = 'none'; img.src = ''; }
+        }
+      });
 
-          var targetActive = String(data.activeTabId || '').trim();
-          var maxId = 0;
-          for (var i = 0; i < data.tabs.length && i < MAX_TABS; i++) {
-            var s = snapshotTabForSession(data.tabs[i]);
-            if (!s) continue;
-            var sidNum = Number(s.id || 0);
-            if (isFinite(sidNum) && sidNum > maxId) maxId = sidNum;
-            var src = {
-              id: s.sourceId || ('restored_' + i),
-              name: s.sourceName || siteNameFromUrl(s.homeUrl || s.url) || 'Tab',
-              url: s.homeUrl || s.url,
-              color: '#555'
-            };
-            var tab = createTab(src, s.url, {
-              silentToast: true,
-              skipHistory: true,
-              skipSessionSave: true,
-              titleOverride: s.title || '',
-              forcedId: sidNum > 0 ? sidNum : null
+      wv.addEventListener('did-stop-loading', function () {
+        tab.loading = false;
+        if (tab.id === state.activeTabId) {
+          setLoadingUI(false);
+          hideLoadingBar();
+          updateNavButtons();
+        }
+        if (tab.element) {
+          var spinner = tab.element.querySelector('.tab-spinner');
+          if (spinner) spinner.style.display = 'none';
+        }
+        // Record to browsing history
+        try {
+          var url = wv.getURL();
+          tab.url = url;
+          if (url && url !== 'about:blank' && !/^(data|chrome|devtools):/i.test(url)) {
+            api.webHistory.add({
+              url: url,
+              title: tab.title || url,
+              favicon: tab.favicon || '',
+              timestamp: Date.now()
             });
-            if (tab) tab.pinned = !!s.pinned;
+            bridge.emit('history:updated');
           }
-          if (maxId >= state.nextTabId) state.nextTabId = maxId + 1;
+        } catch (e) { /* webview not ready */ }
+        scheduleSessionSave();
+      });
 
-          if (targetActive) {
-            for (var j = 0; j < state.tabs.length; j++) {
-              if (String(state.tabs[j].id) === targetActive) {
-                activateTab(state.tabs[j].id);
-                break;
-              }
+      wv.addEventListener('did-fail-load', function (e) {
+        if (e.errorCode === -3) return; // aborted — normal for redirects
+        var classified = classifyLoadFailure(e.errorCode, e.errorDescription, e.validatedURL);
+        if (classified.toast) showToast(classified.toast);
+        bridge.emit('tab:loadFailed', { tabId: tab.id, error: classified });
+      });
+
+      // Handle new window requests (target=_blank, window.open, etc.)
+      wv.addEventListener('new-window', function (e) {
+        e.preventDefault();
+        createTab(null, e.url, { switchTo: e.disposition !== 'background-tab' });
+      });
+    }
+
+    // ── Loading state UI ──
+
+    function setLoadingUI(loading) {
+      if (el.iconReload) el.iconReload.style.display = loading ? 'none' : '';
+      if (el.iconStop) el.iconStop.style.display = loading ? '' : 'none';
+      if (el.btnReload) el.btnReload.title = loading ? 'Stop loading (Esc)' : 'Reload (Ctrl+R)';
+    }
+
+    function showLoadingBar() {
+      clearTimeout(loadingBarTimer);
+      if (el.loadingBar) el.loadingBar.className = 'loading';
+    }
+
+    function hideLoadingBar() {
+      if (el.loadingBar) el.loadingBar.className = 'done';
+      clearTimeout(loadingBarTimer);
+      loadingBarTimer = setTimeout(function () {
+        if (el.loadingBar) el.loadingBar.className = '';
+        if (el.loadingBarFill) el.loadingBarFill.style.width = '';
+      }, 300);
+    }
+
+    function syncLoadingState(tab) {
+      if (!tab || !tab.webview) { setLoadingUI(false); return; }
+      var loading = false;
+      try { loading = tab.webview.isLoading(); } catch (e) {}
+      setLoadingUI(loading);
+      if (loading) showLoadingBar();
+      else if (el.loadingBar) el.loadingBar.className = '';
+    }
+
+    // ── Navigation ──
+
+    function updateNavButtons() {
+      var wv = getActiveWebview();
+      try {
+        if (el.btnBack) el.btnBack.disabled = !(wv && wv.canGoBack());
+        if (el.btnForward) el.btnForward.disabled = !(wv && wv.canGoForward());
+      } catch (e) {
+        if (el.btnBack) el.btnBack.disabled = true;
+        if (el.btnForward) el.btnForward.disabled = true;
+      }
+    }
+
+    // ── Zoom ──
+
+    function zoomIn() {
+      state.zoomLevel = Math.min((state.zoomLevel || 0) + 1, 5);
+      applyZoom();
+    }
+
+    function zoomOut() {
+      state.zoomLevel = Math.max((state.zoomLevel || 0) - 1, -5);
+      applyZoom();
+    }
+
+    function zoomReset() {
+      state.zoomLevel = 0;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      var wv = getActiveWebview();
+      if (wv) wv.setZoomLevel(state.zoomLevel || 0);
+      showZoomIndicator();
+    }
+
+    function showZoomIndicator() {
+      if (!el.zoomIndicator) return;
+      var pct = Math.round(Math.pow(1.2, state.zoomLevel || 0) * 100);
+      el.zoomIndicator.textContent = pct + '%';
+      el.zoomIndicator.style.display = '';
+      el.zoomIndicator.style.opacity = '1';
+      clearTimeout(state.zoomTimer);
+      state.zoomTimer = setTimeout(function () {
+        if (!el.zoomIndicator) return;
+        el.zoomIndicator.style.opacity = '0';
+        setTimeout(function () {
+          if (el.zoomIndicator) el.zoomIndicator.style.display = 'none';
+        }, 200);
+      }, 1500);
+    }
+
+    // ── DevTools ──
+
+    function toggleDevTools() {
+      var wv = getActiveWebview();
+      if (!wv) return;
+      try {
+        var wcId = wv.getWebContentsId();
+        api.webBrowserActions.ctxAction({ webContentsId: wcId, action: 'devtools' });
+      } catch (e) {}
+    }
+
+    // ── Torrent tab (singleton) ──
+
+    function openTorrentTab(source) {
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].type === 'torrent') {
+          switchTab(state.tabs[i].id);
+          if (source && typeof window.torrentTabAddSource === 'function') {
+            window.torrentTabAddSource(source);
+          }
+          return state.tabs[i];
+        }
+      }
+
+      var id = state.nextTabId++;
+
+      var tabEl = document.createElement('div');
+      tabEl.className = 'tab';
+      tabEl.dataset.tabId = id;
+      tabEl.innerHTML =
+        '<svg class="tab-favicon" width="16" height="16" viewBox="0 0 16 16" style="flex-shrink:0">' +
+          '<path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 5v4M6.5 7.5L8 9l1.5-1.5" ' +
+          'stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '</svg>' +
+        '<span class="tab-title">Tankoban Torrent</span>' +
+        '<button class="tab-close" title="Close tab (Ctrl+W)">' +
+          '<svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>' +
+        '</button>';
+      if (el.tabsContainer && el.btnNewTab) {
+        el.tabsContainer.insertBefore(tabEl, el.btnNewTab);
+      } else if (el.tabsContainer) {
+        el.tabsContainer.appendChild(tabEl);
+      }
+
+      var tab = {
+        id: id,
+        webview: null,
+        element: tabEl,
+        title: 'Tankoban Torrent',
+        favicon: '',
+        url: '',
+        homeUrl: '',
+        sourceId: '',
+        sourceName: 'Torrent',
+        sourceColor: '#555',
+        pinned: false,
+        loading: false,
+        type: 'torrent'
+      };
+      state.tabs.push(tab);
+
+      tabEl.addEventListener('click', function (e) {
+        if (!e.target.closest('.tab-close')) switchTab(id);
+      });
+      tabEl.addEventListener('mousedown', function (e) {
+        if (e.button === 1) { e.preventDefault(); closeTab(id); }
+      });
+      tabEl.querySelector('.tab-close').addEventListener('click', function (e) {
+        e.stopPropagation();
+        closeTab(id);
+      });
+
+      switchTab(id);
+
+      if (typeof window.initTorrentTab === 'function') window.initTorrentTab();
+      if (source && typeof window.torrentTabAddSource === 'function') {
+        window.torrentTabAddSource(source);
+      }
+
+      return tab;
+    }
+
+    // ── Lazy webview creation (for home-page tabs that navigate) ──
+
+    function ensureWebview(tab, url) {
+      if (!tab || tab.webview) return tab ? tab.webview : null;
+      if (tab.type === 'torrent') return null;
+
+      var u = String(url || tab.url || tab.homeUrl || '').trim();
+      if (!u || u === 'about:blank') return null;
+
+      var wv = document.createElement('webview');
+      wv.setAttribute('src', u);
+      wv.setAttribute('partition', 'persist:webmode');
+      wv.setAttribute('allowpopups', '');
+      wv.setAttribute('webpreferences', 'contextIsolation=yes');
+      if (el.webviewContainer) el.webviewContainer.appendChild(wv);
+
+      tab.webview = wv;
+      tab.url = u;
+      if (tab.id === state.activeTabId) wv.classList.add('active');
+
+      bindWebviewEvents(tab);
+      bindFindEvents(tab);
+
+      return wv;
+    }
+
+    // ── Source normalization ──
+
+    function normalizeSourceInput(source, urlOverride) {
+      if (source && typeof source === 'object') {
+        var objUrl = String(source.url || urlOverride || '').trim();
+        return {
+          id: source.id != null ? source.id : ('src_' + Date.now()),
+          name: String(source.name || siteNameFromUrl(objUrl) || 'New Tab'),
+          url: objUrl || String(urlOverride || '').trim(),
+          color: String(source.color || '#555')
+        };
+      }
+      var asUrl = String(source || urlOverride || '').trim();
+      return {
+        id: 'src_' + Date.now(),
+        name: siteNameFromUrl(asUrl) || 'New Tab',
+        url: asUrl,
+        color: '#555'
+      };
+    }
+
+    // ── Security classification ──
+
+    function inferSecurityStateFromUrl(url) {
+      var raw = String(url || '').trim();
+      if (!raw) return 'unknown';
+      if (raw.indexOf('https://') === 0) return 'secure';
+      if (raw.indexOf('http://') === 0) return 'insecure';
+      if (/^(file|about|chrome|data):/i.test(raw)) return 'internal';
+      return 'unknown';
+    }
+
+    function classifyLoadFailure(errorCode, errorDescription, failedUrl) {
+      var code = Number(errorCode || 0);
+      var desc = String(errorDescription || '').trim();
+      var lower = desc.toLowerCase();
+      var host = '';
+      try { host = new URL(String(failedUrl || '')).hostname; } catch (e) {}
+
+      var out = { kind: 'load_failed', isBlocked: false, title: '', toast: '' };
+
+      if (code === -20 || code === -21 || lower.indexOf('blocked') !== -1) {
+        out.kind = 'blocked'; out.isBlocked = true;
+      } else if (code === -105 || code === -137 || code === -300 ||
+                 lower.indexOf('name not resolved') !== -1 || lower.indexOf('dns') !== -1) {
+        out.kind = 'dns';
+      } else if (code <= -200 && code >= -299) {
+        out.kind = 'tls';
+      } else if (code === -118 || code === -7 || lower.indexOf('timed out') !== -1) {
+        out.kind = 'timeout';
+      } else if (code === -106 || lower.indexOf('internet disconnected') !== -1) {
+        out.kind = 'offline';
+      }
+
+      var titles = {
+        blocked: 'Blocked', dns: 'DNS error', tls: 'TLS error',
+        timeout: 'Timed out', offline: 'Offline'
+      };
+      out.title = titles[out.kind] || 'Load failed';
+      if (host) out.title += ' \u2014 ' + host;
+
+      if (out.kind === 'blocked') out.toast = 'Blocked: ' + (host || 'site');
+      else if (desc) out.toast = 'Load failed: ' + desc;
+      else out.toast = out.title;
+
+      return out;
+    }
+
+    // ── Session persistence ──
+
+    function snapshotTabForSession(tab) {
+      if (!tab) return null;
+      if (tab.type === 'torrent') return null;
+      var url = String(tab.url || '').trim();
+      if (!url || url === 'about:blank') return null;
+      return {
+        id: String(tab.id || ''),
+        sourceId: tab.sourceId != null ? String(tab.sourceId) : '',
+        sourceName: String(tab.sourceName || '').trim(),
+        title: String(tab.title || '').trim(),
+        url: url,
+        homeUrl: String(tab.homeUrl || url).trim() || url,
+        pinned: !!tab.pinned
+      };
+    }
+
+    function buildSessionPayload() {
+      var snappedTabs = [];
+      for (var i = 0; i < state.tabs.length; i++) {
+        var snap = snapshotTabForSession(state.tabs[i]);
+        if (snap) snappedTabs.push(snap);
+        if (snappedTabs.length >= MAX_TABS) break;
+      }
+      var closedSnaps = [];
+      for (var j = 0; j < state.closedTabs.length; j++) {
+        var closed = snapshotTabForSession(state.closedTabs[j]);
+        if (closed) closedSnaps.push(closed);
+        if (closedSnaps.length >= MAX_CLOSED_TABS) break;
+      }
+      return {
+        tabs: snappedTabs,
+        activeTabId: state.activeTabId != null ? String(state.activeTabId) : '',
+        closedTabs: closedSnaps,
+        restoreLastSession: state.restoreLastSession !== false,
+        updatedAt: Date.now()
+      };
+    }
+
+    function scheduleSessionSave(immediate) {
+      if (state.sessionRestoreInProgress) return;
+      if (!api.webSession || typeof api.webSession.save !== 'function') return;
+      var runSave = function () {
+        state.sessionSaveTimer = null;
+        api.webSession.save({ state: buildSessionPayload() }).catch(function () {});
+      };
+      if (immediate) {
+        if (state.sessionSaveTimer) {
+          try { clearTimeout(state.sessionSaveTimer); } catch (e) {}
+          state.sessionSaveTimer = null;
+        }
+        runSave();
+        return;
+      }
+      if (state.sessionSaveTimer) return;
+      state.sessionSaveTimer = setTimeout(runSave, 260);
+    }
+
+    function pushClosedTab(tab) {
+      var snap = snapshotTabForSession(tab);
+      if (!snap) return;
+      state.closedTabs.unshift(snap);
+      if (state.closedTabs.length > MAX_CLOSED_TABS) state.closedTabs.length = MAX_CLOSED_TABS;
+    }
+
+    function reopenClosedTab() {
+      if (!state.closedTabs.length) {
+        showToast('No recently closed tab');
+        return;
+      }
+      var snap = state.closedTabs.shift();
+      if (!snap) return;
+      var src = {
+        id: snap.sourceId || ('restored_' + Date.now()),
+        name: snap.sourceName || siteNameFromUrl(snap.url) || 'Tab',
+        url: snap.homeUrl || snap.url,
+        color: '#555'
+      };
+      var restored = createTab(src, snap.url, {
+        silentToast: true,
+        skipHistory: true,
+        titleOverride: snap.title || '',
+        forcedId: Number(snap.id || 0) || null
+      });
+      if (restored) {
+        restored.pinned = !!snap.pinned;
+        showToast('Reopened tab');
+        scheduleSessionSave();
+      }
+    }
+
+    function loadSessionAndRestore() {
+      if (!api.webSession || typeof api.webSession.get !== 'function') return;
+      state.sessionRestoreInProgress = true;
+      api.webSession.get().then(function (res) {
+        var data = (res && res.ok && res.state) ? res.state : null;
+        if (!data || typeof data !== 'object') return;
+
+        var settingsAllowRestore = !(state.browserSettings &&
+          state.browserSettings.restoreLastSession === false);
+        state.restoreLastSession = settingsAllowRestore && (data.restoreLastSession !== false);
+
+        state.closedTabs = [];
+        if (Array.isArray(data.closedTabs)) {
+          for (var c = 0; c < data.closedTabs.length; c++) {
+            var cs = snapshotTabForSession(data.closedTabs[c]);
+            if (!cs) continue;
+            state.closedTabs.push(cs);
+            if (state.closedTabs.length >= MAX_CLOSED_TABS) break;
+          }
+        }
+
+        if (!state.restoreLastSession) return;
+        if (!Array.isArray(data.tabs) || !data.tabs.length) return;
+
+        var targetActive = String(data.activeTabId || '').trim();
+        var maxId = 0;
+        for (var i = 0; i < data.tabs.length && i < MAX_TABS; i++) {
+          var s = snapshotTabForSession(data.tabs[i]);
+          if (!s) continue;
+          var sidNum = Number(s.id || 0);
+          if (isFinite(sidNum) && sidNum > maxId) maxId = sidNum;
+          var src = {
+            id: s.sourceId || ('restored_' + i),
+            name: s.sourceName || siteNameFromUrl(s.homeUrl || s.url) || 'Tab',
+            url: s.homeUrl || s.url,
+            color: '#555'
+          };
+          var tab = createTab(src, s.url, {
+            silentToast: true,
+            skipHistory: true,
+            skipSessionSave: true,
+            titleOverride: s.title || '',
+            forcedId: sidNum > 0 ? sidNum : null,
+            switchTo: false
+          });
+          if (tab) tab.pinned = !!s.pinned;
+        }
+        if (maxId >= state.nextTabId) state.nextTabId = maxId + 1;
+
+        if (targetActive) {
+          for (var j = 0; j < state.tabs.length; j++) {
+            if (String(state.tabs[j].id) === targetActive) {
+              switchTab(state.tabs[j].id);
+              break;
             }
           }
-          renderTabs();
-        }).catch(function () {
-          // ignore restore failures
-        }).finally(function () {
-          state.sessionRestoreInProgress = false;
-          scheduleSessionSave();
-        });
-      }
+        }
+      }).catch(function () {
+        // ignore restore failures
+      }).finally(function () {
+        state.sessionRestoreInProgress = false;
+        scheduleSessionSave();
+      });
+    }
 
     return {
       getActiveTab: getActiveTab,
-      getTabByMainId: getTabByMainId,
-      createTabRuntime: createTabRuntime,
-      ensureTabRuntime: ensureTabRuntime,
-      inferSecurityStateFromUrl: inferSecurityStateFromUrl,
-      classifyLoadFailure: classifyLoadFailure,
-      pushRuntimeCommittedUrl: pushRuntimeCommittedUrl,
-      normalizeSourceInput: normalizeSourceInput,
-      snapshotTabForSession: snapshotTabForSession,
-      buildSessionPayload: buildSessionPayload,
+      getActiveWebview: getActiveWebview,
+      createTab: createTab,
+      closeTab: closeTab,
+      switchTab: switchTab,
+      cycleTab: cycleTab,
+      openTorrentTab: openTorrentTab,
+      ensureWebview: ensureWebview,
+      bindWebviewEvents: bindWebviewEvents,
+      escapeHtml: escapeHtml,
+      siteNameFromUrl: siteNameFromUrl,
+      setLoadingUI: setLoadingUI,
+      showLoadingBar: showLoadingBar,
+      hideLoadingBar: hideLoadingBar,
+      syncLoadingState: syncLoadingState,
+      updateNavButtons: updateNavButtons,
+      zoomIn: zoomIn,
+      zoomOut: zoomOut,
+      zoomReset: zoomReset,
+      toggleDevTools: toggleDevTools,
       scheduleSessionSave: scheduleSessionSave,
+      loadSessionAndRestore: loadSessionAndRestore,
       pushClosedTab: pushClosedTab,
       reopenClosedTab: reopenClosedTab,
-      loadSessionAndRestore: loadSessionAndRestore
+      snapshotTabForSession: snapshotTabForSession,
+      normalizeSourceInput: normalizeSourceInput,
+      inferSecurityStateFromUrl: inferSecurityStateFromUrl,
+      classifyLoadFailure: classifyLoadFailure
     };
   };
 })();

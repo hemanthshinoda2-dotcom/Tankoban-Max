@@ -5,388 +5,186 @@
     var state = bridge.state;
     var el = bridge.el;
     var api = bridge.api;
-    var webTabs = bridge.webTabs;
+
     function dep(name) { return (bridge.deps || {})[name]; }
     var escapeHtml = function () { var fn = dep('escapeHtml'); return fn ? fn.apply(null, arguments) : ''; };
-    var shortPath = function () { var fn = dep('shortPath'); return fn ? fn.apply(null, arguments) : ''; };
-    var getSourceColor = function () { var fn = dep('getSourceColor'); return fn ? fn.apply(null, arguments) : '#555'; };
-    var getSourceById = function () { var fn = dep('getSourceById'); return fn ? fn.apply(null, arguments) : null; };
-    var siteNameFromUrl = function () { var fn = dep('siteNameFromUrl'); return fn ? fn.apply(null, arguments) : ''; };
-    var getFaviconUrl = function () { var fn = dep('getFaviconUrl'); return fn ? fn.apply(null, arguments) : ''; };
     var showToast = function () { var fn = dep('showToast'); return fn && fn.apply(null, arguments); };
-    var renderTabs = function () { var fn = dep('renderTabs'); return fn && fn.apply(null, arguments); };
-    var syncLoadBar = function () { var fn = dep('syncLoadBar'); return fn && fn.apply(null, arguments); };
-    var syncReloadStopButton = function () { var fn = dep('syncReloadStopButton'); return fn && fn.apply(null, arguments); };
-    var updateNavButtons = function () { var fn = dep('updateNavButtons'); return fn && fn.apply(null, arguments); };
-    var updateUrlDisplay = function () { var fn = dep('updateUrlDisplay'); return fn && fn.apply(null, arguments); };
-    var scheduleSessionSave = function () { var fn = dep('scheduleSessionSave'); return fn && fn.apply(null, arguments); };
-    var openBrowserForTab = function () { var fn = dep('openBrowserForTab'); return fn && fn.apply(null, arguments); };
-    var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
-    var getActiveTab = function () { var fn = dep('getActiveTab'); return fn ? fn.apply(null, arguments) : null; };
-    var ensureTabRuntime = function () { var fn = dep('ensureTabRuntime'); return fn ? fn.apply(null, arguments) : null; };
-    var closeOmniSuggestions = function () { var fn = dep('closeOmniSuggestions'); return fn && fn.apply(null, arguments); };
-    var setOmniIconForUrl = function () { var fn = dep('setOmniIconForUrl'); return fn && fn.apply(null, arguments); };
-    var isWebModeActive = function () { var fn = dep('isWebModeActive'); return fn ? fn.apply(null, arguments) : false; };
-    var renderHubAll = function () { var fn = dep('renderHubAll'); return fn && fn.apply(null, arguments); };
-    var renderDownloadsPanel = function () { var fn = dep('renderDownloadsPanel'); return fn && fn.apply(null, arguments); };
-    var renderHomeDownloads = function () { var fn = dep('renderHomeDownloads'); return fn && fn.apply(null, arguments); };
+    var hideAllPanels = function () { var fn = dep('hideAllPanels'); return fn && fn.apply(null, arguments); };
 
-    function formatBytes(n) {
-        n = Number(n || 0);
-        if (!isFinite(n) || n <= 0) return '0 B';
-        var u = ['B', 'KB', 'MB', 'GB', 'TB'];
-        var i = 0;
-        while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
-        var dp = i <= 1 ? 0 : (i === 2 ? 1 : 2);
-        return n.toFixed(dp) + ' ' + u[i];
-      }
+    // ── Utilities ──
 
-      function formatSpeed(bps) {
-        bps = Number(bps || 0);
-        if (!isFinite(bps) || bps <= 0) return '';
-        return formatBytes(bps) + '/s';
-      }
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      var i = Math.floor(Math.log(bytes) / Math.log(1024));
+      if (i >= units.length) i = units.length - 1;
+      return (bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0) + ' ' + units[i];
+    }
 
-      function formatEta(received, total, bps) {
-        received = Number(received || 0);
-        total = Number(total || 0);
-        bps = Number(bps || 0);
-        if (!isFinite(received) || !isFinite(total) || !isFinite(bps) || total <= 0 || bps <= 0) return '';
-        var s = Math.max(0, Math.round((total - received) / bps));
-        if (s <= 0) return '';
-        var m = Math.floor(s / 60);
-        var r = s % 60;
-        if (m >= 60) {
-          var h = Math.floor(m / 60);
-          var mm = m % 60;
-          return h + 'h ' + mm + 'm';
-        }
-        if (m > 0) return m + 'm ' + r + 's';
-        return r + 's';
-      }
+    function formatSpeed(bytesPerSec) {
+      if (!bytesPerSec || bytesPerSec <= 0) return '';
+      return formatBytes(bytesPerSec) + '/s';
+    }
 
-      function hostFromUrl(u) {
-        u = String(u || '').trim();
-        if (!u) return '';
-        try {
-          if (u.indexOf('http') !== 0) u = 'https://' + u.replace(/^\/+/, '');
-          var x = new URL(u);
-          return x.hostname || '';
-        } catch (e) {
-          return '';
-        }
-      }
+    function formatEta(totalBytes, received, speed) {
+      if (!speed || speed <= 0 || received >= totalBytes) return '';
+      var remaining = totalBytes - received;
+      var secs = Math.round(remaining / speed);
+      if (secs < 60) return secs + 's';
+      if (secs < 3600) return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+      return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+    }
 
-      function faviconFor(u) {
-        var icon = getFaviconUrl(u);
-        if (icon) return icon;
-        var h = hostFromUrl(u).replace(/^www\./i, '').toLowerCase();
-        if (!h) return '';
-        var first = h.charAt(0).toUpperCase();
-        if (!/[A-Z0-9]/.test(first)) first = '#';
-        var hash = 0;
-        for (var i = 0; i < h.length; i++) hash = ((hash << 5) - hash + h.charCodeAt(i)) | 0;
-        var hue = Math.abs(hash) % 360;
-        var bg = 'hsl(' + hue + ',70%,42%)';
-        var svg = '' +
-          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">' +
-          '<rect width="64" height="64" rx="12" fill="' + bg + '"/>' +
-          '<text x="32" y="43" text-anchor="middle" font-size="34" font-family="Segoe UI, Arial, sans-serif" font-weight="700" fill="#fff">' + first + '</text>' +
-          '</svg>';
-        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
-      }
+    // ── Download item rendering ──
 
-      function normalizeDownload(d) {
-        if (!d) return null;
-        var out = {
-          id: String(d.id || ''),
-          filename: String(d.filename || ''),
-          destination: d.destination != null ? String(d.destination) : '',
-          library: d.library != null ? String(d.library) : '',
-          state: String(d.state || ''),
-          startedAt: d.startedAt != null ? Number(d.startedAt) : null,
-          finishedAt: d.finishedAt != null ? Number(d.finishedAt) : null,
-          error: d.error != null ? String(d.error) : '',
-          pageUrl: d.pageUrl != null ? String(d.pageUrl) : '',
-          downloadUrl: d.downloadUrl != null ? String(d.downloadUrl) : '',
-          receivedBytes: d.receivedBytes != null ? Number(d.receivedBytes) : 0,
-          totalBytes: d.totalBytes != null ? Number(d.totalBytes) : 0,
-          progress: d.progress != null ? Number(d.progress) : null,
-          bytesPerSec: d.bytesPerSec != null ? Number(d.bytesPerSec) : 0,
-          transport: d.transport != null ? String(d.transport) : '',
-          canPause: d.canPause != null ? !!d.canPause : null,
-          canResume: d.canResume != null ? !!d.canResume : null,
-          canCancel: d.canCancel != null ? !!d.canCancel : null,
-        };
-        if (out.state === 'downloading' || out.state === 'in_progress' || out.state === 'progressing') out.state = 'progressing';
-        if (out.state === 'paused') out.state = 'paused';
-        if (out.state === 'cancelled') out.state = 'cancelled';
-        if (!out.transport) out.transport = 'electron-item';
-        if (out.canPause == null) out.canPause = out.transport !== 'direct';
-        if (out.canResume == null) out.canResume = out.transport !== 'direct';
-        if (out.canCancel == null) out.canCancel = true;
-        if (typeof out.progress === 'number') out.progress = Math.max(0, Math.min(1, out.progress));
-        if (out.progress == null && out.totalBytes > 0 && out.receivedBytes >= 0) out.progress = Math.max(0, Math.min(1, out.receivedBytes / out.totalBytes));
-        if (!out.id) out.id = 'dl_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-        return out;
-      }
+    function renderDownloadItem(dl) {
+      if (!el.downloadsList) return;
 
-      function recomputeDownloadingCount() {
-        var active = 0;
-        var hasProgress = false;
-        for (var i = 0; i < state.downloads.length; i++) {
-          var d = state.downloads[i];
-          if (!d) continue;
-          if (d.state === 'progressing') { active++; hasProgress = true; }
-          else if (d.state === 'paused') { active++; }
-        }
-        state.downloading = active;
-        state.downloadingHasProgress = hasProgress;
-      }
+      var existing = document.getElementById('dl-' + dl.id);
+      if (existing) {
+        var pct = dl.totalBytes > 0 ? Math.round((dl.received / dl.totalBytes) * 100) : 0;
+        var fill = existing.querySelector('.dl-progress-fill');
+        var statusEl = existing.querySelector('.dl-status');
+        var icon = existing.querySelector('.dl-icon');
+        var actions = existing.querySelector('.dl-actions');
 
-      var dlRenderTimer = null;
-      function scheduleDlRender() {
-        if (dlRenderTimer) return;
-        dlRenderTimer = setTimeout(function () {
-          dlRenderTimer = null;
-          renderDownloadsPanel();
-          renderHomeDownloads();
-          renderHubDirectActive();
-          renderHubDownloadHistory();
-        }, 120);
-      }
-
-      function upsertDownload(info) {
-        if (!info) return;
-        var id = info.id != null ? String(info.id) : '';
-        var dest = info.destination || info.path || '';
-        dest = dest ? String(dest) : '';
-        var fn = info.filename != null ? String(info.filename) : '';
-
-        var found = null;
-        for (var i = 0; i < state.downloads.length; i++) {
-          var d = state.downloads[i];
-          if (!d) continue;
-          if (id && d.id === id) { found = d; break; }
-          if (!id && dest && d.destination === dest) { found = d; break; }
-          if (!id && fn && d.filename === fn && d.state === 'progressing') { found = d; break; }
-        }
-
-        if (!found) {
-          found = normalizeDownload(info);
-          state.downloads.unshift(found);
+        if (dl.state === 'completed') {
+          if (fill) fill.parentElement.style.display = 'none';
+          statusEl.textContent = formatBytes(dl.totalBytes || dl.received);
+          icon.className = 'dl-icon complete';
+          icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 8.5l3 3 5-6" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+          actions.innerHTML =
+            '<button class="dl-btn" data-dl-action="open" title="Open file"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 2h7v7M12 2L5.5 8.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>' +
+            '<button class="dl-btn" data-dl-action="show" title="Show in folder"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M2 4.5h3l1-1.5h4l1 1.5h1v6H2z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg></button>';
+        } else if (dl.state === 'cancelled' || dl.state === 'interrupted') {
+          if (fill) fill.parentElement.style.display = 'none';
+          statusEl.textContent = dl.state === 'cancelled' ? 'Cancelled' : 'Failed';
+          icon.className = 'dl-icon failed';
+          icon.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>';
+          actions.innerHTML = '';
         } else {
-          var n = normalizeDownload(Object.assign({}, found, info));
-          Object.assign(found, n);
+          if (fill) {
+            fill.style.width = pct + '%';
+            fill.parentElement.style.display = '';
+          }
+          var statusText = formatBytes(dl.received);
+          if (dl.totalBytes > 0) statusText += ' / ' + formatBytes(dl.totalBytes) + ' \u2014 ' + pct + '%';
+          if (dl.speed) statusText += ' \u2022 ' + formatSpeed(dl.speed);
+          statusEl.textContent = statusText;
         }
-
-        if (state.downloads.length > 1000) state.downloads.length = 1000;
-        recomputeDownloadingCount();
-        scheduleDlRender();
+        return;
       }
 
-      function loadDownloadHistory() {
-        if (!api || !api.webSources || !api.webSources.getDownloadHistory) return;
-        api.webSources.getDownloadHistory().then(function (res) {
-          if (!res || !res.ok || !Array.isArray(res.downloads)) return;
-          state.downloads = [];
-          for (var i = 0; i < res.downloads.length; i++) {
-            var d = normalizeDownload(res.downloads[i]);
-            if (d) state.downloads.push(d);
+      // Create new download item element
+      if (el.downloadsEmpty) el.downloadsEmpty.style.display = 'none';
+
+      var item = document.createElement('div');
+      item.className = 'dl-item';
+      item.id = 'dl-' + dl.id;
+
+      var pct = dl.totalBytes > 0 ? Math.round((dl.received / dl.totalBytes) * 100) : 0;
+
+      item.innerHTML =
+        '<div class="dl-icon">' +
+          '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7.5L8 11l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+        '</div>' +
+        '<div class="dl-info">' +
+          '<div class="dl-name">' + escapeHtml(dl.filename) + '</div>' +
+          '<div class="dl-status">' + formatBytes(dl.received) + (dl.totalBytes > 0 ? ' / ' + formatBytes(dl.totalBytes) + ' \u2014 ' + pct + '%' : '') + '</div>' +
+          '<div class="dl-progress-bar"><div class="dl-progress-fill" style="width:' + pct + '%"></div></div>' +
+        '</div>' +
+        '<div class="dl-actions">' +
+          '<button class="dl-btn" data-dl-action="cancel" title="Cancel"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg></button>' +
+        '</div>';
+
+      el.downloadsList.insertBefore(item, el.downloadsList.firstChild);
+    }
+
+    // ── Panel ──
+
+    function showDownloadsPanel() {
+      hideAllPanels();
+      state.downloadsOpen = true;
+      if (el.downloadsPanel) el.downloadsPanel.style.display = '';
+      if (el.menuOverlay) el.menuOverlay.style.display = '';
+    }
+
+    // ── Event wiring ──
+
+    function initDownloadEvents() {
+      if (el.downloadsList) {
+        el.downloadsList.addEventListener('click', function (e) {
+          var btn = e.target.closest('.dl-btn');
+          if (!btn) return;
+          var action = btn.dataset.dlAction;
+          var item = btn.closest('.dl-item');
+          if (!item) return;
+          var id = item.id.replace('dl-', '');
+          var dl = state.downloads[id];
+          if (!dl) return;
+
+          switch (action) {
+            case 'cancel':
+              api.webSources.cancelDownload({ id: id });
+              break;
+            case 'open':
+              if (dl.savePath) api.webBrowserActions.downloadOpenFile({ path: dl.savePath });
+              break;
+            case 'show':
+              if (dl.savePath) api.webBrowserActions.downloadShowInFolder({ path: dl.savePath });
+              break;
           }
-          recomputeDownloadingCount();
-          renderDownloadsPanel();
-          renderHomeDownloads();
-          renderHubDirectActive();
-          renderHubDownloadHistory();
-        }).catch(function () {});
+        });
       }
 
-      function renderDownloadList(targetEl, emptyEl, list, opts) {
-        if (!targetEl || !emptyEl) return;
-        opts = opts || {};
-        list = list || [];
-
-        if (!list.length) {
-          targetEl.innerHTML = '';
-          emptyEl.classList.remove('hidden');
-          return;
-        }
-        emptyEl.classList.add('hidden');
-
-        var html = '';
-        for (var i = 0; i < list.length; i++) {
-          var d = list[i];
-          if (!d) continue;
-
-          var isActive = d.state === 'progressing' || d.state === 'paused';
-          var isOk = d.state === 'completed';
-          var isBad = d.state === 'failed' || d.state === 'interrupted';
-
-          var stateTxt = isActive ? (d.state === 'paused' ? 'Paused' : 'Downloading') : (isOk ? 'Saved' : 'Failed');
-
-          var sub = '';
-          var libTag = d.library ? ('\u2192 ' + d.library) : '';
-          if (isActive) {
-            var left = (d.totalBytes > 0 && d.receivedBytes >= 0) ? (formatBytes(d.receivedBytes) + ' / ' + formatBytes(d.totalBytes)) : '';
-            var sp = formatSpeed(d.bytesPerSec);
-            var eta = formatEta(d.receivedBytes, d.totalBytes, d.bytesPerSec);
-            sub = libTag;
-            if (left) sub = (sub ? (sub + ' \u2022 ') : '') + left;
-            if (sp) sub = (sub ? (sub + ' \u2022 ') : '') + sp;
-            if (eta) sub = (sub ? (sub + ' \u2022 ') : '') + eta;
-          } else if (isOk) {
-            sub = libTag;
-            if (d.destination) sub = (sub ? (sub + ' \u2022 ') : '') + shortPath(d.destination);
-          } else {
-            sub = d.error ? d.error : 'Download failed';
-          }
-
-          var p = null;
-          if (isActive && !opts.compact) {
-            if (typeof d.progress === 'number') p = Math.max(0, Math.min(1, d.progress));
-            else if (d.totalBytes > 0) p = Math.max(0, Math.min(1, d.receivedBytes / d.totalBytes));
-          }
-          var pctTxt = (p != null) ? Math.round(p * 100) + '%' : '';
-          var iconUrl = faviconFor(d.pageUrl || d.downloadUrl);
-          var canPauseAction = !!(d.canPause && api && api.webSources && api.webSources.pauseDownload);
-          var canResumeAction = !!(d.canResume && api && api.webSources && api.webSources.resumeDownload);
-          var canCancelAction = !!(d.canCancel && api && api.webSources && api.webSources.cancelDownload);
-          var actionsHtml = '';
-          if (isActive) {
-            if (d.state === 'paused') {
-              if (canResumeAction) actionsHtml += '<button class="webDlAction" type="button" title="Resume" data-dl-action="resume">&#9654;</button>';
-            } else {
-              if (canPauseAction) actionsHtml += '<button class="webDlAction" type="button" title="Pause" data-dl-action="pause">&#10074;&#10074;</button>';
-            }
-            if (canCancelAction) actionsHtml += '<button class="webDlAction" type="button" title="Cancel" data-dl-action="cancel">&times;</button>';
-          }
-
-          html += '' +
-            '<div class="webDlItem' + (opts.compact ? ' webDlItem--compact' : '') + '" data-dl-id="' + escapeHtml(d.id) + '">' +
-              '<div class="webDlIcon">' +
-                (iconUrl ? ('<img class="webDlFavicon" src="' + escapeHtml(iconUrl) + '" alt=""/>') : '<div class="webDlFaviconFallback"></div>') +
-              '</div>' +
-              '<div class="webDlMeta">' +
-                '<div class="webDlName">' + escapeHtml(d.filename) + '</div>' +
-                '<div class="webDlSub">' + escapeHtml(sub) + '</div>' +
-                (isActive ? ('<div class="webDlProgressWrap">' +
-                  '<div class="webDlProgressBar"><div class="webDlProgressFill" style="width:' + escapeHtml(pctTxt || '0%') + '"></div></div>' +
-                  '<div class="webDlProgressText">' + escapeHtml(pctTxt) + '</div>' +
-                '</div>') : '') +
-              '</div>' +
-              '<div class="webDlRight">' +
-                '<div class="webDlState' + (isBad ? ' webDlState--bad' : '') + '">' + escapeHtml(stateTxt) + '</div>' +
-                (actionsHtml ? ('<div class="webDlActions">' + actionsHtml + '</div>') : '') +
-                (opts.allowRemove ? ('<button class="iconBtn webDlRemove" title="Remove" aria-label="Remove" data-dl-remove="1">&times;</button>') : '') +
-              '</div>' +
-            '</div>';
-        }
-
-        targetEl.innerHTML = html;
-
-        var items = targetEl.querySelectorAll('.webDlItem');
-        for (var j = 0; j < items.length; j++) {
-          items[j].onclick = function (e) {
-            var t = e && e.target;
-            if (t && t.getAttribute && t.getAttribute('data-dl-action')) return;
-            if (t && t.getAttribute && t.getAttribute('data-dl-remove') === '1') return;
-            var id = this.getAttribute('data-dl-id');
-            var d = null;
-            for (var k = 0; k < state.downloads.length; k++) {
-              if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
-            }
-            if (!d) return;
-            if (d.state === 'completed' && d.destination && api && api.shell && api.shell.revealPath) {
-              try { api.shell.revealPath(d.destination); } catch (err) {}
-            } else if (d.state === 'progressing') {
-              showToast('Download in progress');
-            } else if (d.destination && api && api.shell && api.shell.revealPath) {
-              try { api.shell.revealPath(d.destination); } catch (err2) {}
-            }
-          };
-
-          var rm = items[j].querySelector('.webDlRemove');
-          if (rm) {
-            rm.onclick = function (e) {
-              try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
-              var p = this.parentElement;
-              while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
-              if (!p) return;
-              var id = p.getAttribute('data-dl-id');
-              var d = null;
-              for (var k = 0; k < state.downloads.length; k++) {
-                if (state.downloads[k] && state.downloads[k].id === id) { d = state.downloads[k]; break; }
-              }
-              if (!d || d.state === 'progressing') {
-                showToast('Can\'t remove an active download');
-                return;
-              }
-              if (api && api.webSources && api.webSources.removeDownloadHistory) {
-                api.webSources.removeDownloadHistory({ id: id }).then(function () {
-                  state.downloads = state.downloads.filter(function (x) { return x && x.id !== id; });
-                  recomputeDownloadingCount();
-                  scheduleDlRender();
-                }).catch(function () {});
-              }
-            };
-          }
-
-          var actionBtns = items[j].querySelectorAll('[data-dl-action]');
-          for (var ai = 0; ai < actionBtns.length; ai++) {
-            actionBtns[ai].onclick = function (e) {
-              try { e.preventDefault(); e.stopPropagation(); } catch (err) {}
-              var action = String(this.getAttribute('data-dl-action') || '');
-              var p = this.parentElement;
-              while (p && !p.classList.contains('webDlItem')) p = p.parentElement;
-              if (!p) return;
-              var id = p.getAttribute('data-dl-id');
-              if (!id || !api || !api.webSources) return;
-              if (action === 'pause' && api.webSources.pauseDownload) {
-                api.webSources.pauseDownload({ id: id }).catch(function () {});
-              } else if (action === 'resume' && api.webSources.resumeDownload) {
-                api.webSources.resumeDownload({ id: id }).catch(function () {});
-              } else if (action === 'cancel' && api.webSources.cancelDownload) {
-                api.webSources.cancelDownload({ id: id }).catch(function () {});
-              }
-            };
-          }
-        }
+      if (el.downloadsClose) {
+        el.downloadsClose.addEventListener('click', function () {
+          hideAllPanels();
+        });
       }
 
-      function renderDownloadsPanel() {
-        if (!el.dlList || !el.dlEmpty) return;
-        renderDownloadList(el.dlList, el.dlEmpty, state.downloads, { allowRemove: true });
-      }
+      // IPC: download lifecycle
+      api.webSources.onDownloadStarted(function (info) {
+        state.downloads[info.id] = {
+          id: info.id,
+          filename: info.filename || 'download',
+          totalBytes: info.totalBytes || 0,
+          received: 0,
+          speed: 0,
+          state: 'progressing',
+          savePath: ''
+        };
+        renderDownloadItem(state.downloads[info.id]);
+        if (!state.downloadsOpen) showDownloadsPanel();
+      });
 
-      function renderHomeDownloads() {
-        if (!el.homeDlList || !el.homeDlEmpty) return;
-        var act = [];
-        var rest = [];
-        for (var i = 0; i < state.downloads.length; i++) {
-          var d = state.downloads[i];
-          if (!d) continue;
-          if (d.state === 'progressing' || d.state === 'paused') act.push(d);
-          else rest.push(d);
-        }
-        var list = act.concat(rest).slice(0, 8);
-        renderDownloadList(el.homeDlList, el.homeDlEmpty, list, { compact: true, allowRemove: true });
-      }
+      api.webSources.onDownloadProgress(function (info) {
+        var dl = state.downloads[info.id];
+        if (!dl) return;
+        dl.received = info.received || 0;
+        dl.totalBytes = info.totalBytes || dl.totalBytes;
+        dl.state = info.state || 'progressing';
+        dl.speed = info.speed || 0;
+        renderDownloadItem(dl);
+      });
+
+      api.webSources.onDownloadCompleted(function (info) {
+        var dl = state.downloads[info.id];
+        if (!dl) return;
+        dl.state = info.state || 'completed';
+        dl.savePath = info.savePath || '';
+        dl.received = info.totalBytes || dl.received;
+        renderDownloadItem(dl);
+      });
+    }
 
     return {
       formatBytes: formatBytes,
       formatSpeed: formatSpeed,
       formatEta: formatEta,
-      hostFromUrl: hostFromUrl,
-      faviconFor: faviconFor,
-      normalizeDownload: normalizeDownload,
-      recomputeDownloadingCount: recomputeDownloadingCount,
-      scheduleDlRender: scheduleDlRender,
-      upsertDownload: upsertDownload,
-      loadDownloadHistory: loadDownloadHistory,
-      renderDownloadList: renderDownloadList,
-      renderDownloadsPanel: renderDownloadsPanel,
-      renderHomeDownloads: renderHomeDownloads
+      renderDownloadItem: renderDownloadItem,
+      showDownloadsPanel: showDownloadsPanel,
+      initDownloadEvents: initDownloadEvents
     };
   };
 })();
