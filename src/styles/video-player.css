@@ -246,10 +246,6 @@
 }
 
 /* Build 66: libmpv canvas embedded mode renders into a DOM canvas/WebGL surface.
-   Make the entire render surface non-interactive so the stage can reliably receive
-   right-click/mousewheel/mousemove (context menu + minimal HUD reveal zone). */
-body.libmpvCanvas .mpvHost *{ pointer-events:none !important; }
-
 .mpvDetachedPlaceholder{ width:100%; height:100%; border-radius:16px; border:1px dashed rgba(var(--chrome-rgb),0.18); background:rgba(var(--chrome-rgb),0.03); display:flex; align-items:center; justify-content:center; text-align:center; padding:16px; font-size:13px; opacity:0.85; }
 .mpvDetachedPlaceholder.hidden{ display:none; }
 body.mpvEngine .mpvDetachedPlaceholder{ flex:1; height:auto; }
@@ -530,25 +526,6 @@ body.videoFullscreen .videoStage.showHud #videoExitFullscreenBtn:focus-visible{
 
 .videoStage.showHud .videoHud:not(.videoHud--minimal){ opacity:1; transform:none; pointer-events:auto; }
 
-/* Non-canvas mpv surfaces: keep HUD docked and always visible (safety). */
-body.mpvEngine:not(.libmpvCanvas) .videoStage{ gap:10px; }
-body.mpvEngine:not(.libmpvCanvas) .mpvHost{ flex:1; }
-body.mpvEngine:not(.libmpvCanvas) .videoHud{
-  position:relative;
-  left:auto;
-  right:auto;
-  bottom:auto;
-  opacity:1;
-  transform:none;
-  pointer-events:auto;
-  backdrop-filter:none;
-  margin-top:10px;
-}
-body.mpvEngine:not(.libmpvCanvas) .videoStage.showHud .videoHud{ opacity:1; transform:none; pointer-events:auto; }
-body.mpvEngine:not(.libmpvCanvas) .videoToast{ position:relative; top:auto; left:auto; transform:none; margin:0 auto; }
-body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; background:transparent; padding:10px 0; }
-
-
 /* --- Video context menu --- */
 
 /* Video context menu (Build 56C) */
@@ -651,7 +628,6 @@ body.mpvEngine:not(.libmpvCanvas) .videoPrompt{ position:relative; inset:auto; b
   opacity:0.8;
 }
 
-body.mpvEngine:not(.libmpvCanvas) .videoPromptCard{ margin:0 auto; }
 
 
 /* --- HUD buttons, UI hidden toggle --- */
@@ -742,9 +718,6 @@ body.videoUiHidden .videoToast{
 .tracksBtn{ width:100%; height:32px; border-radius:12px; border:1px solid rgba(var(--chrome-rgb),0.14); background:rgba(var(--chrome-rgb),0.06); color:inherit; cursor:pointer; }
 .tracksBtn:hover{ background:rgba(var(--chrome-rgb),0.12); }
 
-/* In mpv mode, the HUD is docked below the surface; keep the panel docked too. */
-/* Dock the tracks panel only for native/embedded mpv surfaces (where overlays can be occluded). */
-body.mpvEngine:not(.libmpvCanvas) .videoTracksPanel{ position:relative; left:auto; right:auto; bottom:auto; padding:0; }
 
 
 /* --- Video prompt dialog --- */
@@ -795,16 +768,6 @@ body.videoShellMode .videoPlayerShell { height: 100vh !important; }
   overflow: hidden;
   z-index: 31;
   pointer-events: auto;
-}
-
-/* In embedded/native mpv surfaces, overlays can be occluded; dock panels instead.
-   In canvas mode, keep them as true overlays (VLC-ish). */
-body.mpvEngine:not(.libmpvCanvas) .hudPanel {
-  position: relative;
-  left: auto;
-  transform: none;
-  bottom: auto;
-  margin: 0 auto;
 }
 
 #videoPlaylistPanel { width: min(520px, calc(100vw - 24px)); max-height: min(520px, calc(100vh - 24px)); }
@@ -1042,29 +1005,4 @@ body.mpvEngine .videoToast {
   padding: 0 8px;
 }
 
-/* ── player_hg Shadow DOM embed mode ──
-   When player_hg runs inside #mpvHost's Shadow DOM, hide all old video.js
-   stage overlays and re-enable pointer events on the host element.
-   Integration logic (progress tracking, auto-advance) still runs behind
-   the scenes — writing to hidden elements is harmless. */
-body.playerHgEmbed #videoStage > :not(#mpvHost) {
-  display: none !important;
-}
-body.playerHgEmbed .videoStage::after {
-  display: none !important;
-}
-body.playerHgEmbed .mpvHost {
-  pointer-events: auto !important;
-}
-/* Prevent outer cursor:none from leaking into Shadow DOM via inheritance.
-   player_hg manages its own cursor hiding inside the shadow root. */
-body.playerHgEmbed .videoStage.hideCursor {
-  cursor: auto;
-}
-body.playerHgEmbed .videoStage.hideCursor #mpvHost {
-  cursor: auto;
-}
-/* Hide old video.js player bar — player_hg has its own HUD/top strip */
-body.playerHgEmbed .videoPlayerBar {
-  display: none !important;
-}
+
