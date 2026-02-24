@@ -415,7 +415,7 @@
         if (!api.webHistory || typeof api.webHistory.list !== 'function') return;
         api.webHistory.list({
           query: String(state.browsingHistoryQuery || ''),
-          limit: MAX_BROWSING_HISTORY_UI
+          limit: (bridge.deps.MAX_BROWSING_HISTORY_UI || 500)
         }).then(function (res) {
           if (!res || !res.ok || !Array.isArray(res.entries)) return;
           state.browsingHistory = res.entries;
