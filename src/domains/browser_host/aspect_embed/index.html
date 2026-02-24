@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:;">
+  <title>Aspect Browser</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="torrent-tab.css">
+</head>
+<body>
+  <div id="tab-bar">
+    <div id="tabs-container">
+      <!-- + button lives inside the container so it sits right after the last tab -->
+      <button id="btn-new-tab" class="nav-btn" title="New tab (Ctrl+T)">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <div id="nav-buttons">
+      <button id="btn-back" class="nav-btn" title="Go back (Alt+Left)" disabled>
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 3L5.5 8l5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="btn-forward" class="nav-btn" title="Go forward (Alt+Right)" disabled>
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.5 3L10.5 8l-5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="btn-reload" class="nav-btn" title="Reload (Ctrl+R)">
+        <svg id="icon-reload" width="16" height="16" viewBox="0 0 16 16"><path d="M13.5 8a5.5 5.5 0 11-1.3-3.5M13.5 2v3h-3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <svg id="icon-stop" width="16" height="16" viewBox="0 0 16 16" style="display:none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <div id="url-bar-wrapper">
+      <input id="url-bar" type="text" placeholder="Search Yandex or enter URL" spellcheck="false" autocomplete="off">
+      <div id="omni-dropdown" style="display:none"></div>
+    </div>
+
+    <button id="btn-bookmark" class="nav-btn" title="Bookmark this page (Ctrl+D)">
+      <svg id="icon-bookmark-outline" width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg>
+      <svg id="icon-bookmark-filled" width="16" height="16" viewBox="0 0 16 16" style="display:none"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="#8ab4f8" stroke-width="1.4" fill="#8ab4f8" stroke-linejoin="round"/></svg>
+    </button>
+
+    <button id="btn-tor" class="nav-btn" title="Toggle Tor (Ctrl+Shift+T)">
+      <svg id="icon-tor" width="16" height="16" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/>
+        <circle cx="8" cy="8" r="3.5" stroke="currentColor" stroke-width="1.2" fill="none"/>
+        <circle cx="8" cy="8" r="1.2" fill="currentColor"/>
+      </svg>
+      <span id="tor-badge" class="tor-badge" style="display:none"></span>
+    </button>
+
+    <button id="btn-menu" class="nav-btn" title="Menu">
+      <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="3" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="13" r="1.2" fill="currentColor"/></svg>
+    </button>
+  </div>
+
+  <div id="bookmark-bar">
+    <div id="bookmark-bar-items"></div>
+    <button id="bookmark-bar-overflow" class="nav-btn" style="display:none" title="More bookmarks">
+      <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+
+  <!-- Three-dot menu panel -->
+  <div id="menu-panel" style="display:none">
+    <div class="menu-item" data-action="new-tab">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span>New tab</span>
+      <span class="menu-shortcut">Ctrl+T</span>
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item" data-action="downloads">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7.5L8 11l3.5-3.5M3 13h10" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Downloads</span>
+      <span class="menu-shortcut">Ctrl+J</span>
+    </div>
+    <div class="menu-item" data-action="history">
+      <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 4.5V8l2.5 2" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>History</span>
+      <span class="menu-shortcut">Ctrl+H</span>
+    </div>
+    <div class="menu-item" data-action="bookmarks">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5 4 13.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></svg>
+      <span>Bookmarks</span>
+      <span class="menu-shortcut">Ctrl+B</span>
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item" data-action="print-pdf">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M4 1h8v4h3v6h-3v4H4v-4H1V5h3V1z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/><path d="M5 9h6M5 11h6" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+      <span>Print page as PDF</span>
+      <span class="menu-shortcut">Ctrl+P</span>
+    </div>
+    <div class="menu-item" data-action="screenshot">
+      <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 3.5V2.5h5v1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+      <span>Screenshot full page</span>
+      <span class="menu-shortcut">Ctrl+Shift+S</span>
+    </div>
+    <div class="menu-separator"></div>
+    <div class="menu-item" data-action="torrent">
+      <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 5v4M6.5 7.5L8 9l1.5-1.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Tankoban Torrent</span>
+    </div>
+  </div>
+
+  <!-- Downloads panel (slides down from toolbar right) -->
+  <div id="downloads-panel" style="display:none">
+    <div id="downloads-header">
+      <span>Downloads</span>
+      <button id="downloads-close" class="find-btn" title="Close">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="downloads-list">
+      <div id="downloads-empty">No downloads yet</div>
+    </div>
+  </div>
+
+  <!-- History panel -->
+  <div id="history-panel" style="display:none">
+    <div id="history-header">
+      <span>History</span>
+      <div id="history-header-actions">
+        <input id="history-search" type="text" placeholder="Search history..." spellcheck="false" autocomplete="off">
+        <button id="history-clear-all" class="find-btn" title="Clear all history">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 4h8M5.5 4V3h3v1M4 4v7.5h6V4" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="history-close" class="find-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="history-list">
+      <div id="history-empty">No history yet</div>
+    </div>
+  </div>
+
+  <!-- Bookmarks panel -->
+  <div id="bookmarks-panel" style="display:none">
+    <div id="bookmarks-header">
+      <span>Bookmarks</span>
+      <div id="bookmarks-header-actions">
+        <input id="bookmarks-search" type="text" placeholder="Search bookmarks..." spellcheck="false" autocomplete="off">
+        <button id="bookmarks-close" class="find-btn" title="Close">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div id="bookmarks-list">
+      <div id="bookmarks-empty">No bookmarks yet</div>
+    </div>
+  </div>
+
+  <div id="loading-bar"><div id="loading-bar-fill"></div></div>
+
+  <div id="webview-container">
+    <div id="find-bar" style="display:none">
+      <input id="find-input" type="text" placeholder="Find in page" spellcheck="false" autocomplete="off">
+      <span id="find-matches"></span>
+      <button id="find-prev" class="find-btn" title="Previous match (Shift+Enter)">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 9l4-4 4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="find-next" class="find-btn" title="Next match (Enter)">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 5l4 4 4-4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button id="find-close" class="find-btn" title="Close (Esc)">
+        <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3.5 3.5l7 7M10.5 3.5l-7 7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="zoom-indicator" style="display:none">100%</div>
+
+    <!-- Torrent manager tab (qBittorrent clone) -->
+    <div id="torrent-container" style="display:none">
+      <div id="tt-toolbar">
+        <button id="tt-btn-add" class="tt-btn" title="Add torrent (magnet link)">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <span>Add</span>
+        </button>
+        <button id="tt-btn-resume" class="tt-btn" title="Resume selected">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M4 2.5l8 4.5-8 4.5z" fill="currentColor"/></svg>
+        </button>
+        <button id="tt-btn-pause" class="tt-btn" title="Pause selected">
+          <svg width="14" height="14" viewBox="0 0 14 14"><rect x="3" y="2" width="3" height="10" rx="0.5" fill="currentColor"/><rect x="8" y="2" width="3" height="10" rx="0.5" fill="currentColor"/></svg>
+        </button>
+        <button id="tt-btn-delete" class="tt-btn" title="Delete selected">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 4h8M5.5 4V3h3v1M4 4v7.5h6V4" stroke="currentColor" stroke-width="1.1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="tt-sep"></div>
+        <button id="tt-btn-resume-all" class="tt-btn" title="Resume all">
+          <svg width="14" height="14" viewBox="0 0 14 14"><path d="M3 2.5l5 4.5-5 4.5z" fill="currentColor"/><path d="M8 2.5l5 4.5-5 4.5z" fill="currentColor"/></svg>
+        </button>
+        <button id="tt-btn-pause-all" class="tt-btn" title="Pause all">
+          <svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/><rect x="5" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/><rect x="9" y="2" width="2.5" height="10" rx="0.5" fill="currentColor"/></svg>
+        </button>
+        <div class="tt-spacer"></div>
+        <input id="tt-search" type="text" placeholder="Filter torrents..." spellcheck="false" autocomplete="off">
+      </div>
+
+      <div id="tt-body">
+        <div id="tt-sidebar">
+          <div class="tt-filter active" data-filter="all"><span class="tt-filter-label">All</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="downloading"><span class="tt-filter-label">Downloading</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="seeding"><span class="tt-filter-label">Seeding</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="completed"><span class="tt-filter-label">Completed</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="paused"><span class="tt-filter-label">Paused</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="active"><span class="tt-filter-label">Active</span><span class="tt-filter-count">0</span></div>
+          <div class="tt-filter" data-filter="errored"><span class="tt-filter-label">Errored</span><span class="tt-filter-count">0</span></div>
+        </div>
+
+        <div id="tt-center">
+          <div id="tt-table-wrap">
+            <table id="tt-table">
+              <thead>
+                <tr>
+                  <th class="tt-col-num">#</th>
+                  <th class="tt-col-name">Name</th>
+                  <th class="tt-col-size">Size</th>
+                  <th class="tt-col-progress">Progress</th>
+                  <th class="tt-col-status">Status</th>
+                  <th class="tt-col-seeds">Seeds</th>
+                  <th class="tt-col-peers">Peers</th>
+                  <th class="tt-col-dlspeed">Down Speed</th>
+                  <th class="tt-col-ulspeed">Up Speed</th>
+                  <th class="tt-col-eta">ETA</th>
+                </tr>
+              </thead>
+              <tbody id="tt-tbody"></tbody>
+            </table>
+            <div id="tt-empty">No torrents. Click <b>Add</b> or paste a magnet link on any page.</div>
+          </div>
+
+          <div id="tt-props">
+            <div id="tt-props-tabs">
+              <div class="tt-ptab active" data-ptab="general">General</div>
+              <div class="tt-ptab" data-ptab="content">Content</div>
+              <div class="tt-ptab" data-ptab="peers">Peers</div>
+              <div class="tt-ptab" data-ptab="trackers">Trackers</div>
+            </div>
+            <div id="tt-props-body">
+              <div id="tt-prop-general" class="tt-prop-panel active"></div>
+              <div id="tt-prop-content" class="tt-prop-panel"></div>
+              <div id="tt-prop-peers" class="tt-prop-panel"></div>
+              <div id="tt-prop-trackers" class="tt-prop-panel"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tt-statusbar">
+        <span id="tt-status-dl">&#8595; 0 B/s</span>
+        <span class="tt-status-sep">|</span>
+        <span id="tt-status-ul">&#8593; 0 B/s</span>
+        <span class="tt-status-sep">|</span>
+        <span id="tt-status-dht">DHT: 0 nodes</span>
+        <span class="tt-status-sep">|</span>
+        <span id="tt-status-active">0 active</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="menu-overlay" style="display:none"></div>
+  <div id="ctx-overlay" style="display:none"></div>
+  <div id="context-menu" style="display:none"></div>
+
+  <script src="renderer.js"></script>
+  <script src="host_bridge_bootstrap.js"></script>
+  <script src="torrent-tab.js"></script>
+</body>
+</html>

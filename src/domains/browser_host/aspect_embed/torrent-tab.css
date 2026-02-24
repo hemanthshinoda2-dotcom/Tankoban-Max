@@ -1,0 +1,671 @@
+/* ── Torrent Manager — qBittorrent dark theme ── */
+
+#torrent-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #202124;
+  color: #e8eaed;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  z-index: 2;
+}
+
+/* ── Toolbar ── */
+
+#tt-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #292a2d;
+  border-bottom: 1px solid #3c4043;
+  flex-shrink: 0;
+}
+
+.tt-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #e8eaed;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.tt-btn:hover { background: #3c4043; }
+.tt-btn:active { background: #4a4d52; }
+.tt-btn svg { flex-shrink: 0; }
+
+.tt-sep {
+  width: 1px;
+  height: 20px;
+  background: #3c4043;
+  margin: 0 4px;
+}
+
+.tt-spacer { flex: 1; }
+
+#tt-search {
+  width: 200px;
+  padding: 4px 8px;
+  background: #35363a;
+  border: 1px solid #3c4043;
+  border-radius: 4px;
+  color: #e8eaed;
+  font-size: 12px;
+  outline: none;
+}
+#tt-search:focus { border-color: #8ab4f8; }
+#tt-search::placeholder { color: #9aa0a6; }
+
+/* ── Body (sidebar + center) ── */
+
+#tt-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+
+#tt-sidebar {
+  width: 180px;
+  flex-shrink: 0;
+  background: #292a2d;
+  border-right: 1px solid #3c4043;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+
+.tt-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 14px;
+  cursor: pointer;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+.tt-filter:hover { background: #35363a; color: #e8eaed; }
+.tt-filter.active { background: #3c4043; color: #8ab4f8; font-weight: 500; }
+
+.tt-filter-count {
+  font-size: 11px;
+  min-width: 18px;
+  text-align: right;
+}
+
+/* ── Center (table + props) ── */
+
+#tt-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Table ── */
+
+#tt-table-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+#tt-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+#tt-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+#tt-table th {
+  padding: 6px 8px;
+  background: #292a2d;
+  border-bottom: 1px solid #3c4043;
+  text-align: left;
+  font-weight: 500;
+  font-size: 11px;
+  color: #9aa0a6;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+#tt-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #35363a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+#tt-table tbody tr { cursor: pointer; }
+#tt-table tbody tr:hover { background: #2d2e31; }
+#tt-table tbody tr.selected { background: #1a3a5c; }
+#tt-table tbody tr.selected:hover { background: #1e4470; }
+
+/* Column widths */
+.tt-col-num   { width: 36px; text-align: center; }
+.tt-col-name  { width: auto; }
+.tt-col-size  { width: 80px; text-align: right; }
+.tt-col-progress { width: 120px; }
+.tt-col-status { width: 100px; }
+.tt-col-seeds  { width: 65px; text-align: right; }
+.tt-col-peers  { width: 65px; text-align: right; }
+.tt-col-dlspeed { width: 85px; text-align: right; }
+.tt-col-ulspeed { width: 85px; text-align: right; }
+.tt-col-eta    { width: 75px; text-align: right; }
+
+/* Progress bar inside table */
+.tt-progress-bar {
+  width: 100%;
+  height: 14px;
+  background: #35363a;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tt-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.tt-progress-fill.downloading { background: #8ab4f8; }
+.tt-progress-fill.seeding     { background: #81c995; }
+.tt-progress-fill.paused      { background: #f9ab00; }
+.tt-progress-fill.completed   { background: #81c995; }
+.tt-progress-fill.error       { background: #f28b82; }
+
+.tt-progress-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 500;
+  color: #e8eaed;
+  text-shadow: 0 0 3px rgba(0,0,0,0.5);
+}
+
+/* Status colors */
+.tt-status-downloading { color: #8ab4f8; }
+.tt-status-seeding     { color: #81c995; }
+.tt-status-completed   { color: #81c995; }
+.tt-status-paused      { color: #f9ab00; }
+.tt-status-failed      { color: #f28b82; }
+.tt-status-cancelled   { color: #9aa0a6; }
+.tt-status-resolving_metadata { color: #c58af9; }
+
+/* Empty state */
+#tt-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+  font-size: 14px;
+  pointer-events: none;
+}
+#tt-empty.hidden { display: none; }
+
+/* ── Properties panel ── */
+
+#tt-props {
+  height: 200px;
+  flex-shrink: 0;
+  border-top: 1px solid #3c4043;
+  display: flex;
+  flex-direction: column;
+  background: #292a2d;
+}
+
+#tt-props-tabs {
+  display: flex;
+  border-bottom: 1px solid #3c4043;
+  flex-shrink: 0;
+}
+
+.tt-ptab {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #9aa0a6;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  user-select: none;
+}
+.tt-ptab:hover { color: #e8eaed; }
+.tt-ptab.active { color: #8ab4f8; border-bottom-color: #8ab4f8; }
+
+#tt-props-body {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+}
+
+.tt-prop-panel {
+  display: none;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.tt-prop-panel.active { display: block; }
+
+/* General tab key-value grid */
+.tt-prop-grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 2px 12px;
+}
+.tt-prop-label { color: #9aa0a6; }
+.tt-prop-value { color: #e8eaed; word-break: break-all; }
+
+/* Content tab file tree */
+.tt-file-list { list-style: none; padding: 0; margin: 0; }
+.tt-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+.tt-file-check { accent-color: #8ab4f8; }
+.tt-file-name  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-file-size  { color: #9aa0a6; flex-shrink: 0; }
+.tt-file-prog  {
+  width: 60px;
+  height: 10px;
+  background: #35363a;
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.tt-file-prog-fill {
+  height: 100%;
+  background: #8ab4f8;
+  border-radius: 2px;
+}
+
+/* File tree (add dialog + properties panel) */
+.tt-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  font-size: 12px;
+  color: #e8eaed;
+}
+.tt-tree-row:hover { background: rgba(255,255,255,0.04); }
+
+.tt-tree-toggle {
+  cursor: pointer;
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: #9aa0a6;
+  flex-shrink: 0;
+  user-select: none;
+}
+.tt-tree-toggle:hover { color: #e8eaed; }
+
+.tt-tree-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.tt-tree-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-tree-size {
+  flex-shrink: 0;
+  color: #9aa0a6;
+  font-size: 11px;
+}
+
+.tt-tree-file-row { cursor: pointer; }
+.tt-tree-file-row.tt-file-selected { background: rgba(138,180,248,0.12); }
+
+.tt-folder-check {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* File context menu */
+#tt-file-ctx-menu {
+  display: none;
+  position: absolute;
+  background: #35363a;
+  border: 1px solid #505154;
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 180px;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+#tt-file-ctx-menu .tt-ctx-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e8eaed;
+  white-space: nowrap;
+}
+#tt-file-ctx-menu .tt-ctx-item:hover { background: rgba(255,255,255,0.08); }
+
+/* Peers table */
+.tt-peers-table { width: 100%; border-collapse: collapse; }
+.tt-peers-table th {
+  text-align: left;
+  padding: 4px 8px;
+  font-weight: 500;
+  font-size: 11px;
+  color: #9aa0a6;
+  border-bottom: 1px solid #3c4043;
+}
+.tt-peers-table td {
+  padding: 3px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid #35363a;
+}
+
+/* Trackers table */
+.tt-trackers-table { width: 100%; border-collapse: collapse; }
+.tt-trackers-table th {
+  text-align: left;
+  padding: 4px 8px;
+  font-weight: 500;
+  font-size: 11px;
+  color: #9aa0a6;
+  border-bottom: 1px solid #3c4043;
+}
+.tt-trackers-table td {
+  padding: 3px 8px;
+  font-size: 12px;
+  border-bottom: 1px solid #35363a;
+}
+
+/* ── Status bar ── */
+
+#tt-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 14px;
+  background: #292a2d;
+  border-top: 1px solid #3c4043;
+  font-size: 11px;
+  color: #9aa0a6;
+  flex-shrink: 0;
+}
+
+.tt-status-sep { color: #3c4043; }
+
+/* ── Add torrent dialog (modal) ── */
+
+#tt-add-overlay {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 10;
+  align-items: center;
+  justify-content: center;
+}
+#tt-add-overlay.visible { display: flex; }
+
+#tt-add-dialog {
+  background: #292a2d;
+  border: 1px solid #3c4043;
+  border-radius: 8px;
+  padding: 20px;
+  width: 500px;
+  max-width: 90%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+#tt-add-dialog h3 {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #e8eaed;
+}
+
+#tt-add-dialog label {
+  display: block;
+  font-size: 12px;
+  color: #9aa0a6;
+  margin-bottom: 4px;
+}
+
+#tt-add-source {
+  width: 100%;
+  padding: 8px;
+  background: #35363a;
+  border: 1px solid #3c4043;
+  border-radius: 4px;
+  color: #e8eaed;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+#tt-add-source:focus { border-color: #8ab4f8; }
+#tt-add-source::placeholder { color: #5f6368; }
+
+.tt-add-path-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#tt-add-path {
+  flex: 1;
+  padding: 6px 8px;
+  background: #35363a;
+  border: 1px solid #3c4043;
+  border-radius: 4px;
+  color: #9aa0a6;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#tt-add-browse {
+  padding: 6px 12px;
+  background: #3c4043;
+  border: none;
+  border-radius: 4px;
+  color: #e8eaed;
+  cursor: pointer;
+  font-size: 12px;
+}
+#tt-add-browse:hover { background: #4a4d52; }
+
+.tt-add-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.tt-add-btn {
+  padding: 7px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tt-add-btn.cancel {
+  background: #3c4043;
+  color: #e8eaed;
+}
+.tt-add-btn.cancel:hover { background: #4a4d52; }
+
+.tt-add-btn.primary {
+  background: #8ab4f8;
+  color: #202124;
+  font-weight: 500;
+}
+.tt-add-btn.primary:hover { background: #aecbfa; }
+.tt-add-btn.primary:disabled { opacity: 0.5; cursor: default; }
+.tt-add-btn.primary:disabled:hover { background: #8ab4f8; }
+
+/* Sequential download checkbox */
+.tt-add-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #e8eaed;
+}
+.tt-add-check-label input[type="checkbox"] { accent-color: #8ab4f8; }
+
+/* Files section */
+#tt-add-files-section {
+  margin-top: 16px;
+  border: 1px solid #3c4043;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.tt-add-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #35363a;
+  font-size: 12px;
+  color: #9aa0a6;
+}
+.tt-add-files-header span { display: inline; }
+
+.tt-add-files-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tt-link-btn {
+  background: none;
+  border: none;
+  color: #8ab4f8;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+.tt-link-btn:hover { text-decoration: underline; }
+
+#tt-add-files-list {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.tt-add-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.tt-add-file-item:hover { background: #35363a; }
+
+.tt-add-file-check { accent-color: #8ab4f8; }
+.tt-add-file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e8eaed;
+}
+.tt-add-file-size {
+  flex-shrink: 0;
+  color: #9aa0a6;
+  font-size: 11px;
+}
+
+.tt-add-placeholder,
+.tt-add-error {
+  padding: 20px;
+  text-align: center;
+  color: #5f6368;
+  font-size: 12px;
+}
+.tt-add-error { color: #f28b82; }
+
+.tt-add-resolving {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.tt-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #3c4043;
+  border-top-color: #8ab4f8;
+  border-radius: 50%;
+  animation: tt-spin 0.8s linear infinite;
+}
+@keyframes tt-spin { to { transform: rotate(360deg); } }
+
+/* ── Torrent context menu ── */
+
+#tt-ctx-menu {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  background: #292a2d;
+  border: 1px solid #3c4043;
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  min-width: 180px;
+}
+
+.tt-ctx-item {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: #e8eaed;
+  cursor: pointer;
+}
+.tt-ctx-item:hover { background: #3c4043; }
+.tt-ctx-item.disabled { color: #5f6368; pointer-events: none; }
+.tt-ctx-sep {
+  height: 1px;
+  background: #3c4043;
+  margin: 4px 0;
+}
+
+/* ── Scrollbar styling ── */
+
+#torrent-container ::-webkit-scrollbar { width: 8px; height: 8px; }
+#torrent-container ::-webkit-scrollbar-track { background: transparent; }
+#torrent-container ::-webkit-scrollbar-thumb { background: #3c4043; border-radius: 4px; }
+#torrent-container ::-webkit-scrollbar-thumb:hover { background: #5f6368; }

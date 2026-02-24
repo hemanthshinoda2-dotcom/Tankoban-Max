@@ -1,4 +1,4 @@
-﻿/*
+/*
 TankobanPlus â€” Main Boot (Build 77, Phase 3)
 
 OWNERSHIP: App lifecycle and window creation.
@@ -8,6 +8,7 @@ All IPC handlers are in main/ipc/index.js.
 module.exports = function boot({ APP_ROOT }) {
 
 const { app, BrowserWindow, Menu, screen, session, globalShortcut } = require('electron');
+const EMBEDDED_BROWSER_GROUNDWORK_ONLY = String(process.env.TANKOBAN_EMBEDDED_BROWSER || '').trim() !== '1';
 const { fileURLToPath } = require('url');
 const path = require('path');
 const fs = require('fs');
@@ -1072,7 +1073,9 @@ app.whenReady().then(async () => {
 
   // BUILD110: make SharedArrayBuffer usable (helps mpv shared surface avoid per-frame copies).
   try { ensureCrossOriginIsolationHeaders(); } catch {}
-  try { ensureWebModeSecurity(); } catch {}
+  if (!EMBEDDED_BROWSER_GROUNDWORK_ONLY) {
+    try { ensureWebModeSecurity(); } catch {}
+  }
 
   // Register IPC handlers early (needed for player_core even in launcher mode).
   // Safe with win=null: the IPC registry uses optional chaining for window access.

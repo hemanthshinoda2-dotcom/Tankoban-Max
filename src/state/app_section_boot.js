@@ -92,6 +92,23 @@
   async function openBrowserWorkspace(opts) {
     const options = (opts && typeof opts === 'object') ? opts : {};
     await setMode('comics');
+
+    // Browser-host bridge first: lets a future Aspect embed plug in without changing callers.
+    try {
+      const host = window.Tanko && window.Tanko.browserHost;
+      if (host && typeof host.ensureReady === 'function') {
+        await host.ensureReady();
+        if (options.openTorrentWorkspace && typeof host.openTorrentWorkspace === 'function') {
+          await host.openTorrentWorkspace();
+          return;
+        }
+        if (typeof host.openDefault === 'function') {
+          await host.openDefault();
+          return;
+        }
+      }
+    } catch (_err) {}
+
     await ensureWebModulesLoaded();
 
     const web = window.Tanko && window.Tanko.web;

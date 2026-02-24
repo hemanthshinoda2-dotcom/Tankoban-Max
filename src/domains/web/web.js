@@ -959,6 +959,22 @@
   // ── Keyboard shortcuts ──
 
   function handleKeyDown(e) {
+    try {
+      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
+        ? window.Tanko.browserHost.getConfig() : null;
+      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
+        var hostPane = document.getElementById('aspectEmbedMountRoot');
+        if (hostPane && hostPane.isConnected && !document.getElementById('webBrowserView')?.classList?.contains('hidden')) return;
+      }
+    } catch (_embedKeyErr) {}
+    try {
+      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
+        ? window.Tanko.browserHost.getConfig() : null;
+      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
+        var hostPane = document.getElementById('aspectEmbedMountRoot');
+        if (hostPane && !hostPane.classList.contains('hidden')) return;
+      }
+    } catch (_embedKeyErr) {}
     // Only handle when browser view is visible or web mode is active
     if (!state.browserOpen && !isWebModeActive()) return;
 

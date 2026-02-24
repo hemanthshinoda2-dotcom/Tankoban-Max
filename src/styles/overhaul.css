@@ -1367,6 +1367,14 @@ code, pre, .mono{
   -webkit-app-region: no-drag;
 }
 
+/* WEB-LAUNCH-FIX: ensure the Web button always receives clicks in frameless mode */
+#webHubToggleBtn{
+  -webkit-app-region: no-drag !important;
+  pointer-events: auto;
+  position: relative;
+  z-index: 2;
+}
+
 /* MERIDIAN_FRAME: custom window controls */
 .winControls{
   display: flex;
