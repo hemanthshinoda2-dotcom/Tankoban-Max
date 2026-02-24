@@ -2,18 +2,16 @@
 // Replaces 8,973-line monolith with thin orchestrator that delegates to modules.
 (function webBrowserDomain() {
   'use strict';
-  console.log('[web.js] ENTRY, bound=' + !!window.__tankoWebBrowserBound);
 
-  if (window.__tankoWebBrowserBound) { console.log('[web.js] SKIP: already bound'); return; }
+  if (window.__tankoWebBrowserBound) return;
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
   if (!api || !api.webSources) {
-    console.warn('[web.js] SKIP: api.webSources missing');
+    console.warn('[web.js] Tanko.api.webSources not available — aborting');
     return;
   }
 
   window.__tankoWebBrowserBound = true;
-  console.log('[web.js] init starting...');
 
   // ── DOM element cache ──
 
