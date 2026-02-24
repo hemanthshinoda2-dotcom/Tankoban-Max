@@ -21,10 +21,7 @@
         "phase8:verify": "node tools/books_phase8_verify.js",
         "build:player": "cd player_qt && build_player.bat",
         "validate:player": "node tools/validate_player_artifacts.js",
-        "build:holy-grail": "tools\\build_holy_grail.bat",
-        "validate:holy-grail": "node tools/validate_holy_grail_artifacts.js",
         "release:prep": "node tools/release_prep.js",
-        "release:prep:full": "node tools/release_prep.js --rebuild-holy-grail",
         "fetch:tor": "node tools/fetch_tor.js",
         "fetch:mpv": "scripts\\windows\\ensure_mpv_windows.bat",
         "visual:browser:baseline": "electron tools/visual-qa/browser_ui_visual_qa.js capture-baseline",
@@ -208,10 +205,6 @@
             {
                 "from": "resources/mpv/windows",
                 "to": "mpv/windows"
-            },
-            {
-                "from": "native/holy_grail/build/Release/holy_grail.node",
-                "to": "native/holy_grail/holy_grail.node"
             },
             {
                 "from": "player_qt/dist/TankobanPlayer",

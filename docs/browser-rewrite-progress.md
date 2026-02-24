@@ -163,7 +163,6 @@ Split `web.js` (~4,500 lines) into logical modules using the bridge pattern (`wi
 | File | What changed |
 |------|-------------|
 | `main/domains/webSources/index.js` | .torrent handler fix (sync setSavePath) — needs commit |
-| `player_hg/*` | Pre-existing Holy Grail player changes (unrelated) |
 
 ---
 

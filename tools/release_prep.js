@@ -6,9 +6,6 @@
  *
  * Validates that all artifacts needed by electron-builder are present.
  *
- * Holy Grail addon:  Uses the pre-built .node from the repo by default.
- *                    Pass --rebuild-holy-grail to recompile (requires VS Build Tools).
- *
  * Qt Player:         Builds automatically if Python 3.10+ is available.
  *                    Skips gracefully if Python is missing — creates a placeholder
  *                    directory so electron-builder doesn't crash.
@@ -16,7 +13,7 @@
  * Runtime deps:      Validates mpv (hard fail) and tor (soft fail with placeholder).
  *
  * Usage:
- *   node tools/release_prep.js [--rebuild-holy-grail] [--skip-player]
+ *   node tools/release_prep.js [--skip-player]
  */
 
 var fs = require('fs');
@@ -30,7 +27,6 @@ var flagSet = {};
 ARGS.forEach(function (a) { flagSet[a] = true; });
 
 // --- Paths ---
-var HOLY_GRAIL_NODE = path.join(ROOT, 'native', 'holy_grail', 'build', 'Release', 'holy_grail.node');
 var PLAYER_EXE = path.join(ROOT, 'player_qt', 'dist', 'TankobanPlayer', 'TankobanPlayer.exe');
 var PLAYER_DIR = path.join(ROOT, 'player_qt', 'dist', 'TankobanPlayer');
 var MPV_DIR = path.join(ROOT, 'resources', 'mpv', 'windows');
@@ -39,10 +35,6 @@ var TOR_DIR = path.join(ROOT, 'resources', 'tor', 'windows');
 function log(tag, msg) { console.log('[' + tag + '] ' + msg); }
 function warn(tag, msg) { console.warn('[' + tag + '] WARNING: ' + msg); }
 function err(tag, msg) { console.error('[' + tag + '] ERROR: ' + msg); }
-
-function run(cmd) {
-  execSync(cmd, { stdio: 'inherit', cwd: ROOT });
-}
 
 function hasPython310() {
   var cmds = ['py --version', 'python --version'];
@@ -57,31 +49,7 @@ function hasPython310() {
 }
 
 // ============================================================
-// Step 1: Holy Grail native addon
-// ============================================================
-function prepHolyGrail() {
-  if (flagSet['--rebuild-holy-grail']) {
-    log('holy-grail', 'Rebuilding native addon (--rebuild-holy-grail flag)...');
-    try {
-      run('tools\\build_holy_grail.bat');
-    } catch (_) {
-      err('holy-grail', 'Build failed. Ensure Visual Studio Build Tools + Windows SDK are installed.');
-      process.exit(1);
-    }
-  }
-
-  if (!fs.existsSync(HOLY_GRAIL_NODE)) {
-    err('holy-grail', 'Pre-built addon not found: ' + path.relative(ROOT, HOLY_GRAIL_NODE));
-    err('holy-grail', 'This file should be tracked in git. Re-clone the repo or run: npm run build:holy-grail');
-    process.exit(1);
-  }
-
-  var size = (fs.statSync(HOLY_GRAIL_NODE).size / 1024).toFixed(0);
-  log('holy-grail', 'OK — ' + path.relative(ROOT, HOLY_GRAIL_NODE) + ' (' + size + ' KB)');
-}
-
-// ============================================================
-// Step 2: Qt Player (optional)
+// Step 1: Qt Player (optional)
 // ============================================================
 function prepPlayer() {
   if (flagSet['--skip-player']) {
@@ -133,7 +101,7 @@ function ensurePlayerDir() {
 }
 
 // ============================================================
-// Step 3: Runtime deps (mpv, tor)
+// Step 2: Runtime deps (mpv, tor)
 // ============================================================
 function checkRuntimeDeps() {
   var mpvExe = path.join(MPV_DIR, 'mpv.exe');
@@ -166,13 +134,11 @@ function main() {
   console.log('=== Tankoban Max Release Preparation ===');
   console.log('');
 
-  prepHolyGrail();
   var hasPlayer = prepPlayer();
   var hasTor = checkRuntimeDeps();
 
   console.log('');
   console.log('=== Summary ===');
-  log('summary', 'Holy Grail addon : OK');
   log('summary', 'Qt player        : ' + (hasPlayer ? 'OK' : 'SKIPPED (optional)'));
   log('summary', 'MPV runtime      : OK');
   log('summary', 'Tor runtime      : ' + (hasTor ? 'OK' : 'SKIPPED (optional)'));
@@ -180,7 +146,6 @@ function main() {
   // Write manifest for debugging / CI
   var manifest = {
     timestamp: new Date().toISOString(),
-    holyGrail: true,
     player: hasPlayer,
     mpv: true,
     tor: hasTor
