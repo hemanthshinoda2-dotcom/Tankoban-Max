@@ -396,7 +396,12 @@
       console.warn('[web.js] module not found:', name);
       return {};
     }
-    return registry[name](bridge);
+    try {
+      return registry[name](bridge);
+    } catch (e) {
+      console.error('[web.js] module "' + name + '" threw during init:', e);
+      return {};
+    }
   }
 
   // Initialize all modules
@@ -412,6 +417,7 @@
 
   // ── Cross-dependency wiring ──
   // Modules access bridge.deps lazily, so we can wire after all factories run.
+  try {
 
   bridge.deps.escapeHtml       = escapeHtml;
   bridge.deps.siteNameFromUrl  = siteNameFromUrl;
@@ -1654,5 +1660,9 @@
     isBrowserOpen: function () { return !!state.browserOpen; },
     openAddSourceDialog: function () { openAddSourceDialog(null); }
   };
+
+  } catch (webInitErr) {
+    console.error('[web.js] FATAL init error:', webInitErr);
+  }
 
 })();
