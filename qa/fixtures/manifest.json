@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-02-24T07:16:14.000Z",
+  "files": [
+    {
+      "path": "audiobooks/library/Book-One/Chapter-001.mp3",
+      "sizeBytes": 67,
+      "sha256": "1cebcb52f868cc8903d128b40f537eb0f5f7a40ff8910cce2fa231bd17f0d639"
+    },
+    {
+      "path": "books/library/Author-Alpha/Book-001.txt",
+      "sizeBytes": 79,
+      "sha256": "89525a3011b2722d3e5b9272499427450264ab285ce88a364f792cb3831df6e2"
+    },
+    {
+      "path": "browser/sources.json",
+      "sizeBytes": 143,
+      "sha256": "14d312335e594054e741f32c3c5f287eb3292b2aeb812dc00ee035994c2e358b"
+    },
+    {
+      "path": "comics/library/Series-Alpha/Volume-001.cbz",
+      "sizeBytes": 66,
+      "sha256": "33f7977b6aaa7544a8fb082c976f6cd1bdabd2f4862f2bd6fc3136005257eaaf"
+    },
+    {
+      "path": "contracts/ipc_contract_samples.json",
+      "sizeBytes": 574,
+      "sha256": "be2dcad6d5c8cc8836a117a076a4061cf03aba4e18ab96c1e65d19720d93d842"
+    },
+    {
+      "path": "torrent/magnets.txt",
+      "sizeBytes": 82,
+      "sha256": "d6642ff1195c3f220ada3137230a38bd7cc958366e5fca87d3ee3dddf39f20f8"
+    },
+    {
+      "path": "video/library/Show-Alpha/Episode-001.mp4",
+      "sizeBytes": 68,
+      "sha256": "d74ade5b099f119cdaa2b47188d9f9ccac885a92f4f80afcbadbe63b813ee4d9"
+    }
+  ]
+}

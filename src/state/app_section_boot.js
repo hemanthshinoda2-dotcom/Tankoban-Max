@@ -3,6 +3,10 @@
 (function appSectionBoot() {
   'use strict';
 
+  /**
+   * @typedef {'shell'|'library'|'comic'|'book'|'audiobook'|'video'|'browser'|'torrent'} AppSection
+   */
+
   const SECTION_ALIASES = {
     comics: 'comic',
     'comic-reader': 'comic',
@@ -17,6 +21,7 @@
     'web-browser': 'browser',
   };
 
+  /** @returns {AppSection | ''} */
   function normalizeSection(raw) {
     const key = String(raw || '').trim().toLowerCase();
     if (!key) return '';
@@ -34,6 +39,7 @@
     return '';
   }
 
+  /** @returns {AppSection | ''} */
   function readSectionFromQuery() {
     try {
       const params = new URLSearchParams((window.location && window.location.search) || '');
@@ -111,6 +117,7 @@
     }
   }
 
+  /** @param {AppSection} section */
   async function applySectionBoot(section) {
     switch (section) {
       case 'library':
@@ -154,7 +161,7 @@
 
   function boot() {
     setTimeout(function () {
-      applySectionBoot(appSection).catch(function (err) {
+      applySectionBoot(/** @type {AppSection} */(appSection)).catch(function (err) {
         try { console.error('[app_section_boot] failed:', err); } catch (_err) {}
       });
     }, 0);
@@ -166,4 +173,3 @@
     boot();
   }
 })();
-

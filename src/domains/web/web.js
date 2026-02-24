@@ -8924,6 +8924,9 @@ function respondToPermissionPrompt(action) {
   moduleBridge.deps.getFaviconUrl = getFaviconUrl;
   moduleBridge.deps.openBrowserForTab = openBrowserForTab;
   moduleBridge.deps.createTab = createTab;
+  moduleBridge.deps.openNewTab = openNewTab;
+  moduleBridge.deps.activateTab = activateTab;
+  moduleBridge.deps.openHubPanelSection = openHubPanelSection;
   moduleBridge.deps.getActiveTab = getActiveTab;
   moduleBridge.deps.ensureTabRuntime = ensureTabRuntime;
   moduleBridge.deps.isWebModeActive = isWebModeActive;
@@ -8940,36 +8943,19 @@ function respondToPermissionPrompt(action) {
   // Expose openBrowser globally so Comics/Books sidebars can call it
   console.log('[DBG-WEB] web.js IIFE reached end — about to expose Tanko.web');
   try {
-    function openDefaultBrowserEntry() {
+    var standaloneModule = useWebModule('standalone');
+    var openDefaultBrowserEntry = standaloneModule.openDefaultBrowserEntry || function () {
       if (state.tabs.length) {
         var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
         openBrowserForTab(targetId);
       } else {
         openNewTab();
       }
-    }
-
-    function openTorrentWorkspace() {
-      var torrentTabId = null;
-      for (var i = 0; i < state.tabs.length; i++) {
-        var tab = state.tabs[i];
-        if (tab && tab.type === 'torrent') {
-          torrentTabId = tab.id;
-          break;
-        }
-      }
-      if (torrentTabId != null) activateTab(torrentTabId);
-      else openDefaultBrowserEntry();
-
-      // Keep torrent controls immediately accessible in standalone torrent mode.
+    };
+    var openTorrentWorkspace = standaloneModule.openTorrentWorkspace || function () {
+      openDefaultBrowserEntry();
       openHubPanelSection('browser');
-      try {
-        if (el.hubMagnetInput && typeof el.hubMagnetInput.focus === 'function') {
-          el.hubMagnetInput.focus();
-          if (typeof el.hubMagnetInput.select === 'function') el.hubMagnetInput.select();
-        }
-      } catch (e) {}
-    }
+    };
 
     window.Tanko = window.Tanko || {};
     window.Tanko.web = {

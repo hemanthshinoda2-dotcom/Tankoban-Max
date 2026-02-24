@@ -26,6 +26,12 @@ Validation and diagnostics:
 2. `npm run doctor`
 3. `npm run ipc:check`
 4. `npm run map`
+5. `npm run boundaries:check`
+6. `npm run fixtures:check`
+7. `npm run ipc:contracts`
+8. `npm run smoke:all`
+9. `npm run test:sections`
+10. `npm run docs:verify-sync`
 
 ## 3. Root Folder Map
 Top-level ownership:
@@ -39,7 +45,9 @@ Top-level ownership:
 8. `packages/` - logical boundaries and ownership maps.
 9. `resources/` + `player_qt/` - native/media runtime assets.
 10. `tools/` + `qa/` - smoke checks, audits, diagnostics, visual QA.
-11. `docs/` - optional supporting architecture docs only.
+11. `contracts/` - IPC payload contracts and schema coverage.
+12. `types/` - critical interface declarations (`.d.ts`) for high-value boundaries.
+13. `docs/` - supporting architecture, ADRs, and canonical agent source.
 
 ## 4. Apps Directory
 Each app is a thin launcher around the same runtime.
@@ -138,6 +146,7 @@ Each app is a thin launcher around the same runtime.
 - `src/state/deferred_modules.js` lazy-loads heavy domains.
 - `src/state/mode_router.js` handles comics/books/videos mode switching.
 - `src/state/app_section_boot.js` applies standalone `appSection` startup routing.
+- Web standalone entry helpers split from `src/domains/web/web.js` into `src/domains/web/web_module_standalone.js`.
 
 2. Preload (`preload/`)
 - `preload/index.js` composes namespace APIs.
@@ -212,6 +221,24 @@ Each app is a thin launcher around the same runtime.
 4. `packages/core-main/launch_section_app.js`
 - Shared launcher for all `apps/*/main.js` entrypoints.
 
+5. `tools/enforce_feature_boundaries.js`
+- Enforces feature package import boundaries.
+
+6. `tools/section_smoke.js`
+- Deterministic fast section-level smoke checks.
+
+7. `tools/section_test_harness.js`
+- Runs section smoke + section-specific stable checks.
+
+8. `tools/ipc_contract_check.js`
+- Verifies IPC payload schema coverage and fixture sample validation.
+
+9. `tools/impact_map.js` + `tools/impact_map.rules.json`
+- Maps changed files to recommended checks; optional `--run` execution.
+
+10. `tools/generate_agent_docs.js` + `tools/verify_agent_docs.js`
+- Keeps `CLAUDE.md` and `chatgpt.md` generated and synchronized from `docs/agent-map.source.md`.
+
 ## 9. Forbidden Import Rules
 Enforce these rules during future refactors:
 1. Do not import one feature package from another feature package internals.
@@ -237,4 +264,5 @@ Keep active docs minimal:
 1. `CLAUDE.md` (canonical map)
 2. `chatgpt.md` (must be identical to `CLAUDE.md`)
 3. `ARCHITECTURE.md` only if needed for supporting detail
-4. Legal/compliance docs (for example `THIRD_PARTY_NOTICES.md`) must remain when required
+4. `docs/adr/*` for accepted architectural decisions
+5. Legal/compliance docs (for example `THIRD_PARTY_NOTICES.md`) must remain when required

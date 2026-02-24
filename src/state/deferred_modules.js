@@ -209,6 +209,7 @@
           './domains/web/web_module_downloads.js',
           './domains/web/web_module_torrent_tab.js',
           './domains/web/web_module_hub.js',
+          './domains/web/web_module_standalone.js',
         ]);
         console.log('[DBG-WEB-DFR] group done, registered modules=', Object.keys(window.__tankoWebModules || {}));
         console.log('[DBG-WEB-DFR] loading web.js...');

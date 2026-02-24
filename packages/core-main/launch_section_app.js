@@ -2,6 +2,10 @@
 
 const path = require('path');
 
+/**
+ * @typedef {'shell'|'library'|'comic'|'book'|'audiobook'|'video'|'browser'|'torrent'} AppSection
+ */
+
 const CANONICAL_SECTIONS = new Set([
   'shell',
   'library',
@@ -34,6 +38,9 @@ function normalizeSection(raw) {
   return CANONICAL_SECTIONS.has(mapped) ? mapped : '';
 }
 
+/**
+ * @param {{ section?: AppSection | string, entryName?: string }} [options]
+ */
 function launchSectionApp(options = {}) {
   const requested = options && typeof options === 'object' ? options.section : '';
   const section = normalizeSection(requested) || normalizeSection(process.env.TANKOBAN_APP_SECTION) || 'shell';
@@ -50,4 +57,3 @@ module.exports = {
   normalizeSection,
   CANONICAL_SECTIONS: Array.from(CANONICAL_SECTIONS),
 };
-

@@ -1,0 +1,3 @@
+﻿Tankoban fixture book text.
+Chapter 1: deterministic sample.
+Seed=book-001

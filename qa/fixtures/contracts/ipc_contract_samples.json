@@ -1,0 +1,19 @@
+﻿{
+  "channelRequests": {
+    "LIBRARY_SCAN": [ { "force": true } ],
+    "VIDEO_SCAN": [ { "force": true } ],
+    "BOOKS_SCAN": [ { "force": true } ],
+    "WINDOW_SET_FULLSCREEN": [ true ]
+  },
+  "channelResponses": {
+    "LIBRARY_SCAN": { "ok": true },
+    "VIDEO_SCAN": { "ok": true },
+    "BOOKS_SCAN": { "ok": true },
+    "WINDOW_SET_FULLSCREEN": true
+  },
+  "events": {
+    "APP_OPEN_FILES": { "paths": ["D:/fixtures/Volume-001.cbz"], "source": "argv" },
+    "VIDEO_UPDATED": { "updatedAt": 1735689600000 },
+    "BOOKS_UPDATED": { "updatedAt": 1735689600000 }
+  }
+}

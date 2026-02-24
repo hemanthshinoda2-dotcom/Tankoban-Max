@@ -1,0 +1,54 @@
+const SECTIONS = Object.freeze({
+  library: {
+    startScript: 'start:library',
+    appEntry: 'apps/library-app/main.js',
+    featurePackage: 'packages/feature-library/index.js',
+    fixtures: ['qa/fixtures/comics/library'],
+    keyFiles: ['src/domains/library/library.js', 'main/domains/library/index.js', 'preload/namespaces/library.js'],
+  },
+  comic: {
+    startScript: 'start:comic',
+    appEntry: 'apps/comic-reader-app/main.js',
+    featurePackage: 'packages/feature-comic-reader/index.js',
+    fixtures: ['qa/fixtures/comics/library'],
+    keyFiles: ['src/domains/reader/boot.js', 'main/domains/comic/index.js', 'main/domains/archives/index.js'],
+  },
+  book: {
+    startScript: 'start:book',
+    appEntry: 'apps/book-reader-app/main.js',
+    featurePackage: 'packages/feature-book-reader/index.js',
+    fixtures: ['qa/fixtures/books/library'],
+    keyFiles: ['src/domains/books/library.js', 'src/domains/books/reader/reader_core.js', 'main/domains/books/index.js'],
+  },
+  audiobook: {
+    startScript: 'start:audiobook',
+    appEntry: 'apps/audiobook-app/main.js',
+    featurePackage: 'packages/feature-audiobook/index.js',
+    fixtures: ['qa/fixtures/audiobooks/library'],
+    keyFiles: ['src/domains/books/audiobook_player_overlay.js', 'src/domains/books/reader/reader_audiobook.js', 'main/domains/audiobooks/index.js'],
+  },
+  video: {
+    startScript: 'start:video',
+    appEntry: 'apps/video-player-app/main.js',
+    featurePackage: 'packages/feature-video/index.js',
+    fixtures: ['qa/fixtures/video/library'],
+    keyFiles: ['src/domains/video/video.js', 'main/domains/video/index.js', 'main/domains/player_core/index.js'],
+  },
+  browser: {
+    startScript: 'start:browser',
+    appEntry: 'apps/browser-app/main.js',
+    featurePackage: 'packages/feature-browser/index.js',
+    fixtures: ['qa/fixtures/browser/sources.json'],
+    keyFiles: ['src/domains/web/web.js', 'main/domains/webSources/index.js', 'preload/namespaces/web.js'],
+  },
+  torrent: {
+    startScript: 'start:torrent',
+    appEntry: 'apps/torrent-app/main.js',
+    featurePackage: 'packages/feature-torrent/index.js',
+    fixtures: ['qa/fixtures/torrent/magnets.txt'],
+    keyFiles: ['src/domains/web/web_module_torrent_tab.js', 'main/domains/webTorrent/index.js', 'main/domains/torProxy/index.js'],
+  },
+});
+
+module.exports = { SECTIONS };
+

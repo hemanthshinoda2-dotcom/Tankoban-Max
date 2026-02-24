@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2021",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "strict": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "packages/core-main/**/*.js",
+    "src/state/app_section_boot.js",
+    "tools/enforce_feature_boundaries.js",
+    "tools/section_smoke.js",
+    "tools/section_test_harness.js",
+    "tools/ipc_contract_check.js",
+    "tools/impact_map.js",
+    "tools/generate_agent_docs.js",
+    "tools/verify_agent_docs.js",
+    "types/**/*.d.ts"
+  ]
+}
+

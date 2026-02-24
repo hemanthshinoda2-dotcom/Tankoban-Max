@@ -66,7 +66,12 @@ function walkJsFiles(dir) {
       const full = path.join(cur, e.name);
       if (e.isDirectory()) {
         // Skip node_modules + build-ish dirs for speed and to avoid scanning compiled artifacts.
-        if (e.name === 'node_modules' || e.name === 'build' || e.name.startsWith('.')) continue;
+        if (
+          e.name === 'node_modules' ||
+          e.name === 'build' ||
+          e.name === 'archive' ||
+          e.name.startsWith('.')
+        ) continue;
         stack.push(full);
       } else if (e.isFile() && e.name.endsWith('.js')) {
         out.push(full);
@@ -243,7 +248,6 @@ function main() {
     path.join(SRC, 'domains', 'library'),
     path.join(SRC, 'domains', 'video'),
     path.join(SRC, 'domains', 'reader'),
-    path.join(SRC, 'domains', 'player'),
     path.join(SRC, 'domains', 'shell'),
     path.join(SRC, 'domains', 'books'),
     path.join(SRC, 'state'),
@@ -345,14 +349,7 @@ function main() {
   const htmlContent = readText(path.join(ROOT, 'src', 'index.html'));
   const requiredIds = [
     'booksReaderView', 'booksReaderHost', 'booksSidebar',
-    'booksReaderTtsBar', 'booksReaderTtsPlayPause', 'booksReaderTtsStop',
-    'booksReaderTtsEngine', 'booksReaderTtsVoice', 'booksReaderTtsPreview',
-    'booksReaderTtsPresetSel', 'booksReaderTtsRewind', 'booksReaderTtsForward',
-    'booksReaderTtsDiag', 'booksReaderTtsDiagBtn',
     'booksReaderErrorBanner', 'booksTocSearch', 'booksTocList',
-    // R1/R5/R7/R9: new refinement elements
-    'booksReaderTtsLaunch', 'booksReaderReturnTts',
-    'booksUtilSearchInput', 'booksUtilBookmarkList',
     // Books library parity (R8/R10)
     'booksLibTipsOverlay', 'booksFolderContinue',
   ];

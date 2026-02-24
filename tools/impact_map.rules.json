@@ -1,0 +1,50 @@
+{
+  "rules": [
+    {
+      "name": "Core IPC",
+      "paths": ["shared/ipc.js", "preload/**", "main/ipc/**", "contracts/ipc/**"],
+      "commands": ["npm run ipc:check", "npm run ipc:contracts"]
+    },
+    {
+      "name": "Library",
+      "paths": ["src/domains/library/**", "main/domains/library/**", "packages/feature-library/**"],
+      "commands": ["npm run smoke:library", "npm run test:section:library"]
+    },
+    {
+      "name": "Comic Reader",
+      "paths": ["src/domains/reader/**", "main/domains/comic/**", "main/domains/archives/**", "packages/feature-comic-reader/**"],
+      "commands": ["npm run smoke:comic", "npm run test:section:comic"]
+    },
+    {
+      "name": "Book Reader",
+      "paths": ["src/domains/books/**", "main/domains/books/**", "main/domains/books*/**", "packages/feature-book-reader/**"],
+      "commands": ["npm run smoke:book", "npm run test:section:book"]
+    },
+    {
+      "name": "Audiobook",
+      "paths": ["main/domains/audiobooks/**", "main/domains/audiobook*/**", "packages/feature-audiobook/**", "src/domains/books/**"],
+      "commands": ["npm run smoke:audiobook", "npm run test:section:audiobook"]
+    },
+    {
+      "name": "Video",
+      "paths": ["src/domains/video/**", "main/domains/video*/**", "main/domains/player_core/**", "packages/feature-video/**", "packages/shared-media/**"],
+      "commands": ["npm run smoke:video", "npm run test:section:video"]
+    },
+    {
+      "name": "Browser/Torrent",
+      "paths": ["src/domains/web/**", "main/domains/web*/**", "main/domains/torProxy/**", "packages/feature-browser/**", "packages/feature-torrent/**"],
+      "commands": ["npm run smoke:browser", "npm run smoke:torrent", "npm run test:section:browser", "npm run test:section:torrent"]
+    },
+    {
+      "name": "Docs Canonical",
+      "paths": ["docs/agent-map.source.md", "tools/generate_agent_docs.js", "CLAUDE.md", "chatgpt.md"],
+      "commands": ["npm run docs:verify-sync"]
+    },
+    {
+      "name": "Boundaries/Fixtures",
+      "paths": ["packages/**", "apps/**", "qa/fixtures/**", "tools/enforce_feature_boundaries.js", "tools/section_smoke.js"],
+      "commands": ["npm run boundaries:check", "npm run fixtures:check"]
+    }
+  ]
+}
+

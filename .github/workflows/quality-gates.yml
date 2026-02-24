@@ -1,0 +1,65 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  core-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Boundary check
+        run: npm run boundaries:check
+      - name: Fixture determinism check
+        run: npm run fixtures:check
+      - name: IPC sync check
+        run: npm run ipc:check
+      - name: IPC contract check
+        run: npm run ipc:contracts
+      - name: Canonical docs sync check
+        run: npm run docs:verify-sync
+      - name: Core typecheck
+        run: npm run typecheck:core
+
+  section-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        section: [library, comic, book, audiobook, video, browser, torrent]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run section smoke
+        run: npm run smoke:${{ matrix.section }}
+
+  impact-report:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate impact plan
+        run: node tools/impact_map.js --base=origin/${{ github.base_ref }}
+

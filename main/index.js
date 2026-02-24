@@ -762,7 +762,11 @@ function createWindow(opts = {}) {
   // DEBUG: pipe renderer [TTS-BAR] logs to main process stdout
   w.webContents.on('console-message', (_ev, level, message, line, sourceId) => {
     if (message && message.indexOf('[TTS-BAR]') !== -1) {
-      console.log(message);
+      try {
+        if (process && process.stdout && !process.stdout.destroyed && process.stdout.writable) {
+          console.log(message);
+        }
+      } catch {}
     }
   });
 
