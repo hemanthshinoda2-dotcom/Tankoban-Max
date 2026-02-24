@@ -482,6 +482,7 @@
           id: String(b.id || ''),
           url: url,
           title: String(b.title || '').trim(),
+          favicon: String(b.favicon || '').trim(),
           folder: String(b.folder || '').trim(),
           createdAt: Number(b.createdAt || 0) || 0,
           updatedAt: Number(b.updatedAt || 0) || 0
@@ -569,7 +570,8 @@
         }
         api.webBookmarks.toggle({
           url: url,
-          title: String(tab.title || tab.sourceName || siteNameFromUrl(url) || url)
+          title: String(tab.title || tab.sourceName || siteNameFromUrl(url) || url),
+          favicon: tab.favicon || ''
         }).then(function (res) {
           if (!res || !res.ok) {
             showToast('Bookmark action failed');

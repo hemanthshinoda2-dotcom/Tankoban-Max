@@ -93,7 +93,7 @@ async function suggest(ctx, _evt, input) {
       var hKey = 'url:' + h.url;
       if (!seen.has(hKey)) {
         seen.add(hKey);
-        results.push({ type: 'history', text: h.title || h.url, url: h.url, favicon: '' });
+        results.push({ type: 'history', text: h.title || h.url, url: h.url, favicon: h.favicon || '' });
       }
     }
   }

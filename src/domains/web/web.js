@@ -312,8 +312,8 @@
 
   function getFaviconUrl(url) {
     try {
-      var u = new URL(String(url || ''));
-      return u.origin + '/favicon.ico';
+      var hostname = new URL(String(url || '')).hostname;
+      return 'https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostname) + '&sz=32';
     } catch (e) { return ''; }
   }
 
@@ -528,6 +528,7 @@
   bridge.deps.updateUrlDisplay = updateUrlDisplay;
 
   function openBrowser(source) {
+    if (panels.hideAllPanels) panels.hideAllPanels();
     if (!source) {
       openHome();
       return;
@@ -556,6 +557,7 @@
   }
 
   function openHome() {
+    if (panels.hideAllPanels) panels.hideAllPanels();
     state.showBrowserHome = true;
     state.browserOpen = true;
     _hideCurrentLibraryView();
@@ -580,6 +582,7 @@
     }
     if (!tab) return;
 
+    if (panels.hideAllPanels) panels.hideAllPanels();
     if (tabsState.switchTab) tabsState.switchTab(tabId);
     state.showBrowserHome = false;
     state.browserOpen = true;
@@ -1747,11 +1750,19 @@
   syncDownloadIndicator();
   renderHomeDownloads();
   renderBrowserHome();
+  if (panels.renderBookmarkBar) panels.renderBookmarkBar();
   if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   if (hub.renderHubAll) hub.renderHubAll();
   if (hub.renderPermissions) hub.renderPermissions();
   if (hub.renderAdblockInfo) hub.renderAdblockInfo();
   if (hub.renderHubBookmarks) hub.renderHubBookmarks();
+
+  // Auto-refresh bookmark bar when bookmarks change from any source
+  if (api.webBookmarks && api.webBookmarks.onUpdated) {
+    api.webBookmarks.onUpdated(function () {
+      if (panels.renderBookmarkBar) panels.renderBookmarkBar();
+    });
+  }
 
   // ── Public API ──
 

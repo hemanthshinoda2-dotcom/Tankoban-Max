@@ -43,7 +43,8 @@ function normalizeEntry(payload) {
     id: 'wh_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
     url: url,
     title: String(src.title || '').trim(),
-    visitedAt: Number(src.visitedAt || Date.now()),
+    favicon: String(src.favicon || '').trim(),
+    visitedAt: Number(src.visitedAt || src.timestamp || Date.now()),
     sourceTabId: src.sourceTabId != null ? String(src.sourceTabId) : '',
   };
 }

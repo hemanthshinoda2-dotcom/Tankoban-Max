@@ -30,7 +30,8 @@ var PORT_START = 9150;
 var PORT_END = 9159;
 var BOOTSTRAP_TIMEOUT_MS = 45000;
 
-var PARTITION = 'persist:webmode';
+// Apply proxy to both legacy (persist:webmode) and Aspect (persist:browser) sessions
+var PARTITIONS = ['persist:webmode', 'persist:browser'];
 
 // ---- Helpers ----
 
@@ -80,12 +81,14 @@ function emit(ctx, eventName, payload) {
 }
 
 function setProxy(rules) {
-  try {
-    var ses = session.fromPartition(PARTITION);
-    return ses.setProxy({ proxyRules: rules || '' });
-  } catch {
-    return Promise.resolve();
+  var promises = [];
+  for (var i = 0; i < PARTITIONS.length; i++) {
+    try {
+      var ses = session.fromPartition(PARTITIONS[i]);
+      promises.push(ses.setProxy({ proxyRules: rules || '' }));
+    } catch {}
   }
+  return promises.length > 0 ? Promise.all(promises) : Promise.resolve();
 }
 
 // ---- Public API ----
@@ -208,8 +211,8 @@ function _tryStart(ctx, torExe, geo, port) {
             torPort = port;
             torActive = true;
 
-            // Set proxy on the webmode session
-            setProxy('socks5h://127.0.0.1:' + port).then(function () {
+            // Set proxy on all browser sessions
+            setProxy('socks5://127.0.0.1:' + port).then(function () {
               if (ipc) {
                 emit(ctx, ipc.EVENT.TOR_PROXY_STATUS_CHANGED, {
                   active: true,

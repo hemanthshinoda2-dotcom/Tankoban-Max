@@ -381,6 +381,32 @@ function bindWebviewEvents(tab) {
     createTab(url, true);
   });
 
+  // ── DOM-level magnet interception (v2) ──
+  // Chromium on Windows delegates magnet: to the OS before will-navigate fires.
+  // Inject a click interceptor into the guest page to catch <a href="magnet:...">
+  // clicks at the DOM level, before Chromium processes the navigation.
+
+  wv.addEventListener('dom-ready', function () {
+    wv.executeJavaScript(
+      'document.addEventListener("click", function(e) {' +
+      '  var a = e.target.closest ? e.target.closest("a[href]") : null;' +
+      '  if (!a) return;' +
+      '  var h = a.getAttribute("href") || "";' +
+      '  if (/^magnet:/i.test(h)) {' +
+      '    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();' +
+      '    console.log("__TK_MAGNET__:" + h);' +
+      '  }' +
+      '}, true);'
+    ).catch(function(){});
+  });
+
+  wv.addEventListener('console-message', function (e) {
+    var msg = String(e.message || '');
+    if (msg.indexOf('__TK_MAGNET__:') === 0) {
+      openTorrentTab(msg.substring('__TK_MAGNET__:'.length));
+    }
+  });
+
 }
 
 // ── Loading state helpers ──

@@ -62,8 +62,10 @@
     // ── History panel ──
 
     function loadHistoryPanel() {
-      api.webHistory.list().then(function (entries) {
+      api.webHistory.list().then(function (res) {
         if (!el.historyList) return;
+        if (!res || !res.ok || !Array.isArray(res.entries)) return;
+        var entries = res.entries;
         var query = el.historySearch ? el.historySearch.value.toLowerCase().trim() : '';
         if (query) {
           entries = entries.filter(function (h) {
@@ -83,7 +85,7 @@
         var groups = {};
         for (var i = 0; i < entries.length; i++) {
           var h = entries[i];
-          var d = new Date(h.timestamp);
+          var d = new Date(h.visitedAt);
           var key = d.toLocaleDateString(undefined, {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
           });
@@ -108,9 +110,9 @@
             var row = document.createElement('div');
             row.className = 'history-item';
             row.dataset.url = hi.url;
-            row.dataset.timestamp = hi.timestamp;
+            row.dataset.id = hi.id;
 
-            var time = new Date(hi.timestamp);
+            var time = new Date(hi.visitedAt);
             var timeStr = time.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
             var faviconHtml = hi.favicon
               ? '<img class="history-item-favicon" src="' + escapeHtml(hi.favicon) + '">'
@@ -134,8 +136,10 @@
     // ── Bookmarks panel ──
 
     function loadBookmarksPanel() {
-      api.webBookmarks.list().then(function (entries) {
+      api.webBookmarks.list().then(function (res) {
         if (!el.bookmarksList) return;
+        if (!res || !res.ok || !Array.isArray(res.bookmarks)) return;
+        var entries = res.bookmarks;
         var query = el.bookmarksSearch ? el.bookmarksSearch.value.toLowerCase().trim() : '';
         if (query) {
           entries = entries.filter(function (b) {
@@ -156,6 +160,7 @@
           var row = document.createElement('div');
           row.className = 'bookmark-item';
           row.dataset.url = b.url;
+          row.dataset.id = b.id;
 
           var faviconHtml = b.favicon
             ? '<img class="bookmark-item-favicon" src="' + escapeHtml(b.favicon) + '">'
@@ -182,14 +187,16 @@
       try { url = wv.getURL(); } catch (e) { return; }
       if (!url || url === 'about:blank') return;
 
-      api.webBookmarks.list().then(function (bookmarks) {
-        var isBookmarked = false;
+      api.webBookmarks.list().then(function (res) {
+        if (!res || !res.ok || !Array.isArray(res.bookmarks)) return;
+        var bookmarks = res.bookmarks;
+        var matched = null;
         for (var i = 0; i < bookmarks.length; i++) {
-          if (bookmarks[i].url === url) { isBookmarked = true; break; }
+          if (bookmarks[i].url === url) { matched = bookmarks[i]; break; }
         }
 
-        if (isBookmarked) {
-          api.webBookmarks.remove({ url: url });
+        if (matched) {
+          api.webBookmarks.remove({ id: matched.id });
           setBookmarkIcon(false);
         } else {
           var tab = getActiveTab();
@@ -219,7 +226,9 @@
       try { url = wv.getURL(); } catch (e) { setBookmarkIcon(false); return; }
       if (!url || url === 'about:blank') { setBookmarkIcon(false); return; }
 
-      api.webBookmarks.list().then(function (bookmarks) {
+      api.webBookmarks.list().then(function (res) {
+        if (!res || !res.ok || !Array.isArray(res.bookmarks)) return;
+        var bookmarks = res.bookmarks;
         var found = false;
         for (var i = 0; i < bookmarks.length; i++) {
           if (bookmarks[i].url === url) { found = true; break; }
@@ -233,7 +242,9 @@
     function renderBookmarkBar() {
       if (!el.bookmarkBarItems) return;
 
-      api.webBookmarks.list().then(function (entries) {
+      api.webBookmarks.list().then(function (res) {
+        if (!res || !res.ok || !Array.isArray(res.bookmarks)) return;
+        var entries = res.bookmarks;
         el.bookmarkBarItems.innerHTML = '';
 
         if (!entries || entries.length === 0) {
@@ -375,7 +386,7 @@
               createTab(null, bookmark.url, { switchTo: true });
               break;
             case 'remove':
-              api.webBookmarks.remove({ url: bookmark.url });
+              api.webBookmarks.remove({ id: bookmark.id });
               renderBookmarkBar();
               updateBookmarkIcon();
               if (state.bookmarksOpen) loadBookmarksPanel();
@@ -495,8 +506,7 @@
           if (!item) return;
 
           if (deleteBtn) {
-            var ts = parseInt(item.dataset.timestamp);
-            api.webHistory.remove({ timestamp: ts });
+            api.webHistory.remove({ id: item.dataset.id });
             item.remove();
             return;
           }
@@ -523,8 +533,7 @@
           if (!item) return;
 
           if (deleteBtn) {
-            var url = item.dataset.url;
-            api.webBookmarks.remove({ url: url });
+            api.webBookmarks.remove({ id: item.dataset.id });
             item.remove();
             updateBookmarkIcon();
             renderBookmarkBar();

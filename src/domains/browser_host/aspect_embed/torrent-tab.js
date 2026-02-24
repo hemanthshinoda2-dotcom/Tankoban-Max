@@ -447,12 +447,11 @@
       });
       if (selectedFiles.length === 0) return;
 
-      var opts = {
+      window.aspect.torrentStartConfigured({
+        resolveId: currentResolveId,
         savePath: savePath || undefined,
         selectedFiles: selectedFiles
-      };
-
-      window.aspect.torrentStartConfigured(currentResolveId, opts);
+      });
       currentResolveId = null;
       resolvedFiles = null;
       overlay.classList.remove('visible');
@@ -460,6 +459,54 @@
 
     // Source input — auto-resolve on paste/change with debounce
     var sourceInput = document.getElementById('tt-add-source');
+
+    // Right-click context menu for paste support
+    sourceInput.addEventListener('contextmenu', function (e) {
+      e.preventDefault();
+      var menu = document.createElement('div');
+      menu.className = 'tt-ctx-menu';
+      menu.style.cssText = 'position:fixed;z-index:99999;background:#2a2a2e;border:1px solid #555;border-radius:4px;padding:2px 0;min-width:120px;box-shadow:0 4px 12px rgba(0,0,0,.5);';
+      menu.style.left = e.clientX + 'px';
+      menu.style.top = e.clientY + 'px';
+
+      function addItem(label, action) {
+        var item = document.createElement('div');
+        item.textContent = label;
+        item.style.cssText = 'padding:6px 16px;cursor:pointer;color:#ddd;font-size:13px;';
+        item.addEventListener('mouseenter', function () { item.style.background = '#3a3a44'; });
+        item.addEventListener('mouseleave', function () { item.style.background = 'transparent'; });
+        item.addEventListener('click', function () { action(); close(); });
+        menu.appendChild(item);
+      }
+      function close() { try { menu.remove(); } catch (_e) {} document.removeEventListener('click', close, true); }
+
+      addItem('Paste', function () {
+        try {
+          var clip = window.aspect && window.aspect.clipboardRead ? window.aspect.clipboardRead() : '';
+          Promise.resolve(clip).then(function (text) {
+            if (text) {
+              sourceInput.value = String(text);
+              sourceInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+          }).catch(function () {});
+        } catch (_e) {}
+      });
+      addItem('Cut', function () {
+        try {
+          if (window.aspect && window.aspect.clipboardWrite) window.aspect.clipboardWrite(sourceInput.value || '');
+          sourceInput.value = '';
+        } catch (_e) {}
+      });
+      addItem('Copy', function () {
+        try {
+          if (window.aspect && window.aspect.clipboardWrite) window.aspect.clipboardWrite(sourceInput.value || '');
+        } catch (_e) {}
+      });
+      addItem('Select All', function () { sourceInput.select(); });
+
+      document.body.appendChild(menu);
+      setTimeout(function () { document.addEventListener('click', close, true); }, 0);
+    });
 
     sourceInput.addEventListener('input', function () {
       clearTimeout(resolveTimer);

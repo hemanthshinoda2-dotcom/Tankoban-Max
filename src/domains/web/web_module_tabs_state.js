@@ -32,6 +32,12 @@
       } catch (e) { return ''; }
     }
 
+    function isWebviewDead(wv) {
+      if (!wv) return true;
+      if (!wv.isConnected) return true;
+      try { var id = wv.getWebContentsId(); return !id; } catch (e) { return true; }
+    }
+
     // ── Tab state queries ──
 
     function getActiveTab() {
@@ -63,9 +69,9 @@
         return null;
       }
 
-      // Create <webview> element (skip for blank/home tabs)
+      // Create <webview> element (skip for blank/home tabs and deferred tabs)
       var wv = null;
-      if (tabUrl && tabUrl !== 'about:blank') {
+      if (tabUrl && tabUrl !== 'about:blank' && !opts.deferWebview) {
         wv = document.createElement('webview');
         wv.setAttribute('src', tabUrl);
         wv.setAttribute('partition', 'persist:webmode');
@@ -108,6 +114,16 @@
         type: 'browser'
       };
       state.tabs.push(tab);
+
+      // Set initial favicon for deferred tabs (session restore)
+      if (opts.deferWebview && tabUrl) {
+        var initFav = dep('getFaviconUrl');
+        if (initFav) {
+          tab.favicon = initFav(tabUrl);
+          var favImg = tabEl.querySelector('.tab-favicon');
+          if (favImg && tab.favicon) { favImg.src = tab.favicon; favImg.style.display = ''; }
+        }
+      }
 
       // Tab element events
       tabEl.addEventListener('click', function (e) {
@@ -182,6 +198,17 @@
         if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
       }
       if (!tab) return;
+
+      // Revive dead or deferred webviews
+      if (tab.url && tab.url !== 'about:blank' && tab.type !== 'torrent') {
+        if (!tab.webview) {
+          ensureWebview(tab, tab.url);
+        } else if (isWebviewDead(tab.webview)) {
+          tab.webview.remove();
+          tab.webview = null;
+          ensureWebview(tab, tab.url);
+        }
+      }
 
       state.activeTabId = id;
 
@@ -324,6 +351,20 @@
         if (tab.element) {
           var spinner = tab.element.querySelector('.tab-spinner');
           if (spinner) spinner.style.display = 'none';
+        }
+        // Favicon fallback: if page-favicon-updated never fired, use Google favicon service
+        if (!tab.favicon) {
+          try {
+            var gfav = dep('getFaviconUrl');
+            var faviconUrl = gfav ? gfav(wv.getURL()) : '';
+            if (faviconUrl) {
+              tab.favicon = faviconUrl;
+              if (tab.element) {
+                var favImg = tab.element.querySelector('.tab-favicon');
+                if (favImg) { favImg.src = faviconUrl; favImg.style.display = ''; }
+              }
+            }
+          } catch (e) {}
         }
         // Record to browsing history
         try {
@@ -764,6 +805,7 @@
             silentToast: true,
             skipHistory: true,
             skipSessionSave: true,
+            deferWebview: true,
             titleOverride: s.title || '',
             forcedId: sidNum > 0 ? sidNum : null,
             switchTo: false

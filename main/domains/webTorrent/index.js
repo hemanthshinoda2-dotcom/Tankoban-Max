@@ -151,6 +151,14 @@ function removeActive(id) {
   return rec;
 }
 
+// Tolerant id extraction — accepts both { id: "xxx" } objects and raw "xxx" strings.
+// Defense-in-depth: works regardless of whether the bridge wraps the payload correctly.
+function extractId(payload) {
+  if (payload && typeof payload === 'object' && payload.id) return String(payload.id);
+  if (typeof payload === 'string' && payload.length > 0) return payload;
+  return '';
+}
+
 function getLibraryRoots(ctx) {
   var books = [];
   var comics = [];
@@ -553,7 +561,7 @@ async function startTorrentBuffer(ctx, evt, payload) {
 }
 
 async function pause(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
   if (typeof rec.torrent.pause !== 'function') return { ok: false, error: 'Pause unsupported' };
@@ -565,7 +573,7 @@ async function pause(ctx, _evt, payload) {
 }
 
 async function resume(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
   if (typeof rec.torrent.resume !== 'function') return { ok: false, error: 'Resume unsupported' };
@@ -577,8 +585,9 @@ async function resume(ctx, _evt, payload) {
 }
 
 async function cancel(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
-  var rec = activeById.get(id);
+  var id = extractId(payload);
+  // Stop progress interval FIRST — prevents upsertHistory re-insertion during destroy
+  var rec = removeActive(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
   rec.entry.state = 'cancelled';
   rec.entry.finishedAt = Date.now();
@@ -588,7 +597,6 @@ async function cancel(ctx, _evt, payload) {
     });
   } catch {}
   upsertHistory(ctx, rec.entry);
-  removeActive(id);
   emitUpdated(ctx);
   return { ok: true };
 }
@@ -615,7 +623,7 @@ async function clearHistory(ctx) {
 }
 
 async function removeHistory(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   if (!id) return { ok: false, error: 'Missing id' };
   if (activeById.has(id)) return { ok: false, error: 'Torrent active' };
   var c = ensureHistory(ctx);
@@ -629,7 +637,7 @@ async function removeHistory(ctx, _evt, payload) {
 }
 
 async function selectFiles(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
   var torrent = rec.torrent;
@@ -698,7 +706,7 @@ async function selectFiles(ctx, _evt, payload) {
 }
 
 async function setDestination(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.entry) return { ok: false, error: 'Torrent not active' };
   var entry = rec.entry;
@@ -735,7 +743,7 @@ async function streamFile(ctx, _evt, payload) {
     return { ok: false, error: 'Disable Tor to stream torrent files' };
   }
 
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
   var torrent = rec.torrent;
@@ -828,7 +836,7 @@ async function addToVideoLibrary(ctx, evt, payload) {
     return { ok: false, error: 'Disable Tor to stream torrents into Video Library' };
   }
 
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent || !rec.entry) return { ok: false, error: 'Torrent not active' };
 
@@ -943,12 +951,21 @@ function buildTrackerList(torrent) {
 }
 
 async function remove(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   if (!id) return { ok: false, error: 'Missing id' };
-  // Cancel if active, then remove from history
-  if (activeById.has(id)) await cancel(ctx, _evt, payload);
+  // 1. Stop progress interval FIRST — prevents upsertHistory re-insertion
+  var rec = removeActive(id);
+  // 2. Destroy the torrent if it was active (keep downloaded files)
+  if (rec && rec.torrent) {
+    try {
+      await new Promise(function (resolve) {
+        rec.torrent.destroy({ destroyStore: false }, function () { resolve(); });
+      });
+    } catch {}
+  }
+  // 3. Filter from history
   var c = ensureHistory(ctx);
-  c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === String(id)); });
+  c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === id); });
   c.updatedAt = Date.now();
   writeHistory(ctx);
   emitUpdated(ctx);
@@ -980,7 +997,7 @@ async function resumeAll(ctx) {
 }
 
 async function getPeers(ctx, _evt, payload) {
-  var id = payload && payload.id ? String(payload.id) : '';
+  var id = extractId(payload);
   var rec = activeById.get(id);
   if (!rec || !rec.torrent) return { ok: true, peers: [] };
   return { ok: true, peers: getPeerList(rec.torrent) };

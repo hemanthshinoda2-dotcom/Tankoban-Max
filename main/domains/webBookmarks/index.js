@@ -13,6 +13,7 @@ function sanitizeBookmark(input) {
     id: String(src.id || ('wbm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8))),
     url: url,
     title: String(src.title || '').trim(),
+    favicon: String(src.favicon || '').trim(),
     folder: String(src.folder || '').trim(),
     createdAt: Number(src.createdAt || Date.now()) || Date.now(),
     updatedAt: Number(src.updatedAt || Date.now()) || Date.now(),
@@ -130,6 +131,7 @@ async function toggle(ctx, _evt, payload) {
   var created = sanitizeBookmark({
     url: url,
     title: payload && payload.title ? payload.title : '',
+    favicon: payload && payload.favicon ? payload.favicon : '',
     folder: payload && payload.folder ? payload.folder : '',
   });
   if (!created) return { ok: false, error: 'Missing URL' };
