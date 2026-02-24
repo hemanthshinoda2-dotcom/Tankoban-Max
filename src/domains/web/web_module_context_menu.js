@@ -83,6 +83,7 @@
     function renderContextMenu(items, x, y) {
       if (!el.contextMenu) return;
       el.contextMenu.innerHTML = '';
+      if (el.webviewContainer) el.webviewContainer.classList.add('wb-pointer-disabled');
 
       for (var i = 0; i < items.length; i++) {
         var item = items[i];
@@ -126,6 +127,7 @@
     function hideContextMenu() {
       if (el.contextMenu) el.contextMenu.style.display = 'none';
       if (el.ctxOverlay) el.ctxOverlay.style.display = 'none';
+      if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
       ctxParams = null;
     }
 
@@ -250,8 +252,14 @@
       }
 
       // Context menu from main process IPC
-      api.webBrowserActions.onContextMenu(function (params) {
-        showWebviewContextMenu(params);
+      if (api.webBrowserActions && typeof api.webBrowserActions.onContextMenu === 'function') {
+        api.webBrowserActions.onContextMenu(function (params) {
+          showWebviewContextMenu(params);
+        });
+      }
+
+      bridge.on('contextMenu', function (params) {
+        showWebviewContextMenu(params || {});
       });
     }
 

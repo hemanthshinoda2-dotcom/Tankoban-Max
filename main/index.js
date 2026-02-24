@@ -312,12 +312,24 @@ function ensureWebModeSecurity() {
             const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
             const targetWindow = ownerWindow || win;
             if (targetWindow && !targetWindow.isDestroyed() && targetWindow.webContents) {
-              targetWindow.webContents.send(EVENT.WEB_POPUP_OPEN, {
-                url: target,
-                disposition: (details && details.disposition) ? String(details.disposition) : 'new-window',
-                sourceUrl: sourceUrl,
-                sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
-              });
+              if (/^magnet:/i.test(target)) {
+                targetWindow.webContents.send(EVENT.WEB_MAGNET_DETECTED, {
+                  magnetUri: target,
+                  magnet: target,
+                  sourceUrl: sourceUrl,
+                  sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
+                });
+              } else {
+                var payload = {
+                  url: target,
+                  disposition: (details && details.disposition) ? String(details.disposition) : 'new-window',
+                  sourceUrl: sourceUrl,
+                  sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
+                };
+                // Backward compatibility while integrated renderer migrates.
+                targetWindow.webContents.send(EVENT.WEB_POPUP_OPEN, payload);
+                targetWindow.webContents.send(EVENT.WEB_CREATE_TAB, payload);
+              }
             }
           } catch {}
           // Popups are handled by renderer tab logic; never spawn native popup windows.
@@ -327,6 +339,22 @@ function ensureWebModeSecurity() {
 
       try {
         contents.on('will-navigate', (event, navUrl) => {
+          if (/^magnet:/i.test(String(navUrl || ''))) {
+            try { event.preventDefault(); } catch {}
+            try {
+              const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
+              const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
+              const targetWindow = ownerWindow || win;
+              if (targetWindow && !targetWindow.isDestroyed() && targetWindow.webContents) {
+                targetWindow.webContents.send(EVENT.WEB_MAGNET_DETECTED, {
+                  magnetUri: String(navUrl || ''),
+                  magnet: String(navUrl || ''),
+                  sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
+                });
+              }
+            } catch {}
+            return;
+          }
           if (!isAllowedWebModeTopLevelUrl(navUrl)) {
             try { event.preventDefault(); } catch {}
           }
@@ -335,9 +363,53 @@ function ensureWebModeSecurity() {
 
       try {
         contents.on('will-redirect', (event, navUrl) => {
+          if (/^magnet:/i.test(String(navUrl || ''))) {
+            try { event.preventDefault(); } catch {}
+            try {
+              const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
+              const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
+              const targetWindow = ownerWindow || win;
+              if (targetWindow && !targetWindow.isDestroyed() && targetWindow.webContents) {
+                targetWindow.webContents.send(EVENT.WEB_MAGNET_DETECTED, {
+                  magnetUri: String(navUrl || ''),
+                  magnet: String(navUrl || ''),
+                  sourceWebContentsId: contents && contents.id ? Number(contents.id) : null,
+                });
+              }
+            } catch {}
+            return;
+          }
           if (!isAllowedWebModeTopLevelUrl(navUrl)) {
             try { event.preventDefault(); } catch {}
           }
+        });
+      } catch {}
+
+      // Forward context-menu from guest webContents for reliable custom menu behavior.
+      try {
+        contents.on('context-menu', (_evt, params) => {
+          const host = contents && contents.hostWebContents ? contents.hostWebContents : null;
+          const ownerWindow = (host && !host.isDestroyed()) ? BrowserWindow.fromWebContents(host) : null;
+          const targetWindow = ownerWindow || win;
+          if (!targetWindow || targetWindow.isDestroyed() || !targetWindow.webContents) return;
+          const cursor = screen.getCursorScreenPoint();
+          const contentBounds = targetWindow.getContentBounds();
+          targetWindow.webContents.send(EVENT.WEB_CTX_MENU, {
+            webContentsId: contents && contents.id ? Number(contents.id) : null,
+            screenX: Number(cursor.x || 0) - Number(contentBounds.x || 0),
+            screenY: Number(cursor.y || 0) - Number(contentBounds.y || 0),
+            x: Number(params && params.x || 0),
+            y: Number(params && params.y || 0),
+            linkURL: String(params && params.linkURL || ''),
+            srcURL: String(params && params.srcURL || ''),
+            pageURL: String(params && params.pageURL || ''),
+            mediaType: String(params && params.mediaType || 'none'),
+            hasImageContents: !!(params && params.hasImageContents),
+            isEditable: !!(params && params.isEditable),
+            selectionText: String(params && params.selectionText || ''),
+            canGoBack: !!(contents && contents.navigationHistory && contents.navigationHistory.canGoBack && contents.navigationHistory.canGoBack()),
+            canGoForward: !!(contents && contents.navigationHistory && contents.navigationHistory.canGoForward && contents.navigationHistory.canGoForward()),
+          });
         });
       } catch {}
 

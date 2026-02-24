@@ -47,8 +47,10 @@
     btnTor:            qs('web-btn-tor'),
     torBadge:          qs('web-tor-badge'),
     btnMenu:           qs('web-btn-menu'),
+    toolbar:           qs('web-toolbar'),
 
     // Bookmark bar
+    bookmarkBar:         qs('web-bookmark-bar'),
     bookmarkBarItems:    qs('web-bookmark-bar-items'),
     bookmarkBarOverflow: qs('web-bookmark-bar-overflow'),
 
@@ -83,6 +85,10 @@
     homeGrid:       qs('web-home-grid'),
     homeEmpty:      qs('web-home-empty'),
     homeAddSource:  qs('web-home-add-source'),
+    homeSearchForm: qs('web-home-search-form'),
+    homeSearchInput: qs('web-home-search-input'),
+    homeSearchTitle: qs('web-home-search-title'),
+    homeQuickTitle: qs('web-home-quick-title'),
 
     // Find bar
     findBar:     qs('web-find-bar'),
@@ -545,6 +551,7 @@
     renderSources();
     renderBrowserHome();
     syncContentVisibility();
+    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   }
 
@@ -558,6 +565,12 @@
     if (tabsState.updateNavButtons) tabsState.updateNavButtons();
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
     renderBrowserHome();
+    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
+    if (el.homeSearchInput) {
+      setTimeout(function () {
+        if (state.showBrowserHome && el.homeSearchInput) el.homeSearchInput.focus();
+      }, 0);
+    }
   }
 
   function openBrowserForTab(tabId) {
@@ -574,6 +587,7 @@
     if (el.browserView) el.browserView.classList.remove('hidden');
     renderSources();
     syncContentVisibility();
+    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   }
 
@@ -607,6 +621,7 @@
     if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
     if (find.closeFind) find.closeFind();
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
+    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
     syncContentVisibility();
   }
 
@@ -680,8 +695,33 @@
     return card;
   }
 
+  function getSearchEngineMetaForHome() {
+    var engines = navOmnibox.SEARCH_ENGINES || {};
+    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'yandex').trim().toLowerCase();
+    if (!engines[key]) key = 'yandex';
+    return engines[key] || { label: 'Yandex' };
+  }
+
+  function syncHomeSearchUi() {
+    var meta = getSearchEngineMetaForHome();
+    if (el.homeSearchTitle) el.homeSearchTitle.textContent = meta.label + ' Search';
+    if (el.homeQuickTitle) el.homeQuickTitle.textContent = 'Quick access';
+    if (el.homeSearchInput) el.homeSearchInput.setAttribute('placeholder', 'Search with ' + meta.label + ' or type a URL');
+  }
+
+  function submitHomeSearch(raw) {
+    var q = String(raw || '').trim();
+    if (!q) return;
+    var url = navOmnibox.resolveInput ? navOmnibox.resolveInput(q) : (navOmnibox.getSearchUrl ? navOmnibox.getSearchUrl(q) : q);
+    if (!url) return;
+    if (tabsState.createTab) tabsState.createTab(null, url, { switchTo: true });
+    state.showBrowserHome = false;
+    syncContentVisibility();
+  }
+
   function renderBrowserHome() {
     if (!el.homeGrid || !el.homePanel) return;
+    syncHomeSearchUi();
     el.homeGrid.innerHTML = '';
     if (el.homeEmpty) el.homeEmpty.style.display = state.sources.length ? 'none' : '';
 
@@ -1093,6 +1133,33 @@
   // ── UI binding ──
 
   function bindUI() {
+    function setWebviewPointerDisabled(disabled) {
+      if (!el.webviewContainer) return;
+      el.webviewContainer.classList.toggle('wb-pointer-disabled', !!disabled);
+    }
+
+    function syncChromePointerShield(target, pointY) {
+      if (!state.browserOpen) {
+        setWebviewPointerDisabled(false);
+        return;
+      }
+      var t = target || document.activeElement;
+      var inChromeByDom = !!(t && t.closest && t.closest(
+        '#web-tab-bar, #web-toolbar, #web-bookmark-bar, #web-menu-panel, #web-context-menu, #web-downloads-panel, #web-history-panel, #web-bookmarks-panel'
+      ));
+      var inChromeByGeometry = false;
+      if (typeof pointY === 'number' && el.contentArea) {
+        try {
+          var top = el.contentArea.getBoundingClientRect().top;
+          inChromeByGeometry = pointY < top;
+        } catch (e) {}
+      }
+      setWebviewPointerDisabled(inChromeByDom || inChromeByGeometry);
+    }
+
+    document.addEventListener('mousemove', function (e) { syncChromePointerShield(e.target, e.clientY); });
+    document.addEventListener('mousedown', function (e) { syncChromePointerShield(e.target, e.clientY); }, true);
+
     // Library back button
     if (el.libraryBack) {
       el.libraryBack.addEventListener('click', function () { closeBrowser(); });
@@ -1115,6 +1182,20 @@
         if (!btn) return;
         var source = getSourceById(btn.getAttribute('data-source-id'));
         if (source) openBrowser(source);
+      });
+    }
+
+    if (el.homeSearchForm) {
+      el.homeSearchForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        submitHomeSearch(el.homeSearchInput ? el.homeSearchInput.value : '');
+      });
+    }
+    if (el.homeSearchInput) {
+      el.homeSearchInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        submitHomeSearch(el.homeSearchInput.value);
       });
     }
 
@@ -1181,6 +1262,12 @@
     });
     if (el.hubPrivacyDoNotTrack) el.hubPrivacyDoNotTrack.addEventListener('change', function () {
       saveBrowserSettings({ privacy: { doNotTrack: el.hubPrivacyDoNotTrack.checked } });
+    });
+    if (el.searchEngineSelect) el.searchEngineSelect.addEventListener('change', function () {
+      var key = String(el.searchEngineSelect.value || 'yandex').trim().toLowerCase() || 'yandex';
+      saveBrowserSettings({ defaultSearchEngine: key });
+      if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
+      renderBrowserHome();
     });
     var exitCheckboxes = [el.hubClearOnExitHistory, el.hubClearOnExitDownloads, el.hubClearOnExitCookies, el.hubClearOnExitCache];
     exitCheckboxes.forEach(function (cb) {
@@ -1266,10 +1353,21 @@
     if (find.initFindEvents) find.initFindEvents();
     if (torrentTab.initTorrentTab) torrentTab.initTorrentTab();
 
+    on('openMagnet', function (magnetUrl) {
+      var m = String(magnetUrl || '').trim();
+      if (!m || m.toLowerCase().indexOf('magnet:') !== 0) return;
+      if (tabsState.openTorrentTab) tabsState.openTorrentTab(m);
+    });
+
     // IPC: create-tab from main process (e.g. window.open interception)
     if (api.webBrowserActions && api.webBrowserActions.onCreateTab) {
       api.webBrowserActions.onCreateTab(function (data) {
         if (!data || !data.url) return;
+        var popupUrl = String(data.url || '').trim();
+        if (popupUrl.toLowerCase().indexOf('magnet:') === 0) {
+          if (tabsState.openTorrentTab) tabsState.openTorrentTab(popupUrl);
+          return;
+        }
         if (tabsState.createTab) tabsState.createTab(null, data.url);
         if (!state.browserOpen) openBrowserForTab(state.activeTabId);
       });
@@ -1304,10 +1402,13 @@
         }
       });
       if (api.webTorrent.onMagnetDetected) api.webTorrent.onMagnetDetected(function (data) {
-        if (!data || !data.magnet) return;
+        var magnet = '';
+        if (typeof data === 'string') magnet = String(data || '').trim();
+        else magnet = String((data && (data.magnetUri || data.magnet)) || '').trim();
+        if (!magnet) return;
         showToast('Magnet link detected');
-        if (torrentTab.addSource) torrentTab.addSource(data.magnet);
-        if (tabsState.openTorrentTab) tabsState.openTorrentTab();
+        if (torrentTab.addSource) torrentTab.addSource(magnet);
+        if (tabsState.openTorrentTab) tabsState.openTorrentTab(magnet);
       });
     }
 
@@ -1494,7 +1595,7 @@
       var magnetInput = el.hubMagnetInput ? el.hubMagnetInput.value.trim() : '';
       if (!magnetInput) { showToast('Paste a magnet link first'); return; }
       if (api.webTorrent && api.webTorrent.startMagnet) {
-        api.webTorrent.startMagnet({ magnet: magnetInput }).then(function (res) {
+        api.webTorrent.startMagnet({ magnetUri: magnetInput }).then(function (res) {
           if (res && res.ok) {
             showToast('Torrent started');
             if (el.hubMagnetInput) el.hubMagnetInput.value = '';

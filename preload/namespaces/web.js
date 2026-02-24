@@ -227,7 +227,20 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       },
       onCreateTab: (cb) => {
         if (typeof cb !== 'function') return;
-        ipcRenderer.on(EVENT.WEB_CREATE_TAB, (_evt, data) => cb(data));
+        var lastKey = '';
+        var lastAt = 0;
+        var forward = (_evt, data) => {
+          var d = (data && typeof data === 'object') ? data : {};
+          var key = String(d.url || '') + '|' + String(d.disposition || '');
+          var now = Date.now();
+          if (key && key === lastKey && (now - lastAt) < 80) return;
+          lastKey = key;
+          lastAt = now;
+          cb(d);
+        };
+        ipcRenderer.on(EVENT.WEB_CREATE_TAB, forward);
+        // Backward compatibility: main may still emit WEB_POPUP_OPEN.
+        ipcRenderer.on(EVENT.WEB_POPUP_OPEN, forward);
       },
     },
   };

@@ -1821,8 +1821,17 @@ COMMON ANCHORS
 
           <!-- Web sources home panel (new-tab page) -->
           <div id="web-home-panel" style="display:none">
+            <div class="web-home-shell">
+              <div id="web-home-search-title" class="web-home-title">Yandex Search</div>
+              <form id="web-home-search-form" class="web-home-search" autocomplete="off">
+                <input id="web-home-search-input" type="text" placeholder="Search with Yandex or type a URL" spellcheck="false" autocomplete="off" autocapitalize="off" />
+                <button type="submit" class="nav-btn web-home-search-btn" aria-label="Search">
+                  <svg viewBox="0 0 16 16" width="15" height="15"><path d="M6.9 1.8a5.1 5.1 0 1 0 3.1 9.2l2.8 2.8a.7.7 0 0 0 1-1l-2.8-2.8a5.1 5.1 0 0 0-4.1-8.2zm0 1.4a3.7 3.7 0 1 1 0 7.4 3.7 3.7 0 0 1 0-7.4z" fill="currentColor"/></svg>
+                </button>
+              </form>
+            </div>
             <div class="web-home-head">
-              <div class="web-home-title">Sources</div>
+              <div id="web-home-quick-title" class="web-home-subtitle">Quick access</div>
               <button id="web-home-add-source" class="find-btn" type="button">Add source...</button>
             </div>
             <div id="web-home-grid"></div>

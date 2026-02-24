@@ -243,7 +243,23 @@
       var wv = tab.webview;
       if (!wv) return;
 
+      function eventUrl(e) {
+        if (!e) return '';
+        if (typeof e.url === 'string' && e.url) return e.url;
+        if (typeof e.targetUrl === 'string' && e.targetUrl) return e.targetUrl;
+        if (e.detail && typeof e.detail.url === 'string' && e.detail.url) return e.detail.url;
+        return '';
+      }
+
+      function handleMagnetUrl(raw) {
+        var u = String(raw || '').trim();
+        if (!u || u.toLowerCase().indexOf('magnet:') !== 0) return false;
+        bridge.emit('openMagnet', u);
+        return true;
+      }
+
       wv.addEventListener('did-navigate', function (e) {
+        if (handleMagnetUrl(eventUrl(e))) return;
         tab.url = e.url;
         if (tab.id === state.activeTabId) {
           if (el.urlBar) el.urlBar.value = e.url;
@@ -254,6 +270,7 @@
       });
 
       wv.addEventListener('did-navigate-in-page', function (e) {
+        if (handleMagnetUrl(eventUrl(e))) return;
         if (e.isMainFrame) {
           tab.url = e.url;
           if (tab.id === state.activeTabId) {
@@ -332,10 +349,26 @@
         bridge.emit('tab:loadFailed', { tabId: tab.id, error: classified });
       });
 
+      wv.addEventListener('will-navigate', function (e) {
+        if (handleMagnetUrl(eventUrl(e))) {
+          if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        }
+      });
+
       // Handle new window requests (target=_blank, window.open, etc.)
       wv.addEventListener('new-window', function (e) {
         e.preventDefault();
-        createTab(null, e.url, { switchTo: e.disposition !== 'background-tab' });
+        var nextUrl = String(eventUrl(e)).trim();
+        if (handleMagnetUrl(nextUrl)) return;
+        // In integrated mode, main-process setWindowOpenHandler is the source of truth
+        // for popup->tab routing to avoid duplicate tab creation paths.
+      });
+
+      wv.addEventListener('context-menu', function (e) {
+        var payload = (e && e.params && typeof e.params === 'object')
+          ? e.params
+          : (e && typeof e === 'object' ? e : {});
+        bridge.emit('contextMenu', payload);
       });
     }
 
