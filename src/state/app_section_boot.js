@@ -91,7 +91,8 @@
 
   async function openBrowserWorkspace(opts) {
     const options = (opts && typeof opts === 'object') ? opts : {};
-    await setMode('comics');
+    await ensureWebModulesLoaded();
+    await setMode('browser');
 
     // Browser-host bridge first: lets a future Aspect embed plug in without changing callers.
     try {
@@ -108,8 +109,6 @@
         }
       }
     } catch (_err) {}
-
-    await ensureWebModulesLoaded();
 
     const web = window.Tanko && window.Tanko.web;
     if (!web) return;

@@ -9,14 +9,42 @@
   tanko.config = tanko.config || {};
 
   const defaults = {
-    enabled: false, // Browser-less by default in this groundwork build.
-    adapter: 'none', // future: 'legacy-web-embed' | 'aspect-embed'
-    hideLaunchButtons: true,
-    showDisabledToast: true
+    enabled: true,
+    adapter: 'legacy-web-embed',
+    browserUxV2: false,
+    hideLaunchButtons: false,
+    showDisabledToast: false,
+    readinessTimeoutMs: 4000
   };
 
   const cfg = Object.assign({}, defaults, (tanko.config.browserHost || {}));
   tanko.config.browserHost = cfg;
+  const runtimeState = {
+    adapter: String(cfg.adapter || 'none'),
+    ready: false,
+    mounted: false,
+    visible: false,
+    fallbackActive: false,
+    lastError: null
+  };
+
+  function getPaneState() {
+    const root = document.getElementById('webLibraryView');
+    const pane = document.getElementById('wb-webview-view');
+    const aspectRoot = document.getElementById('aspectEmbedMountRoot');
+    const paneVisible = !!(pane && !pane.classList.contains('hidden') && pane.style.display !== 'none');
+    const rootVisible = !!(root && !root.classList.contains('hidden') && root.style.display !== 'none');
+    return {
+      mounted: !!(pane || aspectRoot),
+      visible: !!(rootVisible && paneVisible)
+    };
+  }
+
+  function updateRuntimeState(patch) {
+    if (!patch || typeof patch !== 'object') return Object.assign({}, runtimeState);
+    Object.assign(runtimeState, patch);
+    return Object.assign({}, runtimeState);
+  }
 
   function toast(msg) {
     try {
@@ -100,9 +128,13 @@
   let resolvedAdapter = null;
 
   function resolveAdapter() {
-    if (customAdapter) return customAdapter;
     if (!cfg.enabled || cfg.adapter === 'none') return makeDisabledAdapter();
+    if (cfg.adapter === 'aspect-embed') {
+      if (cfg.browserUxV2 === true && customAdapter) return customAdapter;
+      return makeLegacyAdapter();
+    }
     if (cfg.adapter === 'legacy-web-embed') return makeLegacyAdapter();
+    if (customAdapter) return customAdapter;
     return makeDisabledAdapter();
   }
 
@@ -142,7 +174,7 @@
         node.removeAttribute('aria-hidden');
       }
     });
-    const webView = document.getElementById('webBrowserView');
+    const webView = document.getElementById('wb-webview-view');
     if (webView && cfg.hideLaunchButtons) webView.classList.add('hidden');
   }
 
@@ -169,7 +201,33 @@
     },
     showBrowserPane(opts) {
       const _opts = (opts && typeof opts === 'object') ? opts : {};
-      const browserView = document.getElementById('webBrowserView');
+      const libraryView = document.getElementById('webLibraryView');
+      if (libraryView) {
+        libraryView.classList.remove('hidden');
+        libraryView.style.display = '';
+        libraryView.removeAttribute('aria-hidden');
+      }
+      const webviewPane = document.getElementById('wb-webview-view');
+      if (webviewPane) {
+        webviewPane.classList.remove('hidden');
+        webviewPane.style.display = '';
+        webviewPane.removeAttribute('aria-hidden');
+        webviewPane.style.pointerEvents = '';
+      }
+      // Optional hint: hide launch buttons if requested.
+      if (_opts.hideLaunchButtons === true) {
+        try { this.showLaunchButtons(false); } catch (_e) {}
+      }
+      const paneState = getPaneState();
+      updateRuntimeState({
+        mounted: paneState.mounted,
+        visible: paneState.visible
+      });
+      return true;
+    },
+
+    showLibraryPane() {
+      const browserView = document.getElementById('wb-webview-view');
       const libraryView = document.getElementById('webLibraryView');
       if (libraryView) {
         libraryView.classList.add('hidden');
@@ -177,30 +235,15 @@
         libraryView.setAttribute('aria-hidden', 'true');
       }
       if (browserView) {
-        browserView.classList.remove('hidden');
-        browserView.style.display = '';
-        browserView.removeAttribute('aria-hidden');
-      }
-      // Optional hint: hide launch buttons if requested.
-      if (_opts.hideLaunchButtons === true) {
-        try { this.showLaunchButtons(false); } catch (_e) {}
-      }
-      return true;
-    },
-
-    showLibraryPane() {
-      const browserView = document.getElementById('webBrowserView');
-      const libraryView = document.getElementById('webLibraryView');
-      if (browserView) {
         browserView.classList.add('hidden');
-        browserView.style.display = 'none';
+        browserView.style.pointerEvents = 'none';
         browserView.setAttribute('aria-hidden', 'true');
       }
-      if (libraryView) {
-        libraryView.classList.remove('hidden');
-        libraryView.style.display = '';
-        libraryView.removeAttribute('aria-hidden');
-      }
+      const paneState = getPaneState();
+      updateRuntimeState({
+        mounted: paneState.mounted,
+        visible: paneState.visible
+      });
       return true;
     },
 
@@ -243,17 +286,54 @@
     async ensureReady() {
       const adapter = getAdapter();
       if (!adapter || typeof adapter.ensureReady !== 'function') return { ok: false, error: 'no adapter' };
-      return adapter.ensureReady();
+      const timeoutMs = Number(cfg.readinessTimeoutMs || defaults.readinessTimeoutMs) > 0
+        ? Number(cfg.readinessTimeoutMs || defaults.readinessTimeoutMs)
+        : defaults.readinessTimeoutMs;
+      const timeout = new Promise((resolve) => {
+        setTimeout(() => resolve({ ok: false, timeout: true, error: 'ensure-ready-timeout' }), timeoutMs);
+      });
+      const result = await Promise.race([Promise.resolve(adapter.ensureReady()), timeout]);
+      const paneState = getPaneState();
+      updateRuntimeState({
+        ready: !!(result && result.ok),
+        mounted: paneState.mounted,
+        visible: paneState.visible,
+        fallbackActive: !!(result && result.fallback),
+        lastError: result && result.ok ? null : String((result && (result.error || result.reason)) || '')
+      });
+      return result;
     },
     async openDefault() {
       const adapter = getAdapter();
-      if (adapter && typeof adapter.openDefault === 'function') return adapter.openDefault();
+      if (adapter && typeof adapter.openDefault === 'function') {
+        const result = await adapter.openDefault();
+        const paneState = getPaneState();
+        updateRuntimeState({
+          ready: !!(result && result.ok),
+          mounted: paneState.mounted,
+          visible: paneState.visible,
+          fallbackActive: !!(result && result.fallback),
+          lastError: result && result.ok ? null : String((result && (result.error || result.reason)) || '')
+        });
+        return result;
+      }
       disabledNotice('Browser');
       return { ok: false };
     },
     async openTorrentWorkspace() {
       const adapter = getAdapter();
-      if (adapter && typeof adapter.openTorrentWorkspace === 'function') return adapter.openTorrentWorkspace();
+      if (adapter && typeof adapter.openTorrentWorkspace === 'function') {
+        const result = await adapter.openTorrentWorkspace();
+        const paneState = getPaneState();
+        updateRuntimeState({
+          ready: !!(result && result.ok),
+          mounted: paneState.mounted,
+          visible: paneState.visible,
+          fallbackActive: !!(result && result.fallback),
+          lastError: result && result.ok ? null : String((result && (result.error || result.reason)) || '')
+        });
+        return result;
+      }
       disabledNotice('Torrent workspace');
       return { ok: false };
     },
@@ -265,7 +345,18 @@
     },
     async openUrl(url) {
       const adapter = getAdapter();
-      if (adapter && typeof adapter.openUrl === 'function') return adapter.openUrl(url);
+      if (adapter && typeof adapter.openUrl === 'function') {
+        const result = await adapter.openUrl(url);
+        const paneState = getPaneState();
+        updateRuntimeState({
+          ready: !!(result && result.ok),
+          mounted: paneState.mounted,
+          visible: paneState.visible,
+          fallbackActive: !!(result && result.fallback),
+          lastError: result && result.ok ? null : String((result && (result.error || result.reason)) || '')
+        });
+        return result;
+      }
       disabledNotice('Browser');
       return { ok: false };
     },
@@ -280,7 +371,7 @@
         contractVersion: 1,
         config: this.getConfig(),
         mountPoints: {
-          rootViewId: 'webBrowserView',
+          rootViewId: 'webLibraryView',
           launchButtonId: 'webHubToggleBtn',
           addSourceButtonId: 'webHubAddSourceBtn'
         },
@@ -296,6 +387,20 @@
           'canOpenAddSource'
         ]
       };
+    },
+    getRuntimeState() {
+      const paneState = getPaneState();
+      return Object.assign({}, runtimeState, {
+        adapter: this.adapterName(),
+        mounted: paneState.mounted,
+        visible: paneState.visible
+      });
+    },
+    reportRuntimeState(partial) {
+      return updateRuntimeState(partial);
+    },
+    isUxV2Enabled() {
+      return !!(cfg.enabled && cfg.browserUxV2);
     }
   };
 

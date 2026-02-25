@@ -1,17 +1,22 @@
 (function registerFindModule() {
   'use strict';
+
   window.__tankoWebModules = window.__tankoWebModules || {};
+
   window.__tankoWebModules.find = function initFindModule(bridge) {
     var state = bridge.state;
     var el = bridge.el;
 
     function dep(name) { return (bridge.deps || {})[name]; }
-    var getActiveWebview = function () { var fn = dep('getActiveWebview'); return fn ? fn.apply(null, arguments) : null; };
+    var getActiveWebview = function () {
+      var fn = dep('getActiveWebview');
+      return fn ? fn.apply(null, arguments) : null;
+    };
 
-    // ── Find in page ──
+    var findResultBound = false;
 
     function openFind() {
-      state.findOpen = true;
+      state.findBarOpen = true;
       if (el.findBar) el.findBar.style.display = '';
       if (el.findInput) {
         el.findInput.focus();
@@ -20,12 +25,13 @@
     }
 
     function closeFind() {
-      state.findOpen = false;
+      state.findBarOpen = false;
       if (el.findBar) el.findBar.style.display = 'none';
       if (el.findInput) el.findInput.value = '';
       if (el.findMatches) el.findMatches.textContent = '';
+
       var wv = getActiveWebview();
-      if (wv) {
+      if (wv && typeof wv.stopFindInPage === 'function') {
         try { wv.stopFindInPage('clearSelection'); } catch (e) {}
       }
     }
@@ -33,40 +39,40 @@
     function doFind(forward) {
       var text = el.findInput ? el.findInput.value : '';
       var wv = getActiveWebview();
-      if (!wv || !text) return;
+      if (!wv || !text || typeof wv.findInPage !== 'function') return;
       try {
-        wv.findInPage(text, { forward: forward, findNext: true });
+        wv.findInPage(text, { forward: !!forward, findNext: true });
       } catch (e) {}
     }
 
-    // ── Bind find-result listener on a webview (called per-tab) ──
-
-    function bindFindEvents(tab) {
-      if (!tab || !tab.webview) return;
-      tab.webview.addEventListener('found-in-page', function (e) {
-        if (tab.id !== state.activeTabId) return;
-        var r = e.result;
-        if (r.matches !== undefined && el.findMatches) {
-          el.findMatches.textContent = r.matches > 0
-            ? r.activeMatchOrdinal + ' of ' + r.matches
-            : 'No matches';
-        }
+    function bindFindEvents() {
+      if (findResultBound) return;
+      findResultBound = true;
+      bridge.on('find:result', function (r) {
+        if (!el.findMatches || !r || r.matches === undefined) return;
+        el.findMatches.textContent = r.matches > 0
+          ? (r.activeMatchOrdinal + ' of ' + r.matches)
+          : 'No matches';
       });
     }
 
-    // ── Event wiring ──
-
     function initFindEvents() {
+      bindFindEvents();
+
       if (el.findInput) {
         el.findInput.addEventListener('input', function () {
           var text = el.findInput.value;
           var wv = getActiveWebview();
           if (!wv) return;
-          if (text) {
+
+          if (text && typeof wv.findInPage === 'function') {
             try { wv.findInPage(text); } catch (e) {}
-          } else {
-            if (el.findMatches) el.findMatches.textContent = '';
-            try { wv.stopFindInPage('clearSelection'); } catch (e) {}
+            return;
+          }
+
+          if (el.findMatches) el.findMatches.textContent = '';
+          if (typeof wv.stopFindInPage === 'function') {
+            try { wv.stopFindInPage('clearSelection'); } catch (e2) {}
           }
         });
 
@@ -74,6 +80,7 @@
           if (e.key === 'Enter') {
             e.preventDefault();
             doFind(!e.shiftKey);
+            return;
           }
           if (e.key === 'Escape') {
             e.preventDefault();

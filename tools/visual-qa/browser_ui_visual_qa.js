@@ -9,9 +9,14 @@ const baselineDir = path.join(outRoot, 'baseline');
 const currentDir = path.join(outRoot, 'current');
 
 const scenarios = [
-  'tabs-normal','tabs-pinned','tabs-loading','tabs-crashed',
-  'omnibox-idle','omnibox-typing-suggestions-ghost','history-dropdown',
-  'download-shelf-states','permission-and-siteinfo','split-view-transition','home-panel-transition'
+  'library-sidebar-tabs',
+  'library-sidebar-bookmarks',
+  'library-home-history',
+  'library-home-downloads',
+  'webview-toolbar',
+  'webview-find-bar',
+  'torrent-workspace',
+  'menu-home-routing'
 ];
 
 const mode = process.argv[2] || 'capture-current';

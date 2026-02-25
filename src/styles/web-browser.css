@@ -43,9 +43,9 @@
   display: none !important;
 }
 
-/* Hide app chrome when browser is the active surface */
-body:has(.webBrowserView:not(.hidden)) .bgFx { display: none; }
-body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
+/* Hide app chrome only for legacy full-overlay mode */
+body:has(.webBrowserView:not(.hidden)):not(.inBrowserMode) .bgFx { display: none; }
+body:has(.webBrowserView:not(.hidden)):not(.inBrowserMode) .topbar { display: none !important; }
 
 /* ══════════════════════════════════════════
    Tab bar
@@ -238,7 +238,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 /* Nav button — scoped under browser view to avoid collision */
-#webBrowserView .nav-btn {
+#wb-webview-view .nav-btn {
   width: 32px;
   height: 32px;
   border: none;
@@ -252,15 +252,15 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   transition: background-color 0.1s;
 }
 
-#webBrowserView .nav-btn:hover {
+#wb-webview-view .nav-btn:hover {
   background: var(--wb-hover);
 }
 
-#webBrowserView .nav-btn:active {
+#wb-webview-view .nav-btn:active {
   background: var(--wb-active);
 }
 
-#webBrowserView .nav-btn:disabled {
+#wb-webview-view .nav-btn:disabled {
   color: var(--wb-disabled);
   cursor: default;
   pointer-events: none;
@@ -638,7 +638,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 /* Find-bar buttons — scoped under browser view */
-#webBrowserView .find-btn {
+#wb-webview-view .find-btn {
   width: 24px;
   height: 24px;
   border: none;
@@ -652,7 +652,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   transition: background-color 0.1s;
 }
 
-#webBrowserView .find-btn:hover {
+#wb-webview-view .find-btn:hover {
   background: var(--wb-hover);
 }
 
@@ -1560,7 +1560,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 /* Generic small ghost button (used inside hub items) */
-#webBrowserView .btn-ghost.btn-sm {
+#wb-webview-view .btn-ghost.btn-sm {
   padding: 3px 10px;
   font-size: 11px;
   border-radius: 4px;
@@ -1571,7 +1571,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   transition: background 0.12s;
 }
 
-#webBrowserView .btn-ghost.btn-sm:hover {
+#wb-webview-view .btn-ghost.btn-sm:hover {
   background: var(--wb-hover);
   color: var(--wb-text);
 }
@@ -2517,18 +2517,18 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
    Browser scrollbars
    ══════════════════════════════════════════ */
 
-#webBrowserView ::-webkit-scrollbar {
+#wb-webview-view ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
-#webBrowserView ::-webkit-scrollbar-track {
+#wb-webview-view ::-webkit-scrollbar-track {
   background: transparent;
 }
-#webBrowserView ::-webkit-scrollbar-thumb {
+#wb-webview-view ::-webkit-scrollbar-thumb {
   background: var(--wb-border);
   border-radius: 4px;
 }
-#webBrowserView ::-webkit-scrollbar-thumb:hover {
+#wb-webview-view ::-webkit-scrollbar-thumb:hover {
   background: var(--wb-disabled);
 }
 
@@ -2558,4 +2558,173 @@ body[data-app-theme="light"] .webBrowserView {
   --wb-disabled: #9aa0a6;
   --wb-active-press: #d2e3fc;
   --wb-text-secondary: #5f6368;
+}
+
+/* Browser redesign: library-root styling */
+#webLibraryView {
+  --wb-bg: #202124;
+  --wb-text: var(--ui-text, #e8eaed);
+  --wb-muted: var(--ui-muted, #9aa0a6);
+  --wb-surface: #292a2d;
+  --wb-surface-raised: #35363a;
+  --wb-border: #3c4043;
+  --wb-border-subtle: rgba(255, 255, 255, 0.06);
+  --wb-accent: var(--ui-accent, #8ab4f8);
+  --wb-hover: rgba(255, 255, 255, 0.08);
+  --wb-z-browser-surface: 120;
+  --wb-z-browser-content: 125;
+  --wb-z-browser-chrome: 140;
+  --wb-z-browser-overlay: 170;
+}
+
+#webLibraryView .wb-sidebar-count,
+#webLibraryView .wb-sidebar-badge {
+  font-size: 11px;
+  color: var(--wb-muted);
+}
+
+#webLibraryView .wb-sidebar-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+#webLibraryView .wb-tab-item,
+#webLibraryView .wb-bm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--wb-text);
+}
+
+#webLibraryView .wb-tab-item:hover,
+#webLibraryView .wb-bm-item:hover {
+  background: var(--wb-hover);
+}
+
+#webLibraryView .wb-tab-item.active {
+  background: rgba(138, 180, 248, 0.22);
+}
+
+#webLibraryView .wb-tab-favicon,
+#webLibraryView .wb-bm-favicon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+#webLibraryView .wb-tab-title,
+#webLibraryView .wb-bm-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+#webLibraryView .wb-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--wb-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+#webLibraryView .wb-tab-close:hover {
+  background: var(--wb-hover);
+  color: var(--wb-text);
+}
+
+#webLibraryView #wb-home-history-list .web-home-history-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+#webLibraryView #wb-home-history-list .web-home-history-link {
+  color: var(--wb-text);
+  text-decoration: none;
+}
+
+body[data-app-theme="light"] #webLibraryView {
+  --wb-bg: #f1f3f4;
+  --wb-text: #202124;
+  --wb-muted: #5f6368;
+  --wb-surface: #ffffff;
+  --wb-surface-raised: #e8eaed;
+  --wb-border: #dadce0;
+  --wb-border-subtle: rgba(0, 0, 0, 0.08);
+  --wb-accent: #1a73e8;
+  --wb-hover: rgba(0, 0, 0, 0.05);
+}
+
+#webLibraryView .webBrowserView.wb-webview-surface {
+  position: relative !important;
+  inset: auto !important;
+  z-index: var(--wb-z-browser-surface) !important;
+  background: transparent;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#webLibraryView #web-tab-bar,
+#webLibraryView #web-toolbar,
+#webLibraryView #web-bookmark-bar {
+  position: relative;
+  z-index: var(--wb-z-browser-chrome);
+}
+
+#webLibraryView #web-content-area,
+#webLibraryView #web-webview-container,
+#webLibraryView #aspectEmbedMountRoot,
+#webLibraryView #aspectEmbedFrame {
+  position: relative;
+  z-index: var(--wb-z-browser-content);
+  pointer-events: auto;
+}
+
+#webLibraryView #web-menu-overlay,
+#webLibraryView #web-menu-panel,
+#webLibraryView #web-context-menu,
+#webLibraryView #web-downloads-panel,
+#webLibraryView #web-history-panel,
+#webLibraryView #web-bookmarks-panel,
+#webLibraryView #web-find-bar {
+  z-index: var(--wb-z-browser-overlay);
+}
+
+/* Browser-only UX lane: hide library shell surfaces and keep browser as single front-end */
+#webLibraryView .libraryShell {
+  display: block;
+  min-height: calc(100vh - var(--lib-topbar-h));
+  height: calc(100vh - var(--lib-topbar-h));
+  padding: 0;
+}
+
+#webLibraryView .libSidebar,
+#webLibraryView .libContent,
+#webLibraryView #webHomeView {
+  display: none !important;
+}
+
+#webLibraryView #wb-webview-view {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+}
+
+#webLibraryView #web-library-back {
+  display: none !important;
 }

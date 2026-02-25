@@ -64,6 +64,7 @@ const __state = {
   importedSharedTexture: null,
   importedSharedTextureKey: '',
   importedSharedTextureMeta: null,
+  frameSendErrorStreak: 0,
 
   // Build 4: main-side coalescing for hot property events
   hotPropFlushTimer: null,
@@ -318,7 +319,19 @@ function resetHotPropQueue() {
 
 // Build 4: imported shared texture cache
 function makeImportedTextureKey(handleBuf, width, height) {
-  return String(width) + 'x' + String(height);
+  let handleKey = '';
+  try {
+    if (Buffer.isBuffer(handleBuf)) {
+      handleKey = handleBuf.toString('hex');
+    } else if (handleBuf && typeof handleBuf === 'object' && typeof handleBuf.byteLength === 'number') {
+      handleKey = Buffer.from(handleBuf).toString('hex');
+    } else {
+      handleKey = String(handleBuf || '');
+    }
+  } catch {
+    handleKey = '';
+  }
+  return String(width) + 'x' + String(height) + ':' + handleKey;
 }
 
 function releaseImportedSharedTextureCache() {
@@ -328,6 +341,16 @@ function releaseImportedSharedTextureCache() {
   __state.importedSharedTexture = null;
   __state.importedSharedTextureKey = '';
   __state.importedSharedTextureMeta = null;
+}
+
+function getFrameSendErrorDelayMs() {
+  const n = Number(__state.frameSendErrorStreak) || 0;
+  if (!__state.presentationActive) return 100;
+  if (n <= 0) return getActiveFrameLoopDelayMs();
+  if (n === 1) return 16;
+  if (n === 2) return 33;
+  if (n === 3) return 66;
+  return 100;
 }
 
 // Build 5: diagnostics helpers
@@ -441,6 +464,7 @@ function stopFrameLoopInternal() {
   clearEventLoopTimer();
   clearHotPropFlushTimer();
   releaseImportedSharedTextureCache();
+  __state.frameSendErrorStreak = 0;
 }
 
 function loadAddonOrThrow(ctx) {
@@ -492,11 +516,15 @@ function handleAddonEvents(events) {
       continue;
     }
     if (eventName === 'file-loaded') {
+      releaseImportedSharedTextureCache();
+      __state.frameSendErrorStreak = 0;
       __state.playbackEof = false;
       emitToOwner(EVENT.HG_FILE_LOADED, { ok: true });
       continue;
     }
     if (eventName === 'end-file') {
+      releaseImportedSharedTextureCache();
+      __state.frameSendErrorStreak = 0;
       emitToOwner(EVENT.HG_EOF, { ok: true });
       continue;
     }
@@ -508,8 +536,9 @@ function handleAddonEvents(events) {
 function getNextEventLoopDelayMs() {
   if (!__state.presentationActive) return 100;
   if (__state.playbackPaused && __state.playbackEof) return 100;
-  if (__state.playbackPaused) return 50;
-  return 12;
+  if (__state.playbackPaused) return 66;
+  // Slightly slower poll rate reduces main-process timer churn while playback is active.
+  return 16;
 }
 
 function getIdleFrameLoopDelayMs() {
@@ -517,6 +546,14 @@ function getIdleFrameLoopDelayMs() {
   if (__state.playbackPaused && __state.playbackEof) return 100;
   if (__state.playbackPaused) return 32;
   return 8;
+}
+
+function getActiveFrameLoopDelayMs() {
+  if (!__state.presentationActive) return 100;
+  if (__state.playbackPaused && __state.playbackEof) return 100;
+  if (__state.playbackPaused) return 16;
+  // 3ms keeps the loop responsive without hammering 1ms timers continuously.
+  return 3;
 }
 
 // Build 4: imported shared texture reuse
@@ -651,7 +688,7 @@ async function frameLoopTick(ctx, token) {
     // Build 2: do not overlap sends on the same shared texture handle.
     if (__state.frameSendInFlight) {
       diagBump('frameSendSkippedBusy');
-      scheduleNextFrameLoop(ctx, 2, token);
+      scheduleNextFrameLoop(ctx, 8, token);
       return;
     }
 
@@ -689,14 +726,18 @@ async function frameLoopTick(ctx, token) {
         const imported = getOrCreateImportedSharedTexture(handleBuf, width, height);
 
         __state.frameSendInFlight = true;
+        let sendFailed = false;
         try {
           await sharedTexture.sendSharedTexture({
             frame: __state.ownerFrame,
             importedSharedTexture: imported,
           });
           diagBump('framesSent');
+          __state.frameSendErrorStreak = 0;
           if (__state.diagEnabled) __state.diag.lastFrameSentAt = Date.now();
         } catch (err) {
+          sendFailed = true;
+          __state.frameSendErrorStreak += 1;
           diagBump('frameSendErrors');
           diagError(toErrorString(err));
           // Cache may be stale — release so next tick re-imports
@@ -706,7 +747,7 @@ async function frameLoopTick(ctx, token) {
           // NOTE: Do NOT release imported here — it's cached for reuse
         }
 
-        scheduleNextFrameLoop(ctx, 1, token);
+        scheduleNextFrameLoop(ctx, sendFailed ? getFrameSendErrorDelayMs() : getActiveFrameLoopDelayMs(), token);
         return;
       }
     }
@@ -822,6 +863,7 @@ async function initGpu(ctx, evt, args) {
     __state.forcePresentOnce = false;
     __state.isTearingDown = false;
     releaseImportedSharedTextureCache();
+    __state.frameSendErrorStreak = 0;
     resetHotPropQueue();
 
     await observeDefaults();
@@ -844,6 +886,8 @@ async function loadFile(ctx, evt, filePath) {
     if (!__state.initialized) { _hgLog('loadFile: NOT INITIALIZED'); return { ok: false, error: 'not_initialized' }; }
     const target = String(filePath || '');
     if (!target) { _hgLog('loadFile: MISSING FILE PATH'); return { ok: false, error: 'missing_file_path' }; }
+    releaseImportedSharedTextureCache();
+    __state.frameSendErrorStreak = 0;
     _hgLog(`loadFile: loading "${target}"`);
     addon.loadFile(target);
     _hgLog('loadFile: SUCCESS');

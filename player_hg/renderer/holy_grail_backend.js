@@ -282,8 +282,11 @@
       var cssW = Math.max(16, Math.round(rect.width || hostEl.clientWidth || 1280));
       var cssH = Math.max(16, Math.round(rect.height || hostEl.clientHeight || 720));
       var dpr = Math.max(1, toFiniteNumber(window.devicePixelRatio, 1));
-      var pxW = Math.max(16, Math.round(cssW * dpr));
-      var pxH = Math.max(16, Math.round(cssH * dpr));
+      // Smoothness patch: cap backing DPR slightly to cut canvas overdraw on HiDPI
+      // screens while keeping the visual look close to the original HG player.
+      var effectiveDpr = Math.min(dpr, 1.5);
+      var pxW = Math.max(16, Math.round(cssW * effectiveDpr));
+      var pxH = Math.max(16, Math.round(cssH * effectiveDpr));
 
       canvas.style.width = cssW + 'px';
       canvas.style.height = cssH + 'px';
@@ -673,13 +676,15 @@
     }
 
     function applyRenderDefaults() {
-      // Conservative fidelity defaults matching the old adapter
-      hg.setProperty('scale', 'ewa_lanczossharp').catch(function () {});
-      hg.setProperty('cscale', 'spline36').catch(function () {});
+      // Smoothness-first defaults: keep the HG look but back off the heaviest filters
+      // that can add GPU cost in the embedded canvas pipeline.
+      hg.setProperty('scale', 'spline36').catch(function () {});
+      hg.setProperty('cscale', 'bilinear').catch(function () {});
       hg.setProperty('dscale', 'mitchell').catch(function () {});
-      hg.setProperty('correct-downscaling', 'yes').catch(function () {});
-      hg.setProperty('sigmoid-upscaling', 'yes').catch(function () {});
-      hg.setProperty('deband', 'yes').catch(function () {});
+      hg.setProperty('correct-downscaling', 'no').catch(function () {});
+      hg.setProperty('sigmoid-upscaling', 'no').catch(function () {});
+      hg.setProperty('deband', 'no').catch(function () {});
+      hg.setProperty('interpolation', 'no').catch(function () {});
       hg.setProperty('dither-depth', 'auto').catch(function () {});
     }
 

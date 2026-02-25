@@ -2,23 +2,27 @@
   'use strict';
 
   window.__tankoWebModules = window.__tankoWebModules || {};
+
   window.__tankoWebModules.standalone = function initStandaloneModule(bridge) {
     var state = bridge.state;
-    var el = bridge.el;
 
     function dep(name) { return (bridge.deps || {})[name]; }
     var activateTab = function () { var fn = dep('activateTab'); return fn && fn.apply(null, arguments); };
-    var openNewTab = function () { var fn = dep('openNewTab'); return fn && fn.apply(null, arguments); };
-    var openHubPanelSection = function () { var fn = dep('openHubPanelSection'); return fn && fn.apply(null, arguments); };
+    var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
     var openBrowserForTab = function () { var fn = dep('openBrowserForTab'); return fn && fn.apply(null, arguments); };
+    var showHome = function () { var fn = dep('showHome'); return fn && fn.apply(null, arguments); };
+    var openTorrentTab = function () { var fn = dep('openTorrentTab'); return fn && fn.apply(null, arguments); };
 
     function openDefaultBrowserEntry() {
       if (state.tabs.length) {
         var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
         openBrowserForTab(targetId);
-      } else {
-        openNewTab();
+        return;
       }
+      if (createTab) {
+        createTab(null, '', { switchTo: false });
+      }
+      showHome();
     }
 
     function openTorrentWorkspace() {
@@ -30,22 +34,25 @@
           break;
         }
       }
-      if (torrentTabId != null) activateTab(torrentTabId);
-      else openDefaultBrowserEntry();
 
-      openHubPanelSection('browser');
-      try {
-        if (el.hubMagnetInput && typeof el.hubMagnetInput.focus === 'function') {
-          el.hubMagnetInput.focus();
-          if (typeof el.hubMagnetInput.select === 'function') el.hubMagnetInput.select();
-        }
-      } catch (e) {}
+      if (torrentTabId != null) {
+        activateTab(torrentTabId);
+        openBrowserForTab(torrentTabId);
+        return;
+      }
+
+      if (openTorrentTab) {
+        var t = openTorrentTab();
+        if (t && t.id != null) openBrowserForTab(t.id);
+        return;
+      }
+
+      openDefaultBrowserEntry();
     }
 
     return {
       openDefaultBrowserEntry: openDefaultBrowserEntry,
-      openTorrentWorkspace: openTorrentWorkspace,
+      openTorrentWorkspace: openTorrentWorkspace
     };
   };
 })();
-

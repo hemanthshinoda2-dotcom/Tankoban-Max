@@ -110,7 +110,7 @@
 
   function setModeTheme(mode) {
     const m = String(mode || '').toLowerCase();
-    const value = (m === 'books' || m === 'videos' || m === 'comics') ? m : 'comics';
+    const value = (m === 'books' || m === 'videos' || m === 'comics' || m === 'browser') ? m : 'comics';
     document.body.setAttribute('data-mode', value);
   }
 

@@ -7065,6 +7065,8 @@ function clearEmbeddedFirstFrameWatch() {
 
 function armEmbeddedFirstFrameWatch(v, opts, player) {
   if (!player || typeof player.getRenderStats !== 'function') return;
+  const firstFrameGraceMs = 5000;
+  const recheckGraceMs = 2500;
   const token = { atMs: Date.now() };
   state._embeddedFirstFrameWatchToken = token;
 
@@ -7120,9 +7122,9 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
             : { _routeReason: 'no_frame' };
           await openVideoQtFallback(v, qtOpts);
         });
-      }, 1200);
+      }, recheckGraceMs);
     });
-  }, 3500);
+  }, firstFrameGraceMs);
 }
 
 async function openVideo(v, opts = {}) {
