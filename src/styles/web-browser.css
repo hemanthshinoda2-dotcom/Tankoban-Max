@@ -2,26 +2,29 @@
    Inherit from global ui-tokens.css; override in --wb-* namespace */
 
 .webBrowserView {
-  --wb-bg: #202124;
-  --wb-text: var(--ui-text, #e8eaed);
-  --wb-muted: var(--ui-muted, #9aa0a6);
-  --wb-surface: #292a2d;
-  --wb-surface-raised: #35363a;
-  --wb-border: #3c4043;
-  --wb-border-subtle: rgba(255, 255, 255, 0.06);
-  --wb-accent: var(--ui-accent, #8ab4f8);
-  --wb-accent-dim: rgba(138, 180, 248, 0.25);
-  --wb-hover: rgba(255, 255, 255, 0.08);
-  --wb-active: rgba(255, 255, 255, 0.12);
-  --wb-shadow: rgba(0, 0, 0, 0.4);
-  --wb-shadow-sm: rgba(0, 0, 0, 0.3);
+  /* Map browser palette to the app's global design tokens for a cohesive look */
+  --wb-bg: var(--bg);
+  --wb-text: var(--text);
+  --wb-muted: var(--muted);
+  --wb-surface: var(--panel);
+  --wb-surface-raised: var(--panel2);
+  --wb-border: var(--vx-border);
+  --wb-border-subtle: var(--vx-border2);
+  --wb-accent: var(--accent);
+  /* Dimmed accent used for subtle highlights */
+  --wb-accent-dim: color-mix(in srgb, var(--accent) 30%, transparent);
+  /* Hover/active states tint surfaces with the accent colour */
+  --wb-hover: rgba(var(--accent-rgb), 0.08);
+  --wb-active: rgba(var(--accent-rgb), 0.12);
+  --wb-shadow: rgba(0, 0, 0, 0.5);
+  --wb-shadow-sm: rgba(0, 0, 0, 0.4);
   --wb-success: #81c995;
   --wb-error: #f28b82;
   --wb-purple: #bb86fc;
   --wb-purple-dim: rgba(187, 134, 252, 0.5);
-  --wb-disabled: #5f6368;
-  --wb-active-press: #4a4d52;
-  --wb-text-secondary: #bdc1c6;
+  --wb-disabled: var(--muted);
+  --wb-active-press: rgba(var(--accent-rgb), 0.16);
+  --wb-text-secondary: var(--muted);
 }
 
 /* ══════════════════════════════════════════
@@ -56,7 +59,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   align-items: flex-end;
   height: 38px;
   padding: 0 8px 0 8px;
-  background: var(--wb-bg);
+  /* Raise tab bar off the background like library top bar */
+  background: var(--wb-surface-raised);
   user-select: none;
   flex-shrink: 0;
   position: relative;
@@ -76,11 +80,13 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   height: 28px;
   margin-right: 4px;
   margin-bottom: 3px;
-  background: transparent;
-  border: none;
+  /* Match library button styling: subtle surface, thin border and radius */
+  background: rgba(var(--chrome-rgb), 0.04);
+  border: 1px solid var(--wb-border);
   color: var(--wb-muted);
   font-size: 12px;
-  border-radius: 6px;
+  /* Use design token for consistent radius */
+  border-radius: var(--lib-radius-sm);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -119,7 +125,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   min-width: 60px;
   flex: 1 1 240px;
   padding: 0 4px 0 12px;
-  border-radius: 8px 8px 0 0;
+  /* Use app-wide radius token to align with library cards */
+  border-radius: var(--lib-radius-sm) var(--lib-radius-sm) 0 0;
   cursor: pointer;
   gap: 6px;
   color: var(--wb-muted);
@@ -128,8 +135,28 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   position: relative;
 }
 
+/* Pinned tabs: shrink width and hide title/close icon.  Chrome pins show only
+   favicon and cannot be closed via the usual button; they must be unpinned first
+   【452477764220631†L82-L89】.  Use a fixed width and hide the title and close button. */
+#web-tabs-container .tab.pinned {
+  flex: 0 0 56px;
+  max-width: 56px;
+  min-width: 40px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+#web-tabs-container .tab.pinned .tab-title {
+  display: none;
+}
+
+#web-tabs-container .tab.pinned .tab-close {
+  display: none;
+}
+
 #web-tabs-container .tab:hover {
-  background: rgba(255, 255, 255, 0.04);
+  /* Accent-tinted hover for inactive tabs */
+  background: var(--wb-hover);
 }
 
 #web-tabs-container .tab.active {
@@ -186,7 +213,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   top: 8px;
   bottom: 8px;
   width: 1px;
-  background: var(--wb-disabled);
+  /* Use subtle border colour for separators between inactive tabs */
+  background: var(--wb-border-subtle);
 }
 
 /* Tab loading spinner (replaces favicon while loading) */
@@ -241,10 +269,12 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 #webBrowserView .nav-btn {
   width: 32px;
   height: 32px;
-  border: none;
-  background: transparent;
+  /* Match app button styling: subtle background, border and rounded corners */
+  border: 1px solid var(--wb-border);
+  /* Default nav button background is a faint surface tint */
+  background: rgba(var(--chrome-rgb), 0.04);
   color: var(--wb-text);
-  border-radius: 50%;
+  border-radius: var(--lib-radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -304,7 +334,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   width: 100%;
   height: 34px;
   padding: 0 70px 0 34px;
-  background: var(--wb-bg);
+  /* Default omnibox uses surface tint like app search bar */
+  background: var(--wb-surface);
   border: 2px solid transparent;
   border-radius: 17px;
   color: var(--wb-text);
@@ -315,7 +346,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 #web-url-bar:hover {
-  background: var(--wb-surface);
+  background: var(--wb-surface-raised);
 }
 
 #web-url-bar:focus {
@@ -372,7 +403,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   cursor: pointer;
   outline: none;
   padding: 2px 6px;
-  border-radius: 4px;
+  /* Use app token for small radius to integrate with library forms */
+  border-radius: var(--lib-radius-sm);
   transition: background-color 0.1s;
 }
 
@@ -435,7 +467,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   align-items: center;
   gap: 6px;
   padding: 2px 8px;
-  border-radius: 4px;
+  /* Align bookmark pills with library chip radius */
+  border-radius: var(--lib-radius-sm);
   cursor: pointer;
   white-space: nowrap;
   font-size: 12px;
@@ -476,7 +509,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   overflow-y: auto;
   background: var(--wb-surface);
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  /* Use larger panel radius to match app dialogs */
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   padding: 4px 0;
 }
@@ -495,7 +529,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 .bookmark-bar-overflow-item:hover {
-  background: var(--wb-border-subtle);
+  /* Consistent hover treatment using accent tint */
+  background: var(--wb-hover);
 }
 
 .bookmark-bar-overflow-item img {
@@ -604,9 +639,10 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   height: 36px;
   padding: 0 4px 0 12px;
   background: var(--wb-surface-raised);
-  border: 1px solid var(--wb-disabled);
+  border: 1px solid var(--wb-border);
   border-top: none;
-  border-radius: 0 0 8px 8px;
+  /* Match card radius for bottom-only corners */
+  border-radius: 0 0 var(--lib-radius) var(--lib-radius);
   box-shadow: 0 2px 8px var(--wb-shadow-sm);
   user-select: none;
 }
@@ -617,7 +653,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   padding: 0 8px;
   background: var(--wb-bg);
   border: 1px solid var(--wb-border);
-  border-radius: 4px;
+  /* Use app input radius */
+  border-radius: var(--lib-radius-sm);
   color: var(--wb-text);
   font-size: 13px;
   font-family: inherit;
@@ -641,10 +678,11 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 #webBrowserView .find-btn {
   width: 24px;
   height: 24px;
-  border: none;
-  background: transparent;
+  /* Style find buttons like nav buttons */
+  border: 1px solid var(--wb-border);
+  background: rgba(var(--chrome-rgb), 0.04);
   color: var(--wb-text);
-  border-radius: 50%;
+  border-radius: var(--lib-radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -670,7 +708,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   padding: 6px 16px;
   background: var(--wb-surface-raised);
   border: 1px solid var(--wb-disabled);
-  border-radius: 6px;
+  /* Soft corners align with cards */
+  border-radius: var(--lib-radius-sm);
   color: var(--wb-text);
   font-size: 13px;
   box-shadow: 0 2px 8px var(--wb-shadow-sm);
@@ -687,9 +726,14 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   position: fixed;
   z-index: 5000;
   min-width: 200px;
-  background: var(--wb-surface);
+  /* Use an opaque surface for menus to avoid transparency introduced by the Noir
+     theme.  Mapping --wb-surface to semi-transparent panel colours caused the
+     context menu to appear see‑through.  Override it here to use a solid
+     surface based on the app’s surface colour. */
+  background: rgba(var(--surface-rgb), 0.9);
   border: 1px solid var(--wb-border);
-  border-radius: 4px;
+  /* Use larger radius and consistent shadow for context menus */
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   padding: 4px 0;
   font-size: 13px;
@@ -739,9 +783,11 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   right: 8px;
   z-index: 5000;
   width: 240px;
-  background: var(--wb-surface);
+  /* Use the same opaque surface override as the context menu. */
+  background: rgba(var(--surface-rgb), 0.9);
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  /* Panel corners align with app panel radius */
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   padding: 4px 0;
   user-select: none;
@@ -783,6 +829,21 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   background: var(--wb-border);
 }
 
+/* --------------------------------------------------------------------------
+   Opaque menu surfaces
+   The Noir theme uses semi‑transparent panel tokens for surfaces, which caused
+   the context menu, three‑dot menu and other panels (downloads, history and
+   bookmarks) to appear see‑through.  Override their backgrounds here to
+   ensure they have a solid, readable backdrop using the app’s surface colour.
+*/
+#web-context-menu,
+#web-menu-panel,
+#web-downloads-panel,
+#web-history-panel,
+#web-bookmarks-panel {
+  background: rgba(var(--surface-rgb), 0.9);
+}
+
 
 /* ══════════════════════════════════════════
    Downloads panel
@@ -795,9 +856,10 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   z-index: 5000;
   width: 360px;
   max-height: 400px;
-  background: var(--wb-surface);
+  /* Use opaque surface to avoid transparency; override Noir panel colour */
+  background: rgba(var(--surface-rgb), 0.9);
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   display: flex;
   flex-direction: column;
@@ -840,7 +902,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 .dl-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  /* Accent-tinted hover for download rows */
+  background: var(--wb-hover);
 }
 
 .dl-icon {
@@ -907,10 +970,12 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 .dl-btn {
   width: 28px;
   height: 28px;
-  border: none;
-  background: transparent;
+  /* Mirror nav button style for downloads actions */
+  border: 1px solid var(--wb-border);
+  background: rgba(var(--chrome-rgb), 0.04);
   color: var(--wb-muted);
-  border-radius: 50%;
+  /* Rounded rectangle for consistency */
+  border-radius: var(--lib-radius-sm);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -935,9 +1000,10 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   z-index: 5000;
   width: 420px;
   max-height: 500px;
-  background: var(--wb-surface);
+  /* Use opaque surface to avoid transparency; override Noir panel colour */
+  background: rgba(var(--surface-rgb), 0.9);
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   display: flex;
   flex-direction: column;
@@ -1014,7 +1080,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 .history-item:hover {
-  background: var(--wb-border-subtle);
+  /* Use accent-tinted hover background like other list items */
+  background: var(--wb-hover);
 }
 
 .history-item-favicon {
@@ -1090,9 +1157,10 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   z-index: 5000;
   width: 420px;
   max-height: 500px;
-  background: var(--wb-surface);
+  /* Use opaque surface to avoid transparency; override Noir panel colour */
+  background: rgba(var(--surface-rgb), 0.9);
   border: 1px solid var(--wb-border);
-  border-radius: 8px;
+  border-radius: var(--lib-radius);
   box-shadow: 0 4px 16px var(--wb-shadow);
   display: flex;
   flex-direction: column;
@@ -1160,7 +1228,8 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 }
 
 .bookmark-item:hover {
-  background: var(--wb-border-subtle);
+  /* Use accent-tinted hover background like other list items */
+  background: var(--wb-hover);
 }
 
 .bookmark-item-favicon {

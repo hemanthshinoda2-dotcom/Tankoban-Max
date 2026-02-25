@@ -449,6 +449,16 @@
   bridge.deps.updateNavButtons  = tabsState.updateNavButtons;
   bridge.deps.scheduleSessionSave = tabsState.scheduleSessionSave;
 
+  // Allow other modules to clean up torrent tab resources when closed. The
+  // torrentTab module exposes a `destroy` method which clears its internal
+  // intervals and resets internal state. Without invoking destroy, closing
+  // the torrent tab leaves behind a running DHT update interval which
+  // continues to tick and leaks memory/resources. Provide a dependency
+  // so tabsState can invoke it during tab close events.
+  if (torrentTab && typeof torrentTab.destroy === 'function') {
+    bridge.deps.destroyTorrentTab = torrentTab.destroy;
+  }
+
   // From navOmnibox
   bridge.deps.navigateUrl         = navOmnibox.navigateUrl;
   bridge.deps.closeOmniSuggestions = navOmnibox.hideOmniDropdown;

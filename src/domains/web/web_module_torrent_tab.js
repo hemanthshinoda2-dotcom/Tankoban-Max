@@ -259,26 +259,39 @@
         if (selectedIds.has(entry.id)) renderProps();
       });
 
-      // Load existing torrents
-      api.webTorrent.getActive().then(function (result) {
-        if (result.ok && result.torrents) {
-          result.torrents.forEach(function (t) { torrents[t.id] = t; });
-        }
-        return api.webTorrent.getHistory();
-      }).then(function (result) {
-        if (result.ok && result.torrents) {
-          result.torrents.forEach(function (t) {
-            if (!torrents[t.id]) torrents[t.id] = t;
-          });
-        }
-        renderTable();
-      });
-
-      // Periodic DHT update
-      dhtInterval = setInterval(function () {
-        api.webTorrent.getDhtNodes().then(function (n) {
-          if (statusDht) statusDht.textContent = 'DHT: ' + n + ' nodes';
+      // Load existing torrents. Wrap in a promise chain with error handling to
+      // prevent unhandled rejections in case the API fails. We still
+      // render whatever data we have so the UI isn't blank on error.
+      api.webTorrent.getActive()
+        .then(function (result) {
+          if (result && result.ok && Array.isArray(result.torrents)) {
+            result.torrents.forEach(function (t) { torrents[t.id] = t; });
+          }
+          return api.webTorrent.getHistory();
+        })
+        .then(function (result) {
+          if (result && result.ok && Array.isArray(result.torrents)) {
+            result.torrents.forEach(function (t) {
+              if (!torrents[t.id]) torrents[t.id] = t;
+            });
+          }
+          renderTable();
+        })
+        .catch(function (err) {
+          try { console.warn('Failed to load torrent lists', err); } catch {}
+          renderTable();
         });
+
+      // Periodic DHT update. Catch errors on getDhtNodes() so failures don't
+      // bubble up as unhandled promise rejections.
+      dhtInterval = setInterval(function () {
+        api.webTorrent.getDhtNodes()
+          .then(function (n) {
+            if (statusDht) statusDht.textContent = 'DHT: ' + n + ' nodes';
+          })
+          .catch(function () {
+            // ignore errors (e.g. provider unavailable)
+          });
       }, 5000);
     }
 

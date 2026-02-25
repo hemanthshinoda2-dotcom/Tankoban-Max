@@ -137,6 +137,101 @@
         closeTab(id);
       });
 
+      // Show tab context menu on right click.  A separate context menu for tabs
+      // brings our implementation closer to Chromium, which exposes actions like
+      // Duplicate, Pin/Unpin, Mute/Unmute and tab closing shortcuts via the
+      // tab strip context menu【335440645664631†L50-L63】【452477764220631†L82-L89】.  Use the
+      // generic context menu module to render the menu and wire up actions via
+      // ctxParams.onAction.  Each menu item calls into helper functions defined
+      // below.
+      tabEl.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        if (!dep('showContextMenu')) return;
+        var tab = null;
+        for (var i = 0; i < state.tabs.length; i++) {
+          if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
+        }
+        if (!tab) return;
+        // Build context menu items.  Order loosely follows Chrome’s tab context
+        // menu: new tab, duplicate, pin/unpin, mute/unmute, close, close
+        // others, close tabs to right, reopen closed tab, bookmark all tabs
+        var items = [];
+        // New tab
+        items.push({ label: 'New tab', shortcut: 'Ctrl+T', action: 'newTab' });
+        // Duplicate
+        items.push({ label: 'Duplicate', shortcut: '', action: 'duplicate' });
+        // Pin / Unpin
+        if (tab.pinned) items.push({ label: 'Unpin tab', action: 'togglePin' });
+        else items.push({ label: 'Pin tab', action: 'togglePin' });
+        // Mute / Unmute
+        // Only show if webview exists and supports audio controls.  Note: The
+        // electron <webview> tag exposes setAudioMuted() and isAudioMuted() APIs.
+        var canMute = tab.webview && typeof tab.webview.isAudioMuted === 'function' && typeof tab.webview.setAudioMuted === 'function';
+        if (canMute) {
+          try {
+            var muted = tab.webview.isAudioMuted();
+            items.push({ label: muted ? 'Unmute site' : 'Mute site', action: 'toggleMute' });
+          } catch (e) {}
+        }
+        // Separator
+        items.push({ separator: true });
+        // Close
+        items.push({ label: 'Close tab', shortcut: 'Ctrl+W', action: 'close' });
+        // Close other tabs
+        if (state.tabs.length > 1) items.push({ label: 'Close other tabs', action: 'closeOthers' });
+        // Close tabs to the right
+        if (state.tabs.length > 1) items.push({ label: 'Close tabs to the right', action: 'closeRight' });
+        // Separator
+        items.push({ separator: true });
+        // Reopen closed tab (Ctrl+Shift+Z currently bound in web.js).  Many
+        // Chromium-based browsers surface this action in the tab context menu and
+        // via Ctrl+Shift+T【752243596706853†L80-L96】.
+        items.push({ label: 'Reopen closed tab', action: 'reopenClosed' });
+        // Bookmark all tabs
+        items.push({ label: 'Bookmark all tabs', action: 'bookmarkAll' });
+
+        // Render the context menu using the generic module.  Provide onAction
+        // callback to dispatch our tab-specific actions.
+        dep('showContextMenu')({
+          items: items,
+          x: e.clientX,
+          y: e.clientY,
+          onAction: function (act) {
+            switch (act) {
+              case 'newTab':
+                createTab(null, '', { switchTo: true });
+                break;
+              case 'duplicate':
+                // Duplicate the tab by creating a new tab with the same URL.
+                var dupUrl = String(tab.url || '');
+                createTab(null, dupUrl, { switchTo: true });
+                break;
+              case 'togglePin':
+                togglePin(tab);
+                break;
+              case 'toggleMute':
+                toggleMute(tab);
+                break;
+              case 'close':
+                closeTab(tab.id);
+                break;
+              case 'closeOthers':
+                closeOtherTabs(tab.id);
+                break;
+              case 'closeRight':
+                closeTabsToRight(tab.id);
+                break;
+              case 'reopenClosed':
+                if (reopenClosedTab) reopenClosedTab();
+                break;
+              case 'bookmarkAll':
+                bookmarkAllTabs();
+                break;
+            }
+          }
+        });
+      });
+
       // Bind webview events
       if (wv) {
         bindWebviewEvents(tab);
@@ -173,8 +268,21 @@
       // Remove DOM elements
       if (tab.element) tab.element.remove();
       if (tab.webview) tab.webview.remove();
-      if (tab.type === 'torrent' && el.torrentContainer) {
-        el.torrentContainer.style.display = 'none';
+      if (tab.type === 'torrent') {
+        // When closing the torrent tab, hide its container and destroy any
+        // background timers/intervals associated with the torrent UI. The
+        // torrentTab module exposes a destroy() method which clears its
+        // DHT polling interval and resets internal state. Without calling
+        // destroy(), closing the torrent tab leaves the interval running
+        // in the background, which leads to resource leaks and duplicate
+        // polling when a new torrent tab is opened later.
+        if (el.torrentContainer) {
+          el.torrentContainer.style.display = 'none';
+        }
+        var destroyTT = (typeof dep === 'function') ? dep('destroyTorrentTab') : null;
+        if (typeof destroyTT === 'function') {
+          try { destroyTT(); } catch (e) { /* ignore */ }
+        }
       }
       state.tabs.splice(idx, 1);
 
@@ -762,6 +870,114 @@
         showToast('Reopened tab');
         scheduleSessionSave();
       }
+    }
+
+    // ── Additional tab actions (context menu) ──
+
+    /**
+     * Toggle pin state for a tab.  When pinned, move the tab to the front of
+     * the tab array and tab strip; when unpinned, move to the end.  Pinned
+     * tabs are smaller and omit the close button, similar to Chrome【452477764220631†L82-L89】.
+     */
+    function togglePin(tab) {
+      if (!tab || !tab.element) return;
+      tab.pinned = !tab.pinned;
+      // Update CSS class
+      tab.element.classList.toggle('pinned', tab.pinned);
+      // Reorder in state.tabs
+      var idx = state.tabs.indexOf(tab);
+      if (idx >= 0) {
+        state.tabs.splice(idx, 1);
+        if (tab.pinned) {
+          state.tabs.unshift(tab);
+        } else {
+          state.tabs.push(tab);
+        }
+      }
+      // Reorder DOM
+      if (el.tabsContainer && tab.element) {
+        if (tab.pinned) {
+          // Insert at the beginning of the tab container, before any existing tabs
+          el.tabsContainer.insertBefore(tab.element, el.tabsContainer.firstChild);
+        } else {
+          // Insert before the new-tab button (if present) or at the end
+          var refNode = el.btnNewTab || null;
+          el.tabsContainer.insertBefore(tab.element, refNode);
+        }
+      }
+      scheduleSessionSave();
+    }
+
+    /**
+     * Toggle audio mute for a tab.  Uses electron <webview> APIs if available.
+     */
+    function toggleMute(tab) {
+      if (!tab || !tab.webview) return;
+      try {
+        var muted = false;
+        if (typeof tab.webview.isAudioMuted === 'function') muted = tab.webview.isAudioMuted();
+        if (typeof tab.webview.setAudioMuted === 'function') {
+          tab.webview.setAudioMuted(!muted);
+        }
+      } catch (e) {}
+    }
+
+    /**
+     * Close all tabs except the provided id.
+     */
+    function closeOtherTabs(keepId) {
+      // Copy tab IDs to avoid mutation while iterating
+      var ids = state.tabs.map(function (t) { return t.id; });
+      for (var i = 0; i < ids.length; i++) {
+        var tid = ids[i];
+        if (tid !== keepId) closeTab(tid);
+      }
+    }
+
+    /**
+     * Close all tabs to the right of the specified tab id.
+     */
+    function closeTabsToRight(tabId) {
+      var idx = -1;
+      for (var i = 0; i < state.tabs.length; i++) {
+        if (state.tabs[i].id === tabId) { idx = i; break; }
+      }
+      if (idx === -1) return;
+      // Collect IDs of tabs to the right
+      var ids = [];
+      for (var j = idx + 1; j < state.tabs.length; j++) {
+        ids.push(state.tabs[j].id);
+      }
+      for (var k = 0; k < ids.length; k++) {
+        closeTab(ids[k]);
+      }
+    }
+
+    /**
+     * Add bookmarks for all open tabs.  This mirrors Chrome’s “Bookmark all tabs”
+     * action【335440645664631†L50-L63】.  Tabs without http/https URLs are skipped.  Uses
+     * webBookmarks.add() if available on the API.
+     */
+    function bookmarkAllTabs() {
+      if (!api.webBookmarks || typeof api.webBookmarks.add !== 'function') return;
+      for (var i = 0; i < state.tabs.length; i++) {
+        var t = state.tabs[i];
+        var url = String(t.url || '').trim();
+        if (!/^https?:\/\//i.test(url)) continue;
+        // Build title and favicon
+        var title = t.title || t.sourceName || siteNameFromUrl(url) || url;
+        var fav = t.favicon || '';
+        // Call add; ignore duplicates, letting the API decide
+        try {
+          api.webBookmarks.add({
+            url: url,
+            title: title,
+            favicon: fav,
+            timestamp: Date.now()
+          });
+        } catch (e) {}
+      }
+      showToast('Bookmarked all tabs');
     }
 
     function loadSessionAndRestore() {
