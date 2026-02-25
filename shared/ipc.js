@@ -573,6 +573,60 @@ const CHANNEL = {
   /** Set mpv player visibility. Returns: void */
   MPV_SET_VISIBLE: 'mpv:setVisible',
 
+  // Holy Grail (native mpv + sharedTexture bridge)
+  // ========================================
+
+  /** Probe holy grail availability. Returns: { ok, error?, addonPath?, mpvPath?, eglPath?, glesPath?, sharedTexture? } */
+  HG_PROBE: 'holyGrail:probe',
+
+  /** Initialize holy grail GPU pipeline. Args: { width?, height? }. Returns: { ok, error?, width?, height? } */
+  HG_INIT: 'holyGrail:init',
+
+  /** Resize holy grail GPU surface. Args: { width, height }. Returns: { ok, error?, width?, height?, unchanged? } */
+  HG_RESIZE: 'holyGrail:resize',
+
+  /** Load file in holy grail player. Args: filePath. Returns: { ok, error? } */
+  HG_LOAD: 'holyGrail:load',
+
+  /** Start holy grail frame loop. Returns: { ok, error?, alreadyRunning? } */
+  HG_START_FRAME_LOOP: 'holyGrail:startFrameLoop',
+
+  /** Stop holy grail frame loop. Returns: { ok } */
+  HG_STOP_FRAME_LOOP: 'holyGrail:stopFrameLoop',
+
+  /** Send mpv command via holy grail. Args: command array. Returns: { ok, error? } */
+  HG_COMMAND: 'holyGrail:command',
+
+  /** Get holy grail mpv property. Args: name. Returns: { ok, value?, error? } */
+  HG_GET_PROPERTY: 'holyGrail:getProperty',
+
+  /** Set holy grail mpv property. Args: name, value. Returns: { ok, error? } */
+  HG_SET_PROPERTY: 'holyGrail:setProperty',
+
+  /** Get holy grail state. Returns: { ok, state?, error? } */
+  HG_GET_STATE: 'holyGrail:getState',
+
+  /** Get holy grail track list. Returns: { ok, tracks?, error? } */
+  HG_GET_TRACK_LIST: 'holyGrail:getTrackList',
+
+  /** Observe holy grail property changes. Args: name. Returns: { ok, id?, error? } */
+  HG_OBSERVE_PROPERTY: 'holyGrail:observeProperty',
+
+  /** Destroy holy grail player instance (keeps process alive). Returns: { ok } */
+  HG_DESTROY: 'holyGrail:destroy',
+
+  /** Set presentation active state (renderer visibility hint). Args: boolean. Returns: { ok, presentationActive } */
+  HG_SET_PRESENTATION_ACTIVE: 'holyGrail:setPresentationActive',
+
+  /** Get diagnostics snapshot. Returns: { ok, diagnostics } */
+  HG_GET_DIAGNOSTICS: 'holyGrail:getDiagnostics',
+
+  /** Enable/disable diagnostics. Args: boolean. Returns: { ok, diagEnabled } */
+  HG_SET_DIAGNOSTICS_ENABLED: 'holyGrail:setDiagnosticsEnabled',
+
+  /** Reset diagnostics counters. Returns: { ok } */
+  HG_RESET_DIAGNOSTICS: 'holyGrail:resetDiagnostics',
+
   // ========================================
   // Player Core (Tankoban Pro)
   // ========================================
@@ -1031,6 +1085,18 @@ const EVENT = {
 
   /** Folder thumbnail updated. Payload: { folderPath, thumbPath, timestamp } */
   VIDEO_FOLDER_THUMBNAIL_UPDATED: 'video:folderThumbnailUpdated',
+
+  /** Holy grail property change. Payload: { name: string, value: any } */
+  HG_PROPERTY_CHANGE: 'holyGrail:propertyChange',
+
+  /** Holy grail reached EOF. Payload: { ok?: boolean, reason?: string } */
+  HG_EOF: 'holyGrail:eof',
+
+  /** Holy grail file loaded. Payload: { ok?: boolean } */
+  HG_FILE_LOADED: 'holyGrail:fileLoaded',
+
+  /** Holy grail diagnostics snapshot. Payload: diagnostics object */
+  HG_DIAGNOSTICS: 'holyGrail:diagnostics',
 
   // ========================================
   // Dynamic/Templated Events

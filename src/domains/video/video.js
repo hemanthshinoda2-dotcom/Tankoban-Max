@@ -74,6 +74,8 @@ videoProgress IPC calls
     modeComicsBtn: qs('modeComicsBtn'),
     modeBooksBtn: qs('modeBooksBtn'),
     modeVideosBtn: qs('modeVideosBtn'),
+    playerHgBtn: qs('playerHgBtn'),
+    playerQtBtn: qs('playerQtBtn'),
     libTitle: qs('libTitle'),
 
     libraryView: qs('libraryView'),
@@ -315,6 +317,11 @@ videoProgress IPC calls
     _progressPollIntervalMs: 4000,
     player: null,
     mpvAvailable: false,
+    holyGrailAvailable: false,
+    holyGrailAvailError: '',
+    // BUILD31: native embedded libmpv availability (separate from mpv.exe path)
+    libmpvAvailable: false,
+    libmpvAvailError: '',
     mpvWindowMode: '',
     mpvDetached: false,
     _playerDomBound: false,
@@ -347,6 +354,7 @@ videoProgress IPC calls
       // Tankoban Plus Build 5.4B: preferred languages for track selection (mpv only)
       preferredAudioLanguage: null,
       preferredSubtitleLanguage: null,
+      forceQtPlayer: false,
       autoAdvance: true,
       respectSubtitleStyles: true,
       subtitleHudLiftPx: 40,
@@ -1031,9 +1039,14 @@ async function refreshChaptersFromPlayer(){
       const isDefaultEmbedded = (nextEngine === 'embedded' && routeReason === 'default_embedded');
       const showBadge = (!isDefaultEmbedded && nextEngine !== 'none');
       el.videoEngineBadge.classList.toggle('hidden', !showBadge);
-      if (nextEngine === 'qt') {
-        el.videoEngineBadge.textContent = 'Qt';
-        el.videoEngineBadge.title = `Qt player active (${routeReason}; ${openReason}).`;
+      if (nextEngine === 'embedded') {
+        el.videoEngineBadge.textContent = 'Embedded (HG)';
+        el.videoEngineBadge.title = routeReason === 'default_embedded'
+          ? 'Embedded Holy Grail engine active.'
+          : `Embedded Holy Grail engine active (${routeReason}; ${openReason}).`;
+      } else if (nextEngine === 'qt') {
+        el.videoEngineBadge.textContent = 'Qt (fallback)';
+        el.videoEngineBadge.title = `Qt fallback player active (${routeReason}; ${openReason}).`;
       } else {
         el.videoEngineBadge.textContent = 'No Engine';
         el.videoEngineBadge.title = 'No active engine.';
@@ -1599,9 +1612,13 @@ async function refreshChaptersFromPlayer(){
     try { await
 // AI_EXIT_PATH: final save should be triggered during teardown / before leaving player to avoid missing the last poll tick.
 saveNow(true); } catch {}
+    // Destroy player_hg boot instance (cleans up adapter + UI modules internally)
+    try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
     try { await state.player.destroy(); } catch {}
+    try { destroyPlayerHgEmbed(); } catch {}
 
     state.player = null;
+    state._playerHgInstance = null;
     state._playerEventsBoundFor = null;
     document.body.classList.remove('mpvEngine');
     document.body.classList.remove('mpvDetached');
@@ -1616,6 +1633,19 @@ saveNow(true); } catch {}
     const payload = state._retryPending;
     const v = (payload && payload.video) ? payload.video : state.now;
     if (!v || !v.path) return;
+
+    // Optional Qt override mode for diagnostics/fallback.
+    try {
+      const useQt = getQtPlayerPreference();
+      const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
+      if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
+        const sessionId = String(Date.now());
+        const start = (payload && Number.isFinite(Number(payload.resumePosSec))) ? Number(payload.resumePosSec) : 0;
+        try { toast('Opening in Qt player…', 1200); } catch {}
+        await api.player.launchQt({ filePath: String(v.path), startSeconds: start, sessionId });
+        return;
+      }
+    } catch {}
 
     state._retrying = true;
     try {
@@ -2866,11 +2896,15 @@ function closeTracksPanel(){
               console.log('[video-load] Starting video library and player bootstrap');
 
               // Load library data + progress + settings + playback capability checks in parallel
-              const [idxRes, progRes, vs, uiState, dnRes] = await Promise.all([
+              const [idxRes, progRes, vs, uiState, hgResult, mpvResult, dnRes] = await Promise.all([
                 Tanko.api.video.getState().catch(() => ({ idx: { roots: [], shows: [], episodes: [] } })),
                 Tanko.api.videoProgress.getAll().catch(() => ({})),
                 Tanko.api.videoSettings.get?.().catch(() => ({})),
                 Tanko.api.videoUi.getState?.().catch(() => ({})),
+                (Tanko.api.holyGrail && typeof Tanko.api.holyGrail.probe === 'function')
+                  ? Tanko.api.holyGrail.probe().catch((e) => ({ ok: false, error: String((e && e.message) || e || 'probe_failed') }))
+                  : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+                Promise.resolve({ available: false, error: 'embedded_disabled' }),
                 Tanko.api.videoDisplayNames?.getAll?.().catch(() => ({})),
               ]);
 
@@ -2911,6 +2945,14 @@ function closeTracksPanel(){
               // Apply display names (RENAME-VIDEO)
               state.videoDisplayNames = (dnRes && typeof dnRes === 'object') ? dnRes : {};
 
+              // Apply holy grail availability (also mirrored into legacy libmpv flags for existing UI checks).
+              console.log('[HG-DIAG] probe result:', hgResult);
+              state.holyGrailAvailable = !!(hgResult && typeof hgResult === 'object' ? hgResult.ok : hgResult);
+              state.holyGrailAvailError = (hgResult && typeof hgResult === 'object' && hgResult.error) ? String(hgResult.error) : '';
+              state.libmpvAvailable = state.holyGrailAvailable;
+              state.libmpvAvailError = state.holyGrailAvailError;
+              updateQtToggleUi();
+
               // Apply mpv availability
               state.mpvAvailable = false;
               state.mpvWindowMode = '';
@@ -2928,8 +2970,12 @@ function closeTracksPanel(){
                 state.mpvAvailable = !!mpvResult;
               }
 
-              if (!state.mpvAvailable) {
-                toast(`mpv not available${state.mpvAvailError ? ': ' + state.mpvAvailError : ''}`);
+              // Warn only if no in-app backend is available.
+              if (!state.holyGrailAvailable && !state.mpvAvailable) {
+                const msg = state.holyGrailAvailError
+                  ? `Holy Grail not available: ${state.holyGrailAvailError}`
+                  : `mpv not available${state.mpvAvailError ? ': ' + state.mpvAvailError : ''}`;
+                toast(msg);
               }
 
               // Render video library UI
@@ -3014,6 +3060,8 @@ function closeTracksPanel(){
     if (typeof s.preferredSubtitleLanguage === 'string' || s.preferredSubtitleLanguage === null) {
       state.settings.preferredSubtitleLanguage = (typeof s.preferredSubtitleLanguage === 'string' && s.preferredSubtitleLanguage.trim()) ? s.preferredSubtitleLanguage.trim() : null;
     }
+    // Embedded HG is now the primary player. Ignore legacy persisted forceQtPlayer=true.
+    // The toggle button still works — user can switch to Qt, and that choice persists.
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.
 if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
     (typeof s.preferredSubLanguage === 'string' || s.preferredSubLanguage === null)) {
@@ -6277,7 +6325,156 @@ function getEpisodeById(epId){
     return 'file://' + encodeURI(p);
   }
 
+  // ── Shadow DOM embed for player_hg (Session 2 infrastructure — wired in Session 3) ──
 
+  function createPlayerHgEmbed() {
+    const host = el.mpvHost;
+    if (!host) return null;
+
+    // Hide old video.js stage overlays so they don't conflict with player_hg's Shadow DOM UI
+    document.body.classList.add('playerHgEmbed');
+
+    const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = ''; // Clear any previous contents
+
+    // Host-level styles — replaces html/body selectors from player.css
+    // (Shadow DOM has no html/body to style; :host is the container.)
+    const hostStyle = document.createElement('style');
+    hostStyle.textContent =
+      ':host { display: block; width: 100%; height: 100%; overflow: hidden; ' +
+      'font-family: "Segoe UI", system-ui, -apple-system, sans-serif; ' +
+      'color: #e0e0e0; user-select: none; -webkit-user-select: none; }';
+    shadow.appendChild(hostStyle);
+
+    // Load player_hg stylesheet
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '../player_hg/styles/player.css';
+    shadow.appendChild(link);
+
+    // Base DOM structure (mirrors player_hg/index.html)
+    const stage = document.createElement('div');
+    stage.id = 'playerStage';
+    shadow.appendChild(stage);
+
+    // Hidden <video> element (unused in HG mode but keeps boot.js happy)
+    const video = document.createElement('video');
+    video.id = 'videoSurface';
+    video.setAttribute('playsinline', '');
+    video.style.display = 'none';
+    stage.appendChild(video);
+
+    return shadow;
+  }
+
+  function destroyPlayerHgEmbed() {
+    document.body.classList.remove('playerHgEmbed');
+    const host = el.mpvHost;
+    if (!host || !host.shadowRoot) return;
+    host.shadowRoot.innerHTML = '';
+  }
+
+  function ensurePlayer(){
+    // Track panel should never survive engine swaps.
+    closeTracksPanel();
+    state._lastEnsurePlayerError = '';
+
+    const canHolyGrail = !!(state.holyGrailAvailable
+      && window.TankoPlayer && typeof window.TankoPlayer.boot === 'function'
+      && Tanko.api?.holyGrail);
+
+    const setEngineUi = (isMpv, isCanvas) => {
+      const mpvOn = !!isMpv;
+      const canvasOn = !!isCanvas;
+      document.body.classList.toggle('mpvEngine', mpvOn);
+      document.body.classList.toggle('libmpvEmbedded', mpvOn);
+      document.body.classList.toggle('libmpvCanvas', mpvOn && canvasOn);
+
+      if (!mpvOn) {
+        // (kept for completeness; build is mpv-only anyway)
+        document.body.classList.remove('mpvDetached');
+        el.videoEl?.classList.remove('hidden');
+        el.mpvHost?.classList.add('hidden');
+        el.mpvDetachedPlaceholder?.classList.add('hidden');
+        return;
+      }
+
+      // mpv is active (canvas):
+      el.videoEl?.classList.add('hidden');
+      el.mpvDetachedPlaceholder?.classList.add('hidden');
+      document.body.classList.remove('mpvDetached');
+      el.mpvHost?.classList.remove('hidden');
+    };
+
+    if (!canHolyGrail) {
+      state._lastEnsurePlayerError = state.holyGrailAvailError ? String(state.holyGrailAvailError) : 'probe_failed';
+      setEngineUi(false, false);
+      toast(state.holyGrailAvailError ? `Holy Grail not available: ${state.holyGrailAvailError}` : 'Holy Grail not available');
+      return null;
+    }
+
+    const requestedRenderMode = 'canvas';
+
+    // Reuse an existing player if it's already embedded holy grail.
+    if (state.player && state.player.kind === 'mpv') {
+      const wm = String(state.player.windowMode || '');
+      const lastRenderMode = String(state._activeRenderMode || '');
+      if (wm === 'embedded-libmpv' && lastRenderMode === requestedRenderMode) {
+        state.mpvWindowMode = wm;
+        state.mpvDetached = false;
+        state._activeRenderMode = requestedRenderMode;
+        setEngineUi(true, true);
+        try { bindPlayerUi(); } catch {}
+        return state.player;
+      }
+    }
+
+    // Swap engines (best-effort cleanup)
+    try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
+    try { state.player?.destroy?.(); } catch {}
+    try { destroyPlayerHgEmbed(); } catch {}
+    state.player = null;
+    state._playerHgInstance = null;
+    state._playerEventsBoundFor = null;
+
+    try {
+      const shadow = createPlayerHgEmbed();
+      if (!shadow) throw new Error('Shadow DOM creation failed');
+      const bootResult = window.TankoPlayer.boot({
+        root: shadow,
+        backend: 'holy_grail',
+        embedded: true,
+        holyGrailBridge: Tanko.api.holyGrail,
+        onExit: () => { safe(() => showVideoLibrary()); },
+      });
+      bootResult.initAdapter();
+      state.player = bootResult.getAdapter();
+      state._playerHgInstance = bootResult;
+      if (!state.player) throw new Error('Adapter creation failed');
+      try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
+      try { state.player?.setSubtitleHudLift?.(Number(state.settings.subtitleHudLiftPx || 40)); } catch {}
+    } catch (e) {
+      state._lastEnsurePlayerError = String((e && e.message) || e || 'init_failed');
+      try { destroyPlayerHgEmbed(); } catch {}
+      setEngineUi(false, false);
+      toast(`Canvas player failed to start${e && e.message ? ': ' + e.message : ''}`);
+      return null;
+    }
+
+    state._lastEnsurePlayerError = '';
+
+    state._activeRenderMode = requestedRenderMode;
+
+    // Normalize window mode flags for UI.
+    try {
+      state.mpvWindowMode = String(state.player?.windowMode || '');
+      state.mpvDetached = false;
+    } catch {}
+
+    setEngineUi(true, true);
+    try { bindPlayerUi(); } catch {}
+    return state.player;
+  }
 
   function updateHudFromPlayer(){
     if (!state.player) return;
@@ -6802,6 +6999,65 @@ function resolveStartSeconds(v, opts = {}) {
   return start;
 }
 
+function logHgParity(tag, payload) {
+  try {
+    if (!state._hgParityLog) state._hgParityLog = [];
+    const entry = {
+      atMs: Date.now(),
+      tag: String(tag || ''),
+      payload: (payload && typeof payload === 'object') ? { ...payload } : payload,
+    };
+    state._hgParityLog.push(entry);
+    if (state._hgParityLog.length > 120) state._hgParityLog.splice(0, state._hgParityLog.length - 120);
+    if (window && window.__TANKO_HG_PARITY_DEBUG__) console.log('[video:hg-parity]', entry);
+  } catch {}
+}
+
+function snapshotHgParity(reason) {
+  try {
+    const p = state.player;
+    if (!p || typeof p.getParitySnapshot !== 'function') return null;
+    const snap = p.getParitySnapshot();
+    state._hgLastParitySnapshot = snap;
+    logHgParity('snapshot', {
+      reason: String(reason || ''),
+      contractVersion: snap && snap.contractVersion ? String(snap.contractVersion) : '',
+      ready: !!(snap && snap.ready),
+    });
+    return snap;
+  } catch (err) {
+    logHgParity('snapshot-error', { reason: String(reason || ''), error: String((err && err.message) || err || '') });
+    return null;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    window.__tankoDumpHgParity = () => ({
+      playerSnapshot: snapshotHgParity('manual-dump'),
+      uiLog: Array.isArray(state._hgParityLog) ? state._hgParityLog.slice() : [],
+    });
+    window.__tankoAuditHgPerf = () => {
+      const snap = snapshotHgParity('manual-perf-audit');
+      const rs = (snap && snap.renderStats) || {};
+      const dropped = Number(rs.droppedFrameCount || 0);
+      const draws = Number(rs.framePumpDrawCount || rs.frameCount || 0);
+      const closeErrors = Number(rs.frameCloseErrorCount || 0);
+      const avg = Number(rs.avgDrawTimeMs || 0);
+      const issues = [];
+      if (!snap || !snap.gpuInitialized) issues.push('gpu-not-initialized');
+      if (closeErrors > 0) issues.push('frame-close-errors');
+      if (dropped > 0 && draws > 0 && (dropped / Math.max(1, draws)) > 0.25) issues.push('high-frame-drop-ratio');
+      if (avg > 18) issues.push('slow-avg-draw');
+      return {
+        ok: issues.length === 0,
+        issues,
+        summary: { droppedFrameCount: dropped, drawCount: draws, frameCloseErrorCount: closeErrors, avgDrawTimeMs: avg },
+        snapshot: snap,
+      };
+    };
+  } catch {}
+}
 
 function clearEmbeddedFirstFrameWatch() {
   state._embeddedFirstFrameWatchToken = null;
@@ -6883,19 +7139,212 @@ async function openVideo(v, opts = {}) {
     if (!resolved || !resolved.path) return;
     v = resolved;
   }
+  clearEmbeddedFirstFrameWatch();
   state._autoAdvanceBlockUntilMs = Date.now() + 2500;
 
+  const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
+  const explicitQt = !!(opts && typeof opts === 'object' && opts.forceQt === true);
+  const explicitEmbedded = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
+  const userPrefQt = !!(!explicitEmbedded && getQtPlayerPreference());
+  const forceQt = !!(explicitQt || userPrefQt);
   const openReason = String((opts && typeof opts === 'object' && opts._openReason) || 'unknown');
   state._activeOpenReason = openReason;
   try {
     console.log('[video-open-request]', {
       openReason,
+      explicitQt,
+      explicitEmbedded,
+      userPrefQt,
       videoId: String((v && v.id) || ''),
       file: String((v && v.path) || ''),
     });
   } catch {}
 
-  return openVideoQtFallback(v, opts);
+  const requestedReason = explicitQt
+    ? 'explicit_qt'
+    : explicitEmbedded
+      ? 'explicit_embedded'
+      : userPrefQt
+        ? 'user_pref_qt'
+        : 'default_embedded';
+
+  const allowNoFrameQtFallback = (opts && typeof opts === 'object' && typeof opts.allowNoFrameQtFallback === 'boolean')
+    ? opts.allowNoFrameQtFallback
+    // Keep watchdog fallback active on default embedded path; force-embedded intentionally opts out.
+    : !explicitEmbedded;
+  const openOpts = (opts && typeof opts === 'object')
+    ? { ...opts, allowNoFrameQtFallback }
+    : { allowNoFrameQtFallback };
+
+  const canHolyGrail = !!(!forceQt
+    && state.holyGrailAvailable
+    && api
+    && api.holyGrail
+    && window.TankoPlayer && typeof window.TankoPlayer.boot === 'function');
+
+  console.log('[HG-DIAG] openVideo canHolyGrail=' + canHolyGrail, { forceQt, holyGrailAvailable: state.holyGrailAvailable, hasApi: !!api, hasHgApi: !!(api && api.holyGrail), hasTankoPlayer: !!(window.TankoPlayer && typeof window.TankoPlayer.boot === 'function') });
+
+  if (!canHolyGrail) {
+    try { await state.player?.destroy?.(); } catch {}
+    state.player = null;
+    state._playerEventsBoundFor = null;
+    document.body.classList.remove('mpvEngine');
+    document.body.classList.remove('mpvDetached');
+    const routeReason = forceQt ? requestedReason : 'probe_failed';
+    const qtOpts = { ...openOpts, _routeReason: routeReason };
+    return openVideoQtFallback(v, qtOpts);
+  }
+
+  // If play is requested from outside Videos mode, switch first (best-effort).
+  try {
+    if (!IS_VIDEO_SHELL && state.mode !== 'videos') setMode('videos');
+  } catch {}
+
+  const player = ensurePlayer();
+  if (!player) {
+    const initReason = state._lastEnsurePlayerError ? `init_failed:${state._lastEnsurePlayerError}` : 'init_failed';
+    const qtOpts = { ...openOpts, _routeReason: initReason };
+    return openVideoQtFallback(v, qtOpts);
+  }
+
+  // Enter in-app player view.
+  try { closeAllToolPanels(); } catch {}
+  try { clearRetryToast(); } catch {}
+  closePlaylistPanel();
+  closeTracksPanel();
+  hideResumePrompt();
+  stopProgressPoll();
+
+  if (el.videoLibraryView) el.videoLibraryView.classList.add('hidden');
+  if (el.videoPlayerView) el.videoPlayerView.classList.remove('hidden');
+  document.body.classList.add('inVideoPlayer');
+  document.body.classList.remove('videoFullscreen');
+  document.body.classList.remove('videoUiHidden');
+
+  state._manualStop = false;
+  state.videoUiHidden = false;
+  try { state.settings.uiHidden = false; } catch {}
+  state._autoAdvanceTriggeredForKey = null;
+  state.now = v;
+  try {
+    const ui = ensureHgUiControllers();
+    if (ui && ui.playlist && typeof ui.playlist.notifyEpisodeOpened === 'function') ui.playlist.notifyEpisodeOpened(v);
+  } catch {}
+  if (el.videoNowTitle) {
+    el.videoNowTitle.textContent = String((v && (v.title || v.name)) || basename(v && v.path ? v.path : '') || 'Now Playing');
+  }
+  rebuildPlaylistForEpisode(v);
+  syncPlaylistNavButtons();
+
+  // Progress save guards during initial load/resume.
+  state._vpCanSave = false;
+  state._vpResumeInProgressForId = String((v && v.id) || '');
+  state._vpResumeCompletedForId = null;
+  state._vpResumeCompletedAt = 0;
+  state._vpFirstPollTickLoggedForId = null;
+  state._vpFirstNonForceCallLoggedForId = null;
+  state._vpFirstSavedLoggedForId = null;
+  state._vpEndedOnceForId = null;
+
+  const start = resolveStartSeconds(v, opts);
+  state.pendingResumePos = start > 2 ? start : null;
+  try {
+    const gp = getProgressForEpisode(v);
+    const p = (gp && gp.progress && typeof gp.progress === 'object') ? gp.progress : null;
+    state._vpLoadedProgressForId = String((v && v.id) || '');
+    state._vpLoadedProgress = p || null;
+  } catch {
+    state._vpLoadedProgressForId = null;
+    state._vpLoadedProgress = null;
+  }
+
+  // If a previous file is loaded in the same adapter instance, tear it down first.
+  try { await player.unload?.(); } catch {}
+
+  // Pass startSeconds to the adapter — it pauses mpv before loading, then
+  // retries seeking in its poll loop until the position lands.  Once within
+  // tolerance it unpauses automatically.  No visible jump from 0:00.
+  const loadRes = await player.load(String(v.path), { startSeconds: start });
+
+  if (!loadRes || loadRes.ok === false) {
+    const err = String((loadRes && loadRes.error) || 'unknown_error');
+    try { toast(`Holy Grail load failed: ${err}`, 3200); } catch {}
+    try { await player.destroy?.(); } catch {}
+    state.player = null;
+    state._playerEventsBoundFor = null;
+    if (el.videoPlayerView) el.videoPlayerView.classList.add('hidden');
+    if (el.videoLibraryView && state.mode === 'videos') el.videoLibraryView.classList.remove('hidden');
+    document.body.classList.remove('inVideoPlayer');
+    document.body.classList.remove('mpvEngine');
+    document.body.classList.remove('mpvDetached');
+    const qtOpts = { ...openOpts, _routeReason: `load_failed:${err}` };
+    return openVideoQtFallback(v, qtOpts);
+  }
+
+  // Autoplay for non-resume opens.
+  // (Resume seeks intentionally pause before load; the backend unpauses once the seek lands.)
+  try {
+    if (!(start > 2) && typeof player.play === 'function') {
+      const st = (typeof player.getState === 'function') ? player.getState() : null;
+      if (!st || st.paused !== false) await player.play();
+    }
+  } catch {}
+
+  setActivePlayerEngine('embedded', explicitEmbedded ? 'explicit_embedded' : 'default_embedded');
+  armEmbeddedFirstFrameWatch(v, openOpts, player);
+
+  applySettingsToPlayer();
+  // Don't flash the HUD with 0:00 / 0:00 while the resume seek is in flight.
+  // The backend shows a "Resuming…" overlay; HUD will appear on first mouse move.
+  if (!(start > 2)) {
+    updateHudFromPlayer();
+    showHud();
+    hideHudSoon();
+  }
+  startProgressPoll();
+
+  // Keep existing preference pipeline active with first-pass safe timing.
+  const episodeId = String((v && v.id) || '');
+  setTimeout(() => {
+    safe(async () => {
+      try {
+        const p = (episodeId && state.progress && state.progress[episodeId]) ? state.progress[episodeId] : state._vpLoadedProgress;
+        if (p && typeof p === 'object') {
+          if (p.selectedAudioTrackId != null && typeof state.player?.setAudioTrack === 'function') {
+            await state.player.setAudioTrack(p.selectedAudioTrackId);
+          }
+          if (typeof state.player?.setSubtitleTrack === 'function') {
+            if (p.selectedSubtitleTrackId === 'no' || p.selectedSubtitleTrackId == null) await state.player.setSubtitleTrack(null);
+            else await state.player.setSubtitleTrack(p.selectedSubtitleTrackId);
+          }
+          if (Number.isFinite(Number(p.audioDelaySec)) && typeof state.player?.setAudioDelay === 'function') {
+            await state.player.setAudioDelay(Number(p.audioDelaySec));
+          }
+          if (Number.isFinite(Number(p.subtitleDelaySec)) && typeof state.player?.setSubtitleDelay === 'function') {
+            await state.player.setSubtitleDelay(Number(p.subtitleDelaySec));
+          }
+        } else if (episodeId) {
+          scheduleApplyPreferredTracksForVideo(episodeId);
+        }
+      } catch {}
+      safe(() => autoEnableSubtitlesIfAvailable(v));
+      safe(() => refreshTracksFromPlayer());
+      safe(() => refreshDelaysFromPlayer());
+      safe(() => refreshTransformsFromPlayer());
+      safe(() => refreshChaptersFromPlayer());
+    });
+  }, 650);
+
+  setTimeout(() => {
+    state._vpCanSave = true;
+    state._vpResumeInProgressForId = null;
+    state._vpResumeCompletedForId = episodeId || null;
+    state._vpResumeCompletedAt = Date.now();
+    state._autoAdvanceBlockUntilMs = Math.max(Number(state._autoAdvanceBlockUntilMs || 0), Date.now() + 800);
+  }, 900);
+
+  state._suppressResumePromptOnce = false;
+  state._resumeOverridePosSec = null;
 }
 
 async function openVideoQtFallback(v, opts = {}) {
@@ -6919,7 +7368,9 @@ async function openVideoQtFallback(v, opts = {}) {
 
   const fallbackReason = (opts && typeof opts === 'object' && opts._routeReason)
     ? String(opts._routeReason)
-    : 'default_qt';
+    : ((opts && typeof opts === 'object' && opts.forceQt === true)
+      ? 'explicit_qt'
+      : (getQtPlayerPreference() ? 'user_pref_qt' : 'probe_failed'));
   setActivePlayerEngine('qt', fallbackReason);
 
   const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
@@ -7064,8 +7515,11 @@ async function openVideoQtFallback(v, opts = {}) {
 
     // Prevent orphan mpv surface windows when leaving the player view.
     if (state.player?.kind === 'mpv') {
+      try { if (state._playerHgInstance) state._playerHgInstance.destroy(); } catch {}
       safe(() => state.player?.destroy?.());
+      try { destroyPlayerHgEmbed(); } catch {}
       state.player = null;
+      state._playerHgInstance = null;
       state._playerEventsBoundFor = null;
       document.body.classList.remove('mpvEngine');
         document.body.classList.remove('mpvDetached');
@@ -8003,6 +8457,8 @@ function adjustVolume(delta){
       // to ensure mpv has fully parsed the file metadata
       state.player.on('file-loaded', (payload) => {
         console.log('[BUILD89 CHAPTERS] file-loaded event received');
+        logHgParity('file-loaded', { loadId: payload && payload.loadId != null ? payload.loadId : null });
+        snapshotHgParity('file-loaded');
         updateHudFromPlayer();
         state._autoAdvanceBlockUntilMs = Math.max(Number(state._autoAdvanceBlockUntilMs || 0), Date.now() + 1200);
         safe(() => {
@@ -8029,16 +8485,33 @@ function adjustVolume(delta){
       state.player.on('speed', (payload) => { applyImmediateHudPatchFromEvent('speed', payload); updateHudFromPlayer(); });
 
       state.player.on('tracks', (payload) => {
+        logHgParity('tracks', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          count: Array.isArray(payload && payload.tracks) ? payload.tracks.length : null,
+          audioTrackId: payload && Object.prototype.hasOwnProperty.call(payload, 'audioTrackId') ? payload.audioTrackId : null,
+          subtitleTrackId: payload && Object.prototype.hasOwnProperty.call(payload, 'subtitleTrackId') ? payload.subtitleTrackId : null,
+        });
         scheduleTracksRefreshBurst('tracks-event', payload);
         try { ensureHgUiControllers()?.tracksDrawer?.notifyTracksChanged?.(); } catch {}
       });
 
       state.player.on('chapters', (payload) => {
+        logHgParity('chapters', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          count: payload && payload.count != null ? payload.count : (Array.isArray(payload && payload.chapters) ? payload.chapters.length : null)
+        });
         scheduleChaptersRefreshBurst('chapters-event', payload);
       });
 
       state.player.on('first-frame', (payload) => {
         clearEmbeddedFirstFrameWatch();
+        logHgParity('first-frame', {
+          loadId: payload && payload.loadId != null ? payload.loadId : null,
+          sinceLoadMs: payload && payload.sinceLoadMs != null ? payload.sinceLoadMs : null,
+          sourceWidth: payload && payload.sourceWidth != null ? payload.sourceWidth : null,
+          sourceHeight: payload && payload.sourceHeight != null ? payload.sourceHeight : null,
+        });
+        snapshotHgParity('first-frame');
       });
 
       // Build 15: clean recovery for mpv failures (early exit / ipc timeout / not-ready).
@@ -8109,6 +8582,8 @@ function adjustVolume(delta){
 
     // BUILD 67: Enhanced diagnostics for right-click context menu debugging
     function handleCanvasContextMenu(e) {
+      // player_hg embed mode: let the Shadow DOM handle its own context menu
+      if (document.body.classList.contains('playerHgEmbed')) return;
       console.log('[BUILD69 CTX] handleCanvasContextMenu called');
       if (!e) {
         console.log('[BUILD69 CTX] No event object');
@@ -8245,6 +8720,9 @@ function adjustVolume(delta){
       // Non-canvas mpv can swallow bubbling events; keep a capture + document fallback there.
       const handleVideoContextMenu = (e) => {
         if (!e) return;
+        // player_hg embed mode: let the Shadow DOM handle its own context menu
+        if (document.body.classList.contains('playerHgEmbed')) return;
+
         // Cooldown guard
         const now = Date.now();
         if (now - lastContextMenuTime < CONTEXT_MENU_COOLDOWN_MS) return;
@@ -8803,6 +9281,7 @@ function adjustVolume(delta){
         el.videoStage?.addEventListener('click', (e) => {
           if (e.button !== 0) return;          // left click only
           if (!state.player) return;
+          if (document.body.classList.contains('playerHgEmbed')) return;
           if (state.seekDragging) return;      // don't interrupt scrub drag
           const t = e.target;
           if (isPlayerInteractiveTarget(t)) return;
@@ -8828,6 +9307,7 @@ function adjustVolume(delta){
       el.videoStage?.addEventListener('click', (e) => {
         if (e.button !== 0) return;
         if (!state.player) return;
+        if (document.body.classList.contains('playerHgEmbed')) return;
         if (state.seekDragging) return;
         const t = e.target;
         if (isPlayerInteractiveTarget(t)) return;
@@ -8846,7 +9326,7 @@ function adjustVolume(delta){
       if (_leftMenuTimer) { clearTimeout(_leftMenuTimer); _leftMenuTimer = null; }
       if (_clickHudToggleTimer) { clearTimeout(_clickHudToggleTimer); _clickHudToggleTimer = null; } // Build 60
       const t = e.target;
-      if (isPlayerInteractiveTarget(t)) return;
+      if (!document.body.classList.contains('playerHgEmbed') && isPlayerInteractiveTarget(t)) return;
       toggleFullscreen();
     });
 
@@ -9879,6 +10359,53 @@ function bindKeyboard(){
     }, { passive: true });
   }
 
+    function getQtPlayerPreference(){
+      return !!state.settings.forceQtPlayer;
+    }
+
+    function setQtPlayerPreference(useQt){
+      state.settings.forceQtPlayer = !!useQt;
+      persistVideoSettings({ forceQtPlayer: !!state.settings.forceQtPlayer });
+      try {
+        if (typeof localStorage !== 'undefined') localStorage.removeItem('tankobanUseQtPlayer');
+      } catch {}
+    }
+
+    function updateQtToggleUi() {
+      try {
+        var hgBtn = el.playerHgBtn;
+        var qtBtn = el.playerQtBtn;
+        if (!hgBtn || !qtBtn) return;
+
+        var hgReady = !!state.holyGrailAvailable;
+        var useQt = getQtPlayerPreference();
+
+        if (!hgReady) {
+          // HG unavailable — force Qt active, disable HG button
+          hgBtn.classList.remove('active');
+          qtBtn.classList.add('active');
+          try { hgBtn.setAttribute('disabled', 'disabled'); } catch {}
+          hgBtn.title = state.holyGrailAvailError
+            ? 'Unavailable: ' + state.holyGrailAvailError
+            : 'Unavailable';
+          qtBtn.title = 'Qt player (only option)';
+          return;
+        }
+
+        try { hgBtn.removeAttribute('disabled'); } catch {}
+        hgBtn.title = 'Holy Grail embedded player';
+        qtBtn.title = 'External Qt player';
+
+        if (useQt) {
+          hgBtn.classList.remove('active');
+          qtBtn.classList.add('active');
+        } else {
+          hgBtn.classList.add('active');
+          qtBtn.classList.remove('active');
+        }
+      } catch {}
+    }
+
     function bind() {
     bindModeButtons();
     ensureHgUiControllers();
@@ -9937,6 +10464,25 @@ function bindKeyboard(){
     el.modeComicsBtn?.addEventListener('click', () => setMode('comics'));
     el.modeBooksBtn?.addEventListener('click', () => setMode('books'));
     el.modeVideosBtn?.addEventListener('click', () => setMode('videos'));
+
+    updateQtToggleUi();
+    el.playerHgBtn?.addEventListener('click', function () {
+      if (!state.holyGrailAvailable) {
+        try { toast(state.holyGrailAvailError ? 'Embedded unavailable: ' + state.holyGrailAvailError : 'Embedded unavailable', 2600); } catch {}
+        updateQtToggleUi();
+        return;
+      }
+      if (!getQtPlayerPreference()) return; // already active
+      setQtPlayerPreference(false);
+      updateQtToggleUi();
+      try { toast('Player: Holy Grail', 1300); } catch {}
+    });
+    el.playerQtBtn?.addEventListener('click', function () {
+      if (getQtPlayerPreference()) return; // already active
+      setQtPlayerPreference(true);
+      updateQtToggleUi();
+      try { toast('Player: Qt', 1300); } catch {}
+    });
 
     // Video library UI bindings (BUILD 97)
     // BUILD 111 FIX: All add/restore handlers return { ok, state: snap }, not { idx }.
@@ -10124,6 +10670,19 @@ function bindKeyboard(){
           const v = (p.video && typeof p.video === 'object') ? p.video : null;
           if (!v || !v.path) return;
 
+          // Optional Qt override mode for diagnostics/fallback.
+          // NOTE: This handler is not async; do not use await here.
+          try {
+            const useQt = getQtPlayerPreference();
+            const api = (window && window.Tanko && window.Tanko.api) ? window.Tanko.api : null;
+            if (useQt && api && api.player && typeof api.player.launchQt === 'function') {
+              const sessionId = String(Date.now());
+              const start = (p && Number.isFinite(Number(p.resumeOverridePosSec))) ? Number(p.resumeOverridePosSec) : 0;
+              try { toast('Opening in Qt player…', 1200); } catch {}
+              try { api.player.launchQt({ filePath: String(v.path), startSeconds: start, sessionId }); } catch {}
+              return;
+            }
+          } catch {}
           safe(() => openVideo(v, p));
         });
       }

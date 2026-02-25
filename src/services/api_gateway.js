@@ -353,6 +353,35 @@
       launchQt: (...a) => ea.player?.launchQt ? ea.player.launchQt(...a) : (ea.playerLaunchQt ? ea.playerLaunchQt(...a) : undefined),
     },
 
+
+// ========================================
+// holyGrail.* (embedded player bridge)
+// ========================================
+holyGrail: {
+  probe: (...a) => ea.holyGrail?.probe ? ea.holyGrail.probe(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  initGpu: (...a) => ea.holyGrail?.initGpu ? ea.holyGrail.initGpu(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  resizeSurface: (...a) => ea.holyGrail?.resizeSurface ? ea.holyGrail.resizeSurface(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  loadFile: (...a) => ea.holyGrail?.loadFile ? ea.holyGrail.loadFile(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  startFrameLoop: (...a) => ea.holyGrail?.startFrameLoop ? ea.holyGrail.startFrameLoop(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  stopFrameLoop: (...a) => ea.holyGrail?.stopFrameLoop ? ea.holyGrail.stopFrameLoop(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  command: (...a) => ea.holyGrail?.command ? ea.holyGrail.command(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  getProperty: (...a) => ea.holyGrail?.getProperty ? ea.holyGrail.getProperty(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  setProperty: (...a) => ea.holyGrail?.setProperty ? ea.holyGrail.setProperty(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  getState: (...a) => ea.holyGrail?.getState ? ea.holyGrail.getState(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  getTrackList: (...a) => ea.holyGrail?.getTrackList ? ea.holyGrail.getTrackList(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  observeProperty: (...a) => ea.holyGrail?.observeProperty ? ea.holyGrail.observeProperty(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  destroy: (...a) => ea.holyGrail?.destroy ? ea.holyGrail.destroy(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  setPresentationActive: (...a) => ea.holyGrail?.setPresentationActive ? ea.holyGrail.setPresentationActive(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  getDiagnostics: (...a) => ea.holyGrail?.getDiagnostics ? ea.holyGrail.getDiagnostics(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  setDiagnosticsEnabled: (...a) => ea.holyGrail?.setDiagnosticsEnabled ? ea.holyGrail.setDiagnosticsEnabled(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  resetDiagnostics: (...a) => ea.holyGrail?.resetDiagnostics ? ea.holyGrail.resetDiagnostics(...a) : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
+  onPropertyChange: (...a) => ea.holyGrail?.onPropertyChange ? ea.holyGrail.onPropertyChange(...a) : (() => {}),
+  onEof: (...a) => ea.holyGrail?.onEof ? ea.holyGrail.onEof(...a) : (() => {}),
+  onFileLoaded: (...a) => ea.holyGrail?.onFileLoaded ? ea.holyGrail.onFileLoaded(...a) : (() => {}),
+  onDiagnostics: (...a) => ea.holyGrail?.onDiagnostics ? ea.holyGrail.onDiagnostics(...a) : (() => {}),
+  onVideoFrame: (...a) => ea.holyGrail?.onVideoFrame ? ea.holyGrail.onVideoFrame(...a) : (() => {}),
+},
+
     // ========================================
     // mpv.*
     // ========================================

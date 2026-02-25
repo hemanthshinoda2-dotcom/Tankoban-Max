@@ -81,10 +81,11 @@ __bLog('registerIpc: Phase 4C domains OK (thumbs, library, books, video)');
 
 // Phase 4D: MPV/libmpv extraction + thin registry sweep (Build 78D)
 const playerCoreDomain = require('../domains/player_core');
+const holyGrailDomain = require('../domains/holyGrail');
 const clipboardDomain = require('../domains/clipboard');
 const filesDomain = require('../domains/files');
 const comicDomain = require('../domains/comic');
-__bLog('registerIpc: Phase 4D domains OK (player_core, clipboard, files, comic)');
+__bLog('registerIpc: Phase 4D domains OK (player_core, holy_grail, clipboard, files, comic)');
 
 // BUILD_WEB: Web Sources domain
 const webSourcesDomain = require('../domains/webSources');
@@ -480,6 +481,7 @@ try {
     require('./register/video_settings'),
     require('./register/video_ui_state'),
     require('./register/player_core'),
+    require('./register/holy_grail'),
     require('./register/series_settings'),
     require('./register/books_bookmarks'),
     require('./register/books_annotations'), // BUILD_ANNOT
@@ -510,7 +512,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_userscripts','web_torrent','tor_proxy','web_search_history','web_browser_actions','audiobooks','audiobook_progress','audiobook_pairing'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_userscripts','web_torrent','tor_proxy','web_search_history','web_browser_actions','audiobooks','audiobook_progress','audiobook_pairing'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -525,6 +527,7 @@ for (let i = 0; i < registerModules.length; i++) {
     booksTtsEdgeDomain,
     booksOpdsDomain,
     playerCoreDomain,
+    holyGrailDomain,
     shellDomain,
     thumbsDomain,
     videoDomain,

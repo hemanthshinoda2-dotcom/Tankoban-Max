@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' file:; media-src 'self' file: blob:;">
+  <title>Tankoban Player</title>
+  <link rel="stylesheet" href="styles/player.css">
+</head>
+<body>
+  <!-- Stage: fills entire window, stable geometry -->
+  <div id="playerStage">
+    <!-- Video surface -->
+    <video id="videoSurface" playsinline></video>
+
+    <!-- Idle state: shown when no file is loaded -->
+    <div id="idleMessage">
+      <div class="idleTitle">Tankoban Player</div>
+      <button id="openFileBtn">Open Video File</button>
+      <div class="idleHint">or drag &amp; drop a video file</div>
+    </div>
+
+    <!-- Drop zone overlay (shown during drag) -->
+    <div id="dropZone">
+      <span class="dropLabel">Drop video file here</span>
+    </div>
+
+    <!-- Future overlays (hidden, added in later tiers) -->
+    <!-- <div id="topStrip" class="overlay hidden"></div> -->
+    <!-- <div id="bottomHud" class="overlay hidden"></div> -->
+    <!-- <div id="volumeHud" class="overlay hidden"></div> -->
+    <!-- <div id="centerFlash" class="overlay hidden"></div> -->
+    <!-- <div id="toastHud" class="overlay hidden"></div> -->
+    <!-- <div id="tracksDrawer" class="drawer hidden"></div> -->
+    <!-- <div id="playlistDrawer" class="drawer hidden"></div> -->
+  </div>
+
+  <!-- Scripts in dependency order -->
+  <script src="renderer/utils.js"></script>
+  <script src="renderer/player_state.js"></script>
+  <script src="renderer/adapter.js"></script>
+  <script src="renderer/html5_backend.js"></script>
+  <script src="renderer/holy_grail_backend.js"></script>
+  <script src="renderer/hud.js"></script>
+  <script src="renderer/top_strip.js"></script>
+  <script src="renderer/volume_hud.js"></script>
+  <script src="renderer/center_flash.js"></script>
+  <script src="renderer/toast.js"></script>
+  <script src="renderer/context_menu.js"></script>
+  <script src="renderer/drawer.js"></script>
+  <script src="renderer/playlist.js"></script>
+  <script src="renderer/tracks_drawer.js"></script>
+  <script src="renderer/diagnostics.js"></script>
+  <script src="renderer/boot.js"></script>
+
+  <!-- Boot: standalone mode -->
+  <script>window.TankoPlayer.boot({});</script>
+</body>
+</html>
