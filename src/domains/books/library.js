@@ -985,13 +985,9 @@ function getBookProgress(bookId) {
 
   // FEAT-AUDIOBOOK: play audiobook in overlay (optionally from a specific chapter)
   function playAudiobookFromChapter(ab, chapterIndex) {
+    void chapterIndex;
     if (!ab) return;
-    var overlay = window.booksAudiobookOverlay;
-    if (overlay && typeof overlay.open === 'function') {
-      overlay.open(ab, { chapterIndex: chapterIndex, position: 0 });
-    } else {
-      toast('Audiobook player not ready');
-    }
+    toast('Open the paired book to use the audiobook player while reading');
   }
 
   // FEAT-AUDIOBOOK: render audiobook detail view with chapters
@@ -1037,8 +1033,9 @@ function getBookProgress(bookId) {
 
     // Play/resume button text
     if (el.abDetailPlayBtn) {
-      var hasProgress = prog && prog.chapterIndex != null && !prog.finished;
-      el.abDetailPlayBtn.textContent = hasProgress ? '\u25B6 Resume' : '\u25B6 Play';
+      el.abDetailPlayBtn.textContent = '\u25B6 In-reader only';
+      el.abDetailPlayBtn.disabled = true;
+      el.abDetailPlayBtn.title = 'Audiobooks now play only inside the book reader';
     }
 
     // Chapters table
@@ -1109,7 +1106,7 @@ function getBookProgress(bookId) {
         }
         row.appendChild(progressCell);
 
-        // Double click plays from this chapter
+        // Double click (standalone audiobook player removed)
         row.ondblclick = function () {
           playAudiobookFromChapter(ab, idx);
         };
@@ -1120,8 +1117,8 @@ function getBookProgress(bookId) {
           showCtx({
             x: e.clientX, y: e.clientY,
             items: [
-              { label: 'Play from this chapter', onClick: function () { playAudiobookFromChapter(ab, idx); } },
-              { label: 'Play from beginning', onClick: function () { playAudiobookFromChapter(ab, 0); } },
+              { label: 'In-reader only', onClick: function () { playAudiobookFromChapter(ab, idx); } },
+              { label: 'Open paired book to listen', onClick: function () { playAudiobookFromChapter(ab, 0); } },
             ],
           });
         });
@@ -1191,6 +1188,11 @@ function getBookProgress(bookId) {
   // FEAT-AUDIOBOOK: Render "Continue Listening..." shelf from audiobook progress
   function renderAbContinue() {
     if (!el.abContinuePanel || !el.abContinueRow || !el.abContinueEmpty) return;
+    // Individual audiobook player removed: keep progress tracking, but hide the standalone Continue Listening shelf.
+    el.abContinuePanel.classList.add('hidden');
+    el.abContinueRow.innerHTML = '';
+    el.abContinueEmpty.classList.add('hidden');
+    return;
     el.abContinueRow.innerHTML = '';
     var progAll = state.audiobookProgressAll || {};
     var audiobooks = state.audiobookSnap.audiobooks || [];
@@ -1900,10 +1902,8 @@ function getBookProgress(bookId) {
       y: e.clientY,
       items: [
         { label: 'Open', onClick: function () { openAudiobook(ab); } },
-        { label: 'Play', onClick: function () {
-          var overlay = window.booksAudiobookOverlay;
-          if (overlay && typeof overlay.open === 'function') overlay.open(ab);
-          else toast('Audiobook player not ready');
+        { label: 'In-reader only', onClick: function () {
+          toast('Open the paired book to use the audiobook player while reading');
         }},
         { label: 'Play from beginning', disabled: !hasProgress, onClick: function () {
           playAudiobookFromChapter(ab, 0);
@@ -1953,10 +1953,8 @@ function getBookProgress(bookId) {
       x: e.clientX,
       y: e.clientY,
       items: [
-        { label: 'Continue listening', onClick: function () {
-          var overlay = window.booksAudiobookOverlay;
-          if (overlay && typeof overlay.open === 'function') overlay.open(ab);
-          else toast('Audiobook player not ready');
+        { label: 'In-reader only', onClick: function () {
+          toast('Open the paired book to use the audiobook player while reading');
         }},
         { label: 'Open audiobook', onClick: function () { openAudiobook(ab); } },
         { label: 'Play from beginning', onClick: function () {
@@ -3430,12 +3428,7 @@ function getBookProgress(bookId) {
     el.abDetailPlayBtn && el.abDetailPlayBtn.addEventListener('click', function () {
       var ab = findAudiobookById(state.ui.selectedAudiobookId);
       if (!ab) return;
-      var overlay = window.booksAudiobookOverlay;
-      if (overlay && typeof overlay.open === 'function') {
-        overlay.open(ab);
-      } else {
-        toast('Audiobook player not ready');
-      }
+      toast('Open the paired book to use the audiobook player while reading');
     });
 
     // R7: keyboard navigation (Backspace, K)

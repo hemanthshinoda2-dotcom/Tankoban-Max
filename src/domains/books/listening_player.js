@@ -305,7 +305,7 @@
   function _isTtsBarAutoHideAllowed() {
     if (!_open || !_ttsStarted) return false;
     if (_isTtsMegaOpen()) return false;
-    if (_ttsBarHoverBar || _ttsBarHoverBottomZone) return false;
+    // Movement-driven behavior: hide after inactivity even if cursor is resting over the bar/near bottom.
     if (_isPausedLikeStatus(_ttsBarLastStatus)) return false;
     return _isPlayingLikeStatus(_ttsBarLastStatus);
   }
@@ -339,7 +339,7 @@
       return;
     }
     if (forceShow) _setTtsBarVisible(true);
-    if (_isTtsMegaOpen() || _isPausedLikeStatus(_ttsBarLastStatus) || _ttsBarHoverBar || _ttsBarHoverBottomZone) {
+    if (_isTtsMegaOpen() || _isPausedLikeStatus(_ttsBarLastStatus)) {
       _clearTtsBarHideTimer();
       _setTtsBarVisible(true);
       return;
@@ -374,11 +374,10 @@
       _ttsBarHoverBar = false;
       _refreshTtsBarAutoHide(false);
     }
-    function setBottomZoneHover(next) {
-      next = !!next;
-      if (_ttsBarHoverBottomZone === next) return;
-      _ttsBarHoverBottomZone = next;
-      _refreshTtsBarAutoHide(next);
+    function onReadingAreaMove() {
+      if (!_open || !_ttsStarted) return;
+      // Movement-driven reveal: any mouse movement brings the HUD back, then it hides after inactivity.
+      _refreshTtsBarAutoHide(true);
     }
 
     bar.addEventListener('mousemove', onBarEnterOrMove);
@@ -391,16 +390,10 @@
       _refreshTtsBarAutoHide(true);
     }, true);
 
-    readingArea.addEventListener('mousemove', function (ev) {
-      if (!_open || !_ttsStarted) return;
-      var rect = readingArea.getBoundingClientRect();
-      if (!rect || rect.height <= 0) return;
-      var y = ev.clientY;
-      var within = (y >= rect.top && y <= rect.bottom);
-      var inBottom = within && ((rect.bottom - y) <= 80);
-      setBottomZoneHover(inBottom);
+    readingArea.addEventListener('mousemove', onReadingAreaMove);
+    readingArea.addEventListener('mouseleave', function () {
+      _ttsBarHoverBottomZone = false;
     });
-    readingArea.addEventListener('mouseleave', function () { setBottomZoneHover(false); });
   }
 
   // ── Sync play/pause icon ────────────────────────────────────────────────────

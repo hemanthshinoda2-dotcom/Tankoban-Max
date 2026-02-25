@@ -3067,6 +3067,26 @@ body.inBooksReader .br-reader {
   text-align: center;
   white-space: nowrap;
 }
+.ab-bar-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  width: min(220px, 22vw);
+  min-width: 120px;
+  height: 3px;
+  background: rgba(var(--chrome-rgb, 255,255,255), 0.18);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.ab-bar-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-primary, #eee);
+  border: none;
+  cursor: pointer;
+}
 .ab-bar-speed {
   min-width: 36px;
   text-align: center;
@@ -3131,6 +3151,22 @@ body.inBooksReader .br-reader {
 [data-reader-theme="gruvbox"] .ab-player-bar .ab-bar-vol-icon,
 [data-reader-theme="solarized"] .ab-player-bar .ab-bar-vol-icon {
   color: var(--br-reader-text);
+}
+[data-reader-theme="light"] .ab-bar-seek,
+[data-reader-theme="sepia"] .ab-bar-seek,
+[data-reader-theme="paper"] .ab-bar-seek,
+[data-reader-theme="contrast3"] .ab-bar-seek,
+[data-reader-theme="gruvbox"] .ab-bar-seek,
+[data-reader-theme="solarized"] .ab-bar-seek {
+  background: rgba(0,0,0,0.14);
+}
+[data-reader-theme="light"] .ab-bar-seek::-webkit-slider-thumb,
+[data-reader-theme="sepia"] .ab-bar-seek::-webkit-slider-thumb,
+[data-reader-theme="paper"] .ab-bar-seek::-webkit-slider-thumb,
+[data-reader-theme="contrast3"] .ab-bar-seek::-webkit-slider-thumb,
+[data-reader-theme="gruvbox"] .ab-bar-seek::-webkit-slider-thumb,
+[data-reader-theme="solarized"] .ab-bar-seek::-webkit-slider-thumb {
+  background: var(--br-reader-text);
 }
 [data-reader-theme="light"] .ab-player-bar .iconBtn:hover,
 [data-reader-theme="sepia"] .ab-player-bar .iconBtn:hover,

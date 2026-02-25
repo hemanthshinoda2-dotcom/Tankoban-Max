@@ -44,6 +44,7 @@
     el.fwd15       = qs('abFwd15');
     el.nextCh      = qs('abNextCh');
     el.time        = qs('abTime');
+    el.seek        = qs('abSeek');
     el.slower      = qs('abSlower');
     el.speed       = qs('abSpeed');
     el.faster      = qs('abFaster');
@@ -105,6 +106,7 @@
     _audio.volume = _volume;
     updateChapterLabel();
     updateTimeDisplay(0, 0);
+    if (el.seek) { el.seek.value = '0'; el.seek.max = '100'; el.seek.disabled = true; }
     bus.emit('audiobook:chapter-changed', { index: index, title: ch.title, total: _audiobook.chapters.length });
   }
 
@@ -316,6 +318,34 @@
 
   function updateTimeDisplay(cur, dur) {
     if (el.time) el.time.textContent = fmt(cur) + ' / ' + fmt(dur);
+    if (el.seek && !_seekDragging) {
+      var safeDur = (dur && isFinite(dur) && dur > 0) ? dur : 0;
+      el.seek.max = String(safeDur || 100);
+      el.seek.value = String(Math.max(0, Math.min(safeDur || 100, cur || 0)));
+      el.seek.disabled = !safeDur;
+    }
+  }
+
+  function onSeekInput() {
+    if (!el.seek) return;
+    _seekDragging = true;
+    clearAutoHide();
+    showBar();
+    var preview = parseFloat(el.seek.value || '0');
+    var dur = (_audio && isFinite(_audio.duration)) ? (_audio.duration || 0) : 0;
+    if (isFinite(preview)) updateTimeDisplay(preview, dur);
+  }
+
+  function commitSeekFromUi() {
+    if (!_audio || !el.seek) { _seekDragging = false; return; }
+    var next = parseFloat(el.seek.value || '0');
+    if (isFinite(next)) {
+      try { _audio.currentTime = Math.max(0, next); } catch (_) {}
+    }
+    _seekDragging = false;
+    updateTimeDisplay(_audio.currentTime || 0, _audio.duration || 0);
+    scheduleSave();
+    if (_playing) startAutoHide();
   }
 
   // ── Bar visibility / auto-hide ─────────────────────────────────────────────
@@ -336,7 +366,7 @@
     clearAutoHide();
     if (!_playing) return;
     _barHideTimer = setTimeout(function () {
-      if (_playing && !_barHoverBar && !_barHoverBottom) hideBar();
+      if (_playing && !_seekDragging) hideBar();
     }, BAR_AUTO_HIDE_MS);
   }
 
@@ -421,24 +451,30 @@
       el.volume.addEventListener('input', function () { setVolume(parseFloat(el.volume.value)); });
     }
 
+    // Scrub bar
+    if (el.seek) {
+      el.seek.addEventListener('input', onSeekInput);
+      el.seek.addEventListener('change', commitSeekFromUi);
+      el.seek.addEventListener('pointerdown', function () { _seekDragging = true; clearAutoHide(); showBar(); });
+      el.seek.addEventListener('pointerup', commitSeekFromUi);
+      el.seek.addEventListener('mousedown', function () { _seekDragging = true; clearAutoHide(); showBar(); });
+      el.seek.addEventListener('mouseup', commitSeekFromUi);
+      el.seek.addEventListener('touchstart', function () { _seekDragging = true; clearAutoHide(); showBar(); }, { passive: true });
+      el.seek.addEventListener('touchend', commitSeekFromUi, { passive: true });
+    }
+
     // Auto-hide: hover detection on bar
-    el.bar.addEventListener('mouseenter', function () { _barHoverBar = true; showBar(); clearAutoHide(); });
+    el.bar.addEventListener('mouseenter', function () { _barHoverBar = true; resetAutoHide(); });
+    el.bar.addEventListener('mousemove', function () { if (_loaded && _playing) resetAutoHide(); });
     el.bar.addEventListener('mouseleave', function () { _barHoverBar = false; startAutoHide(); });
 
-    // Auto-hide: bottom-zone hover detection on reading area
+    // Auto-hide: movement-driven reveal on the reading area
     var readingArea = el.bar.parentElement;
     if (readingArea) {
-      readingArea.addEventListener('mousemove', function (e) {
+      readingArea.addEventListener('mousemove', function () {
         if (!_loaded || !_playing) return;
-        var rect = readingArea.getBoundingClientRect();
-        var inBottomZone = (e.clientY > rect.bottom - 80);
-        if (inBottomZone && !_barVisible) {
-          _barHoverBottom = true;
-          showBar();
-        } else if (!inBottomZone && _barHoverBottom) {
-          _barHoverBottom = false;
-          startAutoHide();
-        }
+        _barHoverBottom = false;
+        resetAutoHide();
       }, { passive: true });
     }
 
