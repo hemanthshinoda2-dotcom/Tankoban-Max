@@ -603,7 +603,6 @@ COMMON ANCHORS
                       <button id="abFwd15" class="iconBtn ab-bar-btn" title="Forward 15s" aria-label="Forward 15 seconds"><svg viewBox="0 0 20 20" width="14" height="14"><path d="M10 2a8 8 0 110 16 8 8 0 010-16zm0 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13z" fill="currentColor"/><path d="M12.5 7L15 10l-2.5 3" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><text x="8" y="13" font-size="7" fill="currentColor" text-anchor="middle" font-weight="bold">15</text></svg></button>
                       <button id="abNextCh" class="iconBtn ab-bar-btn" title="Next chapter" aria-label="Next chapter"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M4 2v12l8-6z" fill="currentColor"/><rect x="12" y="2" width="2" height="12" rx="0.5" fill="currentColor"/></svg></button>
                       <span id="abTime" class="ab-bar-time">0:00 / 0:00</span>
-                      <input type="range" id="abSeek" class="ab-bar-seek" min="0" max="100" step="0.1" value="0" title="Seek" aria-label="Seek audiobook">
                       <button id="abSlower" class="iconBtn ab-bar-btn" title="Slower" aria-label="Slower">&#8722;</button>
                       <span id="abSpeed" class="ab-bar-speed">1.0&times;</span>
                       <button id="abFaster" class="iconBtn ab-bar-btn" title="Faster" aria-label="Faster">+</button>
@@ -1042,16 +1041,6 @@ COMMON ANCHORS
               <div class="navItems">
                 <sl-button id="videoAddShowFolderBtn" class="navBtn" title="Add show folder">Add show folder...</sl-button>
                 <div id="videoFoldersList" class="folderTree" role="tree" aria-label="Shows"></div>
-              </div>
-            </div>
-
-            <div class="navSep"></div>
-
-            <div class="navSection">
-              <div class="navHeader">Player</div>
-              <div class="playerSwitch modeSwitch">
-                <sl-button id="playerHgBtn" class="modeBtn active" size="small" title="Holy Grail embedded player">Holy Grail</sl-button>
-                <sl-button id="playerQtBtn" class="modeBtn" size="small" title="External Qt player">Qt</sl-button>
               </div>
             </div>
 
@@ -1511,35 +1500,19 @@ COMMON ANCHORS
             <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
               <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
             </button>
-            <div class="navSection" id="wb-sidebar-tabs-section">
-              <div class="navHeader">Tabs <span id="wb-tabs-count" class="wb-sidebar-count"></span></div>
-              <div id="wb-sidebar-tabs-list" class="navItems wb-sidebar-tabs" role="list" aria-label="Open tabs"></div>
-              <button id="wb-sidebar-new-tab" class="navBtn" title="New tab (Ctrl+T)">
-                <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                New tab
-              </button>
-            </div>
-
-            <div class="navSep"></div>
             <div class="navSection">
               <div class="navHeader">Sources</div>
               <div class="navItems">
                 <div id="webSourcesList" class="folderTree" role="list" aria-label="Bookmarked sources"></div>
                 <sl-button id="webAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+                <sl-button id="webTipsBtn" class="navBtn" title="Keyboard shortcuts (K)">Tips</sl-button>
               </div>
             </div>
 
             <div class="navSep"></div>
 
-            <div class="navSection" id="wb-sidebar-bookmarks-section">
-              <div class="navHeader">Bookmarks</div>
-              <div id="wb-sidebar-bookmarks-list" class="navItems folderTree" role="list" aria-label="Bookmarks"></div>
-            </div>
-
-            <div class="navSep"></div>
-
             <div class="navSection">
-              <div class="navHeader">Downloads <span id="wb-downloads-badge" class="wb-sidebar-badge hidden"></span></div>
+              <div class="navHeader">Downloads</div>
               <div class="navItems">
                 <div id="webDownloadStatus" class="muted tiny">No active downloads</div>
                 <div id="webDownloadProgressRow" class="webSidebarDlRow hidden" aria-hidden="true">
@@ -1551,22 +1524,9 @@ COMMON ANCHORS
 
             <div class="navSep"></div>
 
-            <div class="navSection" id="wb-sidebar-torrent-section">
-              <div class="navHeader">Torrents</div>
-              <div class="navItems">
-                <button id="wb-sidebar-torrent-btn" class="navBtn" title="Open torrent client">
-                  Torrent Client <span id="wb-torrent-badge" class="wb-sidebar-badge hidden"></span>
-                </button>
-              </div>
-            </div>
-
-            <div class="navSep"></div>
-
             <div class="navSection">
-              <div class="navHeader">App</div>
+              <div class="navHeader">Info</div>
               <div class="navItems">
-                <sl-button id="webTipsBtn" class="navBtn" title="Keyboard shortcuts (K)">Tips</sl-button>
-                <sl-button id="wb-settings-btn" class="navBtn" title="Browser settings">Settings</sl-button>
                 <div id="webDestInfo" class="muted tiny">
                   Books &rarr; <span id="webDestBooks" class="webDestPath">Not configured</span><br/>
                   Comics &rarr; <span id="webDestComics" class="webDestPath">Not configured</span>
@@ -1578,15 +1538,6 @@ COMMON ANCHORS
           <!-- BUILD_WEB_HOME: library home view (grid + continue row) -->
           <div class="libContent">
             <div id="webHomeView" class="homeView">
-              <div class="web-home-shell">
-                <div class="web-home-title">Search</div>
-                <form id="wb-home-search-form" class="web-home-search" autocomplete="off" onsubmit="return false;">
-                  <input id="wb-home-search-input" type="text" placeholder="Search with Yandex or type a URL" spellcheck="false" autocomplete="off" autocapitalize="off" />
-                  <button id="wb-home-search-submit" type="button" class="nav-btn web-home-search-btn" aria-label="Search">
-                    <svg viewBox="0 0 16 16" width="15" height="15"><path d="M6.9 1.8a5.1 5.1 0 1 0 3.1 9.2l2.8 2.8a.7.7 0 0 0 1-1l-2.8-2.8a5.1 5.1 0 0 0-4.1-8.2zm0 1.4a3.7 3.7 0 1 1 0 7.4 3.7 3.7 0 0 1 0-7.4z" fill="currentColor"/></svg>
-                  </button>
-                </form>
-              </div>
               <div class="panel continuePanel">
                 <div class="continueHead">
                   <div class="continueTitle">Continue Browsing...</div>
@@ -1614,27 +1565,65 @@ COMMON ANCHORS
                 <div id="webSourcesGrid" class="seriesGrid"></div>
                 <div id="webSourcesEmpty" class="muted tiny hidden">No sources yet. Add a source from the sidebar.</div>
               </div>
-
-              <div class="panel seriesPanel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">Bookmarks</div>
-                </div>
-                <div id="wb-home-bookmarks-grid" class="seriesGrid"></div>
-                <div id="wb-home-bookmarks-empty" class="muted tiny hidden">No bookmarks yet.</div>
-              </div>
-
-              <div id="wb-home-history-panel" class="panel webHomeDownloadsPanel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">History</div>
-                </div>
-                <div id="wb-home-history-list" class="webHomeDownloadsList"></div>
-                <div id="wb-home-history-empty" class="muted tiny hidden">No history yet.</div>
-              </div>
             </div>
           </div>
+        </div>
 
-      <!-- BUILD_WEB_REDESIGN: Browser webview view -->
-      <div id="wb-webview-view" class="webBrowserView wb-webview-surface hidden">
+      </section>
+
+      <!-- Add source dialog (shared by Comics/Books/Web sidebars) -->
+      <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
+        <div class="settingsCard">
+          <div class="settingsTop">
+            <div id="webAddTitle" class="settingsTitle">Add Download Source</div>
+            <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webSourceName">Site name</label>
+            <input id="webSourceName" type="text" class="search" placeholder="e.g. MyBookSite" autocomplete="off" />
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webSourceUrl">URL</label>
+            <input id="webSourceUrl" type="url" class="search" placeholder="https://example.com" autocomplete="off" />
+          </div>
+          <div class="settingsActions">
+            <button id="webSourceSaveBtn" class="btn">Add Source</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="downloadDestPickerOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Choose download destination">
+        <div class="settingsCard downloadDestPickerCard">
+          <div class="settingsTop">
+            <div id="downloadDestPickerTitle" class="settingsTitle">Choose Download Folder</div>
+            <button id="downloadDestPickerCancelBtn" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+          </div>
+          <div id="downloadDestPickerSubtext" class="downloadDestPickerSub">Pick a folder inside Books, Comics, or Videos.</div>
+
+          <div id="downloadDestPickerModes" class="downloadDestPickerModes" role="tablist" aria-label="Library mode">
+            <button class="downloadDestPickerMode active" type="button" data-mode="books">Books</button>
+            <button class="downloadDestPickerMode" type="button" data-mode="comics">Comics</button>
+            <button class="downloadDestPickerMode" type="button" data-mode="videos">Videos</button>
+          </div>
+
+          <div class="downloadDestPickerRootRow">
+            <label class="settingsLabel" for="downloadDestPickerRootSelect">Root Folder</label>
+            <select id="downloadDestPickerRootSelect" class="select"></select>
+          </div>
+
+          <div id="downloadDestPickerPath" class="downloadDestPickerPath"></div>
+          <div id="downloadDestPickerList" class="folderTree downloadDestPickerList" role="list"></div>
+          <div id="downloadDestPickerEmpty" class="folderTreeEmpty hidden">No folders available in this mode.</div>
+
+          <div class="settingsActions">
+            <button id="downloadDestPickerUpBtn" class="btn btn-ghost btn-sm" type="button">Up</button>
+            <button id="downloadDestPickerUseBtn" class="btn" type="button">Download Here</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FEAT-BROWSER: Aspect-based browser view (overlay, hidden by default) -->
+      <div id="webBrowserView" class="webBrowserView hidden">
 
         <!-- Row 1: Tab strip -->
         <div id="web-tab-bar">
@@ -1941,59 +1930,6 @@ COMMON ANCHORS
         <div id="web-menu-overlay" style="display:none"></div>
         <div id="web-context-menu" style="display:none"></div>
 
-      </div>
-
-      </section>
-
-      <!-- Add source dialog (shared by Comics/Books/Web sidebars) -->
-      <div id="webAddSourceOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Add download source">
-        <div class="settingsCard">
-          <div class="settingsTop">
-            <div id="webAddTitle" class="settingsTitle">Add Download Source</div>
-            <button id="webAddSourceClose" class="btn btn-ghost btn-sm">Close</button>
-          </div>
-          <div class="settingsGroup">
-            <label class="settingsLabel" for="webSourceName">Site name</label>
-            <input id="webSourceName" type="text" class="search" placeholder="e.g. MyBookSite" autocomplete="off" />
-          </div>
-          <div class="settingsGroup">
-            <label class="settingsLabel" for="webSourceUrl">URL</label>
-            <input id="webSourceUrl" type="url" class="search" placeholder="https://example.com" autocomplete="off" />
-          </div>
-          <div class="settingsActions">
-            <button id="webSourceSaveBtn" class="btn">Add Source</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="downloadDestPickerOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Choose download destination">
-        <div class="settingsCard downloadDestPickerCard">
-          <div class="settingsTop">
-            <div id="downloadDestPickerTitle" class="settingsTitle">Choose Download Folder</div>
-            <button id="downloadDestPickerCancelBtn" class="btn btn-ghost btn-sm" type="button">Cancel</button>
-          </div>
-          <div id="downloadDestPickerSubtext" class="downloadDestPickerSub">Pick a folder inside Books, Comics, or Videos.</div>
-
-          <div id="downloadDestPickerModes" class="downloadDestPickerModes" role="tablist" aria-label="Library mode">
-            <button class="downloadDestPickerMode active" type="button" data-mode="books">Books</button>
-            <button class="downloadDestPickerMode" type="button" data-mode="comics">Comics</button>
-            <button class="downloadDestPickerMode" type="button" data-mode="videos">Videos</button>
-          </div>
-
-          <div class="downloadDestPickerRootRow">
-            <label class="settingsLabel" for="downloadDestPickerRootSelect">Root Folder</label>
-            <select id="downloadDestPickerRootSelect" class="select"></select>
-          </div>
-
-          <div id="downloadDestPickerPath" class="downloadDestPickerPath"></div>
-          <div id="downloadDestPickerList" class="folderTree downloadDestPickerList" role="list"></div>
-          <div id="downloadDestPickerEmpty" class="folderTreeEmpty hidden">No folders available in this mode.</div>
-
-          <div class="settingsActions">
-            <button id="downloadDestPickerUpBtn" class="btn btn-ghost btn-sm" type="button">Up</button>
-            <button id="downloadDestPickerUseBtn" class="btn" type="button">Download Here</button>
-          </div>
-        </div>
       </div>
 
       <!-- BUILD_WEB_PARITY: Web toast -->
@@ -2377,3 +2313,4 @@ COMMON ANCHORS
   <script src="./state/app_section_boot.js"></script>
 </body>
 </html>
+

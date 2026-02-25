@@ -11,7 +11,6 @@
     var getActiveTab = function () { var fn = dep('getActiveTab'); return fn ? fn.apply(null, arguments) : null; };
     var getActiveWebview = function () { var fn = dep('getActiveWebview'); return fn ? fn.apply(null, arguments) : null; };
     var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
-    var openNewTab = function () { var fn = dep('openNewTab'); return fn && fn.apply(null, arguments); };
     var showToast = function () { var fn = dep('showToast'); return fn && fn.apply(null, arguments); };
     var showDownloadsPanel = function () { var fn = dep('showDownloadsPanel'); return fn && fn.apply(null, arguments); };
     var openTorrentTab = function () { var fn = dep('openTorrentTab'); return fn && fn.apply(null, arguments); };
@@ -47,6 +46,7 @@
       state.historyOpen = true;
       if (el.historyPanel) el.historyPanel.style.display = '';
       if (el.menuOverlay) el.menuOverlay.style.display = '';
+      if (el.historySearch) el.historySearch.value = '';
       loadHistoryPanel();
     }
 
@@ -55,6 +55,7 @@
       state.bookmarksOpen = true;
       if (el.bookmarksPanel) el.bookmarksPanel.style.display = '';
       if (el.menuOverlay) el.menuOverlay.style.display = '';
+      if (el.bookmarksSearch) el.bookmarksSearch.value = '';
       loadBookmarksPanel();
     }
 
@@ -466,10 +467,7 @@
           hideAllPanels();
 
           switch (action) {
-            case 'new-tab':
-              if (openNewTab) openNewTab();
-              else createTab(null, 'https://yandex.com/', { switchTo: true });
-              break;
+            case 'new-tab': createTab(null, '', { switchTo: true }); break;
             case 'downloads': showDownloadsPanel(); break;
             case 'history': showHistoryPanel(); break;
             case 'bookmarks': showBookmarksPanel(); break;

@@ -12,15 +12,11 @@
 
     try {
       if (typeof tanko.browserHost.setConfig === 'function') {
-        var existingCfg = (typeof tanko.browserHost.getConfig === 'function')
-          ? (tanko.browserHost.getConfig() || {})
-          : {};
         tanko.browserHost.setConfig({
-          enabled: existingCfg.enabled !== false,
-          adapter: existingCfg.adapter || 'aspect-embed',
-          browserUxV2: existingCfg.browserUxV2 === true,
-          hideLaunchButtons: existingCfg.hideLaunchButtons === true,
-          showDisabledToast: existingCfg.showDisabledToast === true
+          enabled: true,
+          adapter: 'aspect-embed',
+          hideLaunchButtons: false,
+          showDisabledToast: false
         });
       }
     } catch (_cfgErr) {}
@@ -33,35 +29,12 @@
       iframeLoaded: false,
       iframeLoadPromise: null,
       listenersBound: false,
-      btnUnsubs: [],
-      usingLegacyFallback: false,
-      lastError: null
+      btnUnsubs: []
     };
     var handledClickEvents = (typeof WeakSet === 'function') ? new WeakSet() : null;
-    var directCaptureHandler = null;
 
     function noop() {}
-    function getHostCfg() {
-      try {
-        if (tanko.browserHost && typeof tanko.browserHost.getConfig === 'function') {
-          return tanko.browserHost.getConfig() || {};
-        }
-      } catch (_e) {}
-      return {};
-    }
-    function isAspectLaneEnabled() {
-      var cfg = getHostCfg();
-      return !!(cfg && cfg.enabled !== false && cfg.browserUxV2 === true && cfg.adapter === 'aspect-embed');
-    }
-    function reportRuntime(patch) {
-      try {
-        if (tanko.browserHost && typeof tanko.browserHost.reportRuntimeState === 'function') {
-          tanko.browserHost.reportRuntimeState(patch || {});
-        }
-      } catch (_e) {}
-    }
     function qs(id) { return document.getElementById(id); }
-    function getBrowserRoot() { return qs('webLibraryView') || qs('wb-webview-view'); }
     function activateWebPage() {
       return new Promise(function(resolve) {
         var switched = false;
@@ -75,10 +48,10 @@
         // lives under comics mode, so explicitly switch modes before showing the browser pane.
         try {
           if (!switched && tanko.modeRouter && typeof tanko.modeRouter.setMode === 'function') {
-            Promise.resolve(tanko.modeRouter.setMode('browser')).then(function() {
+            Promise.resolve(tanko.modeRouter.setMode('comics')).then(function() {
               resolve(true);
             }).catch(function(err){
-              try { console.error('[browserHost][aspect-embed] modeRouter.setMode(browser) failed', err); } catch (_e2) {}
+              try { console.error('[browserHost][aspect-embed] modeRouter.setMode(comics) failed', err); } catch (_e2) {}
               resolve(false);
             });
             return;
@@ -86,7 +59,7 @@
         } catch (_e3) {}
         try {
           if (!switched && typeof window.setMode === 'function') {
-            window.setMode('browser');
+            window.setMode('comics');
             switched = true;
           }
         } catch (_e4) {}
@@ -98,7 +71,7 @@
     }
     function isBrowserPaneVisible() {
       try {
-        var node = getBrowserRoot();
+        var node = qs('webBrowserView');
         if (!node) return false;
         if (node.classList && node.classList.contains('hidden')) return false;
         if (node.style && node.style.display === 'none') return false;
@@ -107,7 +80,13 @@
     }
     function emergencyShowBrowserPane() {
       try {
-        var browserView = getBrowserRoot();
+        var browserView = qs('webBrowserView');
+        var libraryView = qs('webLibraryView');
+        if (libraryView) {
+          libraryView.classList.add('hidden');
+          libraryView.style.display = 'none';
+          libraryView.setAttribute('aria-hidden', 'true');
+        }
         if (browserView) {
           browserView.classList.remove('hidden');
           browserView.style.display = '';
@@ -151,10 +130,6 @@
     }
     function showBrowserPane() {
       try { if (tanko.browserHost && typeof tanko.browserHost.showBrowserPane === 'function') tanko.browserHost.showBrowserPane(); } catch (_e) {}
-      if (!isAspectLaneEnabled()) {
-        disableAspectForLegacyLane();
-        return;
-      }
       ensureMount();
     }
     function showLibraryPane() {
@@ -167,7 +142,7 @@
     }
 
     function hideLegacyBrowserMarkup() {
-      var root = qs('wb-webview-view');
+      var root = qs('webBrowserView');
       if (!root) return;
       if (!root.dataset.aspectEmbedPrepared) {
         root.dataset.aspectEmbedPrepared = '1';
@@ -181,7 +156,7 @@
     }
 
     function restoreLegacyBrowserMarkup() {
-      var root = qs('wb-webview-view');
+      var root = qs('webBrowserView');
       if (!root) return;
       try { delete root.dataset.aspectEmbedPrepared; } catch (_e) {}
       Array.prototype.forEach.call(root.children || [], function (child) {
@@ -193,48 +168,8 @@
       });
     }
 
-    function unbindDirectLaunchButtonCapture() {
-      var btn = qs('webHubToggleBtn');
-      if (!btn || !directCaptureHandler) return;
-      try { btn.removeEventListener('click', directCaptureHandler, true); } catch (_e) {}
-      directCaptureHandler = null;
-      try { delete btn.dataset.aspectEmbedCaptureBound; } catch (_e2) {}
-    }
-
-    function disableAspectForLegacyLane() {
-      restoreLegacyBrowserMarkup();
-      try {
-        while (state.btnUnsubs.length) {
-          var unsub = state.btnUnsubs.pop();
-          if (typeof unsub === 'function') unsub();
-        }
-      } catch (_e) {}
-      state.listenersBound = false;
-      unbindDirectLaunchButtonCapture();
-
-      try {
-        var wrapper = qs('aspectEmbedMountRoot');
-        if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
-      } catch (_e2) {}
-      state.wrapper = null;
-      state.iframe = null;
-      state.iframeLoaded = false;
-      state.iframeLoadPromise = null;
-      state.initialized = false;
-      state.usingLegacyFallback = false;
-      state.lastError = null;
-      reportRuntime({
-        ready: false,
-        mounted: false,
-        visible: false,
-        fallbackActive: false,
-        lastError: null
-      });
-    }
-
     function hideAspectEmbedOverlayForLegacy(reason) {
       state.usingLegacyFallback = true;
-      state.lastError = String(reason || 'legacy-fallback');
       try {
         if (state.wrapper) {
           state.wrapper.style.display = 'none';
@@ -248,19 +183,11 @@
           state.iframe.setAttribute('tabindex', '-1');
         }
       } catch (_e2) {}
-      reportRuntime({
-        ready: false,
-        mounted: !!state.wrapper,
-        visible: false,
-        fallbackActive: true,
-        lastError: state.lastError
-      });
       try { console.warn('[browserHost][aspect-embed] hiding aspect overlay and switching to legacy browser', { reason: reason || 'fallback' }); } catch (_e3) {}
     }
 
     function showAspectEmbedOverlay() {
       state.usingLegacyFallback = false;
-      state.lastError = null;
       try {
         if (state.wrapper) {
           state.wrapper.style.display = 'flex';
@@ -274,13 +201,6 @@
           state.iframe.removeAttribute('tabindex');
         }
       } catch (_e2) {}
-      reportRuntime({
-        ready: true,
-        mounted: !!state.wrapper,
-        visible: true,
-        fallbackActive: false,
-        lastError: null
-      });
     }
 
     function openLegacyWebDefaultFallback() {
@@ -297,11 +217,9 @@
         if (web && typeof web.openHome === 'function') return web.openHome();
         if (web && typeof web.openBrowser === 'function') return web.openBrowser(null);
         emergencyShowBrowserPane();
-        reportRuntime({ fallbackActive: true, visible: true, mounted: true });
         return { ok: false, adapter: 'aspect-embed', fallback: 'pane-only' };
       }).catch(function () {
         emergencyShowBrowserPane();
-        reportRuntime({ fallbackActive: true, visible: true, mounted: true });
         return { ok: false, adapter: 'aspect-embed', fallback: 'pane-only' };
       });
     }
@@ -329,11 +247,7 @@
       } catch (_e) { return fallback; }
     }
     function getApi(){ return (window.Tanko && window.Tanko.api) || null; }
-    function getElectronAPI(){
-      // Keep access routed indirectly so this file does not directly reference preload globals.
-      var key = 'electron' + 'API';
-      return window[key] || null;
-    }
+    function getElectronAPI(){ return window.electronAPI || null; }
 
     function createEventHub() {
       var buckets = Object.create(null);
@@ -547,15 +461,11 @@
     }
 
     function ensureMount() {
-      if (!isAspectLaneEnabled()) {
-        disableAspectForLegacyLane();
-        return;
-      }
       if (state.initialized && state.iframe && state.wrapper) {
         if (!state.usingLegacyFallback) showAspectEmbedOverlay();
         return;
       }
-      var view = qs('wb-webview-view');
+      var view = qs('webBrowserView');
       if (!view) return;
       hideLegacyBrowserMarkup();
 
@@ -566,7 +476,7 @@
         wrapper.setAttribute('data-role', 'aspect-embed-root');
         wrapper.style.position = 'absolute';
         wrapper.style.inset = '0';
-        wrapper.style.zIndex = '110';
+        wrapper.style.zIndex = '1';
         wrapper.style.display = 'flex';
         wrapper.style.minWidth = '0';
         wrapper.style.minHeight = '0';
@@ -575,10 +485,6 @@
       }
       state.wrapper = wrapper;
       if (!state.usingLegacyFallback) showAspectEmbedOverlay();
-      reportRuntime({
-        mounted: true,
-        visible: !state.usingLegacyFallback
-      });
 
       if (!state.bridge) {
         state.bridge = createParentBridge();
@@ -601,7 +507,6 @@
         state.iframeLoadPromise = new Promise(function(resolve){
           iframe.addEventListener('load', function(){
             state.iframeLoaded = true;
-            reportRuntime({ ready: true, mounted: true, visible: !state.usingLegacyFallback, fallbackActive: false, lastError: null });
             resolve(true);
           }, { once: true });
         });
@@ -624,19 +529,12 @@
       }
     }
     function afterIframeLoaded(fn) {
-      if (!isAspectLaneEnabled()) return Promise.resolve(fn(false));
       ensureMount();
       var p = state.iframeLoadPromise || Promise.resolve(true);
       // If iframe load hangs (bad path / blocked load), degrade to legacy web flow.
-      var hostCfg = (tanko.browserHost && typeof tanko.browserHost.getConfig === 'function')
-        ? (tanko.browserHost.getConfig() || {})
-        : {};
-      var timeoutMs = Number(hostCfg.readinessTimeoutMs || 4000);
-      if (!isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = 4000;
+      var timeoutMs = 4000;
       var timeout = new Promise(function(resolve){
         setTimeout(function(){
-          state.lastError = 'iframe-load-timeout';
-          reportRuntime({ ready: false, fallbackActive: true, lastError: state.lastError });
           resolve(false);
         }, timeoutMs);
       });
@@ -656,14 +554,10 @@
     }
 
     function bindDirectLaunchButtonCapture() {
-      if (!isAspectLaneEnabled()) {
-        unbindDirectLaunchButtonCapture();
-        return;
-      }
       var btn = qs('webHubToggleBtn');
       if (!btn || btn.dataset.aspectEmbedCaptureBound === '1') return;
       btn.dataset.aspectEmbedCaptureBound = '1';
-      directCaptureHandler = function(e){
+      btn.addEventListener('click', function(e){
         if (isHandledClick(e)) return;
         markHandledClick(e);
         try {
@@ -672,7 +566,7 @@
         try {
           console.info('[browserHost][aspect-embed] webHubToggleBtn click captured', {
             mode: (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.getMode === 'function') ? window.Tanko.modeRouter.getMode() : 'unknown',
-            hasWebviewView: !!qs('wb-webview-view'),
+            hasWebBrowserView: !!qs('webBrowserView'),
             hasWebLibraryView: !!qs('webLibraryView')
           });
         } catch (_e2) {}
@@ -694,15 +588,10 @@
         }).catch(function(err){
           try { console.error('[browserHost][aspect-embed] openDefault(capture) rejected', err); } catch (_e4) {}
         });
-      };
-      btn.addEventListener('click', directCaptureHandler, true);
+      }, true);
     }
 
     function bindTopLevelButtons() {
-      if (!isAspectLaneEnabled()) {
-        disableAspectForLegacyLane();
-        return;
-      }
       if (state.listenersBound) return;
       state.listenersBound = true;
       bindButton('webHubToggleBtn', function (e) {
@@ -830,19 +719,8 @@
       canOpenAddSource: function(){ return true; },
       isBrowserOpen: function () {
         try {
-          var root = getBrowserRoot();
-          return !!(state.iframe && state.iframe.isConnected && root && !(root.classList && root.classList.contains('hidden')));
+          return !!(state.iframe && state.iframe.isConnected && !qs('webBrowserView').classList.contains('hidden'));
         } catch (_e) { return false; }
-      },
-      getRuntimeState: function () {
-        return {
-          adapter: 'aspect-embed',
-          ready: !!state.iframeLoaded && !state.usingLegacyFallback,
-          mounted: !!(state.wrapper && state.wrapper.isConnected),
-          visible: !state.usingLegacyFallback && isBrowserPaneVisible(),
-          fallbackActive: !!state.usingLegacyFallback,
-          lastError: state.lastError || null
-        };
       }
     };
 
@@ -856,8 +734,7 @@
       tanko.aspectEmbed.ensureReady = function(){ return adapter.ensureReady(); };
       if (typeof tanko.browserHost.showLaunchButtons === 'function') tanko.browserHost.showLaunchButtons();
       if (typeof tanko.browserHost.showLaunchButtons === 'function') tanko.browserHost.showLaunchButtons();
-      if (isAspectLaneEnabled()) bindDirectLaunchButtonCapture();
-      else disableAspectForLegacyLane();
+      bindDirectLaunchButtonCapture();
       try {
         console.info('[browserHost] Aspect embed adapter registered');
       } catch (_e) {}

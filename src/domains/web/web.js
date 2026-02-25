@@ -20,8 +20,8 @@
   }
 
   var el = {
-    // Browser chrome (webview view mounted within webLibraryView)
-    browserView:       qs('wb-webview-view'),
+    // Browser chrome (webBrowserView)
+    browserView:       qs('webBrowserView'),
     tabBar:            qs('web-tab-bar'),
     tabsContainer:     qs('web-tabs-container'),
     btnNewTab:         qs('web-btn-new-tab'),
@@ -85,9 +85,8 @@
     homeGrid:       qs('web-home-grid'),
     homeEmpty:      qs('web-home-empty'),
     homeAddSource:  qs('web-home-add-source'),
-    homeSearchForm: qs('wb-home-search-form') || qs('web-home-search-form'),
-    homeSearchInput: qs('wb-home-search-input') || qs('web-home-search-input'),
-    homeSearchSubmit: qs('wb-home-search-submit'),
+    homeSearchForm: qs('web-home-search-form'),
+    homeSearchInput: qs('web-home-search-input'),
     homeSearchTitle: qs('web-home-search-title'),
     homeQuickTitle: qs('web-home-quick-title'),
 
@@ -116,19 +115,6 @@
     homeDlList:     qs('webHomeDownloadsList'),
     homeDlEmpty:    qs('webHomeDownloadsEmpty'),
     homeDlClearBtn: qs('webHomeDownloadsClear'),
-    homeBmGrid:     qs('wb-home-bookmarks-grid'),
-    homeBmEmpty:    qs('wb-home-bookmarks-empty'),
-    homeHistoryPanel: qs('wb-home-history-panel'),
-    homeHistoryList: qs('wb-home-history-list'),
-    homeHistoryEmpty: qs('wb-home-history-empty'),
-    sidebarTabsList: qs('wb-sidebar-tabs-list'),
-    sidebarTabsCount: qs('wb-tabs-count'),
-    sidebarNewTabBtn: qs('wb-sidebar-new-tab'),
-    sidebarBookmarksList: qs('wb-sidebar-bookmarks-list'),
-    sidebarTorrentBtn: qs('wb-sidebar-torrent-btn'),
-    sidebarTorrentBadge: qs('wb-torrent-badge'),
-    sidebarDownloadsBadge: qs('wb-downloads-badge'),
-    settingsBtn:    qs('wb-settings-btn'),
     addSourceBtn:   qs('webAddSourceBtn'),
     downloadStatus: qs('webDownloadStatus'),
     sidebarDlRow:   qs('webDownloadProgressRow'),
@@ -246,18 +232,13 @@
     dlBarDismissed: false,
     dlBarTimer: null,
     browserOpen: false,
-    viewMode: 'webview',
     editSourceId: null,
     toastTimer: null,
     ctxOpen: false,
     showBrowserHome: false,
-    downloadsById: {},
-    lastNonBrowserMode: 'comics',
-    _lastLegacySurfaceWarnTs: 0,
     browserSettings: {
       defaultSearchEngine: 'yandex',
       parityV1Enabled: true,
-      browserUxV2: false,
       adblockEnabled: true,
       restoreLastSession: true,
       startup: { mode: 'continue', customUrl: '' },
@@ -369,9 +350,7 @@
 
   function isWebModeActive() {
     var router = window.Tanko && window.Tanko.modeRouter;
-    if (!router || typeof router.getMode !== 'function') return false;
-    var mode = router.getMode();
-    return mode === 'browser' || mode === 'web';
+    return router ? router.getMode() === 'web' : false;
   }
 
   // ── webTabs shim (replaces old WCV IPC) ──
@@ -460,11 +439,11 @@
   bridge.deps.getActiveTab      = tabsState.getActiveTab;
   bridge.deps.getActiveWebview   = tabsState.getActiveWebview;
   bridge.deps.createTab         = tabsState.createTab;
-  bridge.deps.activateTab       = tabsState.activateTab || tabsState.switchTab;
+  bridge.deps.activateTab       = tabsState.activateTab;
   bridge.deps.ensureWebview     = tabsState.ensureWebview;
   bridge.deps.ensureTabRuntime  = tabsState.ensureWebview;
   bridge.deps.openTorrentTab    = tabsState.openTorrentTab;
-  bridge.deps.renderTabs        = tabsState.emitTabsChanged || function () {};
+  bridge.deps.renderTabs        = tabsState.renderTabs;
   bridge.deps.syncLoadBar       = tabsState.syncLoadingState;
   bridge.deps.syncReloadStopButton = tabsState.syncLoadingState;
   bridge.deps.updateNavButtons  = tabsState.updateNavButtons;
@@ -486,12 +465,6 @@
   bridge.deps.hideAllPanels      = panels.hideAllPanels;
   bridge.deps.showContextMenu    = contextMenu.showContextMenu;
   bridge.deps.hideContextMenu    = contextMenu.hideContextMenu;
-  bridge.deps.showHomeSection    = function (section) {
-    openHome(section ? { section: section } : null);
-  };
-  bridge.deps.showHome           = function () {
-    openHome();
-  };
 
   // From find
   bridge.deps.closeFind          = find.closeFind;
@@ -508,43 +481,7 @@
 
   // ── Mode switching ──
 
-  var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView', browser: 'webLibraryView' };
-
-  function ensureBrowserSurfaceMounted() {
-    if (!el.browserView || !el.webLibraryView) return;
-    try {
-      el.browserView.style.position = 'relative';
-      el.browserView.style.inset = 'auto';
-      el.browserView.style.zIndex = '1';
-      el.browserView.style.flex = '1';
-      el.browserView.style.minHeight = '0';
-      el.browserView.classList.add('wb-webview-surface');
-      if (el.tabBar) el.tabBar.style.display = '';
-      if (el.bookmarkBar) el.bookmarkBar.style.display = '';
-      if (el.homeView) {
-        el.homeView.classList.add('hidden');
-        el.homeView.style.display = 'none';
-      }
-      el.browserView.classList.remove('hidden');
-      el.browserView.style.display = 'flex';
-    } catch (e) {}
-  }
-
-  function showBrowserSectionSurface() {
-    if (!el.webLibraryView) return;
-    el.webLibraryView.classList.remove('hidden');
-    el.webLibraryView.style.display = '';
-    el.webLibraryView.removeAttribute('aria-hidden');
-    document.body.classList.add('inBrowserMode');
-  }
-
-  function hideBrowserSectionSurface() {
-    if (!el.webLibraryView) return;
-    el.webLibraryView.classList.add('hidden');
-    el.webLibraryView.style.display = 'none';
-    el.webLibraryView.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('inBrowserMode');
-  }
+  var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView' };
 
   function _hideCurrentLibraryView() {
     var router = window.Tanko && window.Tanko.modeRouter;
@@ -562,26 +499,13 @@
 
   function syncContentVisibility() {
     var activeTab = tabsState.getActiveTab ? tabsState.getActiveTab() : null;
-    var showTorrent = !!(activeTab && activeTab.type === 'torrent');
-    var showWebview = !showTorrent;
+    var showHome = !!state.showBrowserHome;
+    var showTorrent = !showHome && activeTab && activeTab.type === 'torrent';
+    var showWebview = !showHome && !showTorrent;
 
-    if (el.homeView) {
-      el.homeView.style.display = 'none';
-      el.homeView.classList.add('hidden');
-    }
-    if (el.browserView) {
-      el.browserView.classList.remove('hidden');
-      el.browserView.style.display = 'flex';
-    }
-    if (el.homePanel) el.homePanel.style.display = 'none';
+    if (el.homePanel) el.homePanel.style.display = showHome ? '' : 'none';
     if (el.torrentContainer) el.torrentContainer.style.display = showTorrent ? '' : 'none';
     if (el.webviewContainer) el.webviewContainer.style.display = showWebview ? '' : 'none';
-
-    state.showBrowserHome = false;
-    state.viewMode = showTorrent ? 'torrent' : 'webview';
-    if (state.viewMode === 'torrent') emit('view:torrent', {});
-    else emit('view:webview', {});
-    scheduleLegacySurfaceAssert('syncContentVisibility');
   }
 
   function updateUrlDisplay() {
@@ -603,136 +527,10 @@
   // Wire updateUrlDisplay as a dep
   bridge.deps.updateUrlDisplay = updateUrlDisplay;
 
-  function ensureBrowserModeVisible() {
-    var router = window.Tanko && window.Tanko.modeRouter;
-    if (router && typeof router.setMode === 'function') {
-      try { router.setMode('browser'); } catch (e) {}
-    } else if (typeof window.setMode === 'function') {
-      try { window.setMode('browser'); } catch (e2) {}
-    }
-    showBrowserSectionSurface();
-  }
-
-  function getBrowserHostBridge() {
-    try {
-      return window.Tanko && window.Tanko.browserHost ? window.Tanko.browserHost : null;
-    } catch (e) { return null; }
-  }
-
-  function getBrowserHostConfig() {
-    try {
-      var host = getBrowserHostBridge();
-      if (host && typeof host.getConfig === 'function') return host.getConfig() || null;
-    } catch (e) {}
-    return null;
-  }
-
-  function isBrowserUxV2Enabled() {
-    var cfg = getBrowserHostConfig();
-    return !!(cfg && cfg.enabled && cfg.browserUxV2 === true);
-  }
-
-  function shouldRouteThroughHost() {
-    var cfg = getBrowserHostConfig();
-    return !!(cfg && cfg.enabled && cfg.browserUxV2 === true && cfg.adapter === 'aspect-embed');
-  }
-
-  function assertLegacySurfaceVisible(reason) {
-    if (shouldRouteThroughHost()) return true;
-    if (!state.browserOpen || state.viewMode !== 'webview') return true;
-
-    var container = el.webviewContainer;
-    var active = null;
-    if (container && typeof container.querySelector === 'function') {
-      active = container.querySelector('webview.active, webview[data-active="true"], webview');
-    }
-
-    var now = Date.now();
-    var containerRect = container && container.getBoundingClientRect ? container.getBoundingClientRect() : null;
-    var activeRect = active && active.getBoundingClientRect ? active.getBoundingClientRect() : null;
-    var containerSized = !!(containerRect && containerRect.width > 16 && containerRect.height > 16);
-    var activeSized = !!(activeRect && activeRect.width > 16 && activeRect.height > 16);
-    var containerVisible = !!(
-      container &&
-      container.style.display !== 'none' &&
-      !container.classList.contains('hidden')
-    );
-
-    var aspectRoot = document.getElementById('aspectEmbedMountRoot');
-    var aspectVisible = false;
-    if (aspectRoot) {
-      var style = null;
-      try { style = window.getComputedStyle(aspectRoot); } catch (e) { style = null; }
-      aspectVisible = !!(style && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0.01);
-    }
-
-    var ok = !!(active && containerVisible && containerSized && activeSized && !aspectVisible);
-    if (!ok) {
-      if (now - Number(state._lastLegacySurfaceWarnTs || 0) > 1500) {
-        state._lastLegacySurfaceWarnTs = now;
-        console.warn('[web.js] legacy-surface-assertion-failed', {
-          reason: String(reason || ''),
-          hasActiveWebview: !!active,
-          containerVisible: containerVisible,
-          containerSized: containerSized,
-          activeSized: activeSized,
-          aspectRootVisible: aspectVisible
-        });
-      }
-    }
-    return ok;
-  }
-
-  function scheduleLegacySurfaceAssert(reason) {
-    if (shouldRouteThroughHost()) return;
-    setTimeout(function () { assertLegacySurfaceVisible(reason); }, 0);
-    setTimeout(function () { assertLegacySurfaceVisible(String(reason || '') + ':frame'); }, 120);
-  }
-
-  function isAspectSurfaceOwnerActive() {
-    var host = getBrowserHostBridge();
-    var cfg = getBrowserHostConfig();
-    if (!cfg || !cfg.enabled || cfg.browserUxV2 !== true || cfg.adapter !== 'aspect-embed') return false;
-    if (!host || typeof host.getRuntimeState !== 'function') return false;
-    try {
-      var rt = host.getRuntimeState();
-      return !!(rt && rt.visible && rt.mounted && !rt.fallbackActive);
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function syncBrowserHostUxConfig() {
-    var host = getBrowserHostBridge();
-    if (!host || typeof host.setConfig !== 'function') return;
-    try {
-      host.setConfig({
-        browserUxV2: state.browserSettings.browserUxV2 === true
-      });
-    } catch (e) {}
-  }
-
   function openBrowser(source) {
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (!source) {
-      if (state.activeTabId != null) openBrowserForTab(state.activeTabId);
-      else openNewTab();
-      return;
-    }
-
-    if (typeof source === 'string') {
-      if (shouldRouteThroughHost()) {
-        var host = getBrowserHostBridge();
-        if (host && typeof host.openUrl === 'function') {
-          host.openUrl(source).catch(function () {});
-          return;
-        }
-      }
-      if (tabsState.createTab) tabsState.createTab(null, source, { switchTo: true });
-      state.browserOpen = true;
-      ensureBrowserModeVisible();
-      renderSidebarTabs();
-      syncContentVisibility();
+      openHome();
       return;
     }
 
@@ -747,53 +545,34 @@
       if (tabsState.createTab) tabsState.createTab(source, source.url);
     }
 
+    state.showBrowserHome = false;
     state.browserOpen = true;
-    ensureBrowserModeVisible();
+    _hideCurrentLibraryView();
+    if (el.browserView) el.browserView.classList.remove('hidden');
     renderSources();
-    renderSidebarTabs();
     renderBrowserHome();
     syncContentVisibility();
     if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   }
 
-  function openBrowserPanel(section) {
-    var key = String(section || '').trim().toLowerCase();
-    if (!key) return false;
-    if (key === 'downloads') {
-      if (downloads.showDownloadsPanel) downloads.showDownloadsPanel();
-      return true;
-    }
-    if (key === 'history') {
-      if (panels.showHistoryPanel) panels.showHistoryPanel();
-      return true;
-    }
-    if (key === 'bookmarks') {
-      if (panels.showBookmarksPanel) panels.showBookmarksPanel();
-      return true;
-    }
-    return false;
-  }
-
-  function openHome(opts) {
-    var section = opts && opts.section ? String(opts.section).toLowerCase() : '';
-    state.browserOpen = true;
-    ensureBrowserModeVisible();
+  function openHome() {
     if (panels.hideAllPanels) panels.hideAllPanels();
+    state.showBrowserHome = true;
+    state.browserOpen = true;
+    _hideCurrentLibraryView();
+    if (el.browserView) el.browserView.classList.remove('hidden');
     syncContentVisibility();
     updateUrlDisplay();
     if (tabsState.updateNavButtons) tabsState.updateNavButtons();
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
-    if (section) {
-      openBrowserPanel(section);
-      return;
-    }
+    renderBrowserHome();
     if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    if (state.activeTabId != null) {
-      openBrowserForTab(state.activeTabId);
-      return;
+    if (el.homeSearchInput) {
+      setTimeout(function () {
+        if (state.showBrowserHome && el.homeSearchInput) el.homeSearchInput.focus();
+      }, 0);
     }
-    openNewTab();
   }
 
   function openBrowserForTab(tabId) {
@@ -804,36 +583,38 @@
     if (!tab) return;
 
     if (panels.hideAllPanels) panels.hideAllPanels();
-    if (tabsState.activateTab) tabsState.activateTab(tabId);
-    else if (tabsState.switchTab) tabsState.switchTab(tabId);
+    if (tabsState.switchTab) tabsState.switchTab(tabId);
+    state.showBrowserHome = false;
     state.browserOpen = true;
-    ensureBrowserModeVisible();
+    _hideCurrentLibraryView();
+    if (el.browserView) el.browserView.classList.remove('hidden');
     renderSources();
-    renderSidebarTabs();
     syncContentVisibility();
     if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    scheduleLegacySurfaceAssert('openBrowserForTab');
     if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   }
 
   function openNewTab() {
     var behavior = state.browserSettings.home.newTabBehavior || 'tankoban_home';
-    var targetUrl = 'https://yandex.com/';
-    if (behavior === 'custom' && state.browserSettings.home.homeUrl) {
-      targetUrl = state.browserSettings.home.homeUrl;
+    if (behavior === 'tankoban_home' || behavior === 'home') {
+      openHome();
+    } else if (behavior === 'custom' && state.browserSettings.home.homeUrl) {
+      if (tabsState.createTab) tabsState.createTab(null, state.browserSettings.home.homeUrl);
+      state.showBrowserHome = false;
+      state.browserOpen = true;
+      _hideCurrentLibraryView();
+      if (el.browserView) el.browserView.classList.remove('hidden');
+      syncContentVisibility();
+    } else {
+      openHome();
     }
-    if (tabsState.createTab) tabsState.createTab(null, targetUrl, { switchTo: true });
-    state.showBrowserHome = false;
-    state.browserOpen = true;
-    ensureBrowserModeVisible();
-    syncContentVisibility();
-    scheduleLegacySurfaceAssert('openNewTab');
   }
 
   function closeBrowser() {
     state.browserOpen = false;
     state.showBrowserHome = false;
     if (el.browserView) el.browserView.classList.add('hidden');
+    _showCurrentLibraryView();
     updateUrlDisplay();
     renderSources();
     renderSourcesGrid();
@@ -845,25 +626,6 @@
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
     if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
     syncContentVisibility();
-
-    var targetMode = String(state.lastNonBrowserMode || 'comics');
-    if (targetMode !== 'comics' && targetMode !== 'videos' && targetMode !== 'books') {
-      targetMode = 'comics';
-    }
-    try {
-      var router = window.Tanko && window.Tanko.modeRouter;
-      if (router && typeof router.setMode === 'function') {
-        Promise.resolve(router.setMode(targetMode)).catch(function () {
-          try { window.setMode('comics'); } catch (e) {}
-        });
-      } else if (typeof window.setMode === 'function') {
-        window.setMode(targetMode);
-      } else {
-        _showCurrentLibraryView();
-      }
-    } catch (e) {
-      try { window.setMode('comics'); } catch (e2) {}
-    }
   }
 
   // Wire orchestrator functions as deps
@@ -961,10 +723,35 @@
   }
 
   function renderBrowserHome() {
+    if (!el.homeGrid || !el.homePanel) return;
     syncHomeSearchUi();
-    renderSourcesGrid();
-    renderHomeBookmarks();
-    renderHomeHistory();
+    el.homeGrid.innerHTML = '';
+    if (el.homeEmpty) el.homeEmpty.style.display = state.sources.length ? 'none' : '';
+
+    for (var i = 0; i < state.sources.length; i++) {
+      var s = state.sources[i];
+      var card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'web-home-card';
+      card.setAttribute('data-source-id', s.id);
+
+      var iconWrap = document.createElement('div');
+      iconWrap.className = 'web-home-card-icon';
+      var img = document.createElement('img');
+      img.alt = '';
+      img.src = getFaviconUrl(s.url);
+      img.onerror = function () { this.style.display = 'none'; };
+      iconWrap.appendChild(img);
+
+      var name = document.createElement('div');
+      name.className = 'web-home-card-title';
+      name.textContent = s.name || 'Source';
+
+      card.appendChild(iconWrap);
+      card.appendChild(name);
+      el.homeGrid.appendChild(card);
+    }
+
     syncContentVisibility();
   }
 
@@ -989,118 +776,6 @@
       })(tab.id));
       el.continuePanel.appendChild(tile);
     }
-  }
-
-  function renderSidebarTabs() {
-    if (!el.sidebarTabsList) return;
-    var html = '';
-    for (var i = 0; i < state.tabs.length; i++) {
-      var tab = state.tabs[i];
-      if (!tab) continue;
-      var active = tab.id === state.activeTabId;
-      var title = tab.title || tab.url || (tab.type === 'torrent' ? 'Tankoban Torrent' : 'New Tab');
-      var favicon = tab.favicon || (tab.url ? getFaviconUrl(tab.url) : '');
-      if (tab.type === 'torrent') favicon = '';
-      html += '<div class=\"wb-tab-item' + (active ? ' active' : '') + '\" data-tab-id=\"' + escapeHtml(String(tab.id)) + '\">'
-        + (favicon
-          ? ('<img class=\"wb-tab-favicon\" src=\"' + escapeHtml(favicon) + '\" alt=\"\">')
-          : '<span class=\"wb-tab-favicon\">●</span>')
-        + '<span class=\"wb-tab-title\">' + escapeHtml(title) + '</span>'
-        + '<button class=\"wb-tab-close\" type=\"button\" title=\"Close tab\" data-tab-close-id=\"' + escapeHtml(String(tab.id)) + '\">x</button>'
-        + '</div>';
-    }
-    el.sidebarTabsList.innerHTML = html;
-    if (el.sidebarTabsCount) el.sidebarTabsCount.textContent = state.tabs.length ? ('(' + state.tabs.length + ')') : '';
-  }
-
-  function renderTopTabs() {
-    if (!el.tabsContainer) return;
-    var addBtn = el.btnNewTab;
-    if (addBtn && addBtn.parentNode !== el.tabsContainer) {
-      el.tabsContainer.appendChild(addBtn);
-    }
-
-    var old = el.tabsContainer.querySelectorAll('.tab[data-tab-id]');
-    for (var k = 0; k < old.length; k++) {
-      var n = old[k];
-      if (n && n.parentNode) n.parentNode.removeChild(n);
-    }
-
-    for (var i = 0; i < state.tabs.length; i++) {
-      var tab = state.tabs[i];
-      if (!tab) continue;
-      var row = document.createElement('div');
-      row.className = 'tab' + (tab.id === state.activeTabId ? ' active' : '');
-      row.setAttribute('data-tab-id', String(tab.id));
-      var title = tab.title || tab.url || (tab.type === 'torrent' ? 'Tankoban Torrent' : 'New Tab');
-      row.title = title + (tab.url ? '\n' + tab.url : '');
-
-      var favicon = tab.favicon || (tab.url ? getFaviconUrl(tab.url) : '');
-      if (tab.type === 'torrent') favicon = '';
-      var faviconHtml = tab.loading
-        ? '<span class="tab-spinner"></span>'
-        : (favicon
-          ? '<img class="tab-favicon" src="' + escapeHtml(favicon) + '" alt="">'
-          : '<span class="tab-favicon">●</span>');
-      row.innerHTML = faviconHtml
-        + '<span class="tab-title">' + escapeHtml(title) + '</span>'
-        + '<button class="tab-close" type="button" data-tab-close-id="' + escapeHtml(String(tab.id)) + '" title="Close tab">x</button>';
-
-      el.tabsContainer.insertBefore(row, addBtn || null);
-    }
-  }
-
-  function renderHomeBookmarks() {
-    if (!api.webBookmarks || typeof api.webBookmarks.list !== 'function') return;
-    api.webBookmarks.list().then(function (res) {
-      var rows = (res && res.ok && Array.isArray(res.bookmarks)) ? res.bookmarks : [];
-      if (el.sidebarBookmarksList) {
-        var sidebarHtml = '';
-        for (var i = 0; i < rows.length; i++) {
-          var b = rows[i];
-          sidebarHtml += '<div class=\"wb-bm-item\" data-bookmark-url=\"' + escapeHtml(String(b.url || '')) + '\">'
-            + '<img class=\"wb-bm-favicon\" src=\"' + escapeHtml(b.favicon || getFaviconUrl(b.url || '')) + '\" alt=\"\">'
-            + '<span class=\"wb-bm-title\">' + escapeHtml(b.title || b.url || 'Bookmark') + '</span>'
-            + '</div>';
-        }
-        el.sidebarBookmarksList.innerHTML = sidebarHtml;
-      }
-      if (el.homeBmGrid && el.homeBmEmpty) {
-        el.homeBmGrid.innerHTML = '';
-        el.homeBmEmpty.classList.toggle('hidden', rows.length > 0);
-        for (var j = 0; j < rows.length; j++) {
-          var row = rows[j];
-          var card = document.createElement('button');
-          card.type = 'button';
-          card.className = 'seriesCard';
-          card.setAttribute('data-bookmark-url', row.url || '');
-          card.innerHTML = '<div class=\"seriesThumb webSourceThumb\">'
-            + '<img class=\"webSourceFavicon\" src=\"' + escapeHtml(row.favicon || getFaviconUrl(row.url || '')) + '\" alt=\"\" onerror=\"this.style.display=\'none\'\">'
-            + '</div>'
-            + '<div class=\"seriesTitle\">' + escapeHtml(row.title || row.url || 'Bookmark') + '</div>';
-          el.homeBmGrid.appendChild(card);
-        }
-      }
-    }).catch(function () {});
-  }
-
-  function renderHomeHistory() {
-    if (!api.webHistory || typeof api.webHistory.list !== 'function') return;
-    if (!el.homeHistoryList || !el.homeHistoryEmpty) return;
-    api.webHistory.list({ limit: 24 }).then(function (res) {
-      var rows = (res && res.ok && Array.isArray(res.entries)) ? res.entries : [];
-      state.browsingHistory = rows;
-      el.homeHistoryList.innerHTML = '';
-      el.homeHistoryEmpty.classList.toggle('hidden', rows.length > 0);
-      for (var i = 0; i < rows.length; i++) {
-        var h = rows[i];
-        var row = document.createElement('div');
-        row.className = 'web-home-history-item';
-        row.innerHTML = '<img class=\"wb-bm-favicon\" src=\"' + escapeHtml(h.favicon || getFaviconUrl(h.url || '')) + '\" alt=\"\">'
-          + '<a href=\"#\" class=\"web-home-history-link\" data-history-url=\"' + escapeHtml(h.url || '') + '\">' + escapeHtml(h.title || h.url || 'History') + '</a>';
-        el.homeHistoryList.appendChild(row);
-      }
-    }).catch(function () {});
   }
 
   function loadSources() {
@@ -1180,7 +855,6 @@
     return {
       defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
       parityV1Enabled: src.parityV1Enabled !== false,
-      browserUxV2: src.browserUxV2 === true,
       adblockEnabled: src.adblockEnabled !== false,
       restoreLastSession: src.restoreLastSession !== false,
       startup: { mode: String(startup.mode || 'continue').trim().toLowerCase() || 'continue', customUrl: String(startup.customUrl || '').trim() },
@@ -1217,7 +891,6 @@
       if (navOmnibox.syncSearchEngineSelect) navOmnibox.syncSearchEngineSelect();
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       syncBrowserSettingsControls();
-      syncBrowserHostUxConfig();
       if (api.webAdblock && typeof api.webAdblock.setEnabled === 'function') {
         api.webAdblock.setEnabled({ enabled: state.browserSettings.adblockEnabled !== false }).catch(function () {});
       }
@@ -1225,7 +898,6 @@
       if (navOmnibox.syncSearchEngineSelect) navOmnibox.syncSearchEngineSelect();
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       syncBrowserSettingsControls();
-      syncBrowserHostUxConfig();
     });
   }
 
@@ -1240,7 +912,6 @@
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       syncBrowserSettingsControls();
       if (tabsState.scheduleSessionSave) tabsState.scheduleSessionSave();
-      syncBrowserHostUxConfig();
     }).catch(function () {});
   }
 
@@ -1291,7 +962,22 @@
   // ── Keyboard shortcuts ──
 
   function handleKeyDown(e) {
-    if (isAspectSurfaceOwnerActive()) return;
+    try {
+      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
+        ? window.Tanko.browserHost.getConfig() : null;
+      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
+        var hostPane = document.getElementById('aspectEmbedMountRoot');
+        if (hostPane && hostPane.isConnected && !document.getElementById('webBrowserView')?.classList?.contains('hidden')) return;
+      }
+    } catch (_embedKeyErr) {}
+    try {
+      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
+        ? window.Tanko.browserHost.getConfig() : null;
+      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
+        var hostPane = document.getElementById('aspectEmbedMountRoot');
+        if (hostPane && !hostPane.classList.contains('hidden')) return;
+      }
+    } catch (_embedKeyErr) {}
     // Only handle when browser view is visible or web mode is active
     if (!state.browserOpen && !isWebModeActive()) return;
 
@@ -1352,21 +1038,21 @@
     // Ctrl+H — history
     if (ctrl && !shift && key === 'h') {
       e.preventDefault();
-      if (state.browserOpen) openBrowserPanel('history');
+      if (state.browserOpen && panels.showHistoryPanel) panels.showHistoryPanel();
       return;
     }
 
     // Ctrl+J — downloads
     if (ctrl && !shift && key === 'j') {
       e.preventDefault();
-      if (state.browserOpen) openBrowserPanel('downloads');
+      if (state.browserOpen && downloads.showDownloadsPanel) downloads.showDownloadsPanel();
       return;
     }
 
     // Ctrl+B — bookmarks
     if (ctrl && !shift && key === 'b') {
       e.preventDefault();
-      if (state.browserOpen) openBrowserPanel('bookmarks');
+      if (state.browserOpen && panels.showBookmarksPanel) panels.showBookmarksPanel();
       return;
     }
 
@@ -1503,22 +1189,9 @@
     if (el.winMax) el.winMax.addEventListener('click', function () { if (api.window && api.window.toggleMaximize) api.window.toggleMaximize(); });
     if (el.winClose) el.winClose.addEventListener('click', function () { closeBrowser(); });
 
-    if (el.tabsContainer) {
-      el.tabsContainer.addEventListener('click', function (e) {
-        var closeBtn = e.target.closest('[data-tab-close-id]');
-        if (closeBtn) {
-          e.preventDefault();
-          e.stopPropagation();
-          var closeId = Number(closeBtn.getAttribute('data-tab-close-id'));
-          if (tabsState.closeTab) tabsState.closeTab(closeId);
-          if (!state.tabs.length) closeBrowser();
-          return;
-        }
-        var tabNode = e.target.closest('[data-tab-id]');
-        if (!tabNode) return;
-        var tabId = Number(tabNode.getAttribute('data-tab-id'));
-        if (tabId || tabId === 0) openBrowserForTab(tabId);
-      });
+    // New tab button
+    if (el.btnNewTab) {
+      el.btnNewTab.addEventListener('click', function () { openNewTab(); });
     }
 
     // Home panel source click delegation
@@ -1544,34 +1217,10 @@
         submitHomeSearch(el.homeSearchInput.value);
       });
     }
-    if (el.homeSearchSubmit) {
-      el.homeSearchSubmit.addEventListener('click', function () {
-        submitHomeSearch(el.homeSearchInput ? el.homeSearchInput.value : '');
-      });
-    }
 
     // Home panel add source
     if (el.homeAddSource) {
       el.homeAddSource.addEventListener('click', function () { openAddSourceDialog(null); });
-    }
-
-    if (el.homeBmGrid) {
-      el.homeBmGrid.addEventListener('click', function (e) {
-        var card = e.target.closest('[data-bookmark-url]');
-        if (!card) return;
-        var url = String(card.getAttribute('data-bookmark-url') || '').trim();
-        if (url) openBrowser(url);
-      });
-    }
-
-    if (el.homeHistoryList) {
-      el.homeHistoryList.addEventListener('click', function (e) {
-        var link = e.target.closest('[data-history-url]');
-        if (!link) return;
-        e.preventDefault();
-        var url = String(link.getAttribute('data-history-url') || '').trim();
-        if (url) openBrowser(url);
-      });
     }
 
     // Sidebar source click delegation
@@ -1581,57 +1230,6 @@
         if (!row) return;
         var source = getSourceById(row.getAttribute('data-source-id'));
         if (source) openBrowser(source);
-      });
-    }
-
-    if (el.sidebarTabsList) {
-      el.sidebarTabsList.addEventListener('click', function (e) {
-        var closeBtn = e.target.closest('[data-tab-close-id]');
-        if (closeBtn) {
-          var closeId = Number(closeBtn.getAttribute('data-tab-close-id'));
-          if (tabsState.closeTab) tabsState.closeTab(closeId);
-          renderSidebarTabs();
-          renderContinue();
-          if (!state.tabs.length) openNewTab();
-          return;
-        }
-        var tabRow = e.target.closest('[data-tab-id]');
-        if (!tabRow) return;
-        var tabId = Number(tabRow.getAttribute('data-tab-id'));
-        if (tabId || tabId === 0) openBrowserForTab(tabId);
-      });
-    }
-
-    if (el.sidebarNewTabBtn) {
-      el.sidebarNewTabBtn.addEventListener('click', function () {
-        openNewTab();
-      });
-    }
-
-    if (el.sidebarBookmarksList) {
-      el.sidebarBookmarksList.addEventListener('click', function (e) {
-        var row = e.target.closest('[data-bookmark-url]');
-        if (!row) return;
-        var u = String(row.getAttribute('data-bookmark-url') || '').trim();
-        if (u) openBrowser(u);
-      });
-    }
-
-    if (el.sidebarTorrentBtn) {
-      el.sidebarTorrentBtn.addEventListener('click', function () {
-        if (tabsState.openTorrentTab) tabsState.openTorrentTab();
-        state.showBrowserHome = false;
-        syncContentVisibility();
-      });
-    }
-
-    if (el.settingsBtn) {
-      el.settingsBtn.addEventListener('click', function () {
-        try {
-          if (window.Tanko && window.Tanko.settings && typeof window.Tanko.settings.open === 'function') {
-            window.Tanko.settings.open({ tab: 'browser' });
-          }
-        } catch (e) {}
       });
     }
 
@@ -1725,6 +1323,37 @@
 
     // Continue browsing tile clicks are bound in renderContinue()
 
+    // Menu panel action delegation
+    if (el.menuPanel) {
+      el.menuPanel.addEventListener('click', function (e) {
+        var item = e.target.closest('[data-action]');
+        if (!item) return;
+        var action = item.getAttribute('data-action');
+        if (panels.hideAllPanels) panels.hideAllPanels();
+        switch (action) {
+          case 'new-tab': openNewTab(); break;
+          case 'downloads': if (downloads.showDownloadsPanel) downloads.showDownloadsPanel(); break;
+          case 'history': if (panels.showHistoryPanel) panels.showHistoryPanel(); break;
+          case 'bookmarks': if (panels.showBookmarksPanel) panels.showBookmarksPanel(); break;
+          case 'print-pdf':
+            if (api.webBrowserActions && api.webBrowserActions.printPdf) {
+              var tab = tabsState.getActiveTab ? tabsState.getActiveTab() : null;
+              if (tab) api.webBrowserActions.printPdf({ tabId: tab.id });
+            }
+            break;
+          case 'screenshot':
+            if (api.webBrowserActions && api.webBrowserActions.capturePage) {
+              var capTab = tabsState.getActiveTab ? tabsState.getActiveTab() : null;
+              if (capTab) api.webBrowserActions.capturePage({ tabId: capTab.id });
+            }
+            break;
+          case 'torrent':
+            if (tabsState.openTorrentTab) tabsState.openTorrentTab();
+            break;
+        }
+      });
+    }
+
     // Menu overlay click → close panels
     if (el.menuOverlay) {
       el.menuOverlay.addEventListener('click', function () {
@@ -1747,34 +1376,6 @@
       var m = String(magnetUrl || '').trim();
       if (!m || m.toLowerCase().indexOf('magnet:') !== 0) return;
       if (tabsState.openTorrentTab) tabsState.openTorrentTab(m);
-    });
-
-    on('tabs:changed', function () {
-      renderTopTabs();
-      renderSidebarTabs();
-      renderContinue();
-      updateUrlDisplay();
-    });
-
-    on('downloads:changed', function () {
-      syncDownloadIndicator();
-      renderHomeDownloads();
-    });
-
-    on('history:updated', function () {
-      renderHomeHistory();
-    });
-
-    on('view:home', function (payload) {
-      if (!payload || !payload.section) return;
-      var key = String(payload.section || '').toLowerCase();
-      var target = null;
-      if (key === 'downloads') target = el.homeDownloadsPanel;
-      else if (key === 'history') target = el.homeHistoryPanel;
-      else if (key === 'bookmarks') target = el.homeBmGrid;
-      if (target && typeof target.scrollIntoView === 'function') {
-        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
-      }
     });
 
     // IPC: create-tab from main process (e.g. window.open interception)
@@ -2114,43 +1715,7 @@
     if (el.sidebarDlRow) el.sidebarDlRow.classList.toggle('hidden', !activeCount);
   }
 
-  function registerBrowserModeHandler() {
-    var router = window.Tanko && window.Tanko.modeRouter;
-    if (!router || typeof router.registerModeHandler !== 'function') return;
-    router.registerModeHandler('browser', {
-      setMode: function (_mode, meta) {
-        var previousMode = meta && meta.previousMode ? String(meta.previousMode) : '';
-        if (previousMode && previousMode !== 'browser') {
-          state.lastNonBrowserMode = previousMode;
-        }
-        showBrowserSectionSurface();
-        if (state.activeTabId != null) {
-          openBrowserForTab(state.activeTabId);
-        } else {
-          openNewTab();
-        }
-      },
-      refresh: function () {
-        var wv = tabsState.getActiveWebview ? tabsState.getActiveWebview() : null;
-        if (wv && typeof wv.reload === 'function') {
-          try { wv.reload(); } catch (e) {}
-        }
-      },
-      back: function () {
-        var wv = tabsState.getActiveWebview ? tabsState.getActiveWebview() : null;
-        if (wv && typeof wv.canGoBack === 'function' && wv.canGoBack()) {
-          try { wv.goBack(); } catch (e) {}
-          return;
-        }
-        if (state.activeTabId == null) openNewTab();
-      }
-    });
-  }
-
   // ── Init sequence ──
-
-  ensureBrowserSurfaceMounted();
-  registerBrowserModeHandler();
 
   try {
     bindUI();
@@ -2185,10 +1750,6 @@
   syncDownloadIndicator();
   renderHomeDownloads();
   renderBrowserHome();
-  renderTopTabs();
-  renderSidebarTabs();
-  renderHomeBookmarks();
-  renderHomeHistory();
   if (panels.renderBookmarkBar) panels.renderBookmarkBar();
   if (hub.updateBookmarkButton) hub.updateBookmarkButton();
   if (hub.renderHubAll) hub.renderHubAll();
@@ -2206,13 +1767,6 @@
   // ── Public API ──
 
   var openDefaultBrowserEntry = standalone.openDefaultBrowserEntry || function () {
-    if (shouldRouteThroughHost()) {
-      var host = getBrowserHostBridge();
-      if (host && typeof host.openDefault === 'function') {
-        host.openDefault().catch(function () {});
-        return;
-      }
-    }
     if (state.tabs.length) {
       var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
       openBrowserForTab(targetId);
@@ -2221,13 +1775,6 @@
     }
   };
   var openTorrentWorkspace = standalone.openTorrentWorkspace || function () {
-    if (shouldRouteThroughHost()) {
-      var host = getBrowserHostBridge();
-      if (host && typeof host.openTorrentWorkspace === 'function') {
-        host.openTorrentWorkspace().catch(function () {});
-        return;
-      }
-    }
     openDefaultBrowserEntry();
     if (tabsState.openTorrentTab) tabsState.openTorrentTab();
   };

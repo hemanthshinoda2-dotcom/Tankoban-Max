@@ -1,8 +1,8 @@
-// Central mode routing for comics/videos/books/browser.
+// Central mode routing for comics/videos/books.
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books', 'browser']);
+  const MODES = new Set(['comics', 'videos', 'books']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -37,34 +37,25 @@
     const isComics = m === 'comics';
     const isVideos = m === 'videos';
     const isBooks = m === 'books';
-    const isBrowser = m === 'browser';
 
     const libraryView = qs('libraryView');
     const playerView = qs('playerView');
     const videoLibraryView = qs('videoLibraryView');
     const videoPlayerView = qs('videoPlayerView');
     const booksLibraryView = qs('booksLibraryView');
-    const webLibraryView = qs('webLibraryView');
 
     if (libraryView) libraryView.classList.toggle('hidden', !isComics);
     if (playerView) playerView.classList.add('hidden');
     if (videoLibraryView) videoLibraryView.classList.toggle('hidden', !isVideos);
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
-    if (webLibraryView) {
-      webLibraryView.classList.toggle('hidden', !isBrowser);
-      webLibraryView.style.display = isBrowser ? '' : 'none';
-      if (isBrowser) webLibraryView.removeAttribute('aria-hidden');
-      else webLibraryView.setAttribute('aria-hidden', 'true');
-    }
-    // Keep browser webview pane hidden outside browser mode
-    var webviewView = qs('wb-webview-view');
-    if (webviewView && !isBrowser) webviewView.classList.add('hidden');
+    // Hide browser overlay on mode switch
+    var webBrowserView = qs('webBrowserView');
+    if (webBrowserView) webBrowserView.classList.add('hidden');
 
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
-    document.body.classList.toggle('inBrowserMode', isBrowser);
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
 
@@ -82,9 +73,6 @@
     }
     if (mode === 'books' && typeof d.ensureBooksModulesLoaded === 'function') {
       await d.ensureBooksModulesLoaded();
-    }
-    if (mode === 'browser' && typeof d.ensureWebModulesLoaded === 'function') {
-      await d.ensureWebModulesLoaded();
     }
   }
 

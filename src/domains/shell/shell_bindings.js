@@ -467,27 +467,97 @@
   }
 
   function openBrowserFromTopButton() {
+    console.log('[DBG-WEB] openBrowserFromTopButton called');
+
+    function emergencyRevealWebBrowserView(reason) {
+      try { console.warn('[DBG-WEB] emergency reveal fallback:', reason || 'unknown'); } catch (_e) {}
+      try {
+        var libraryView = document.getElementById('webLibraryView');
+        var browserView = document.getElementById('webBrowserView');
+        if (libraryView) {
+          libraryView.classList.add('hidden');
+          libraryView.style.display = 'none';
+          libraryView.setAttribute('aria-hidden', 'true');
+        }
+        if (browserView) {
+          browserView.classList.remove('hidden');
+          browserView.style.display = '';
+          browserView.removeAttribute('aria-hidden');
+        }
+      } catch (_domErr) {}
+      try {
+        if (window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.showBrowserPane === 'function') {
+          window.Tanko.browserHost.showBrowserPane();
+        }
+      } catch (_hostErr) {}
+    }
+
+    // Prefer browser-host bridge so a future Aspect embed can plug in cleanly.
     try {
       var host = getBrowserHostBridge();
       if (host && typeof host.openDefault === 'function') {
-        Promise.resolve(host.openDefault()).catch(function () {});
+        Promise.resolve(host.openDefault()).then(function () {
+          try {
+            var view = document.getElementById('webBrowserView');
+            if (!view || view.classList.contains('hidden') || view.style.display === 'none') {
+              emergencyRevealWebBrowserView('host-openDefault-hidden-view');
+            }
+          } catch (_vErr) {}
+        }).catch(function (err) {
+          console.error('[DBG-WEB] browserHost.openDefault rejected:', err);
+          emergencyRevealWebBrowserView('host-openDefault-rejected');
+        });
         return;
       }
-    } catch (_err) {}
+    } catch (_err) {
+      emergencyRevealWebBrowserView('host-bridge-throw');
+    }
+
+    // Direct fallback (Aspect embed mount exposes this) in case shell state guards or adapter wiring drift.
+    try {
+      if (window.Tanko && window.Tanko.aspectEmbed && typeof window.Tanko.aspectEmbed.openDefault === 'function') {
+        Promise.resolve(window.Tanko.aspectEmbed.openDefault()).then(function () {
+          try {
+            var view = document.getElementById('webBrowserView');
+            if (!view || view.classList.contains('hidden') || view.style.display === 'none') {
+              emergencyRevealWebBrowserView('aspect-openDefault-hidden-view');
+            }
+          } catch (_vErr2) {}
+        }).catch(function (err) {
+          console.error('[DBG-WEB] Tanko.aspectEmbed.openDefault rejected:', err);
+          emergencyRevealWebBrowserView('aspect-openDefault-rejected');
+        });
+        return;
+      }
+    } catch (_errAspect) {
+      emergencyRevealWebBrowserView('aspect-bridge-throw');
+    }
 
     var d = window.Tanko && window.Tanko.deferred;
-    if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;
-
+    if (!d || typeof d.ensureWebModulesLoaded !== 'function') {
+      console.warn('[DBG-WEB] ensureWebModulesLoaded not available', d);
+      emergencyRevealWebBrowserView('deferred-loader-missing');
+      return;
+    }
     d.ensureWebModulesLoaded().then(function () {
-      if (!window.Tanko || !window.Tanko.web) return;
-      if (typeof window.Tanko.web.openDefault === 'function') {
-        window.Tanko.web.openDefault();
-        return;
+      console.log('[DBG-WEB] ensureWebModulesLoaded resolved, Tanko.web=', window.Tanko && window.Tanko.web);
+      if (window.Tanko && window.Tanko.web) {
+        if (typeof window.Tanko.web.openDefault === 'function') {
+          window.Tanko.web.openDefault();
+          return;
+        }
+        if (typeof window.Tanko.web.openHome === 'function') {
+          window.Tanko.web.openHome();
+          return;
+        }
+      } else {
+        console.error('[DBG-WEB] Tanko.web NOT set after module load — web.js IIFE likely failed');
       }
-      if (typeof window.Tanko.web.openHome === 'function') {
-        window.Tanko.web.openHome();
-      }
-    }).catch(function () {});
+      emergencyRevealWebBrowserView('web-module-open-missing');
+    }).catch(function (err) {
+      console.error('[DBG-WEB] ensureWebModulesLoaded REJECTED:', err);
+      emergencyRevealWebBrowserView('ensureWebModulesLoaded-rejected');
+    });
   }
 
   if (webHubToggleBtn) {
@@ -1130,15 +1200,6 @@
   window.__tankoGetShortcutKey = getShortcutKey;
 
   el.refreshBtn.addEventListener('click', () => {
-    try {
-      var router = window.Tanko && window.Tanko.modeRouter;
-      if (router && typeof router.dispatchRefresh === 'function') {
-        router.dispatchRefresh().then(function (handled) {
-          if (!handled) refreshLibrary();
-        }).catch(function () { refreshLibrary(); });
-        return;
-      }
-    } catch {}
     if (document.body.classList.contains('inBooksMode')) {
       try { window.booksApp && window.booksApp.refresh && window.booksApp.refresh(); } catch {}
       return;
@@ -1163,18 +1224,6 @@
   // Library top toolbar back button (YAC-style shell). Keep behavior identical to the existing back affordance.
   if (el.libBackBtn) {
     el.libBackBtn.addEventListener('click', () => {
-      try {
-        var router = window.Tanko && window.Tanko.modeRouter;
-        if (router && typeof router.dispatchBack === 'function') {
-          router.dispatchBack().then(function (handled) {
-            if (handled) return;
-            if (appState.selectedSeriesId && el.seriesBackBtn) el.seriesBackBtn.click();
-          }).catch(function () {
-            if (appState.selectedSeriesId && el.seriesBackBtn) el.seriesBackBtn.click();
-          });
-          return;
-        }
-      } catch {}
       if (document.body.classList.contains('inBooksMode')) {
         try { window.booksApp && window.booksApp.back && window.booksApp.back(); } catch {}
         return;
@@ -1270,4 +1319,3 @@
 
   try { applyBrowserlessGroundworkUiState(); } catch (_e) {}
 })();
-

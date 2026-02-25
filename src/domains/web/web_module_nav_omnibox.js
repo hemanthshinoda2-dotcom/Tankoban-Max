@@ -11,8 +11,7 @@
     var getActiveTab = function () { var fn = dep('getActiveTab'); return fn ? fn.apply(null, arguments) : null; };
     var getActiveWebview = function () { var fn = dep('getActiveWebview'); return fn ? fn.apply(null, arguments) : null; };
     var createTab = function () { var fn = dep('createTab'); return fn && fn.apply(null, arguments); };
-    var openNewTab = function () { var fn = dep('openNewTab'); return fn && fn.apply(null, arguments); };
-    var activateTab = function () { var fn = dep('activateTab'); return fn && fn.apply(null, arguments); };
+    var ensureWebview = function () { var fn = dep('ensureWebview'); return fn ? fn.apply(null, arguments) : null; };
     var openBrowserForTab = function () { var fn = dep('openBrowserForTab'); return fn && fn.apply(null, arguments); };
     var siteNameFromUrl = function () { var fn = dep('siteNameFromUrl'); return fn ? fn.apply(null, arguments) : ''; };
     var updateNavButtons = function () { var fn = dep('updateNavButtons'); return fn && fn.apply(null, arguments); };
@@ -92,7 +91,9 @@
 
     function ensureBrowserSurface(tabId) {
       if (tabId == null) return;
-      bridge.emit('view:webview', { tabId: tabId });
+      // If the user navigates from Tankoban home/new-tab UI, force the content
+      // area back to the active webview so pages are actually visible.
+      if (!state.showBrowserHome && state.browserOpen) return;
       try { openBrowserForTab(tabId); } catch (e) {}
     }
 
@@ -121,19 +122,15 @@
         return;
       }
 
-      if (tab.type === 'torrent') {
+      // Ensure webview exists (tab might be showing home page)
+      var wv = tab.webview || ensureWebview(tab, url);
+      if (wv) {
+        wv.loadURL(url);
+        ensureBrowserSurface(tab.id);
+      } else {
         var fallbackTab = createTab(null, url, { switchTo: true });
         if (fallbackTab && fallbackTab.id != null) ensureBrowserSurface(fallbackTab.id);
-        return;
       }
-
-      tab.url = url;
-      activateTab(tab.id);
-      var wv = getActiveWebview();
-      if (wv && typeof wv.loadURL === 'function') {
-        try { wv.loadURL(url); } catch (e) {}
-      }
-      ensureBrowserSurface(tab.id);
     }
 
     // ── Omnibox dropdown (IPC-based suggestions) ──
@@ -391,9 +388,7 @@
       }
       if (el.btnNewTab) {
         el.btnNewTab.addEventListener('click', function () {
-          if (openNewTab) openNewTab();
-          else createTab(null, 'https://yandex.com/', { switchTo: true });
-          bridge.emit('view:webview');
+          createTab(null, '', { switchTo: true });
         });
       }
     }
