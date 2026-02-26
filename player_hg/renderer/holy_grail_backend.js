@@ -1171,7 +1171,17 @@
         if (_pendingSeekSec !== null) {
           hg.setProperty('pause', 'yes').catch(function () {});
         }
-        return hg.loadFile(filePath);
+        // Apply hardware-decoding override if provided.  When loadOpts.hwdec is set
+        // to 'no' or 'auto', request mpv to change its hardware decoder
+        // preference before loading the file.  Failures are ignored.
+        var hw = (loadOpts && typeof loadOpts.hwdec === 'string') ? loadOpts.hwdec : null;
+        var loadPromise = Promise.resolve();
+        if (hw) {
+          loadPromise = hg.setProperty('hwdec', hw).catch(function () { /* ignore */ });
+        }
+        return loadPromise.then(function () {
+          return hg.loadFile(filePath);
+        });
       }).then(function (loadRes) {
         console.log('[HG-DIAG] loadFile result:', loadRes);
         if (!loadRes || !loadRes.ok) {

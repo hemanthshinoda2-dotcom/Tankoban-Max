@@ -61,9 +61,19 @@ const __state = {
   forcePresentOnce: false,
 
   // Build 4: cache imported shared texture to avoid per-frame import/release churn
+  // Maintain a small ring buffer of imported shared textures.  Each entry
+  // stores the imported texture and its cache key.  Keeping multiple textures
+  // alive reduces the chance that the renderer stalls if the consumer holds
+  // onto a previous frame longer than expected.  The old single-entry cache
+  // fields (importedSharedTexture*, importedSharedTextureKey) are kept for
+  // backward compatibility but superseded by the ring buffer implementation in
+  // getOrCreateImportedSharedTexture().
   importedSharedTexture: null,
   importedSharedTextureKey: '',
   importedSharedTextureMeta: null,
+  // Ring buffer of imported textures keyed by handle: see getOrCreateImportedSharedTexture().
+  importedSharedTextures: [],
+  importedSharedTextureMap: new Map(),
   frameSendErrorStreak: 0,
 
   // Build 4: main-side coalescing for hot property events
@@ -117,6 +127,42 @@ const __state = {
   ownerFrame: null,
   observedProperties: new Set(),
 };
+
+// ── Fallback logging ──
+// Persist fallback and error reasons to a log file in the user's data directory.
+// Each line is a JSON object with a timestamp, a reason string and an arbitrary
+// details payload.  Logging does not throw.  Use persistFallbackLog() to
+// record any conditions that lead to fallback to the Qt player, blank
+// screens or other recoverable errors.
+let _fallbackLogPath = null;
+function getFallbackLogPath() {
+  if (_fallbackLogPath) return _fallbackLogPath;
+  try {
+    const userDataDir = app && typeof app.getPath === 'function' ? app.getPath('userData') : null;
+    if (userDataDir) {
+      _fallbackLogPath = path.join(userDataDir, 'hg_fallback.log');
+    } else {
+      _fallbackLogPath = path.join(require('os').tmpdir(), 'hg_fallback.log');
+    }
+  } catch {
+    _fallbackLogPath = path.join(require('os').tmpdir(), 'hg_fallback.log');
+  }
+  return _fallbackLogPath;
+}
+
+function persistFallbackLog(reason, details) {
+  try {
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      reason: String(reason || ''),
+      details: details || {},
+    }) + '\n';
+    const dest = getFallbackLogPath();
+    fs.appendFileSync(dest, line);
+  } catch {
+    /* ignore logging failures */
+  }
+}
 
 function toErrorString(err) {
   return String((err && err.message) || err || 'unknown_error');
@@ -335,12 +381,25 @@ function makeImportedTextureKey(handleBuf, width, height) {
 }
 
 function releaseImportedSharedTextureCache() {
+  // Release all imported shared textures, both legacy and ring buffer.  When
+  // called, this fully clears the cache so subsequent frames will re-import.
+  // Release legacy single entry
   if (__state.importedSharedTexture) {
     try { __state.importedSharedTexture.release(); } catch {}
   }
   __state.importedSharedTexture = null;
   __state.importedSharedTextureKey = '';
   __state.importedSharedTextureMeta = null;
+  // Release ring buffer entries
+  if (Array.isArray(__state.importedSharedTextures)) {
+    for (const tex of __state.importedSharedTextures) {
+      try { tex.imported.release(); } catch {}
+    }
+  }
+  if (__state.importedSharedTextureMap && typeof __state.importedSharedTextureMap.clear === 'function') {
+    __state.importedSharedTextureMap.clear();
+  }
+  __state.importedSharedTextures = [];
 }
 
 function getFrameSendErrorDelayMs() {
@@ -560,20 +619,15 @@ function getActiveFrameLoopDelayMs() {
 function getOrCreateImportedSharedTexture(handleBuf, width, height) {
   const key = makeImportedTextureKey(handleBuf, width, height);
 
-  if (__state.importedSharedTexture && __state.importedSharedTextureKey === key) {
+  // Use ring buffer cache: check if an imported texture with this key exists.
+  const map = __state.importedSharedTextureMap;
+  if (map && map.has(key)) {
     diagBump('importCacheHits');
-    return __state.importedSharedTexture;
+    return map.get(key).imported;
   }
 
-  // Release previous cached import
-  if (__state.importedSharedTexture) {
-    diagBump('importCacheResets');
-    try { __state.importedSharedTexture.release(); } catch {}
-    __state.importedSharedTexture = null;
-  }
-
+  // No cached entry: import a new shared texture and store it.
   diagBump('importCacheMisses');
-
   const imported = sharedTexture.importSharedTexture({
     textureInfo: {
       pixelFormat: 'bgra',
@@ -584,6 +638,24 @@ function getOrCreateImportedSharedTexture(handleBuf, width, height) {
     allReferencesReleased: () => {},
   });
 
+  // Store in ring buffer and map
+  if (Array.isArray(__state.importedSharedTextures) && map) {
+    const entry = { key, imported };
+    map.set(key, entry);
+    __state.importedSharedTextures.push(entry);
+    // Evict oldest if buffer grows beyond 3
+    const maxSize = 3;
+    if (__state.importedSharedTextures.length > maxSize) {
+      const old = __state.importedSharedTextures.shift();
+      if (old) {
+        try { old.imported.release(); } catch {}
+        map.delete(old.key);
+        diagBump('importCacheResets');
+      }
+    }
+  }
+
+  // Update legacy fields for backward compatibility
   __state.importedSharedTexture = imported;
   __state.importedSharedTextureKey = key;
   __state.importedSharedTextureMeta = { width, height };
@@ -641,10 +713,13 @@ async function eventLoopTick(ctx, token) {
     }
   } catch (err) {
     diagBump('pollEventsErrors');
-    diagError(toErrorString(err));
+    const msg = toErrorString(err);
+    diagError(msg);
+    // Persist unexpected poll errors for diagnostic purposes
+    persistFallbackLog('event_loop_error', { error: msg });
     emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
       name: '__error__',
-      value: toErrorString(err),
+      value: msg,
     });
   }
 
@@ -725,29 +800,32 @@ async function frameLoopTick(ctx, token) {
         // Build 4: reuse cached imported shared texture
         const imported = getOrCreateImportedSharedTexture(handleBuf, width, height);
 
+        // Send the imported shared texture asynchronously.  The promise is
+        // handled without awaiting so that the frame loop does not block on
+        // GPU submission.  Success and error callbacks reset
+        // frameSendInFlight and schedule the next frame tick with the
+        // appropriate backoff.
         __state.frameSendInFlight = true;
-        let sendFailed = false;
-        try {
-          await sharedTexture.sendSharedTexture({
-            frame: __state.ownerFrame,
-            importedSharedTexture: imported,
-          });
+        sharedTexture.sendSharedTexture({
+          frame: __state.ownerFrame,
+          importedSharedTexture: imported,
+        }).then(() => {
+          // Success
           diagBump('framesSent');
           __state.frameSendErrorStreak = 0;
           if (__state.diagEnabled) __state.diag.lastFrameSentAt = Date.now();
-        } catch (err) {
-          sendFailed = true;
+          __state.frameSendInFlight = false;
+          scheduleNextFrameLoop(ctx, getActiveFrameLoopDelayMs(), token);
+        }).catch((err) => {
+          // Failure
           __state.frameSendErrorStreak += 1;
           diagBump('frameSendErrors');
           diagError(toErrorString(err));
           // Cache may be stale — release so next tick re-imports
           releaseImportedSharedTextureCache();
-        } finally {
           __state.frameSendInFlight = false;
-          // NOTE: Do NOT release imported here — it's cached for reuse
-        }
-
-        scheduleNextFrameLoop(ctx, sendFailed ? getFrameSendErrorDelayMs() : getActiveFrameLoopDelayMs(), token);
+          scheduleNextFrameLoop(ctx, getFrameSendErrorDelayMs(), token);
+        });
         return;
       }
     }
@@ -757,10 +835,13 @@ async function frameLoopTick(ctx, token) {
     return;
   } catch (err) {
     diagBump('frameSendErrors');
-    diagError(toErrorString(err));
+    const msg = toErrorString(err);
+    diagError(msg);
+    // Persist unexpected frame loop errors for diagnostics
+    persistFallbackLog('frame_loop_error', { error: msg });
     emitToOwner(EVENT.HG_PROPERTY_CHANGE, {
       name: '__error__',
-      value: toErrorString(err),
+      value: msg,
     });
   }
 
@@ -810,8 +891,7 @@ async function probe(ctx, evt) {
 
     _hgLog(`probe: ok=${ok} addon=${!!addonPath} mpv=${!!mpvPath} egl=${!!eglPath} gles=${!!glesPath} sharedTex=${hasSharedTexture}`);
     _hgLog(`probe paths: addon=${addonPath} mpv=${mpvPath} egl=${eglPath} gles=${glesPath}`);
-
-    return {
+    const res = {
       ok,
       addonPath,
       mpvPath,
@@ -820,11 +900,18 @@ async function probe(ctx, evt) {
       sharedTexture: hasSharedTexture,
       error: ok ? '' : 'missing_required_component',
     };
+    // Persist failure details for diagnostics.  Do not log successes to avoid clutter.
+    if (!ok) {
+      persistFallbackLog('probe_failed', { addonPath, mpvPath, eglPath, glesPath, sharedTexture: hasSharedTexture, error: res.error });
+    }
+    return res;
   } catch (err) {
-    _hgLog(`probe: EXCEPTION: ${toErrorString(err)}`);
+    const msg = toErrorString(err);
+    _hgLog(`probe: EXCEPTION: ${msg}`);
+    persistFallbackLog('probe_exception', { error: msg });
     return {
       ok: false,
-      error: toErrorString(err),
+      error: msg,
     };
   }
 }
@@ -875,7 +962,9 @@ async function initGpu(ctx, evt, args) {
       addonPath: __state.addonPath,
     };
   } catch (err) {
-    return { ok: false, error: toErrorString(err) };
+    const msg = toErrorString(err);
+    persistFallbackLog('init_failed', { error: msg });
+    return { ok: false, error: msg };
   }
 }
 
@@ -883,18 +972,35 @@ async function loadFile(ctx, evt, filePath) {
   try {
     setOwnerFromEvent(ctx, evt);
     const addon = loadAddonOrThrow(ctx);
-    if (!__state.initialized) { _hgLog('loadFile: NOT INITIALIZED'); return { ok: false, error: 'not_initialized' }; }
+    if (!__state.initialized) {
+      _hgLog('loadFile: NOT INITIALIZED');
+      persistFallbackLog('load_failed', { filePath: String(filePath || ''), error: 'not_initialized' });
+      return { ok: false, error: 'not_initialized' };
+    }
     const target = String(filePath || '');
-    if (!target) { _hgLog('loadFile: MISSING FILE PATH'); return { ok: false, error: 'missing_file_path' }; }
+    if (!target) {
+      _hgLog('loadFile: MISSING FILE PATH');
+      persistFallbackLog('load_failed', { filePath: String(filePath || ''), error: 'missing_file_path' });
+      return { ok: false, error: 'missing_file_path' };
+    }
     releaseImportedSharedTextureCache();
     __state.frameSendErrorStreak = 0;
     _hgLog(`loadFile: loading "${target}"`);
-    addon.loadFile(target);
+    try {
+      addon.loadFile(target);
+    } catch (err) {
+      const msg = toErrorString(err);
+      _hgLog(`loadFile: EXCEPTION in loadFile(): ${msg}`);
+      persistFallbackLog('load_failed', { filePath: target, error: msg });
+      return { ok: false, error: msg };
+    }
     _hgLog('loadFile: SUCCESS');
     return { ok: true };
   } catch (err) {
-    _hgLog(`loadFile: EXCEPTION: ${toErrorString(err)}`);
-    return { ok: false, error: toErrorString(err) };
+    const msg = toErrorString(err);
+    _hgLog(`loadFile: EXCEPTION: ${msg}`);
+    persistFallbackLog('load_failed', { filePath: String(filePath || ''), error: msg });
+    return { ok: false, error: msg };
   }
 }
 

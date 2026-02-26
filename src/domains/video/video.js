@@ -7110,6 +7110,32 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
             return;
           }
 
+          // Decide whether to retry with software decoding or fall back to Qt.  If
+          // this is the first time we've observed a stalled first frame and
+          // hardware decoding is enabled (opts.hwdec !== 'no'), attempt a
+          // retry with hwdec disabled.  Otherwise fall back to Qt.
+          const retryCount = Number(opts && opts.retryCount) || 0;
+          const currentHw = (opts && typeof opts.hwdec === 'string') ? opts.hwdec : 'auto';
+          // Use a distinct local flag name to avoid shadowing the outer scope.
+          const forceEmbFlag = !!(opts && typeof opts === 'object' && opts.forceEmbedded === true);
+          // If hwdec has not yet been retried and we are not in force-embedded
+          // mode, attempt a retry with hwdec=no.
+          if (!forceEmbFlag && retryCount < 1 && currentHw !== 'no') {
+            toast('Embedded render stalled. Retrying with software decode…', 2400);
+            try { await player.destroy?.(); } catch {}
+            state.player = null;
+            state._playerEventsBoundFor = null;
+            document.body.classList.remove('mpvEngine');
+            document.body.classList.remove('mpvDetached');
+            clearEmbeddedFirstFrameWatch();
+            const retryOpts = { ...(opts || {}), hwdec: 'no', retryCount: retryCount + 1, _routeReason: 'hwdec_retry' };
+            // Allow Qt fallback on subsequent stalls
+            retryOpts.allowNoFrameQtFallback = true;
+            await openVideo(v, retryOpts);
+            return;
+          }
+
+          // Otherwise give up and fall back to the Qt player.
           toast('Embedded render stalled. Falling back to Qt.', 2200);
           try { await player.destroy?.(); } catch {}
           state.player = null;
@@ -7117,7 +7143,6 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
           document.body.classList.remove('mpvEngine');
           document.body.classList.remove('mpvDetached');
           clearEmbeddedFirstFrameWatch();
-
           const qtOpts = (opts && typeof opts === 'object')
             ? { ...opts, _routeReason: 'no_frame' }
             : { _routeReason: 'no_frame' };
@@ -7267,7 +7292,15 @@ async function openVideo(v, opts = {}) {
   // Pass startSeconds to the adapter — it pauses mpv before loading, then
   // retries seeking in its poll loop until the position lands.  Once within
   // tolerance it unpauses automatically.  No visible jump from 0:00.
-  const loadRes = await player.load(String(v.path), { startSeconds: start });
+  // Include hardware-decoder override when provided.  By default the
+  // Holy Grail backend will use mpv's automatic hardware decoding.  If a
+  // previous attempt stalled, opts.hwdec can be set to 'no' to disable
+  // hardware decoding.  Pass through the setting to the adapter.
+  const loadOptions = { startSeconds: start };
+  if (opts && typeof opts === 'object' && typeof opts.hwdec === 'string') {
+    loadOptions.hwdec = opts.hwdec;
+  }
+  const loadRes = await player.load(String(v.path), loadOptions);
 
   if (!loadRes || loadRes.ok === false) {
     const err = String((loadRes && loadRes.error) || 'unknown_error');
