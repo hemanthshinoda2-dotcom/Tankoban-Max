@@ -17,6 +17,7 @@ const crypto = require('crypto');
 const { Worker } = require('worker_threads');
 const { dialog, BrowserWindow } = require('electron');
 const { pathToFileURL } = require('url');
+const STREAMABLE_MANIFEST_FILE = '.tanko_torrent_stream.json';
 
 // DIAG: Temporary diagnostic logger for debugging scan/add issues
 const __diagLog = (() => {
@@ -1403,6 +1404,27 @@ function __pathExists(p) {
   try { return !!(p && fs.existsSync(p)); } catch { return false; }
 }
 
+function __hasStreamManifestRecursive(rootFolder, maxDepth) {
+  const root = String(rootFolder || '').trim();
+  if (!root || !__pathExists(root)) return false;
+  const depthLimit = Math.max(0, Number(maxDepth) || 5);
+  const stack = [{ dir: root, depth: 0 }];
+  while (stack.length) {
+    const cur = stack.pop();
+    let names = [];
+    try { names = fs.readdirSync(cur.dir); } catch { names = []; }
+    for (const name of names) {
+      const full = path.join(cur.dir, name);
+      let st = null;
+      try { st = fs.statSync(full); } catch { st = null; }
+      if (!st) continue;
+      if (st.isFile() && String(name || '').toLowerCase() === STREAMABLE_MANIFEST_FILE) return true;
+      if (st.isDirectory() && cur.depth < depthLimit) stack.push({ dir: full, depth: cur.depth + 1 });
+    }
+  }
+  return false;
+}
+
 function __waitMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
@@ -1437,9 +1459,14 @@ async function removeStreamableFolder(ctx, _evt, payload) {
       return { ok: false, error: 'Target folder must be within show path' };
     }
 
+    const hasManifest = __hasStreamManifestRecursive(targetFolder, 6);
+    if (!hasManifest) {
+      return { ok: false, error: 'Not a streamable folder', code: 'NOT_STREAMABLE', targetFolder, showPath, deleted: false };
+    }
+
     let deleted = true;
     if (deleteFiles) {
-      deleted = await __removeDirVerified(targetFolder, 8, 120);
+      deleted = await __removeDirVerified(targetFolder, 16, 180);
       if (!deleted) {
         return { ok: false, error: 'Folder is in use or locked', targetFolder, showPath, deleted: false };
       }

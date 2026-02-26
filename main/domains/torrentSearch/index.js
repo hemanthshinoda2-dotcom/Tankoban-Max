@@ -528,9 +528,17 @@ async function query(ctx, _evt, payload) {
       const name = String(row && row.name || '').trim();
       if (!id && !name) return false;
       if (sourceFilter === id || sourceFilter === name) return true;
-      return canonicalIndexerToken(id) === srcCanon || canonicalIndexerToken(name) === srcCanon;
+      const idCanon = canonicalIndexerToken(id);
+      const nameCanon = canonicalIndexerToken(name);
+      if (idCanon === srcCanon || nameCanon === srcCanon) return true;
+      if (srcCanon.length >= 4 && (idCanon.includes(srcCanon) || srcCanon.includes(idCanon))) return true;
+      if (srcCanon.length >= 4 && (nameCanon.includes(srcCanon) || srcCanon.includes(nameCanon))) return true;
+      return false;
     });
     if (hit && hit.id) resolvedSingleSource = String(hit.id);
+    if ((!resolvedSingleSource || resolvedSingleSource === sourceFilter) && /nyaa/i.test(sourceFilter)) {
+      resolvedSingleSource = 'nyaasi';
+    }
   }
 
   const indexers = forceSingleSource ? [resolvedSingleSource] : parseIndexerSpec(cfg, category);

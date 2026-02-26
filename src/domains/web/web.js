@@ -1319,9 +1319,10 @@
 
   function appendSearchResults(items) {
     var src = Array.isArray(items) ? items : [];
-    if (!src.length) return;
+    if (!src.length) return 0;
     var seen = new Set();
     var out = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.slice() : [];
+    var added = 0;
     for (var i = 0; i < out.length; i++) {
       var key0 = String(out[i] && (out[i].magnetUri || out[i].id || out[i].title) || '').trim();
       if (key0) seen.add(key0);
@@ -1332,8 +1333,10 @@
       if (!key || seen.has(key)) continue;
       seen.add(key);
       out.push(row);
+      added += 1;
     }
     state.searchResultsRaw = out;
+    return added;
   }
 
   function asPct01(value) {
@@ -1967,6 +1970,7 @@
       state.searchLoading = false;
       state.searchLoadingMore = false;
       if (Array.isArray(state.searchResultsRaw) && state.searchResultsRaw.length) updateSourcesSearchStatusTail();
+      setTimeout(ensureSourcesSearchViewportFilled, 0);
     });
   }
 
@@ -1978,6 +1982,16 @@
     var wrap = el.sourcesSearchTableWrap;
     var remain = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight;
     if (remain > 120) return;
+    runSourcesSearch({ append: true });
+  }
+
+  function ensureSourcesSearchViewportFilled() {
+    if (state.sourcesSubMode !== 'search') return;
+    if (!el.sourcesSearchTableWrap) return;
+    if (state.searchLoading || state.searchLoadingMore || !state.searchHasMore) return;
+    if (!state.searchQuery) return;
+    var wrap = el.sourcesSearchTableWrap;
+    if ((wrap.scrollHeight - wrap.clientHeight) > 12) return;
     runSourcesSearch({ append: true });
   }
 

@@ -5200,7 +5200,17 @@ function getEpisodeById(epId){
       }
     }
 
-    const res = await Tanko.api.video.removeStreamableFolder(payload);
+    let res = await Tanko.api.video.removeStreamableFolder(payload);
+    if ((!res || res.ok === false) && String((res && res.error) || '').toLowerCase().includes('locked')) {
+      for (let i = 0; i < 2; i++) {
+        // Allow handles to settle after torrent teardown on Windows.
+        // eslint-disable-next-line no-await-in-loop
+        await new Promise((resolve) => setTimeout(resolve, 450 * (i + 1)));
+        // eslint-disable-next-line no-await-in-loop
+        res = await Tanko.api.video.removeStreamableFolder(payload);
+        if (res && res.ok) break;
+      }
+    }
     if (res && res.state) applyVideoSnapshot(res.state);
     if (!res || res.ok === false) return res || { ok: false, error: 'Failed to remove streamable folder' };
 
@@ -5218,15 +5228,16 @@ function getEpisodeById(epId){
     if (!ok) return;
 
     const streamableTorrentIds = collectTorrentIdsForShowFolder(show, '', null);
-    const treatAsStreamable = isTorrentStreamableShow(show) || streamableTorrentIds.length > 0;
-    if (treatAsStreamable) {
-      const res = await removeStreamableFolderEntry(show, '', streamableTorrentIds);
-      if (!res || res.ok === false) {
-        const msg = String((res && res.error) || 'Failed to remove streamable folder');
-        toast(msg);
-        return;
-      }
+    const streamRes = await removeStreamableFolderEntry(show, '', streamableTorrentIds);
+    if (streamRes && streamRes.ok) {
       toast('Streamable folder removed');
+      return;
+    }
+    const isNotStreamable = String((streamRes && streamRes.code) || '') === 'NOT_STREAMABLE'
+      || String((streamRes && streamRes.error) || '').toLowerCase().includes('not a streamable folder');
+    if (!isNotStreamable && (isTorrentStreamableShow(show) || streamableTorrentIds.length > 0)) {
+      const msg = String((streamRes && streamRes.error) || 'Failed to remove streamable folder');
+      toast(msg);
       return;
     }
 
