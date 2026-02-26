@@ -949,6 +949,16 @@ const CHANNEL = {
   WEB_SEARCH_ADD: 'webSearch:add',
 
   // ========================================
+  // Torrent Search (Sources mode / Jackett)
+  // ========================================
+
+  /** Query torrent search backend. Args: { query, category, limit, page }. Returns: { ok, items?, error? } */
+  TORRENT_SEARCH_QUERY: 'torrentSearch:query',
+
+  /** Check torrent search backend health/config. Returns: { ok, ready, error?, details? } */
+  TORRENT_SEARCH_HEALTH: 'torrentSearch:health',
+
+  // ========================================
   // Web Browser Actions
   // ========================================
 
@@ -1156,6 +1166,9 @@ const EVENT = {
   WEB_MAGNET_DETECTED: 'web:magnetDetected',
   /** .torrent file downloaded to temp. Payload: filePath string */
   WEB_TORRENT_FILE_DETECTED: 'web:torrentFileDetected',
+
+  /** Torrent search backend status changed. Payload: { ready, error?, details? } */
+  TORRENT_SEARCH_STATUS_CHANGED: 'torrentSearch:statusChanged',
 
   // FEAT-TOR
   /** Tor proxy status changed. Payload: { active, bootstrapProgress? } */

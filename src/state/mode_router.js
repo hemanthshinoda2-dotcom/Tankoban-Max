@@ -1,8 +1,8 @@
-// Central mode routing for comics/videos/books.
+// Central mode routing for comics/videos/books/sources.
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books']);
+  const MODES = new Set(['comics', 'videos', 'books', 'sources']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -27,9 +27,11 @@
     const comics = qs('modeComicsBtn');
     const videos = qs('modeVideosBtn');
     const books = qs('modeBooksBtn');
+    const sources = qs('modeSourcesBtn');
     if (comics) comics.classList.toggle('active', m === 'comics');
     if (videos) videos.classList.toggle('active', m === 'videos');
     if (books) books.classList.toggle('active', m === 'books');
+    if (sources) sources.classList.toggle('active', m === 'sources');
   }
 
   function applyFallbackViewState(mode) {
@@ -37,25 +39,29 @@
     const isComics = m === 'comics';
     const isVideos = m === 'videos';
     const isBooks = m === 'books';
+    const isSources = m === 'sources';
 
     const libraryView = qs('libraryView');
     const playerView = qs('playerView');
     const videoLibraryView = qs('videoLibraryView');
     const videoPlayerView = qs('videoPlayerView');
     const booksLibraryView = qs('booksLibraryView');
+    const webLibraryView = qs('webLibraryView');
 
     if (libraryView) libraryView.classList.toggle('hidden', !isComics);
     if (playerView) playerView.classList.add('hidden');
     if (videoLibraryView) videoLibraryView.classList.toggle('hidden', !isVideos);
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
+    if (webLibraryView) webLibraryView.classList.toggle('hidden', !isSources);
     // Hide browser overlay on mode switch
     var webBrowserView = qs('webBrowserView');
-    if (webBrowserView) webBrowserView.classList.add('hidden');
+    if (webBrowserView && !isSources) webBrowserView.classList.add('hidden');
 
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
+    document.body.classList.toggle('inSourcesMode', isSources);
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
 
@@ -73,6 +79,13 @@
     }
     if (mode === 'books' && typeof d.ensureBooksModulesLoaded === 'function') {
       await d.ensureBooksModulesLoaded();
+    }
+    if (mode === 'sources') {
+      if (typeof d.ensureWebModulesLoadedLegacy === 'function') {
+        await d.ensureWebModulesLoadedLegacy();
+      } else if (typeof d.ensureWebModulesLoaded === 'function') {
+        await d.ensureWebModulesLoaded();
+      }
     }
   }
 

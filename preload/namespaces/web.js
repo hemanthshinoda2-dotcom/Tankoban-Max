@@ -197,6 +197,15 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       },
     },
 
+    torrentSearch: {
+      query: (payload) => ipcRenderer.invoke(CHANNEL.TORRENT_SEARCH_QUERY, payload),
+      health: () => ipcRenderer.invoke(CHANNEL.TORRENT_SEARCH_HEALTH),
+      onStatusChanged: (cb) => {
+        if (typeof cb !== 'function') return;
+        ipcRenderer.on(EVENT.TORRENT_SEARCH_STATUS_CHANGED, (_evt, data) => cb(data));
+      },
+    },
+
     // FEAT-TOR: Tor proxy
     torProxy: {
       start: () => ipcRenderer.invoke(CHANNEL.TOR_PROXY_START),

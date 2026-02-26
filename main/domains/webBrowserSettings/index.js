@@ -30,6 +30,18 @@ const DEFAULT_SETTINGS = {
       cookies: false,
       cache: false
     }
+  },
+  jackett: {
+    baseUrl: '',
+    apiKey: '',
+    indexer: 'all',
+    timeoutMs: 30000,
+    indexersByCategory: {
+      all: 'all',
+      comics: 'all',
+      books: 'all',
+      tv: 'all'
+    }
   }
 };
 
@@ -63,6 +75,24 @@ function normalizeUrl(value) {
   return String(value || '').trim();
 }
 
+function normalizeTimeout(value, fallback) {
+  var n = Number(value);
+  if (!isFinite(n) || n <= 0) return fallback;
+  if (n < 2000) return 2000;
+  if (n > 60000) return 60000;
+  return Math.round(n);
+}
+
+function normalizeIndexerMap(input) {
+  var src = (input && typeof input === 'object') ? input : {};
+  return {
+    all: String(src.all || 'all').trim() || 'all',
+    comics: String(src.comics || src.manga || src.anime || 'all').trim() || 'all',
+    books: String(src.books || src.audiobooks || 'all').trim() || 'all',
+    tv: String(src.tv || src.movies || 'all').trim() || 'all'
+  };
+}
+
 function normalizeSettings(input) {
   var src = (input && typeof input === 'object') ? input : {};
   var startupInput = (src.startup && typeof src.startup === 'object') ? src.startup : {};
@@ -70,6 +100,7 @@ function normalizeSettings(input) {
   var downloadsInput = (src.downloads && typeof src.downloads === 'object') ? src.downloads : {};
   var privacyInput = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
   var clearOnExitInput = (privacyInput.clearOnExit && typeof privacyInput.clearOnExit === 'object') ? privacyInput.clearOnExit : {};
+  var jackettInput = (src.jackett && typeof src.jackett === 'object') ? src.jackett : {};
 
   var startupMode = normalizeStartupMode(startupInput.mode || src.startupMode);
   if (src.restoreLastSession === false && !startupInput.mode && !src.startupMode) {
@@ -101,6 +132,13 @@ function normalizeSettings(input) {
         cookies: !!(clearOnExitInput.cookies || src.clearCookiesOnExit),
         cache: !!(clearOnExitInput.cache || src.clearCacheOnExit)
       }
+    },
+    jackett: {
+      baseUrl: normalizeUrl(jackettInput.baseUrl || src.jackettBaseUrl),
+      apiKey: String(jackettInput.apiKey || src.jackettApiKey || '').trim(),
+      indexer: String(jackettInput.indexer || src.jackettIndexer || 'all').trim() || 'all',
+      timeoutMs: normalizeTimeout(jackettInput.timeoutMs || src.jackettTimeoutMs, DEFAULT_SETTINGS.jackett.timeoutMs),
+      indexersByCategory: normalizeIndexerMap(jackettInput.indexersByCategory || src.jackettIndexersByCategory)
     }
   };
   return out;

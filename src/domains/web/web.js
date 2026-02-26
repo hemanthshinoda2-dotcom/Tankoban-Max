@@ -212,6 +212,28 @@
     destPickerList:     qs('downloadDestPickerList'),
     destPickerPath:     qs('downloadDestPickerPath'),
     destPickerEmpty:    qs('downloadDestPickerEmpty'),
+
+    // Sources search UI
+    sourcesSearchInput: qs('sourcesSearchInput'),
+    sourcesSearchFilter: qs('sourcesSearchFilter'),
+    sourcesSearchBtn: qs('sourcesSearchBtn'),
+    sourcesSearchBody: qs('sourcesSearchBody'),
+    sourcesSearchStatus: qs('sourcesSearchStatus'),
+    sourcesSearchTabBtn: qs('sourcesSearchTabBtn'),
+    sourcesDownloadsTabBtn: qs('sourcesDownloadsTabBtn'),
+    sourcesSearchView: qs('sourcesSearchView'),
+    sourcesDownloadsView: qs('sourcesDownloadsView'),
+
+    // Save-to-library flow
+    sourcesSaveOverlay: qs('sourcesSaveFlowOverlay'),
+    sourcesSaveCancel: qs('sourcesSaveFlowCancel'),
+    sourcesSaveStart: qs('sourcesSaveFlowStart'),
+    sourcesSaveCategory: qs('sourcesSaveCategory'),
+    sourcesSaveDestMode: qs('sourcesSaveDestMode'),
+    sourcesSaveExistingWrap: qs('sourcesSaveExistingWrap'),
+    sourcesSaveExistingFolder: qs('sourcesSaveExistingFolder'),
+    sourcesSaveNewWrap: qs('sourcesSaveNewWrap'),
+    sourcesSaveNewFolder: qs('sourcesSaveNewFolder'),
   };
 
   // ── Shared state ──
@@ -276,6 +298,11 @@
     bookmarksOpen: false,
     hubTorrentFilter: 'active',
     destPickerData: null,
+    sourcesSubMode: 'search',
+    searchResults: [],
+    searchLoading: false,
+    pendingMagnet: null,
+    destinationRoots: { books: null, comics: null, videos: null, allBooks: [], allComics: [], allVideos: [] },
   };
 
   // ── Event bus ──
@@ -350,7 +377,9 @@
 
   function isWebModeActive() {
     var router = window.Tanko && window.Tanko.modeRouter;
-    return router ? router.getMode() === 'web' : false;
+    if (!router || typeof router.getMode !== 'function') return false;
+    var mode = String(router.getMode() || '').toLowerCase();
+    return mode === 'sources' || mode === 'web';
   }
 
   // ── webTabs shim (replaces old WCV IPC) ──
@@ -491,7 +520,7 @@
 
   // ── Mode switching ──
 
-  var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView' };
+  var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView', sources: 'webLibraryView' };
 
   function _hideCurrentLibraryView() {
     var router = window.Tanko && window.Tanko.modeRouter;
@@ -534,10 +563,18 @@
     if (navOmnibox.setOmniIconForUrl) navOmnibox.setOmniIconForUrl(url);
   }
 
+  function ensureTorrentContainerInBrowser() {
+    if (!el.torrentContainer || !el.contentArea) return;
+    if (el.torrentContainer.parentElement !== el.contentArea) {
+      el.contentArea.appendChild(el.torrentContainer);
+    }
+  }
+
   // Wire updateUrlDisplay as a dep
   bridge.deps.updateUrlDisplay = updateUrlDisplay;
 
   function openBrowser(source) {
+    ensureTorrentContainerInBrowser();
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (!source) {
       openHome();
@@ -567,6 +604,7 @@
   }
 
   function openHome() {
+    ensureTorrentContainerInBrowser();
     if (panels.hideAllPanels) panels.hideAllPanels();
     state.showBrowserHome = true;
     state.browserOpen = true;
@@ -586,6 +624,7 @@
   }
 
   function openBrowserForTab(tabId) {
+    ensureTorrentContainerInBrowser();
     var tab = null;
     for (var i = 0; i < state.tabs.length; i++) {
       if (state.tabs[i].id === tabId) { tab = state.tabs[i]; break; }
@@ -804,9 +843,229 @@
     if (!api.webSources || typeof api.webSources.getDestinations !== 'function') return;
     api.webSources.getDestinations().then(function (res) {
       if (!res || !res.ok) return;
+      state.destinationRoots = {
+        books: res.books || null,
+        comics: res.comics || null,
+        videos: res.videos || null,
+        allBooks: Array.isArray(res.allBooks) ? res.allBooks : [],
+        allComics: Array.isArray(res.allComics) ? res.allComics : [],
+        allVideos: Array.isArray(res.allVideos) ? res.allVideos : []
+      };
       if (el.destBooks) el.destBooks.textContent = shortPath(res.books || 'Not configured');
       if (el.destComics) el.destComics.textContent = shortPath(res.comics || 'Not configured');
     }).catch(function () {});
+  }
+
+  function formatBytesForSources(bytes) {
+    var n = Number(bytes || 0);
+    if (!isFinite(n) || n <= 0) return '-';
+    var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var idx = Math.floor(Math.log(n) / Math.log(1024));
+    if (idx < 0) idx = 0;
+    if (idx >= units.length) idx = units.length - 1;
+    var value = n / Math.pow(1024, idx);
+    return value.toFixed(idx === 0 ? 0 : 1) + ' ' + units[idx];
+  }
+
+  function setSourcesSubMode(mode) {
+    var key = String(mode || 'search').toLowerCase() === 'downloads' ? 'downloads' : 'search';
+    state.sourcesSubMode = key;
+    if (el.sourcesSearchTabBtn) el.sourcesSearchTabBtn.classList.toggle('active', key === 'search');
+    if (el.sourcesDownloadsTabBtn) el.sourcesDownloadsTabBtn.classList.toggle('active', key === 'downloads');
+    if (el.sourcesSearchView) el.sourcesSearchView.classList.toggle('hidden', key !== 'search');
+    if (el.sourcesDownloadsView) el.sourcesDownloadsView.classList.toggle('hidden', key !== 'downloads');
+    if (key === 'downloads') {
+      if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement !== el.sourcesDownloadsView) {
+        el.sourcesDownloadsView.appendChild(el.torrentContainer);
+      }
+      if (el.torrentContainer) el.torrentContainer.style.display = '';
+      if (torrentTab && typeof torrentTab.initTorrentTab === 'function') torrentTab.initTorrentTab();
+      if (torrentTab && typeof torrentTab.renderTable === 'function') torrentTab.renderTable();
+      if (hub && typeof hub.refreshTorrentState === 'function') hub.refreshTorrentState();
+      if (el.browserView) el.browserView.classList.add('hidden');
+      state.browserOpen = false;
+      return;
+    }
+    if (el.torrentContainer && el.sourcesDownloadsView && el.torrentContainer.parentElement === el.sourcesDownloadsView) {
+      if (el.browserView && el.contentArea && el.torrentContainer.parentElement !== el.contentArea) {
+        el.contentArea.appendChild(el.torrentContainer);
+      }
+      el.torrentContainer.style.display = 'none';
+    }
+    if (el.sourcesSearchInput) {
+      setTimeout(function () {
+        try { el.sourcesSearchInput.focus(); } catch (_e) {}
+      }, 0);
+    }
+  }
+
+  function renderSourcesSearchRows() {
+    if (!el.sourcesSearchBody) return;
+    var html = '';
+    for (var i = 0; i < state.searchResults.length; i++) {
+      var row = state.searchResults[i] || {};
+      html += '<tr>'
+        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(row.title || '') + '">' + escapeHtml(row.title || '-') + '</td>'
+        + '<td>' + escapeHtml(formatBytesForSources(row.sizeBytes)) + '</td>'
+        + '<td>' + escapeHtml(String(row.fileCount != null ? row.fileCount : '-')) + '</td>'
+        + '<td>' + escapeHtml(String(row.seeders != null ? row.seeders : 0)) + '</td>'
+        + '<td><button class="btn btn-sm" data-magnet-id="' + escapeHtml(String(row.id || '')) + '">Magnet</button></td>'
+      + '</tr>';
+    }
+    if (!html) {
+      html = '<tr><td colspan="5" class="muted tiny">No results.</td></tr>';
+    }
+    el.sourcesSearchBody.innerHTML = html;
+  }
+
+  function getSearchFilter() {
+    return String((el.sourcesSearchFilter && el.sourcesSearchFilter.value) || 'all').trim().toLowerCase() || 'all';
+  }
+
+  function getDestinationRootByCategory(category) {
+    var key = String(category || 'comics').trim().toLowerCase();
+    if (key === 'books') return state.destinationRoots.books || '';
+    if (key === 'videos') return state.destinationRoots.videos || '';
+    return state.destinationRoots.comics || '';
+  }
+
+  function getRootListByCategory(category) {
+    var key = String(category || 'comics').trim().toLowerCase();
+    if (key === 'books') return state.destinationRoots.allBooks || [];
+    if (key === 'videos') return state.destinationRoots.allVideos || [];
+    return state.destinationRoots.allComics || [];
+  }
+
+  function listFoldersForSaveFlow(category, rootPath) {
+    if (!api.webSources || typeof api.webSources.listDestinationFolders !== 'function') {
+      return Promise.resolve({ ok: true, folders: [] });
+    }
+    return api.webSources.listDestinationFolders({ mode: category, path: rootPath || '' });
+  }
+
+  function refreshSaveFlowInputs() {
+    var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
+    var mode = String((el.sourcesSaveDestMode && el.sourcesSaveDestMode.value) || 'default').trim().toLowerCase();
+    if (el.sourcesSaveExistingWrap) el.sourcesSaveExistingWrap.classList.toggle('hidden', mode !== 'existing');
+    if (el.sourcesSaveNewWrap) el.sourcesSaveNewWrap.classList.toggle('hidden', mode !== 'new');
+    if (mode !== 'existing') return;
+    var roots = getRootListByCategory(category);
+    var root = roots.length ? roots[0] : getDestinationRootByCategory(category);
+    listFoldersForSaveFlow(category, root).then(function (res) {
+      if (!el.sourcesSaveExistingFolder) return;
+      var rows = (res && res.ok && Array.isArray(res.folders)) ? res.folders : [];
+      var html = '';
+      for (var i = 0; i < rows.length; i++) {
+        var p = String(rows[i] && rows[i].path || '');
+        if (!p) continue;
+        html += '<option value="' + escapeHtml(p) + '">' + escapeHtml(rows[i].name || p) + '</option>';
+      }
+      if (!html && root) html = '<option value="' + escapeHtml(root) + '">' + escapeHtml(root) + '</option>';
+      el.sourcesSaveExistingFolder.innerHTML = html;
+    }).catch(function () {});
+  }
+
+  function openSaveFlow(resultRow) {
+    if (!resultRow || !resultRow.magnetUri) return;
+    state.pendingMagnet = resultRow;
+    if (el.sourcesSaveCategory) el.sourcesSaveCategory.value = 'comics';
+    if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.value = 'default';
+    if (el.sourcesSaveNewFolder) el.sourcesSaveNewFolder.value = '';
+    refreshSaveFlowInputs();
+    if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.remove('hidden');
+  }
+
+  function closeSaveFlow() {
+    state.pendingMagnet = null;
+    if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.add('hidden');
+  }
+
+  function buildSavePath() {
+    var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
+    var mode = String((el.sourcesSaveDestMode && el.sourcesSaveDestMode.value) || 'default').trim().toLowerCase();
+    var root = getDestinationRootByCategory(category);
+    if (!root) return '';
+    if (mode === 'existing') {
+      return String((el.sourcesSaveExistingFolder && el.sourcesSaveExistingFolder.value) || root).trim() || root;
+    }
+    if (mode === 'new') {
+      var folderName = String((el.sourcesSaveNewFolder && el.sourcesSaveNewFolder.value) || '').trim();
+      if (!folderName) return '';
+      var normalizedRoot = String(root).replace(/[\\\/]+$/, '');
+      var safeName = folderName.replace(/[\\\/]+/g, '_');
+      return normalizedRoot + '/' + safeName;
+    }
+    return root;
+  }
+
+  function startConfiguredDownload() {
+    var row = state.pendingMagnet;
+    if (!row || !row.magnetUri || !api.webTorrent) return;
+    var savePath = buildSavePath();
+    if (!savePath) {
+      showToast('Select a valid destination');
+      return;
+    }
+    if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
+    if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Resolving metadata...';
+    api.webTorrent.resolveMetadata({ source: row.magnetUri }).then(function (meta) {
+      if (!meta || !meta.ok) throw new Error((meta && meta.error) || 'Metadata resolution failed');
+      var selected = [];
+      var files = Array.isArray(meta.files) ? meta.files : [];
+      for (var i = 0; i < files.length; i++) selected.push(i);
+      return api.webTorrent.startConfigured({
+        resolveId: meta.resolveId,
+        savePath: savePath,
+        selectedFiles: selected
+      });
+    }).then(function (started) {
+      if (!started || !started.ok) throw new Error((started && started.error) || 'Failed to start download');
+      closeSaveFlow();
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Started: ' + (row.title || 'torrent');
+      setSourcesSubMode('downloads');
+      showToast('Torrent added to Downloads');
+    }).catch(function (err) {
+      var msg = String((err && err.message) || err || 'Failed to start torrent');
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = msg;
+      showToast(msg);
+    }).finally(function () {
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
+    });
+  }
+
+  function runSourcesSearch() {
+    var query = String((el.sourcesSearchInput && el.sourcesSearchInput.value) || '').trim();
+    if (!query) {
+      state.searchResults = [];
+      renderSourcesSearchRows();
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Enter a query and search.';
+      return;
+    }
+    if (!api.torrentSearch || typeof api.torrentSearch.query !== 'function') {
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Torrent search backend is unavailable.';
+      return;
+    }
+    state.searchLoading = true;
+    if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Searching...';
+    api.torrentSearch.query({ query: query, category: getSearchFilter(), limit: 40, page: 0 })
+      .then(function (res) {
+        state.searchLoading = false;
+        if (!res || !res.ok) {
+          state.searchResults = [];
+          renderSourcesSearchRows();
+          if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = (res && res.error) || 'Search failed';
+          return;
+        }
+        state.searchResults = Array.isArray(res.items) ? res.items : [];
+        renderSourcesSearchRows();
+        if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = state.searchResults.length + ' result(s)';
+      })
+      .catch(function (err) {
+        state.searchLoading = false;
+        state.searchResults = [];
+        renderSourcesSearchRows();
+        if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = String((err && err.message) || err || 'Search failed');
+      });
   }
 
   function openAddSourceDialog(source) {
@@ -1228,6 +1487,45 @@
       });
     }
 
+    // Sources-first UI
+    if (el.sourcesSearchBtn) {
+      el.sourcesSearchBtn.addEventListener('click', function () { runSourcesSearch(); });
+    }
+    if (el.sourcesSearchInput) {
+      el.sourcesSearchInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        runSourcesSearch();
+      });
+    }
+    if (el.sourcesSearchFilter) {
+      el.sourcesSearchFilter.addEventListener('change', function () {
+        if ((el.sourcesSearchInput && el.sourcesSearchInput.value || '').trim()) runSourcesSearch();
+      });
+    }
+    if (el.sourcesSearchBody) {
+      el.sourcesSearchBody.addEventListener('click', function (e) {
+        var btn = e.target && e.target.closest ? e.target.closest('[data-magnet-id]') : null;
+        if (!btn) return;
+        var id = btn.getAttribute('data-magnet-id');
+        var row = null;
+        for (var i = 0; i < state.searchResults.length; i++) {
+          if (String(state.searchResults[i] && state.searchResults[i].id) === String(id)) { row = state.searchResults[i]; break; }
+        }
+        if (row) openSaveFlow(row);
+      });
+    }
+    if (el.sourcesSearchTabBtn) {
+      el.sourcesSearchTabBtn.addEventListener('click', function () { setSourcesSubMode('search'); });
+    }
+    if (el.sourcesDownloadsTabBtn) {
+      el.sourcesDownloadsTabBtn.addEventListener('click', function () { setSourcesSubMode('downloads'); });
+    }
+    if (el.sourcesSaveCancel) el.sourcesSaveCancel.addEventListener('click', closeSaveFlow);
+    if (el.sourcesSaveStart) el.sourcesSaveStart.addEventListener('click', startConfiguredDownload);
+    if (el.sourcesSaveCategory) el.sourcesSaveCategory.addEventListener('change', refreshSaveFlowInputs);
+    if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.addEventListener('change', refreshSaveFlowInputs);
+
     // Home panel add source
     if (el.homeAddSource) {
       el.homeAddSource.addEventListener('click', function () { openAddSourceDialog(null); });
@@ -1356,9 +1654,6 @@
               var capTab = tabsState.getActiveTab ? tabsState.getActiveTab() : null;
               if (capTab) api.webBrowserActions.capturePage({ tabId: capTab.id });
             }
-            break;
-          case 'torrent':
-            if (tabsState.openTorrentTab) tabsState.openTorrentTab();
             break;
         }
       });
@@ -1732,6 +2027,8 @@
   } catch (e) {
     console.warn('[web.js] bindUI failed', e);
   }
+  renderSourcesSearchRows();
+  setSourcesSubMode('search');
 
   loadBrowserSettings().then(function () {
     if (tabsState.loadSessionAndRestore) tabsState.loadSessionAndRestore();
@@ -1789,7 +2086,59 @@
     if (tabsState.openTorrentTab) tabsState.openTorrentTab();
   };
 
+  function openSources() {
+    // Caller should already have switched mode to 'sources'. Do not call
+    // closeBrowser() here because it can restore the wrong library view if
+    // mode switch is still in-flight.
+    state.browserOpen = false;
+    state.showBrowserHome = false;
+    if (el.browserView) el.browserView.classList.add('hidden');
+    if (panels.hideAllPanels) panels.hideAllPanels();
+    if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
+    if (find.closeFind) find.closeFind();
+    if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
+    setSourcesSubMode('search');
+  }
+
+  function openSourcesSearch() {
+    openSources();
+    setSourcesSubMode('search');
+  }
+
+  function openSourcesDownloads() {
+    state.browserOpen = false;
+    state.showBrowserHome = false;
+    if (el.browserView) el.browserView.classList.add('hidden');
+    setSourcesSubMode('downloads');
+  }
+
+  function openSaveFlowForResult(result) {
+    if (!result || typeof result !== 'object') return;
+    openSaveFlow(result);
+  }
+
   window.Tanko = window.Tanko || {};
+  try {
+    if (window.Tanko.modeRouter && typeof window.Tanko.modeRouter.registerModeHandler === 'function') {
+      window.Tanko.modeRouter.registerModeHandler('sources', {
+        setMode: function () {
+          if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
+          return Promise.resolve();
+        },
+        refresh: function () {
+          if (state.sourcesSubMode === 'downloads' && hub.refreshTorrentState) hub.refreshTorrentState();
+          return Promise.resolve();
+        },
+        back: function () {
+          if (state.browserOpen) {
+            closeBrowser();
+            return Promise.resolve();
+          }
+          return Promise.resolve();
+        }
+      });
+    }
+  } catch (_routerErr) {}
   window.Tanko.web = {
     openBrowser: openBrowser,
     openHome: openHome,
@@ -1798,6 +2147,19 @@
     openTorrentWorkspace: openTorrentWorkspace,
     isBrowserOpen: function () { return !!state.browserOpen; },
     openAddSourceDialog: function () { openAddSourceDialog(null); }
+  };
+  window.Tanko.sources = {
+    openSources: openSources,
+    openSearch: openSourcesSearch,
+    openDownloads: openSourcesDownloads,
+    search: function (query, filter) {
+      if (el.sourcesSearchInput) el.sourcesSearchInput.value = String(query || '');
+      if (el.sourcesSearchFilter && filter) el.sourcesSearchFilter.value = String(filter || 'all').toLowerCase();
+      setSourcesSubMode('search');
+      runSourcesSearch();
+    },
+    openSaveFlow: openSaveFlowForResult,
+    startConfiguredDownload: startConfiguredDownload
   };
 
   } catch (webInitErr) {

@@ -46,6 +46,63 @@
   display: none !important;
 }
 
+.sourcesSearchPanel {
+  margin-bottom: 10px;
+}
+
+.sourcesSearchControls {
+  display: grid;
+  grid-template-columns: 1fr 140px 100px;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sourcesSearchTableWrap {
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 8px;
+  overflow: auto;
+  max-height: 320px;
+}
+
+.sourcesSearchTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.sourcesSearchTable th,
+.sourcesSearchTable td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--wb-border-subtle);
+  text-align: left;
+  font-size: 12px;
+}
+
+.sourcesSearchTable th {
+  position: sticky;
+  top: 0;
+  background: var(--wb-surface);
+  z-index: 1;
+}
+
+.sourcesSearchTitleCell {
+  max-width: 520px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Sources mode should only show torrent UI; keep sidebar minimal (Web utility only). */
+#webLibraryView .libSidebar .navSection:not(.navSectionUtility),
+#webLibraryView .libSidebar .navSep {
+  display: none !important;
+}
+
+#webLibraryView #webHomeView > .continuePanel,
+#webLibraryView #webHomeDownloadsPanel,
+#webLibraryView #webHomeView > .panel.seriesPanel {
+  display: none !important;
+}
+
 /* Hide app chrome when browser is the active surface */
 body:has(.webBrowserView:not(.hidden)) .bgFx { display: none; }
 body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }

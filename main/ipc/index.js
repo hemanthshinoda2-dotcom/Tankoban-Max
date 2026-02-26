@@ -100,6 +100,7 @@ const webAdblockDomain = require('../domains/webAdblock');
 const webUserscriptsDomain = require('../domains/webUserscripts');
 const torProxyDomain = require('../domains/torProxy');
 const webSearchHistoryDomain = require('../domains/webSearchHistory'); // FEAT-BROWSER
+const torrentSearchDomain = require('../domains/torrentSearch');
 __bLog('registerIpc: BUILD_WEB webSourcesDomain + settings/history/torrent/torProxy domains OK');
 
 // FEAT-AUDIOBOOK: Audiobook domains
@@ -499,6 +500,7 @@ try {
     require('./register/web_adblock'),
     require('./register/web_userscripts'),
     require('./register/web_torrent'),
+    require('./register/torrent_search'),
     require('./register/tor_proxy'), // FEAT-TOR
     require('./register/web_search_history'), // FEAT-BROWSER
     require('./register/web_browser_actions'), // FEAT-BROWSER
@@ -512,7 +514,7 @@ try {
   registerModules = [];
 }
 
-const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_userscripts','web_torrent','tor_proxy','web_search_history','web_browser_actions','audiobooks','audiobook_progress','audiobook_pairing'];
+const registerModuleNames = ['window','shell','library','books','books_tts_edge','books_progress','books_tts_progress','books_settings','books_ui_state','books_opds','video','video_posters','page_thumbnails','files','archives','export','progress','video_progress','video_settings','video_ui_state','player_core','holy_grail','series_settings','books_bookmarks','books_annotations','books_display_names','video_display_names','health_check','web_sources','web_browser_settings','web_history','web_session','web_bookmarks','web_permissions','web_data','web_find','web_adblock','web_userscripts','web_torrent','torrent_search','tor_proxy','web_search_history','web_browser_actions','audiobooks','audiobook_progress','audiobook_pairing'];
 for (let i = 0; i < registerModules.length; i++) {
   const register = registerModules[i];
   try {
@@ -555,6 +557,7 @@ for (let i = 0; i < registerModules.length; i++) {
     webAdblockDomain,
     webUserscriptsDomain,
     webTorrentDomain,
+    torrentSearchDomain,
     torProxyDomain, // FEAT-TOR
     webSearchHistoryDomain, // FEAT-BROWSER
     audiobooksDomain, // FEAT-AUDIOBOOK

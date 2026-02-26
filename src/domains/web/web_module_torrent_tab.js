@@ -723,6 +723,7 @@
         case 'delete':
           ids.forEach(function (id) {
             api.webTorrent.remove({ id: id });
+            if (api.webTorrent.removeHistory) api.webTorrent.removeHistory({ id: id });
             delete torrents[id];
             selectedIds.delete(id);
           });
@@ -731,6 +732,7 @@
         case 'deleteFiles':
           ids.forEach(function (id) {
             api.webTorrent.cancel({ id: id });
+            if (api.webTorrent.removeHistory) api.webTorrent.removeHistory({ id: id });
             delete torrents[id];
             selectedIds.delete(id);
           });
@@ -766,6 +768,7 @@
         case 'delete':
           ids.forEach(function (id) {
             api.webTorrent.remove({ id: id });
+            if (api.webTorrent.removeHistory) api.webTorrent.removeHistory({ id: id });
             delete torrents[id];
             selectedIds.delete(id);
           });

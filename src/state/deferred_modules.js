@@ -292,6 +292,7 @@
     const comicsBtn = document.getElementById('modeComicsBtn');
     const booksBtn = document.getElementById('modeBooksBtn');
     const videosBtn = document.getElementById('modeVideosBtn');
+    const sourcesBtn = document.getElementById('modeSourcesBtn');
 
     videosBtn?.addEventListener('click', async (e) => {
       try {
@@ -317,6 +318,24 @@
       } catch {}
       await ensureBooksModulesLoaded();
       if (typeof window.setMode === 'function') window.setMode('books');
+    });
+
+    sourcesBtn?.addEventListener('click', async (e) => {
+      try {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      } catch {}
+      if (typeof tanko.deferred.ensureWebModulesLoadedLegacy === 'function') {
+        await tanko.deferred.ensureWebModulesLoadedLegacy();
+      } else {
+        await ensureWebModulesLoaded();
+      }
+      if (typeof window.setMode === 'function') window.setMode('sources');
+      try {
+        if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
+          window.Tanko.sources.openSources();
+        }
+      } catch {}
     });
   }
 

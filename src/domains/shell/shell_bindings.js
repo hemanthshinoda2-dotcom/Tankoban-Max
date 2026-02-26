@@ -163,6 +163,7 @@
   var LIB_DEFAULT_AUTO_STEP = 15;
 
   var webHubToggleBtn = document.getElementById('webHubToggleBtn');
+  var webUtilityBtns = Array.prototype.slice.call(document.querySelectorAll('.webUtilityBtn'));
   var openSettingsBtn = document.getElementById('openSettingsBtn');
   var librarySettingsOverlay = document.getElementById('librarySettingsOverlay');
   var settingsCloseBtn = document.getElementById('settingsClose');
@@ -567,6 +568,14 @@
       openBrowserFromTopButton();
     });
   }
+  webUtilityBtns.forEach(function (btn) {
+    if (!btn) return;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBrowserFromTopButton();
+    });
+  });
 
   if (webHubAddSourceBtn) {
     webHubAddSourceBtn.addEventListener('click', function (e) {

@@ -4,7 +4,7 @@
   'use strict';
 
   /**
-   * @typedef {'shell'|'library'|'comic'|'book'|'audiobook'|'video'|'browser'|'torrent'} AppSection
+   * @typedef {'shell'|'library'|'comic'|'book'|'audiobook'|'video'|'browser'|'torrent'|'sources'} AppSection
    */
 
   const SECTION_ALIASES = {
@@ -19,6 +19,7 @@
     'video-player': 'video',
     web: 'browser',
     'web-browser': 'browser',
+    sources: 'sources',
   };
 
   /** @returns {AppSection | ''} */
@@ -34,7 +35,8 @@
       mapped === 'audiobook' ||
       mapped === 'video' ||
       mapped === 'browser' ||
-      mapped === 'torrent'
+      mapped === 'torrent' ||
+      mapped === 'sources'
     ) return mapped;
     return '';
   }
@@ -91,7 +93,7 @@
 
   async function openBrowserWorkspace(opts) {
     const options = (opts && typeof opts === 'object') ? opts : {};
-    await setMode('comics');
+    await setMode('sources');
 
     // Browser-host bridge first: lets a future Aspect embed plug in without changing callers.
     try {
@@ -134,6 +136,19 @@
     }
   }
 
+  async function openSourcesWorkspace() {
+    await setMode('sources');
+    await ensureWebModulesLoaded();
+    try {
+      if (window.Tanko && window.Tanko.sources) {
+        if (typeof window.Tanko.sources.openSources === 'function') {
+          window.Tanko.sources.openSources();
+          return;
+        }
+      }
+    } catch (_err) {}
+  }
+
   /** @param {AppSection} section */
   async function applySectionBoot(section) {
     switch (section) {
@@ -161,8 +176,16 @@
       case 'browser':
         await openBrowserWorkspace({ openTorrentWorkspace: false });
         return;
+      case 'sources':
+        await openSourcesWorkspace();
+        return;
       case 'torrent':
-        await openBrowserWorkspace({ openTorrentWorkspace: true });
+        await openSourcesWorkspace();
+        try {
+          if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openDownloads === 'function') {
+            window.Tanko.sources.openDownloads();
+          }
+        } catch (_err) {}
         return;
       default:
         await setMode('comics');

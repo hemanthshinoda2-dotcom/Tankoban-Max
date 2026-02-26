@@ -1691,6 +1691,15 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
 
 /* Tankoban Plus Build 1: mode switch + video views */
 .modeSwitch{ display:flex; gap:6px; align-items:center; justify-content:center; margin-top:6px; }
+
+.navSectionUtility {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.webUtilityBtn {
+  width: 100%;
+}
 .modeBtn{ padding:6px 10px; border-radius:10px; border:1px solid rgba(var(--chrome-rgb),0.16); background:rgba(var(--chrome-rgb),0.06); color:inherit; cursor:pointer; font-size:12px; }
 .modeBtn.active{ background:rgba(var(--chrome-rgb),0.14); border-color:rgba(var(--chrome-rgb),0.28); }
 

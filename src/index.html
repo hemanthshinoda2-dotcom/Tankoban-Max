@@ -62,6 +62,7 @@ COMMON ANCHORS
           <sl-button id="modeComicsBtn" class="modeBtn active" size="small" title="Comics">Comics</sl-button>
           <sl-button id="modeBooksBtn" class="modeBtn" size="small" title="Books">Books</sl-button>
           <sl-button id="modeVideosBtn" class="modeBtn" size="small" title="Videos">Videos</sl-button>
+          <sl-button id="modeSourcesBtn" class="modeBtn" size="small" title="Sources">Sources</sl-button>
         </div>
       </div>
 
@@ -72,7 +73,6 @@ COMMON ANCHORS
           <svg class="themeIcon themeIcon--moon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style="display:none"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
         </button>
         <sl-button id="hiddenSeriesBtn" class="btn btn-ghost btn-sm" size="small" title="Hidden series">Hidden</sl-button>
-        <button id="webHubToggleBtn" class="iconBtn" title="Open Tankoban Browser" aria-label="Open Tankoban Browser">Web</button>
 
         <!-- Global search across library -->
         <div class="globalSearchWrap compact">
@@ -129,6 +129,13 @@ COMMON ANCHORS
               <div class="navItems">
                 <sl-button id="openFileBtn" class="navBtn" title="Open File">Open file...</sl-button>
                 <sl-button id="openSettingsBtn" class="navBtn" title="Settings">Settings</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+            <div class="navSection navSectionUtility">
+              <div class="navItems">
+                <sl-button id="webUtilityBtnComics" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
               </div>
             </div>
 
@@ -290,6 +297,13 @@ COMMON ANCHORS
                 <sl-button id="booksRestoreHiddenBtn" class="navBtn" title="Restore hidden series" disabled aria-disabled="true">Restore hidden</sl-button>
                 <sl-button id="booksOpenFileBtn" class="navBtn" title="Open book file">Open file...</sl-button>
                 <sl-button id="booksRefreshBtn" class="navBtn" title="Refresh books library">Refresh</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+            <div class="navSection navSectionUtility">
+              <div class="navItems">
+                <sl-button id="webUtilityBtnBooks" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
               </div>
             </div>
 
@@ -1047,12 +1061,31 @@ COMMON ANCHORS
             <div class="navSep"></div>
 
             <div class="navSection">
+              <div class="navHeader">Player</div>
+              <div class="navItems">
+                <div class="playerSwitch" role="group" aria-label="Video player engine">
+                  <sl-button id="playerHgBtn" class="modeBtn" size="small" title="Use Holy Grail embedded player">Holy Grail</sl-button>
+                  <sl-button id="playerQtBtn" class="modeBtn" size="small" title="Use external Qt player">Qt</sl-button>
+                </div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
               <div class="navHeader">Actions</div>
               <div class="navItems">
                 <sl-button id="videoAddFilesBtn" class="navBtn" title="Add video files">Add files...</sl-button>
                 <sl-button id="videoRestoreHiddenBtn" class="navBtn" title="Restore hidden shows">Restore hidden</sl-button>
                 <sl-button id="videoOpenFileBtn" class="navBtn" title="Open video file">Open file...</sl-button>
                 <sl-button id="videoRefreshBtn" class="navBtn" title="Refresh library">Refresh</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+            <div class="navSection navSectionUtility">
+              <div class="navItems">
+                <sl-button id="webUtilityBtnVideos" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
               </div>
             </div>
           </aside>
@@ -1494,7 +1527,7 @@ COMMON ANCHORS
       </section>
 
       <!-- BUILD_WEB: Web sources browser view -->
-      <section id="webLibraryView" class="view hidden" style="display:none">
+      <section id="webLibraryView" class="view hidden">
         <div class="libraryShell">
           <aside class="libSidebar" aria-label="Web sources navigation">
             <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
@@ -1533,11 +1566,61 @@ COMMON ANCHORS
                 </div>
               </div>
             </div>
+
+            <div class="navSep"></div>
+            <div class="navSection navSectionUtility">
+              <div class="navItems">
+                <sl-button id="webUtilityBtnSources" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
+              </div>
+            </div>
           </aside>
 
           <!-- BUILD_WEB_HOME: library home view (grid + continue row) -->
           <div class="libContent">
             <div id="webHomeView" class="homeView">
+              <div class="panel sourcesSearchPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Tankoban Torrent</div>
+                  <div class="panelActions" id="sourcesSubModeTabs">
+                    <button id="sourcesSearchTabBtn" class="btn btn-ghost btn-sm active" type="button">Search</button>
+                    <button id="sourcesDownloadsTabBtn" class="btn btn-ghost btn-sm" type="button">Downloads</button>
+                  </div>
+                </div>
+                <div id="sourcesSearchView">
+                  <div class="sourcesSearchControls">
+                    <input id="sourcesSearchInput" class="search" type="text" placeholder="Search torrents..." autocomplete="off" />
+                    <select id="sourcesSearchFilter" class="select">
+                      <option value="all">All</option>
+                      <option value="comics">Comics</option>
+                      <option value="books">Books</option>
+                      <option value="tv">TV</option>
+                    </select>
+                    <button id="sourcesSearchBtn" class="btn btn-sm" type="button">Search</button>
+                  </div>
+                  <div id="sourcesSearchStatus" class="muted tiny">Enter a query and search.</div>
+                  <div class="sourcesSearchTableWrap">
+                    <table id="sourcesSearchTable" class="sourcesSearchTable">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Size</th>
+                          <th>Files</th>
+                          <th>Seeders</th>
+                          <th>Magnet</th>
+                        </tr>
+                      </thead>
+                      <tbody id="sourcesSearchBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div id="sourcesDownloadsView" class="panel hidden">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Torrent Downloads</div>
+                </div>
+              </div>
+
               <div class="panel continuePanel">
                 <div class="continueHead">
                   <div class="continueTitle">Continue Browsing...</div>
@@ -1618,6 +1701,42 @@ COMMON ANCHORS
           <div class="settingsActions">
             <button id="downloadDestPickerUpBtn" class="btn btn-ghost btn-sm" type="button">Up</button>
             <button id="downloadDestPickerUseBtn" class="btn" type="button">Download Here</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sourcesSaveFlowOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Save torrent to library">
+        <div class="settingsCard">
+          <div class="settingsTop">
+            <div class="settingsTitle">Save to Library</div>
+            <button id="sourcesSaveFlowCancel" class="btn btn-ghost btn-sm" type="button">Cancel</button>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="sourcesSaveCategory">Category</label>
+            <select id="sourcesSaveCategory" class="select">
+              <option value="comics">Comics</option>
+              <option value="books">Books</option>
+              <option value="videos">TV</option>
+            </select>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="sourcesSaveDestMode">Destination</label>
+            <select id="sourcesSaveDestMode" class="select">
+              <option value="default">Standalone download (default)</option>
+              <option value="existing">Pick existing folder</option>
+              <option value="new">Create new folder</option>
+            </select>
+          </div>
+          <div class="settingsGroup hidden" id="sourcesSaveExistingWrap">
+            <label class="settingsLabel" for="sourcesSaveExistingFolder">Existing folder</label>
+            <select id="sourcesSaveExistingFolder" class="select"></select>
+          </div>
+          <div class="settingsGroup hidden" id="sourcesSaveNewWrap">
+            <label class="settingsLabel" for="sourcesSaveNewFolder">New folder name</label>
+            <input id="sourcesSaveNewFolder" class="search" type="text" placeholder="Folder name" autocomplete="off" />
+          </div>
+          <div class="settingsActions">
+            <button id="sourcesSaveFlowStart" class="btn" type="button">Start Download</button>
           </div>
         </div>
       </div>
@@ -1741,11 +1860,6 @@ COMMON ANCHORS
             <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><circle cx="8" cy="8.5" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 3.5V2.5h5v1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
             <span>Screenshot full page</span>
             <span class="menu-shortcut">Ctrl+Shift+S</span>
-          </div>
-          <div class="menu-separator"></div>
-          <div class="menu-item" data-action="torrent">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM8 5v4M6.5 7.5L8 9l1.5-1.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <span>Tankoban Torrent</span>
           </div>
         </div>
 
@@ -2313,4 +2427,3 @@ COMMON ANCHORS
   <script src="./state/app_section_boot.js"></script>
 </body>
 </html>
-
