@@ -42,7 +42,7 @@ function getVideoSettingsMem(ctx) {
   try {
     if (!fs.existsSync(prefsPath) && fs.existsSync(legacyPath)) {
       const legacy = normalizeVideoSettings(ctx.storage.readJSON(legacyPath, {}));
-      ctx.storage.writeJSONDebounced(prefsPath, legacy);
+      try { ctx.storage.writeJSON(prefsPath, legacy).catch(() => {}); } catch {}
       try { fs.unlinkSync(legacyPath); } catch {}
       videoSettingsMem = legacy;
       return videoSettingsMem;
@@ -74,7 +74,7 @@ async function save(ctx, _evt, settings) {
   const next = (settings && typeof settings === 'object') ? settings : {};
   v.settings = { ...(v.settings || {}), ...next };
   v.updatedAt = Date.now();
-  ctx.storage.writeJSONDebounced(p, v);
+  await ctx.storage.writeJSON(p, v);
   return { ok: true, value: { settings: { ...(v.settings || {}) }, updatedAt: v.updatedAt } };
 }
 
@@ -85,7 +85,7 @@ async function save(ctx, _evt, settings) {
 async function clear(ctx) {
   const p = ctx.storage.dataPath('video_prefs.json');
   videoSettingsMem = { settings: {}, updatedAt: Date.now() };
-  ctx.storage.writeJSONDebounced(p, videoSettingsMem);
+  await ctx.storage.writeJSON(p, videoSettingsMem);
   return { ok: true };
 }
 

@@ -10,3 +10,6 @@
   - `packages/core-main`
   - `packages/core-storage`
   - `packages/core-ipc-contracts`
+- Renderer boundary contract:
+  - Books orchestration entrypoints (`library`, `listening_shell`, `listening_player`) should use `window.Tanko.features.books` first.
+  - `window.Tanko.api.*` remains valid as fallback during compatibility window.

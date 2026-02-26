@@ -69,6 +69,30 @@ videoProgress IPC calls
     } catch (e) { console.error('[safe] sync error:', e); }
   };
   const qs = (id) => document.getElementById(id);
+  const getFeature = (name) => {
+    try {
+      const f = window.Tanko && window.Tanko.features ? window.Tanko.features : null;
+      if (!f || !name) return null;
+      return f[name] || null;
+    } catch {
+      return null;
+    }
+  };
+
+  function getVideoOps() {
+    const feat = getFeature('video');
+    return {
+      getState: (feat && typeof feat.getState === 'function')
+        ? feat.getState
+        : (() => Tanko.api.video.getState()),
+      getPlayerPreference: (feat && typeof feat.getPlayerPreference === 'function')
+        ? feat.getPlayerPreference
+        : (() => (Tanko.api.videoSettings.get ? Tanko.api.videoSettings.get() : Promise.resolve({}))),
+      setPlayerPreference: (feat && typeof feat.setPlayerPreference === 'function')
+        ? feat.setPlayerPreference
+        : ((settings) => (Tanko.api.videoSettings.save ? Tanko.api.videoSettings.save(settings) : Promise.resolve({ ok: false }))),
+    };
+  }
 
   const el = {
     modeComicsBtn: qs('modeComicsBtn'),
@@ -2896,10 +2920,11 @@ function closeTracksPanel(){
               console.log('[video-load] Starting video library and player bootstrap');
 
               // Load library data + progress + settings + playback capability checks in parallel
+              const videoOps = getVideoOps();
               const [idxRes, progRes, vs, uiState, hgResult, mpvResult, dnRes] = await Promise.all([
-                Tanko.api.video.getState().catch(() => ({ idx: { roots: [], shows: [], episodes: [] } })),
+                videoOps.getState().catch(() => ({ idx: { roots: [], shows: [], episodes: [] } })),
                 Tanko.api.videoProgress.getAll().catch(() => ({})),
-                Tanko.api.videoSettings.get?.().catch(() => ({})),
+                videoOps.getPlayerPreference().catch(() => ({})),
                 Tanko.api.videoUi.getState?.().catch(() => ({})),
                 (Tanko.api.holyGrail && typeof Tanko.api.holyGrail.probe === 'function')
                   ? Tanko.api.holyGrail.probe().catch((e) => ({ ok: false, error: String((e && e.message) || e || 'probe_failed') }))
@@ -3102,8 +3127,9 @@ if (!Object.prototype.hasOwnProperty.call(s, 'preferredSubtitleLanguage') &&
 
   function persistVideoSettings(partial){
     safe(async () => {
-      if (!Tanko.api.videoSettings.save) return;
-      await Tanko.api.videoSettings.save(partial || {});
+      const videoOps = getVideoOps();
+      if (!videoOps.setPlayerPreference) return;
+      await videoOps.setPlayerPreference(partial || {});
     });
   }
 
@@ -10413,7 +10439,9 @@ function bindKeyboard(){
       state.settings.forceQtPlayer = !!useQt;
       persistVideoSettings({ forceQtPlayer: !!state.settings.forceQtPlayer });
       try {
-        if (typeof localStorage !== 'undefined') localStorage.removeItem('tankobanUseQtPlayer');
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('tankobanUseQtPlayer', state.settings.forceQtPlayer ? '1' : '0');
+        }
       } catch {}
     }
 

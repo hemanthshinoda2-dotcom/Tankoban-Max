@@ -38,7 +38,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Phase 2: IPC contract (Build 76) - Phase 3: adjusted path
-const { CHANNEL, EVENT } = require('../../shared/ipc');
+const { CHANNEL, EVENT } = require('../../packages/core-ipc-contracts');
 __bLog('registerIpc: core imports OK');
 
 // Phase 4A: Storage library and persistence domains (Build 78A)

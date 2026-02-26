@@ -8,7 +8,7 @@
 // TRACE:IPC_OUT
 
 const { contextBridge, ipcRenderer } = require('electron');
-const { CHANNEL, EVENT } = require('../shared/ipc');
+const { CHANNEL, EVENT } = require('../packages/core-ipc-contracts');
 const { createFeatureFacade } = require('../packages/core-preload');
 const deps = { ipcRenderer, CHANNEL, EVENT };
 

@@ -25,7 +25,8 @@ SECTION INDEX (search: ══════ SECTION:)
   if (window.__tankoBooksLibraryBound) return;
   window.__tankoBooksLibraryBound = true;
 
-  const api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
+  const featureBooks = window.Tanko && window.Tanko.features && window.Tanko.features.books ? window.Tanko.features.books : null;
+  const api = (featureBooks && featureBooks.api) ? featureBooks.api : (window.Tanko && window.Tanko.api ? window.Tanko.api : null);
   if (!api || !api.books) return;
 
   const qs = (id) => {

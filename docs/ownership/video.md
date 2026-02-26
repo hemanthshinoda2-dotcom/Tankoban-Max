@@ -10,3 +10,6 @@
   - `packages/core-main`
   - `packages/core-storage`
   - `packages/core-ipc-contracts`
+- Renderer boundary contract:
+  - Player preference read/write should prefer `window.Tanko.features.video`.
+  - Raw `window.Tanko.api.videoSettings` is compatibility fallback only.

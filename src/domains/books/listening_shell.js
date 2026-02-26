@@ -15,6 +15,19 @@
   var currentMode = MODE_READ;
   var pendingListenBook = null; // LISTEN_P3: book queued to open in TTS player
 
+  function getBooksOps() {
+    var feat = window.Tanko && window.Tanko.features && window.Tanko.features.books ? window.Tanko.features.books : null;
+    var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
+    return {
+      clearTtsProgress: feat && typeof feat.clearTtsProgress === 'function'
+        ? feat.clearTtsProgress
+        : (api && typeof api.clearBooksTtsProgress === 'function' ? api.clearBooksTtsProgress : null),
+      getAllTtsProgress: feat && typeof feat.getAllTtsProgress === 'function'
+        ? feat.getAllTtsProgress
+        : (api && typeof api.getAllBooksTtsProgress === 'function' ? api.getAllBooksTtsProgress : null),
+    };
+  }
+
   function qs(id) {
     try { return document.getElementById(id); } catch { return null; }
   }
@@ -85,9 +98,9 @@
     remove.onclick = function (e) {
       e.preventDefault();
       e.stopPropagation();
-      var api = window.Tanko && window.Tanko.api;
-      if (api && typeof api.clearBooksTtsProgress === 'function') {
-        api.clearBooksTtsProgress(entry.bookId).then(function () {
+      var booksOps = getBooksOps();
+      if (booksOps && typeof booksOps.clearTtsProgress === 'function') {
+        booksOps.clearTtsProgress(entry.bookId).then(function () {
           // Re-render the shelf after clearing
           var app = window.booksApp;
           if (app && typeof app.setListenMode === 'function') app.setListenMode(true);
@@ -136,14 +149,14 @@
     var continueEmpty = qs('booksContinueEmpty');
     if (!continuePanel) return;
 
-    var api = window.Tanko && window.Tanko.api;
-    if (!api || typeof api.getAllBooksTtsProgress !== 'function') {
+    var booksOps = getBooksOps();
+    if (!booksOps || typeof booksOps.getAllTtsProgress !== 'function') {
       continuePanel.classList.add('hidden');
       if (continueEmpty) continueEmpty.classList.remove('hidden');
       return;
     }
 
-    api.getAllBooksTtsProgress().then(function (result) {
+    booksOps.getAllTtsProgress().then(function (result) {
       var byBook = (result && typeof result.byBook === 'object') ? result.byBook : {};
       var entries = [];
       for (var bookId in byBook) {

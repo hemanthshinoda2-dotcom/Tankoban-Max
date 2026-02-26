@@ -1,4 +1,5 @@
 const { URL } = require('url');
+const { EVENT } = require('../../../packages/core-ipc-contracts');
 
 const WEB_SETTINGS_FILE = 'web_browser_settings.json';
 const DEFAULT_LIMIT = 40;
@@ -195,8 +196,7 @@ function parseItems(xml) {
 
 function emitStatus(ctx, payload) {
   try {
-    const ipc = require('../../../shared/ipc');
-    ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.TORRENT_SEARCH_STATUS_CHANGED, payload || {});
+    ctx.win && ctx.win.webContents && ctx.win.webContents.send(EVENT.TORRENT_SEARCH_STATUS_CHANGED, payload || {});
   } catch (_e) {}
 }
 

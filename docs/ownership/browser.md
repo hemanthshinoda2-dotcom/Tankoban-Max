@@ -10,3 +10,6 @@
   - `packages/core-main`
   - `packages/core-preload`
   - `packages/core-ipc-contracts`
+- Renderer boundary contract:
+  - Browser settings orchestration should prefer `window.Tanko.features.browser`.
+  - Raw `window.Tanko.api.webBrowserSettings` access is retained only for fallback compatibility.

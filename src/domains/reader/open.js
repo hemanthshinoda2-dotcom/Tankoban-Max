@@ -29,6 +29,37 @@ Hot search tokens:
 - EDIT_ZONE:INPUT
 */
 
+  function getComicsOps() {
+    const feat = window.Tanko && window.Tanko.features && window.Tanko.features.comics ? window.Tanko.features.comics : null;
+    const api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
+    return {
+      getProgress: feat && typeof feat.getProgress === 'function'
+        ? feat.getProgress
+        : (api && api.progress && typeof api.progress.get === 'function' ? api.progress.get.bind(api.progress) : null),
+      saveProgress: feat && typeof feat.saveProgress === 'function'
+        ? feat.saveProgress
+        : (api && api.progress && typeof api.progress.save === 'function' ? api.progress.save.bind(api.progress) : null),
+      cbzOpen: feat && typeof feat.cbzOpen === 'function'
+        ? feat.cbzOpen
+        : (api && api.archives && typeof api.archives.cbzOpen === 'function' ? api.archives.cbzOpen.bind(api.archives) : null),
+      cbzReadEntry: feat && typeof feat.cbzReadEntry === 'function'
+        ? feat.cbzReadEntry
+        : (api && api.archives && typeof api.archives.cbzReadEntry === 'function' ? api.archives.cbzReadEntry.bind(api.archives) : null),
+      cbzClose: feat && typeof feat.cbzClose === 'function'
+        ? feat.cbzClose
+        : (api && api.archives && typeof api.archives.cbzClose === 'function' ? api.archives.cbzClose.bind(api.archives) : null),
+      cbrOpen: feat && typeof feat.cbrOpen === 'function'
+        ? feat.cbrOpen
+        : (api && api.archives && typeof api.archives.cbrOpen === 'function' ? api.archives.cbrOpen.bind(api.archives) : null),
+      cbrReadEntry: feat && typeof feat.cbrReadEntry === 'function'
+        ? feat.cbrReadEntry
+        : (api && api.archives && typeof api.archives.cbrReadEntry === 'function' ? api.archives.cbrReadEntry.bind(api.archives) : null),
+      cbrClose: feat && typeof feat.cbrClose === 'function'
+        ? feat.cbrClose
+        : (api && api.archives && typeof api.archives.cbrClose === 'function' ? api.archives.cbrClose.bind(api.archives) : null),
+    };
+  }
+
   async function openBook(book) {
 
 // PERF_HOTSPOT: openBook has long awaits; rapid volume switches can let stale completions overwrite UI/state
@@ -47,8 +78,9 @@ let openedIsCbr = false;
 
 
     showLoading('Opening volume', book?.title || '');
+    const comicsOps = getComicsOps();
     try {
-      const saved = await Tanko.api.progress.get(book.id);
+      const saved = comicsOps.getProgress ? await comicsOps.getProgress(book.id) : null;
       if (isStale()) return;
 
     // BUILD42_CONTINUE_READING_TOUCH_ON_OPEN (Build 42)
@@ -66,7 +98,7 @@ let openedIsCbr = false;
       appState.progressAll[book.id] = touched;
 
       // Persist the touch immediately (safe: keeps existing pageIndex/y/finished flags).
-      try { Tanko.api.progress.save(book.id, touched).catch(() => {}); } catch {}
+      try { if (comicsOps.saveProgress) comicsOps.saveProgress(book.id, touched).catch(() => {}); } catch {}
     } catch {}
       // BUILD19_KNOWN_SPREAD_SET_SEED (Build 19)
       // Restore known spread indices to stabilize Two-Page parity across sessions.
@@ -139,8 +171,8 @@ appState.settings.scrollMode = 'infinite';
       const isCbr = lower.endsWith('.cbr');
 
       const opened = isCbr
-        ? await Tanko.api.archives.cbrOpen(book.path)
-        : await Tanko.api.archives.cbzOpen(book.path);
+        ? await (comicsOps.cbrOpen ? comicsOps.cbrOpen(book.path) : Promise.resolve({}))
+        : await (comicsOps.cbzOpen ? comicsOps.cbzOpen(book.path) : Promise.resolve({}));
 
       const sid = opened.sessionId;
 
@@ -148,7 +180,9 @@ openedSid = sid;
 openedIsCbr = isCbr;
 if (isStale()) {
   try {
-    if (openedSid) Promise.resolve(openedIsCbr ? Tanko.api.archives.cbrClose(openedSid) : Tanko.api.archives.cbzClose(openedSid)).catch(() => {});
+    if (openedSid) Promise.resolve(openedIsCbr
+      ? (comicsOps.cbrClose ? comicsOps.cbrClose(openedSid) : Promise.resolve({ ok: false }))
+      : (comicsOps.cbzClose ? comicsOps.cbzClose(openedSid) : Promise.resolve({ ok: false }))).catch(() => {});
   } catch {}
   return;
 }
@@ -164,8 +198,8 @@ if (isStale()) {
         entries: (opened.entries || []).map((e, i) => ({ ...e, entryIndex: i })),
         getFileBytes: async (entry) => {
           const ab = isCbr
-            ? await Tanko.api.archives.cbrReadEntry(sid, entry.entryIndex)
-            : await Tanko.api.archives.cbzReadEntry(sid, entry.entryIndex);
+            ? await (comicsOps.cbrReadEntry ? comicsOps.cbrReadEntry(sid, entry.entryIndex) : Promise.resolve(null))
+            : await (comicsOps.cbzReadEntry ? comicsOps.cbzReadEntry(sid, entry.entryIndex) : Promise.resolve(null));
           return new Uint8Array(ab);
         },
       };
@@ -240,7 +274,9 @@ if (isStale()) {
 
       if (isStale()) {
         try {
-          if (openedSid) Promise.resolve(openedIsCbr ? Tanko.api.archives.cbrClose(openedSid) : Tanko.api.archives.cbzClose(openedSid)).catch(() => {});
+          if (openedSid) Promise.resolve(openedIsCbr
+            ? (comicsOps.cbrClose ? comicsOps.cbrClose(openedSid) : Promise.resolve({ ok: false }))
+            : (comicsOps.cbzClose ? comicsOps.cbzClose(openedSid) : Promise.resolve({ ok: false }))).catch(() => {});
         } catch {}
         return;
       }
@@ -264,7 +300,9 @@ if (isStale()) {
 // Build 22: if a newer open started, this completion is stale — do not toast/reset the active session.
 if (isStale()) {
   try {
-    if (openedSid) Promise.resolve(openedIsCbr ? Tanko.api.archives.cbrClose(openedSid) : Tanko.api.archives.cbzClose(openedSid)).catch(() => {});
+    if (openedSid) Promise.resolve(openedIsCbr
+      ? (comicsOps.cbrClose ? comicsOps.cbrClose(openedSid) : Promise.resolve({ ok: false }))
+      : (comicsOps.cbzClose ? comicsOps.cbzClose(openedSid) : Promise.resolve({ ok: false }))).catch(() => {});
   } catch {}
   return;
 }
@@ -449,4 +487,3 @@ if (isStale()) {
     // Non-forced calls are batched to reduce DOM churn during rapid movement.
     scheduleHudPageCounter();
   }
-

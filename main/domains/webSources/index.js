@@ -4,10 +4,12 @@
 const path = require('path');
 const fs = require('fs');
 const { session } = require('electron');
+const IPC = require('../../../packages/core-ipc-contracts');
 
 const CONFIG_FILE = 'web_sources.json';
 const DOWNLOAD_HISTORY_FILE = 'web_download_history.json';
 const libraryBridge = require('../../../packages/core-main/library_bridge');
+const torrentServiceBridge = require('../../../packages/feature-torrent/service_bridge');
 
 const DEFAULT_SOURCES = [
   { id: 'annasarchive', name: "Anna's Archive", url: 'https://annas-archive.org', color: '#e74c3c', builtIn: true },
@@ -56,8 +58,7 @@ function capDownloads(cfg) {
 
 function emitDownloadsUpdated(ctx) {
   try {
-    var ipc = require('../../../shared/ipc');
-    ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOADS_UPDATED, {
+    ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOADS_UPDATED, {
       downloads: (ensureDownloadsCache(ctx).downloads || []),
     });
   } catch {}
@@ -146,7 +147,7 @@ async function add(ctx, _evt, payload) {
   cfg.sources.push(source);
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(require('../../../shared/ipc').EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
+  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
   return { ok: true, source: source };
 }
 
@@ -157,7 +158,7 @@ async function remove(ctx, _evt, id) {
   if (cfg.sources.length === before) return { ok: false, error: 'Source not found' };
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(require('../../../shared/ipc').EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
+  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
   return { ok: true };
 }
 
@@ -174,7 +175,7 @@ async function update(ctx, _evt, payload) {
   if (payload.color != null) found.color = String(payload.color).trim();
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(require('../../../shared/ipc').EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
+  try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_SOURCES_UPDATED, { sources: cfg.sources }); } catch {}
   return { ok: true };
 }
 
@@ -260,10 +261,9 @@ function detectModeHintByFilename(filename) {
 
 function emitPickerRequest(ctx, payload) {
   try {
-    var ipc = require('../../../shared/ipc');
     var wc = ctx && ctx.win && ctx.win.webContents ? ctx.win.webContents : null;
     if (!wc || wc.isDestroyed()) return false;
-    wc.send(ipc.EVENT.WEB_DOWNLOAD_PICKER_REQUEST, payload || {});
+    wc.send(IPC.EVENT.WEB_DOWNLOAD_PICKER_REQUEST, payload || {});
     return true;
   } catch {
     return false;
@@ -491,8 +491,6 @@ function setupDownloadHandler(ctx) {
   if (downloadHandlerBound) return;
   downloadHandlerBound = true;
   try {
-    var ipc = require('../../../shared/ipc');
-
     // Reconcile persisted history: any lingering "downloading" entries become interrupted.
     mutateDownloads(ctx, function (cfgBoot) {
       var changed = false;
@@ -564,7 +562,7 @@ function setupDownloadHandler(ctx) {
             state: 'failed',
           });
           try {
-            ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+            ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
               id: null,
               filename: filename,
               error: msg,
@@ -594,11 +592,7 @@ function setupDownloadHandler(ctx) {
             }
             var readPromise = fs.promises.readFile(torrentTmpPath);
             readPromise.then(function (buf) {
-              var webTorrentDomain = require('../webTorrent');
-              if (!webTorrentDomain || typeof webTorrentDomain.startTorrentBuffer !== 'function') {
-                return { ok: false, error: 'Torrent engine unavailable' };
-              }
-              return webTorrentDomain.startTorrentBuffer(ctx, null, {
+              return torrentServiceBridge.startTorrentFromBuffer(ctx, {
                 buffer: buf,
                 referer: pageUrl,
                 sourceUrl: downloadUrl,
@@ -646,7 +640,7 @@ function setupDownloadHandler(ctx) {
           try { if (tempSavePath && fs.existsSync(tempSavePath)) fs.unlinkSync(tempSavePath); } catch {}
           persistRouteFailure(route);
           try {
-            ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+            ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
               id: null,
               filename: filename,
               error: route.cancelled ? 'Cancelled' : route.error,
@@ -716,7 +710,7 @@ function setupDownloadHandler(ctx) {
 
         // BUILD_WEB_PARITY
         try {
-          ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+          ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_STARTED, {
             id: dlId,
             filename: filename,
             destination: finalDestination,
@@ -786,7 +780,7 @@ function setupDownloadHandler(ctx) {
               }
             } catch {}
 
-            ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_PROGRESS, {
+            ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_PROGRESS, {
               id: dlId,
               filename: filename,
               destination: finalDestination,
@@ -836,7 +830,7 @@ function setupDownloadHandler(ctx) {
             if (route.library) triggerLibraryRescan(ctx, route.library);
 
             try {
-              ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+              ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
                 ok: true,
                 state: 'completed',
                 id: dlId,
@@ -847,7 +841,7 @@ function setupDownloadHandler(ctx) {
             } catch {}
           } else {
             try {
-              ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+              ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
                 id: dlId,
                 state: (doneState === 'cancelled') ? 'cancelled' : (doneState === 'interrupted' ? 'interrupted' : 'failed'),
                 filename: filename,
@@ -863,7 +857,7 @@ function setupDownloadHandler(ctx) {
         var msg = String((err && err.message) || err || 'Failed to pick destination');
         persistRouteFailure({ cancelled: false, error: msg });
         try {
-          ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+          ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
             id: null,
             filename: filename,
             error: msg,
@@ -1001,12 +995,11 @@ function triggerLibraryRescan(ctx, library) {
 }
 
 async function runDirectDownload(ctx, dlId, payload, evt) {
-  var ipc = require('../../../shared/ipc');
   var url = String((payload && payload.url) || '').trim();
   if (!/^https?:\/\//i.test(url)) {
     await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', downloadUrl: url });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', state: 'failed' });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: 'Invalid URL', state: 'failed' });
     } catch {}
     return;
   }
@@ -1032,7 +1025,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     activeDownloadItems.delete(dlId);
     await pushFailedDownload(ctx, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), downloadUrl: url });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), state: 'failed' });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: String((payload && payload.suggestedFilename) || 'download'), error: String((err && err.message) || err || 'Network error'), state: 'failed' });
     } catch {}
     return;
   }
@@ -1051,7 +1044,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       downloadUrl: String(res.url || url)
     });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
         id: dlId,
         filename: filename,
         error: route.cancelled ? 'Cancelled' : route.error,
@@ -1066,7 +1059,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     var httpErr = 'HTTP ' + Number(res.status || 0) + (res.statusText ? (' ' + String(res.statusText)) : '');
     await pushFailedDownload(ctx, { id: dlId, filename: filename, destination: route.destination, library: route.library, error: httpErr, downloadUrl: String(res.url || url) });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: httpErr, state: 'failed' });
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, { id: dlId, filename: filename, error: httpErr, state: 'failed' });
     } catch {}
     return;
   }
@@ -1115,7 +1108,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
   activeSpeed.set(dlId, { lastAt: Date.now(), lastBytes: 0, bytesPerSec: 0 });
 
   try {
-    ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_STARTED, {
+    ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_STARTED, {
       id: dlId,
       filename: filename,
       destination: route.destination,
@@ -1153,7 +1146,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     }
     var pct = totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : null;
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_PROGRESS, {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_PROGRESS, {
         id: dlId,
         filename: filename,
         destination: route.destination,
@@ -1203,7 +1196,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
       d.canCancel = true;
     });
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
         id: dlId,
         state: stateName || 'failed',
         filename: filename,
@@ -1236,7 +1229,7 @@ async function runDirectDownload(ctx, dlId, payload, evt) {
     });
     triggerLibraryRescan(ctx, route.library);
     try {
-      ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_DOWNLOAD_COMPLETED, {
+      ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOAD_COMPLETED, {
         ok: true,
         state: 'completed',
         id: dlId,

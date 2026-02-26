@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { session, dialog, shell } = require('electron');
+const IPC = require('../../../packages/core-ipc-contracts');
 const libraryBridge = require('../../../packages/core-main/library_bridge');
 
 const HISTORY_FILE = 'web_torrent_history.json';
@@ -44,7 +45,7 @@ function findActiveBySource(opts) {
 }
 
 function getIpc() {
-  try { return require('../../../shared/ipc'); } catch { return null; }
+  try { return IPC; } catch { return null; }
 }
 
 async function ensureClient() {

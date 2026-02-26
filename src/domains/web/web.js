@@ -394,6 +394,71 @@
     }, 2500);
   }
 
+  function getFeature(name) {
+    try {
+      var f = window.Tanko && window.Tanko.features ? window.Tanko.features : null;
+      if (!f || !name) return null;
+      return f[name] || null;
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function getSourcesOps() {
+    var feat = getFeature('sources');
+    return {
+      search: feat && typeof feat.search === 'function' ? feat.search : (api.torrentSearch && api.torrentSearch.query ? api.torrentSearch.query : null),
+      resolveMetadata: feat && typeof feat.resolveMetadata === 'function' ? feat.resolveMetadata : (api.webTorrent && api.webTorrent.resolveMetadata ? api.webTorrent.resolveMetadata : null),
+      startConfigured: feat && typeof feat.startConfigured === 'function' ? feat.startConfigured : (api.webTorrent && api.webTorrent.startConfigured ? api.webTorrent.startConfigured : null),
+      cancelResolve: feat && typeof feat.cancelResolve === 'function' ? feat.cancelResolve : (api.webTorrent && api.webTorrent.cancelResolve ? api.webTorrent.cancelResolve : null),
+      startMagnet: feat && typeof feat.startMagnet === 'function' ? feat.startMagnet : (api.webTorrent && api.webTorrent.startMagnet ? api.webTorrent.startMagnet : null),
+    };
+  }
+
+  function getTorrentOps() {
+    var feat = getFeature('torrent');
+    return {
+      getActive: feat && typeof feat.getActive === 'function' ? feat.getActive : (api.webTorrent && api.webTorrent.getActive ? api.webTorrent.getActive : null),
+      getHistory: feat && typeof feat.getHistory === 'function' ? feat.getHistory : (api.webTorrent && api.webTorrent.getHistory ? api.webTorrent.getHistory : null),
+      selectFiles: feat && typeof feat.selectFiles === 'function' ? feat.selectFiles : (api.webTorrent && api.webTorrent.selectFiles ? api.webTorrent.selectFiles : null),
+      remove: feat && typeof feat.remove === 'function' ? feat.remove : (api.webTorrent && api.webTorrent.remove ? api.webTorrent.remove : null),
+      removeHistory: feat && typeof feat.removeHistory === 'function' ? feat.removeHistory : (api.webTorrent && api.webTorrent.removeHistory ? api.webTorrent.removeHistory : null),
+      pauseAll: feat && typeof feat.pauseAll === 'function' ? feat.pauseAll : (api.webTorrent && api.webTorrent.pauseAll ? api.webTorrent.pauseAll : null),
+      resumeAll: feat && typeof feat.resumeAll === 'function' ? feat.resumeAll : (api.webTorrent && api.webTorrent.resumeAll ? api.webTorrent.resumeAll : null),
+      onStarted: feat && typeof feat.onStarted === 'function' ? feat.onStarted : (api.webTorrent && api.webTorrent.onStarted ? api.webTorrent.onStarted : null),
+      onMetadata: feat && typeof feat.onMetadata === 'function' ? feat.onMetadata : (api.webTorrent && api.webTorrent.onMetadata ? api.webTorrent.onMetadata : null),
+      onProgress: feat && typeof feat.onProgress === 'function' ? feat.onProgress : (api.webTorrent && api.webTorrent.onProgress ? api.webTorrent.onProgress : null),
+      onCompleted: feat && typeof feat.onCompleted === 'function' ? feat.onCompleted : (api.webTorrent && api.webTorrent.onCompleted ? api.webTorrent.onCompleted : null),
+      onMagnetDetected: feat && typeof feat.onMagnetDetected === 'function' ? feat.onMagnetDetected : (api.webTorrent && api.webTorrent.onMagnetDetected ? api.webTorrent.onMagnetDetected : null),
+    };
+  }
+
+  function getBrowserOps() {
+    var feat = getFeature('browser');
+    return {
+      getSettings: feat && typeof feat.getSettings === 'function'
+        ? feat.getSettings
+        : (api.webBrowserSettings && api.webBrowserSettings.get ? api.webBrowserSettings.get : null),
+      saveSettings: feat && typeof feat.saveSettings === 'function'
+        ? feat.saveSettings
+        : (api.webBrowserSettings && api.webBrowserSettings.save ? api.webBrowserSettings.save : null),
+    };
+  }
+
+  function getWebSourcesOps() {
+    return {
+      get: api.webSources && typeof api.webSources.get === 'function' ? api.webSources.get : null,
+      getDestinations: api.webSources && typeof api.webSources.getDestinations === 'function' ? api.webSources.getDestinations : null,
+      listDestinationFolders: api.webSources && typeof api.webSources.listDestinationFolders === 'function' ? api.webSources.listDestinationFolders : null,
+      add: api.webSources && typeof api.webSources.add === 'function' ? api.webSources.add : null,
+      update: api.webSources && typeof api.webSources.update === 'function' ? api.webSources.update : null,
+      remove: api.webSources && typeof api.webSources.remove === 'function' ? api.webSources.remove : null,
+      clearDownloadHistory: api.webSources && typeof api.webSources.clearDownloadHistory === 'function' ? api.webSources.clearDownloadHistory : null,
+      onUpdated: api.webSources && typeof api.webSources.onUpdated === 'function' ? api.webSources.onUpdated : null,
+      onDestinationPickerRequest: api.webSources && typeof api.webSources.onDestinationPickerRequest === 'function' ? api.webSources.onDestinationPickerRequest : null,
+    };
+  }
+
   function loadHiddenSourcesTorrents() {
     try {
       var raw = localStorage.getItem('tankoSourcesHiddenTorrents');
@@ -859,7 +924,9 @@
   }
 
   function loadSources() {
-    api.webSources.get().then(function (res) {
+    var srcOps = getWebSourcesOps();
+    if (!srcOps.get) return;
+    srcOps.get().then(function (res) {
       if (res && res.ok && Array.isArray(res.sources)) {
         state.sources = res.sources;
         renderSources();
@@ -871,8 +938,9 @@
   }
 
   function loadDestinations() {
-    if (!api.webSources || typeof api.webSources.getDestinations !== 'function') return;
-    api.webSources.getDestinations().then(function (res) {
+    var srcOps = getWebSourcesOps();
+    if (!srcOps.getDestinations) return;
+    srcOps.getDestinations().then(function (res) {
       if (!res || !res.ok) return;
       state.destinationRoots = {
         books: res.books || null,
@@ -894,12 +962,13 @@
   }
 
   function refreshSourcesTorrents() {
-    if (!api.webTorrent) return;
-    var p1 = (typeof api.webTorrent.getActive === 'function')
-      ? api.webTorrent.getActive()
+    var tor = getTorrentOps();
+    if (!tor.getActive && !tor.getHistory) return;
+    var p1 = (typeof tor.getActive === 'function')
+      ? tor.getActive()
       : Promise.resolve({ ok: false, torrents: [] });
-    var p2 = (typeof api.webTorrent.getHistory === 'function')
-      ? api.webTorrent.getHistory()
+    var p2 = (typeof tor.getHistory === 'function')
+      ? tor.getHistory()
       : Promise.resolve({ ok: false, torrents: [] });
     Promise.all([p1, p2]).then(function (res) {
       var a = (res[0] && res[0].ok && Array.isArray(res[0].torrents)) ? res[0].torrents : [];
@@ -1007,7 +1076,8 @@
       if (action === 'see-files') { openManageFilesOverlayByTorrentId(id); return; }
       if (action === 'toggle-seq') {
         var t = getSourcesTorrentById(id);
-        if (!t || !api.webTorrent || typeof api.webTorrent.selectFiles !== 'function') return;
+        var torOps = getTorrentOps();
+        if (!t || typeof torOps.selectFiles !== 'function') return;
         var files = Array.isArray(t.files) ? t.files : [];
         var selected = [];
         var priorities = {};
@@ -1017,7 +1087,7 @@
           selected.push(i);
           priorities[i] = String((t.filePriorities && t.filePriorities[i]) || f.priority || 'normal');
         }
-        api.webTorrent.selectFiles({
+        torOps.selectFiles({
           id: id,
           selectedIndices: selected,
           priorities: priorities,
@@ -1035,22 +1105,23 @@
         renderSourcesTorrentRows();
         return;
       }
-      if (!api.webTorrent) return;
+      var tor = getTorrentOps();
+      if (!tor.remove) return;
       if (action === 'remove-only') {
-        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: false, removeFromLibrary: false }) : { ok: false })
-          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(tor.remove({ id: id, removeFiles: false, removeFromLibrary: false }))
+          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
         return;
       }
       if (action === 'remove-lib') {
-        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: false, removeFromLibrary: true }) : { ok: false })
-          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(tor.remove({ id: id, removeFiles: false, removeFromLibrary: true }))
+          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
         return;
       }
       if (action === 'remove-delete') {
-        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: true, removeFromLibrary: true }) : { ok: false })
-          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(tor.remove({ id: id, removeFiles: true, removeFromLibrary: true }))
+          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
       }
     });
@@ -1168,10 +1239,11 @@
   }
 
   function listFoldersForSaveFlow(category, rootPath) {
-    if (!api.webSources || typeof api.webSources.listDestinationFolders !== 'function') {
+    var srcOps = getWebSourcesOps();
+    if (!srcOps.listDestinationFolders) {
       return Promise.resolve({ ok: true, folders: [] });
     }
-    return api.webSources.listDestinationFolders({ mode: category, path: rootPath || '' });
+    return srcOps.listDestinationFolders({ mode: category, path: rootPath || '' });
   }
 
   function renderSaveFlowFiles() {
@@ -1251,8 +1323,9 @@
   }
 
   function resetSaveFlowState() {
-    if (state.pendingResolveId && api.webTorrent && typeof api.webTorrent.cancelResolve === 'function') {
-      api.webTorrent.cancelResolve({ resolveId: state.pendingResolveId }).catch(function () {});
+    var srcOps = getSourcesOps();
+    if (state.pendingResolveId && typeof srcOps.cancelResolve === 'function') {
+      srcOps.cancelResolve({ resolveId: state.pendingResolveId }).catch(function () {});
     }
     state.pendingResolveId = null;
     state.pendingResolveFiles = [];
@@ -1264,7 +1337,8 @@
 
   function resolveFilesForSaveFlow() {
     var row = state.pendingMagnet;
-    if (!row || !row.magnetUri || !api.webTorrent || typeof api.webTorrent.resolveMetadata !== 'function') {
+    var srcOps = getSourcesOps();
+    if (!row || !row.magnetUri || typeof srcOps.resolveMetadata !== 'function') {
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
       renderSaveFlowFiles();
       return;
@@ -1288,7 +1362,7 @@
     function doResolve(withDestination) {
       var payload = { source: row.magnetUri };
       if (withDestination) payload.destinationRoot = buildSavePath() || undefined;
-      return api.webTorrent.resolveMetadata(payload).then(acceptMeta);
+      return srcOps.resolveMetadata(payload).then(acceptMeta);
     }
 
     doResolve(true).catch(function () {
@@ -1365,7 +1439,9 @@
 
   function startConfiguredDownload() {
     var row = state.pendingMagnet;
-    if (!row || !row.magnetUri || !api.webTorrent) {
+    var srcOps = getSourcesOps();
+    var torOps = getTorrentOps();
+    if (!row || !row.magnetUri) {
       if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'No magnet selected.';
       showToast('No magnet selected');
       return;
@@ -1420,8 +1496,8 @@
     }
 
     var startPromise;
-    if (state.saveFlowMode === 'manage' && state.managingTorrentId && typeof api.webTorrent.selectFiles === 'function') {
-      startPromise = api.webTorrent.selectFiles({
+    if (state.saveFlowMode === 'manage' && state.managingTorrentId && typeof torOps.selectFiles === 'function') {
+      startPromise = torOps.selectFiles({
         id: state.managingTorrentId,
         selectedIndices: selected,
         priorities: priorities,
@@ -1431,16 +1507,16 @@
         if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to apply torrent file changes');
         return { ok: true, id: state.managingTorrentId };
       });
-    } else if (state.pendingResolveId && typeof api.webTorrent.startConfigured === 'function') {
-      startPromise = api.webTorrent.startConfigured({
+    } else if (state.pendingResolveId && typeof srcOps.startConfigured === 'function') {
+      startPromise = srcOps.startConfigured({
         resolveId: state.pendingResolveId,
         origin: 'sources_v2',
         savePath: savePath,
         selectedFiles: selected.length ? selected : null
       }).then(function (started) {
         if (!started || !started.ok) throw new Error((started && started.error) || 'Failed to start download');
-        if (selected.length && typeof api.webTorrent.selectFiles === 'function') {
-          return api.webTorrent.selectFiles({
+        if (selected.length && typeof torOps.selectFiles === 'function') {
+          return torOps.selectFiles({
             id: started.id,
             selectedIndices: selected,
             priorities: priorities,
@@ -1450,8 +1526,8 @@
         }
         return started;
       });
-    } else if (typeof api.webTorrent.startMagnet === 'function') {
-      startPromise = api.webTorrent.startMagnet({ magnetUri: row.magnetUri, destinationRoot: savePath, origin: 'sources_v2' });
+    } else if (typeof srcOps.startMagnet === 'function') {
+      startPromise = srcOps.startMagnet({ magnetUri: row.magnetUri, destinationRoot: savePath, origin: 'sources_v2' });
     } else {
       startPromise = Promise.reject(new Error('Download start unavailable'));
     }
@@ -1465,7 +1541,7 @@
     });
   }
 
-  function runSourcesSearch() {
+function runSourcesSearch() {
     var query = String((el.sourcesSearchInput && el.sourcesSearchInput.value) || '').trim();
     if (!query) {
       state.searchResults = [];
@@ -1473,13 +1549,14 @@
       if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = '';
       return;
     }
-    if (!api.torrentSearch || typeof api.torrentSearch.query !== 'function') {
+    var srcOps = getSourcesOps();
+    if (typeof srcOps.search !== 'function') {
       if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Torrent search backend is unavailable.';
       return;
     }
     state.searchLoading = true;
     if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Searching...';
-    api.torrentSearch.query({ query: query, category: getSearchFilter(), limit: 40, page: 0 })
+    srcOps.search({ query: query, category: getSearchFilter(), limit: 40, page: 0 })
       .then(function (res) {
         state.searchLoading = false;
         if (!res || !res.ok) {
@@ -1522,7 +1599,8 @@
     if (!name || !url) { showToast('Name and URL are required'); return; }
     if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
 
-    var method = state.editSourceId ? api.webSources.update : api.webSources.add;
+    var srcOps = getWebSourcesOps();
+    var method = state.editSourceId ? srcOps.update : srcOps.add;
     var payload = state.editSourceId
       ? { id: state.editSourceId, name: name, url: url }
       : { name: name, url: url };
@@ -1537,7 +1615,9 @@
 
   function removeSource(id) {
     if (!id) return;
-    api.webSources.remove(id).then(function (res) {
+    var srcOps = getWebSourcesOps();
+    if (!srcOps.remove) return;
+    srcOps.remove(id).then(function (res) {
       if (!res || !res.ok) { showToast('Failed to remove source'); return; }
       showToast('Source removed');
       loadSources();
@@ -1592,11 +1672,12 @@
   }
 
   function loadBrowserSettings() {
-    if (!api.webBrowserSettings || typeof api.webBrowserSettings.get !== 'function') {
+    var browserOps = getBrowserOps();
+    if (typeof browserOps.getSettings !== 'function') {
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       return Promise.resolve();
     }
-    return api.webBrowserSettings.get().then(function (res) {
+    return browserOps.getSettings().then(function (res) {
       if (!res || !res.ok || !res.settings) return;
       state.browserSettings = normalizeBrowserSettingsForUi(res.settings || {});
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
@@ -1614,9 +1695,10 @@
   }
 
   function saveBrowserSettings(patch) {
-    if (!api.webBrowserSettings || typeof api.webBrowserSettings.save !== 'function') return;
+    var browserOps = getBrowserOps();
+    if (typeof browserOps.saveSettings !== 'function') return;
     var payload = (patch && typeof patch === 'object') ? patch : {};
-    api.webBrowserSettings.save(payload).then(function (res) {
+    browserOps.saveSettings(payload).then(function (res) {
       if (!res || !res.ok || !res.settings) return;
       state.browserSettings = normalizeBrowserSettingsForUi(res.settings);
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
@@ -2107,8 +2189,9 @@
 
     // Destination picker
     if (el.destPickerCancel) el.destPickerCancel.addEventListener('click', closeDestPicker);
-    if (api.webSources && api.webSources.onDestinationPickerRequest) {
-      api.webSources.onDestinationPickerRequest(handleDestPickerRequest);
+    var srcOps = getWebSourcesOps();
+    if (srcOps.onDestinationPickerRequest) {
+      srcOps.onDestinationPickerRequest(handleDestPickerRequest);
     }
 
     // Home downloads clear
@@ -2190,47 +2273,46 @@
     }
 
     // IPC: sources updated
-    if (api.webSources && api.webSources.onUpdated) {
-      api.webSources.onUpdated(function () { loadSources(); });
+    if (srcOps.onUpdated) {
+      srcOps.onUpdated(function () { loadSources(); });
     }
 
     // IPC: torrent events
-    if (api.webTorrent) {
-      if (api.webTorrent.onStarted) api.webTorrent.onStarted(function () {
-        if (hub.refreshTorrentState) hub.refreshTorrentState();
-        refreshSourcesTorrents();
-      });
-      if (api.webTorrent.onMetadata) api.webTorrent.onMetadata(function () {
-        if (hub.refreshTorrentState) hub.refreshTorrentState();
-        refreshSourcesTorrents();
-      });
-      if (api.webTorrent.onProgress) api.webTorrent.onProgress(function () {
-        if (hub.renderHubTorrentActive) hub.renderHubTorrentActive();
-        refreshSourcesTorrents();
-      });
-      if (api.webTorrent.onCompleted) api.webTorrent.onCompleted(function (info) {
-        if (hub.refreshTorrentState) hub.refreshTorrentState();
-        refreshSourcesTorrents();
-        var label = (info && info.name) ? String(info.name) : '';
-        var stateName = String(info && info.state || '').toLowerCase();
-        if (stateName === 'completed' || stateName === 'completed_with_errors') {
-          showToast(label ? ('Torrent finished: ' + label) : 'Torrent finished');
-        } else if (stateName === 'cancelled') {
-          showToast(label ? ('Torrent cancelled: ' + label) : 'Torrent cancelled');
-        } else if (stateName) {
-          showToast(String(info && info.error || '') || 'Torrent failed');
-        }
-      });
-      if (api.webTorrent.onMagnetDetected) api.webTorrent.onMagnetDetected(function (data) {
-        var magnet = '';
-        if (typeof data === 'string') magnet = String(data || '').trim();
-        else magnet = String((data && (data.magnetUri || data.magnet)) || '').trim();
-        if (!magnet) return;
-        showToast('Magnet link detected');
-        if (torrentTab.addSource) torrentTab.addSource(magnet);
-        if (tabsState.openTorrentTab) tabsState.openTorrentTab(magnet);
-      });
-    }
+    var torrentOps = getTorrentOps();
+    if (torrentOps.onStarted) torrentOps.onStarted(function () {
+      if (hub.refreshTorrentState) hub.refreshTorrentState();
+      refreshSourcesTorrents();
+    });
+    if (torrentOps.onMetadata) torrentOps.onMetadata(function () {
+      if (hub.refreshTorrentState) hub.refreshTorrentState();
+      refreshSourcesTorrents();
+    });
+    if (torrentOps.onProgress) torrentOps.onProgress(function () {
+      if (hub.renderHubTorrentActive) hub.renderHubTorrentActive();
+      refreshSourcesTorrents();
+    });
+    if (torrentOps.onCompleted) torrentOps.onCompleted(function (info) {
+      if (hub.refreshTorrentState) hub.refreshTorrentState();
+      refreshSourcesTorrents();
+      var label = (info && info.name) ? String(info.name) : '';
+      var stateName = String(info && info.state || '').toLowerCase();
+      if (stateName === 'completed' || stateName === 'completed_with_errors') {
+        showToast(label ? ('Torrent finished: ' + label) : 'Torrent finished');
+      } else if (stateName === 'cancelled') {
+        showToast(label ? ('Torrent cancelled: ' + label) : 'Torrent cancelled');
+      } else if (stateName) {
+        showToast(String(info && info.error || '') || 'Torrent failed');
+      }
+    });
+    if (torrentOps.onMagnetDetected) torrentOps.onMagnetDetected(function (data) {
+      var magnet = '';
+      if (typeof data === 'string') magnet = String(data || '').trim();
+      else magnet = String((data && (data.magnetUri || data.magnet)) || '').trim();
+      if (!magnet) return;
+      showToast('Magnet link detected');
+      if (torrentTab.addSource) torrentTab.addSource(magnet);
+      if (tabsState.openTorrentTab) tabsState.openTorrentTab(magnet);
+    });
 
     // IPC: Tor status
     if (api.torProxy && api.torProxy.onStatusChanged) {
@@ -2379,8 +2461,9 @@
     if (el.hubDownloadHistoryList) {
       el.hubDownloadHistoryList.addEventListener('click', function (e) {
         var clearBtn = e.target.closest('[data-dl-history-clear]');
-        if (clearBtn && api.webSources && api.webSources.clearDownloadHistory) {
-          api.webSources.clearDownloadHistory().then(function () {
+        var srcOps = getWebSourcesOps();
+        if (clearBtn && srcOps.clearDownloadHistory) {
+          srcOps.clearDownloadHistory().then(function () {
             showToast('Download history cleared');
             if (hub.renderHubDownloadHistory) hub.renderHubDownloadHistory();
           }).catch(function () {});
@@ -2389,8 +2472,9 @@
     }
     if (el.hubDownloadHistoryClearBtn) {
       el.hubDownloadHistoryClearBtn.addEventListener('click', function () {
-        if (!api.webSources || !api.webSources.clearDownloadHistory) return;
-        api.webSources.clearDownloadHistory().then(function () {
+        var srcOps = getWebSourcesOps();
+        if (!srcOps.clearDownloadHistory) return;
+        srcOps.clearDownloadHistory().then(function () {
           showToast('Download history cleared');
           if (hub.renderHubDownloadHistory) hub.renderHubDownloadHistory();
         }).catch(function () {});
@@ -2399,12 +2483,14 @@
 
     // Torrent hub controls
     if (el.hubTorrentPauseAllBtn) el.hubTorrentPauseAllBtn.addEventListener('click', function () {
-      if (api.webTorrent && api.webTorrent.pauseAll) api.webTorrent.pauseAll().then(function () {
+      var torrentOps = getTorrentOps();
+      if (torrentOps.pauseAll) torrentOps.pauseAll().then(function () {
         if (hub.refreshTorrentState) hub.refreshTorrentState();
       }).catch(function () {});
     });
     if (el.hubTorrentResumeAllBtn) el.hubTorrentResumeAllBtn.addEventListener('click', function () {
-      if (api.webTorrent && api.webTorrent.resumeAll) api.webTorrent.resumeAll().then(function () {
+      var torrentOps = getTorrentOps();
+      if (torrentOps.resumeAll) torrentOps.resumeAll().then(function () {
         if (hub.refreshTorrentState) hub.refreshTorrentState();
       }).catch(function () {});
     });
@@ -2414,8 +2500,9 @@
     if (el.hubMagnetStartBtn) el.hubMagnetStartBtn.addEventListener('click', function () {
       var magnetInput = el.hubMagnetInput ? el.hubMagnetInput.value.trim() : '';
       if (!magnetInput) { showToast('Paste a magnet link first'); return; }
-      if (api.webTorrent && api.webTorrent.startMagnet) {
-        api.webTorrent.startMagnet({ magnetUri: magnetInput }).then(function (res) {
+      var sourcesOps = getSourcesOps();
+      if (sourcesOps.startMagnet) {
+        sourcesOps.startMagnet({ magnetUri: magnetInput }).then(function (res) {
           if (res && res.ok) {
             showToast('Torrent started');
             if (el.hubMagnetInput) el.hubMagnetInput.value = '';

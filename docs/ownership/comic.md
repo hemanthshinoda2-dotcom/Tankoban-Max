@@ -10,3 +10,6 @@
   - `packages/core-main`
   - `packages/shared-ui`
   - `packages/core-ipc-contracts`
+- Renderer boundary contract:
+  - Reader open/orchestration paths should prefer `window.Tanko.features.comics`.
+  - Raw `window.Tanko.api.progress` / `window.Tanko.api.archives` are compatibility fallback only.

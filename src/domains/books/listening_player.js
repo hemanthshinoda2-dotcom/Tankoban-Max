@@ -42,6 +42,19 @@
   var _sleepCountdownId = null;
   var _preMuteVolume = -1; // OPT1: for mute toggle keyboard shortcut
 
+  function getBooksOps() {
+    var feat = window.Tanko && window.Tanko.features && window.Tanko.features.books ? window.Tanko.features.books : null;
+    var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
+    return {
+      saveTtsProgress: feat && typeof feat.saveTtsProgress === 'function'
+        ? feat.saveTtsProgress
+        : (api && typeof api.saveBooksTtsProgress === 'function' ? api.saveBooksTtsProgress : null),
+      getTtsProgress: feat && typeof feat.getTtsProgress === 'function'
+        ? feat.getTtsProgress
+        : (api && typeof api.getBooksTtsProgress === 'function' ? api.getBooksTtsProgress : null),
+    };
+  }
+
   // TTS bar auto-hide (Prompt 3)
   var _ttsBarHideTimer = null;
   var _ttsBarLastStatus = 'idle';
@@ -634,12 +647,12 @@ function updateCard(info) {
     if (immediate) {
       if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
       try {
-        var api = window.Tanko && window.Tanko.api;
-        if (api && typeof api.saveBooksTtsProgress === 'function') {
+        var booksOps = getBooksOps();
+        if (booksOps && typeof booksOps.saveTtsProgress === 'function') {
           // FIX-LISTEN-CONT: return promise so closePlayer can await before re-render
-          var p = api.saveBooksTtsProgress(primaryId, entry).catch(function () {});
+          var p = booksOps.saveTtsProgress(primaryId, entry).catch(function () {});
           if (fallbackId && fallbackId !== primaryId) {
-            try { api.saveBooksTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
+            try { booksOps.saveTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
           }
           return p;
         }
@@ -649,11 +662,11 @@ function updateCard(info) {
       _saveTimer = setTimeout(function () {
         _saveTimer = null;
         try {
-          var api = window.Tanko && window.Tanko.api;
-          if (api && typeof api.saveBooksTtsProgress === 'function') {
-            api.saveBooksTtsProgress(primaryId, entry).catch(function () {});
+          var booksOps = getBooksOps();
+          if (booksOps && typeof booksOps.saveTtsProgress === 'function') {
+            booksOps.saveTtsProgress(primaryId, entry).catch(function () {});
             if (fallbackId && fallbackId !== primaryId) {
-              try { api.saveBooksTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
+              try { booksOps.saveTtsProgress(fallbackId, entry).catch(function () {}); } catch {}
             }
           }
         } catch {}
@@ -1169,7 +1182,7 @@ function updateCard(info) {
 
       // Resume from saved progress (FIX-LISTEN-PROG): handle id/path normalization + update UI immediately
       var resumeIdx = 0;
-      var api = window.Tanko && window.Tanko.api;
+      var booksOps = getBooksOps();
       var bookId = _book && (_book.id || _book.path);
       function applyEntry(entry) {
         if (!_open || !_ttsStarted || sessionToken !== _sessionToken) return;
@@ -1187,17 +1200,17 @@ function updateCard(info) {
         }
       }
       function fetchEntry(primaryId, fallbackId) {
-        if (!api || typeof api.getBooksTtsProgress !== 'function' || !primaryId) return Promise.resolve(null);
-        return api.getBooksTtsProgress(primaryId).then(function (e) {
+        if (!booksOps || typeof booksOps.getTtsProgress !== 'function' || !primaryId) return Promise.resolve(null);
+        return booksOps.getTtsProgress(primaryId).then(function (e) {
           if (e) return e;
-          if (fallbackId && fallbackId !== primaryId) return api.getBooksTtsProgress(fallbackId).catch(function () { return null; });
+          if (fallbackId && fallbackId !== primaryId) return booksOps.getTtsProgress(fallbackId).catch(function () { return null; });
           return null;
         }).catch(function () {
-          if (fallbackId && fallbackId !== primaryId) return api.getBooksTtsProgress(fallbackId).catch(function () { return null; });
+          if (fallbackId && fallbackId !== primaryId) return booksOps.getTtsProgress(fallbackId).catch(function () { return null; });
           return null;
         });
       }
-      if (api && typeof api.getBooksTtsProgress === 'function' && bookId) {
+      if (booksOps && typeof booksOps.getTtsProgress === 'function' && bookId) {
         var primary = _book && _book.id ? _book.id : null;
         var fallback = _book && _book.path ? _book.path : null;
         fetchEntry(primary || bookId, fallback).then(function (entry) {

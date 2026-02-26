@@ -10,3 +10,6 @@
   - `packages/feature-torrent`
   - `packages/core-main`
   - `packages/core-ipc-contracts`
+- Renderer boundary contract:
+  - Use `window.Tanko.features.sources` / `window.Tanko.features.torrent` facades first.
+  - Keep `window.Tanko.api.webTorrent` / `window.Tanko.api.torrentSearch` as compatibility fallback only.

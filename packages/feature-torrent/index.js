@@ -1,6 +1,7 @@
 'use strict';
 
 const registerIpc = require('./register_ipc');
+const serviceBridge = require('./service_bridge');
 
 module.exports = {
   name: 'feature-torrent',
@@ -13,4 +14,5 @@ module.exports = {
     tools: ['tools/fetch_tor.js'],
   },
   registerIpc: registerIpc,
+  services: serviceBridge,
 };
