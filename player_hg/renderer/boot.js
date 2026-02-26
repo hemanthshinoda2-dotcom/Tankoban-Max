@@ -34,6 +34,7 @@
     var idleMessage = root.getElementById('idleMessage');
     var openFileBtn = root.getElementById('openFileBtn');
     var dropZone = root.getElementById('dropZone');
+    var playlistContext = null;
 
     // ── Detect backend ──
 
@@ -104,6 +105,9 @@
     // ── Create adapter ──
 
     var adapter = null;
+    var preferredAudioTrackId = null;
+    var preferredSubtitleTrackId = null;
+    var preferredSubVisibility = null;
 
     function initAdapter() {
       if (adapter) return adapter;
@@ -135,6 +139,9 @@
       window.TankoPlayer.toast.init();
       window.TankoPlayer.contextMenu.init();
       window.TankoPlayer.playlist.init(loadFile);
+      if (playlistContext && window.TankoPlayer.playlist && typeof window.TankoPlayer.playlist.setContext === 'function') {
+        window.TankoPlayer.playlist.setContext(playlistContext);
+      }
       window.TankoPlayer.tracksDrawer.init();
       window.TankoPlayer.diagnostics.init();
 
@@ -153,8 +160,22 @@
           var name = s.filePath.replace(/\\/g, '/').split('/').pop();
           name = name.replace(/\.[^.]+$/, '');
           window.TankoPlayer.topStrip.setTitle(name);
-          window.TankoPlayer.playlist.buildFromFolder(s.filePath);
+          if (playlistContext && window.TankoPlayer.playlist && typeof window.TankoPlayer.playlist.setContext === 'function') {
+            playlistContext.currentPath = s.filePath;
+            window.TankoPlayer.playlist.setContext(playlistContext);
+          } else {
+            window.TankoPlayer.playlist.buildFromFolder(s.filePath);
+          }
         }
+        setTimeout(function () { applyPersistedTrackPrefs(); }, 160);
+        setTimeout(function () { applyPersistedTrackPrefs(); }, 520);
+      });
+
+      adapter.on('tracks', function () {
+        scheduleSettingsSave();
+      });
+      adapter.on('subtitle-visibility', function () {
+        scheduleSettingsSave();
       });
 
       // Auto-advance on EOF
@@ -179,8 +200,13 @@
 
     // ── Load and play a file ──
 
-    function loadFile(filePath) {
+    function loadFile(filePath, meta) {
       if (!filePath) return;
+      var handledByHost = false;
+      if (opts.onFileSwitch) {
+        try { handledByHost = (opts.onFileSwitch(filePath, meta || {}) === true); } catch (e) {}
+      }
+      if (handledByHost) return;
       initAdapter();
 
       if (idleMessage) idleMessage.classList.add('hidden');
@@ -195,8 +221,38 @@
       adapter.load(filePath).then(function () {
         return adapter.play();
       });
+    }
 
-      if (opts.onFileSwitch) opts.onFileSwitch(filePath);
+    function applyPersistedTrackPrefs() {
+      if (!adapter || !adapter.capabilities || !adapter.capabilities.tracks) return;
+      if (preferredAudioTrackId != null && typeof adapter.setAudioTrack === 'function') {
+        adapter.setAudioTrack(preferredAudioTrackId).catch(function () {});
+      }
+      if (typeof adapter.setSubtitleTrack === 'function') {
+        if (preferredSubtitleTrackId === 'no' || preferredSubtitleTrackId === null) {
+          adapter.setSubtitleTrack(null).catch(function () {});
+        } else if (preferredSubtitleTrackId != null) {
+          adapter.setSubtitleTrack(preferredSubtitleTrackId).catch(function () {});
+        }
+      }
+      if (typeof preferredSubVisibility === 'boolean' && typeof adapter.setSubtitleVisibility === 'function') {
+        adapter.setSubtitleVisibility(preferredSubVisibility).catch(function () {});
+      }
+    }
+
+    function setPlaylistContext(ctx) {
+      if (!ctx || !Array.isArray(ctx.paths) || !ctx.paths.length) {
+        playlistContext = null;
+      } else {
+        playlistContext = {
+          paths: ctx.paths.slice(),
+          folderLabel: String(ctx.folderLabel || ''),
+          currentPath: String(ctx.currentPath || ''),
+        };
+      }
+      if (window.TankoPlayer.playlist && typeof window.TankoPlayer.playlist.setContext === 'function') {
+        window.TankoPlayer.playlist.setContext(playlistContext);
+      }
     }
 
     // ── Open file dialog (standalone idle screen) ──
@@ -293,10 +349,22 @@
       if (settingsTimer) clearTimeout(settingsTimer);
       settingsTimer = setTimeout(function () {
         if (window.PlayerBridge && window.PlayerBridge.saveSettings) {
+          var st = adapter && typeof adapter.getState === 'function' ? adapter.getState() : null;
+          if (adapter && adapter.capabilities && adapter.capabilities.tracks) {
+            if (typeof adapter.getCurrentAudioTrack === 'function') preferredAudioTrackId = adapter.getCurrentAudioTrack();
+            if (typeof adapter.getCurrentSubtitleTrack === 'function') {
+              var subId = adapter.getCurrentSubtitleTrack();
+              preferredSubtitleTrackId = (subId == null) ? 'no' : subId;
+            }
+            if (st && typeof st.subtitlesVisible === 'boolean') preferredSubVisibility = !!st.subtitlesVisible;
+          }
           window.PlayerBridge.saveSettings({
             volume: volumePercent,
             muted: muted,
             speed: currentSpeed,
+            selectedAudioTrackId: preferredAudioTrackId,
+            selectedSubtitleTrackId: preferredSubtitleTrackId,
+            subtitleVisibility: preferredSubVisibility,
           });
         }
       }, 250);
@@ -315,7 +383,20 @@
         if (typeof settings.speed === 'number' && settings.speed > 0) {
           currentSpeed = settings.speed;
         }
+        if (Object.prototype.hasOwnProperty.call(settings, 'selectedAudioTrackId')) {
+          preferredAudioTrackId = settings.selectedAudioTrackId;
+        }
+        if (Object.prototype.hasOwnProperty.call(settings, 'selectedSubtitleTrackId')) {
+          preferredSubtitleTrackId = settings.selectedSubtitleTrackId;
+        }
+        if (typeof settings.subtitleVisibility === 'boolean') {
+          preferredSubVisibility = settings.subtitleVisibility;
+        }
       });
+    }
+
+    if (opts.playlistContext) {
+      setPlaylistContext(opts.playlistContext);
     }
 
     function cycleSpeed(direction) {
@@ -639,6 +720,7 @@
     return {
       adapter: adapter,
       loadFile: loadFile,
+      setPlaylistContext: setPlaylistContext,
       initAdapter: initAdapter,
       destroy: destroy,
       // Expose for video.js integration

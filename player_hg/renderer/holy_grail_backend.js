@@ -219,6 +219,8 @@
       crop: 'none',
       renderQuality: 'auto',
       subtitleHudLiftPx: 40,
+      subtitleHudVisible: false,
+      subtitleHudHeightPx: 0,
       trackList: [],
       chapterList: [],
     };
@@ -332,6 +334,7 @@
         lastResizeW = w;
         lastResizeH = h;
         hg.resizeSurface({ width: w, height: h }).catch(function () {});
+        applySubtitleSafeMargin().catch(function () {});
       }, 80);
     }
 
@@ -997,6 +1000,7 @@
 
       if (name === 'sub-visibility') {
         state.subtitlesVisible = !!value;
+        emit('subtitle-visibility', { subtitlesVisible: state.subtitlesVisible });
         return;
       }
 
@@ -1201,6 +1205,7 @@
         }
         // Request resize to match current canvas
         requestSurfaceResize();
+        applySubtitleSafeMargin().catch(function () {});
         return { ok: true };
       });
     }
@@ -1394,6 +1399,7 @@
         return hg.setProperty('sid', 'no').then(function () {
           state.subtitleTrackId = null;
           state.subtitlesVisible = false;
+          emit('subtitle-visibility', { subtitlesVisible: false });
           return { ok: true };
         });
       }
@@ -1401,6 +1407,16 @@
         state.subtitleTrackId = String(id);
         state.subtitlesVisible = true;
         lastSubtitleTrackId = String(id);
+        emit('subtitle-visibility', { subtitlesVisible: true });
+        return { ok: true };
+      });
+    }
+
+    function setSubtitleVisibility(visible) {
+      var want = !!visible;
+      return hg.setProperty('sub-visibility', want ? 'yes' : 'no').then(function () {
+        state.subtitlesVisible = want;
+        emit('subtitle-visibility', { subtitlesVisible: state.subtitlesVisible });
         return { ok: true };
       });
     }
@@ -1415,11 +1431,17 @@
 
     function toggleSubtitles() {
       if (state.subtitlesVisible) {
-        return setSubtitleTrack('no');
+        return setSubtitleVisibility(false);
       }
-      // Re-enable last known subtitle track
-      var id = lastSubtitleTrackId || 'auto';
-      return setSubtitleTrack(id);
+      if (!state.subtitleTrackId && lastSubtitleTrackId) {
+        return setSubtitleTrack(lastSubtitleTrackId).then(function () {
+          return setSubtitleVisibility(true);
+        });
+      }
+      if (!state.subtitleTrackId) {
+        return setSubtitleTrack('auto');
+      }
+      return setSubtitleVisibility(true);
     }
 
     function addExternalSubtitle(path) {
@@ -1515,10 +1537,36 @@
       });
     }
 
+    function applySubtitleSafeMargin() {
+      var hudH = Math.max(0, Math.round(toFiniteNumber(state.subtitleHudHeightPx, 0)));
+      var userLift = Math.max(0, Math.round(toFiniteNumber(state.subtitleHudLiftPx, 40)));
+      var controlsVisible = !!state.subtitleHudVisible;
+      var tunedLift = controlsVisible ? Math.round(userLift * 0.3) : Math.round(userLift * 0.15);
+      var marginY = controlsVisible ? (hudH + 6 + tunedLift) : (18 + tunedLift);
+      // Keep baseline anchored near bottom and let sub-margin-y provide HUD-safe lift.
+      var subPos = 92;
+      return Promise.all([
+        hg.setProperty('sub-margin-y', String(marginY)),
+        hg.setProperty('sub-pos', String(subPos)),
+      ]).then(function () {
+        return { ok: true, marginY: marginY, subPos: subPos };
+      });
+    }
+
     function setSubtitleHudLift(px) {
       state.subtitleHudLiftPx = toFiniteNumber(px, 40);
-      var marginY = Math.max(0, Math.round(state.subtitleHudLiftPx));
-      return hg.setProperty('sub-margin-y', String(marginY)).then(function () { return { ok: true }; });
+      return applySubtitleSafeMargin();
+    }
+
+    function setSubtitleSafeMargin(opts) {
+      opts = opts || {};
+      if (Object.prototype.hasOwnProperty.call(opts, 'controlsVisible')) {
+        state.subtitleHudVisible = !!opts.controlsVisible;
+      }
+      if (Object.prototype.hasOwnProperty.call(opts, 'hudHeightPx')) {
+        state.subtitleHudHeightPx = Math.max(0, toFiniteNumber(opts.hudHeightPx, 0));
+      }
+      return applySubtitleSafeMargin();
     }
 
     function setRespectSubtitleStyles(respect) {
@@ -1587,6 +1635,7 @@
       getRenderStats: getRenderStats,
       takeScreenshot: takeScreenshot,
       setSubtitleHudLift: setSubtitleHudLift,
+      setSubtitleSafeMargin: setSubtitleSafeMargin,
 
       getAudioTracks: getAudioTracks,
       getSubtitleTracks: getSubtitleTracks,
@@ -1594,6 +1643,7 @@
       getCurrentSubtitleTrack: getCurrentSubtitleTrack,
       setAudioTrack: setAudioTrack,
       setSubtitleTrack: setSubtitleTrack,
+      setSubtitleVisibility: setSubtitleVisibility,
       selectSubtitleTrack: setSubtitleTrack,
       cycleAudioTrack: cycleAudioTrack,
       cycleSubtitleTrack: cycleSubtitleTrack,

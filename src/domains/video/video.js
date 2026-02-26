@@ -2096,6 +2096,14 @@ let cachedCropMode = 'none';
     if (el.videoSubtitleDelayValue) el.videoSubtitleDelayValue.textContent = fmtDelay(cachedSubtitleDelaySec);
   }
 
+  function normalizeTracksResult(res){
+    if (Array.isArray(res)) return { ok: true, tracks: res };
+    if (res && typeof res === 'object' && Array.isArray(res.tracks)) {
+      return { ok: res.ok !== false, tracks: res.tracks };
+    }
+    return { ok: false, tracks: [] };
+  }
+
   async function refreshTracksFromPlayer(){
     try {
       if (!state.player) {
@@ -2116,9 +2124,10 @@ let cachedCropMode = 'none';
         let last = null;
         for (let i = 0; i < tries; i++) {
           try {
-            const r = await fn();
+            const r = normalizeTracksResult(await fn());
             last = r;
-            if (r && r.ok && Array.isArray(r.tracks)) return r;
+            if (Array.isArray(r.tracks) && r.tracks.length) return r;
+            if (i === tries - 1) return r;
           } catch (e) {
             last = { ok: false, error: String(e && e.message ? e.message : e) };
           }
@@ -2335,18 +2344,20 @@ async function refreshTransformsFromPlayer(){
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const fetchTracksWithRetry = async (fn, { tries = 3, delayMs = 250 } = {}) => {
       let lastErr = null;
+      let lastRes = { ok: false, tracks: [] };
       for (let i = 0; i < tries; i += 1) {
         try {
-          const res = await fn();
+          const res = normalizeTracksResult(await fn());
+          lastRes = res;
           // MPV can take a moment to populate track-list right after load.
-          if (res && typeof res === 'object' && Array.isArray(res.tracks) && res.tracks.length) return res;
+          if (Array.isArray(res.tracks) && res.tracks.length) return res;
           if (i < tries - 1) await wait(delayMs);
-          return (res && typeof res === 'object') ? res : { tracks: [], selectedId: null };
         } catch (err) {
           lastErr = err;
           if (i < tries - 1) await wait(delayMs);
         }
       }
+      if (Array.isArray(lastRes.tracks)) return lastRes;
       throw lastErr || new Error('Track fetch failed');
     };
 
@@ -2540,11 +2551,11 @@ function closeTracksPanel(){
     for (let i = 0; i < 6; i++) {
       try {
         const ar = await state.player.getAudioTracks();
-        aTracks = (ar && Array.isArray(ar.tracks)) ? ar.tracks : [];
+        aTracks = normalizeTracksResult(ar).tracks;
       } catch {}
       try {
         const sr = await state.player.getSubtitleTracks();
-        sTracks = (sr && Array.isArray(sr.tracks)) ? sr.tracks : [];
+        sTracks = normalizeTracksResult(sr).tracks;
       } catch {}
       if ((aTracks && aTracks.length) || (sTracks && sTracks.length)) break;
       if (i < 5) await wait(200);
@@ -2646,7 +2657,7 @@ function closeTracksPanel(){
       await new Promise(resolve => setTimeout(resolve, 200));
       
       const tracksResult = await state.player.getSubtitleTracks();
-      const tracks = (tracksResult && tracksResult.tracks) ? tracksResult.tracks : [];
+      const tracks = normalizeTracksResult(tracksResult).tracks;
       if (!tracks || tracks.length === 0) return;
       
       // Check if user has a saved track preference for this video
@@ -6483,6 +6494,18 @@ function getEpisodeById(epId){
         embedded: true,
         holyGrailBridge: Tanko.api.holyGrail,
         onExit: () => { safe(() => showVideoLibrary()); },
+        onFileSwitch: (filePath, meta) => {
+          const source = String((meta && meta.source) || '');
+          if (source !== 'playlist') return false;
+          const fp = String(filePath || '').replace(/\\/g, '/');
+          const nowPath = String((state.now && state.now.path) || '').replace(/\\/g, '/');
+          if (!fp || fp === nowPath) return true;
+          const eps = Array.isArray(state.playlist?.episodes) ? state.playlist.episodes : [];
+          const target = eps.find(e => String((e && e.path) || '').replace(/\\/g, '/') === fp);
+          if (!target) return false;
+          safe(() => openEpisodeFromPlaylist(target, { source: 'hg-playlist' }));
+          return true;
+        },
       });
       bootResult.initAdapter();
       state.player = bootResult.getAdapter();
@@ -6490,6 +6513,7 @@ function getEpisodeById(epId){
       if (!state.player) throw new Error('Adapter creation failed');
       try { state.player?.setRespectSubtitleStyles?.(!!state.settings.respectSubtitleStyles); } catch {}
       try { state.player?.setSubtitleHudLift?.(Number(state.settings.subtitleHudLiftPx || 40)); } catch {}
+      try { syncEmbeddedHgPlaylistContext(state.now); } catch {}
     } catch (e) {
       state._lastEnsurePlayerError = String((e && e.message) || e || 'init_failed');
       try { destroyPlayerHgEmbed(); } catch {}
@@ -6791,6 +6815,25 @@ function rebuildPlaylistForEpisode(ep) {
       });
     }
   } catch {}
+
+  try {
+    syncEmbeddedHgPlaylistContext(ep);
+  } catch {}
+}
+
+function syncEmbeddedHgPlaylistContext(currentEp) {
+  const inst = state._playerHgInstance;
+  if (!inst || typeof inst.setPlaylistContext !== 'function') return;
+  const eps = Array.isArray(state.playlist.episodes) ? state.playlist.episodes : [];
+  const seasonName = currentEp && currentEp.folderRelPath
+    ? basename(currentEp.folderRelPath)
+    : folderLabelFromEpisode(currentEp);
+  const paths = eps.map(e => String((e && e.path) || '')).filter(Boolean);
+  inst.setPlaylistContext({
+    paths,
+    folderLabel: seasonName,
+    currentPath: String((currentEp && currentEp.path) || ''),
+  });
 }
 
 // Helper: Extract folder/file name from path
@@ -7189,7 +7232,7 @@ function armEmbeddedFirstFrameWatch(v, opts, player) {
   }, firstFrameGraceMs);
 }
 
-async function openVideo(v, opts = {}) {
+  async function openVideo(v, opts = {}) {
   // Apply one-shot overrides if provided (e.g., Play from beginning / Continue Watching).
   try {
     if (opts && typeof opts === 'object') {
@@ -7382,12 +7425,29 @@ async function openVideo(v, opts = {}) {
       try {
         const p = (episodeId && state.progress && state.progress[episodeId]) ? state.progress[episodeId] : state._vpLoadedProgress;
         if (p && typeof p === 'object') {
-          if (p.selectedAudioTrackId != null && typeof state.player?.setAudioTrack === 'function') {
-            await state.player.setAudioTrack(p.selectedAudioTrackId);
+          const hasAudioPref = Object.prototype.hasOwnProperty.call(p, 'selectedAudioTrackId') || Object.prototype.hasOwnProperty.call(p, 'aid');
+          let savedAudioId = Object.prototype.hasOwnProperty.call(p, 'selectedAudioTrackId') ? p.selectedAudioTrackId : undefined;
+          if ((savedAudioId === null || savedAudioId === undefined) && Object.prototype.hasOwnProperty.call(p, 'aid')) {
+            savedAudioId = p.aid;
+          }
+          if (hasAudioPref && savedAudioId != null && typeof state.player?.setAudioTrack === 'function') {
+            await state.player.setAudioTrack(savedAudioId);
           }
           if (typeof state.player?.setSubtitleTrack === 'function') {
-            if (p.selectedSubtitleTrackId === 'no' || p.selectedSubtitleTrackId == null) await state.player.setSubtitleTrack(null);
-            else await state.player.setSubtitleTrack(p.selectedSubtitleTrackId);
+            const hasSubPref = Object.prototype.hasOwnProperty.call(p, 'selectedSubtitleTrackId') || Object.prototype.hasOwnProperty.call(p, 'sid');
+            let savedSubId = Object.prototype.hasOwnProperty.call(p, 'selectedSubtitleTrackId') ? p.selectedSubtitleTrackId : undefined;
+            if ((savedSubId === null || savedSubId === undefined) && Object.prototype.hasOwnProperty.call(p, 'sid')) {
+              savedSubId = p.sid;
+            }
+            if (hasSubPref) {
+              if (savedSubId === 'no' || savedSubId === false) await state.player.setSubtitleTrack(null);
+              else await state.player.setSubtitleTrack(savedSubId);
+            }
+          }
+          const hasSubVisibility = (typeof p.subtitlesVisible === 'boolean') || (typeof p.subVisibility === 'boolean');
+          const savedSubVisibility = (typeof p.subtitlesVisible === 'boolean') ? p.subtitlesVisible : p.subVisibility;
+          if (hasSubVisibility && typeof state.player?.setSubtitleVisibility === 'function') {
+            await state.player.setSubtitleVisibility(!!savedSubVisibility);
           }
           if (Number.isFinite(Number(p.audioDelaySec)) && typeof state.player?.setAudioDelay === 'function') {
             await state.player.setAudioDelay(Number(p.audioDelaySec));
@@ -7825,26 +7885,30 @@ async function saveNow(force) {
     let selectedAudioTrackLang = null;
     let selectedSubtitleTrackId = null;
     let selectedSubtitleTrackLang = null;
+    let subtitlesVisible = null;
     let audioDelaySec = null;
     let subtitleDelaySec = null;
     try {
       const canReadTracks = !!(state.player && state.player.capabilities && state.player.capabilities.tracks);
       const canReadDelays = !!(state.player && state.player.capabilities && state.player.capabilities.delays);
       const lastProbeAt = Number(state._vpLastPrefsProbeAt) || 0;
-      const allowSlowProbe = !!force && ((nowMs - lastProbeAt) >= 15000);
+      const needTrackProbe = !Array.isArray(lastAudioTracks) || !lastAudioTracks.length || !Array.isArray(lastSubtitleTracks) || !lastSubtitleTracks.length;
+      const allowSlowProbe = !!force && (needTrackProbe || (nowMs - lastProbeAt) >= 3000);
       if (allowSlowProbe) state._vpLastPrefsProbeAt = nowMs;
 
       if (state.player && state.player.capabilities && state.player.capabilities.tracks) {
         if (allowSlowProbe && typeof state.player.getAudioTracks === 'function') {
           const a = await state.player.getAudioTracks();
-          if (a && a.ok && Array.isArray(a.tracks)) {
-            lastAudioTracks = a.tracks;
+          const an = normalizeTracksResult(a);
+          if (Array.isArray(an.tracks)) {
+            lastAudioTracks = an.tracks;
           }
         }
         if (allowSlowProbe && typeof state.player.getSubtitleTracks === 'function') {
           const s = await state.player.getSubtitleTracks();
-          if (s && s.ok && Array.isArray(s.tracks)) {
-            lastSubtitleTracks = s.tracks;
+          const sn = normalizeTracksResult(s);
+          if (Array.isArray(sn.tracks)) {
+            lastSubtitleTracks = sn.tracks;
           }
         }
 
@@ -7859,6 +7923,8 @@ async function saveNow(force) {
           selectedSubtitleTrackId = selS.id;
           selectedSubtitleTrackLang = (selS.lang !== undefined && selS.lang !== null) ? String(selS.lang) : null;
         }
+        const pst = (typeof state.player.getState === 'function') ? state.player.getState() : null;
+        if (pst && typeof pst.subtitlesVisible === 'boolean') subtitlesVisible = !!pst.subtitlesVisible;
       }
 
       // Get delays if supported
@@ -7899,6 +7965,11 @@ async function saveNow(force) {
       selectedAudioTrackLang,
       selectedSubtitleTrackId,
       selectedSubtitleTrackLang,
+      subtitlesVisible,
+      // Qt-compatible aliases used by player_core + player_qt persistence.
+      aid: selectedAudioTrackId,
+      sid: selectedSubtitleTrackId,
+      subVisibility: subtitlesVisible,
       audioDelaySec,
       subtitleDelaySec,
     };
@@ -7913,6 +7984,18 @@ async function saveNow(force) {
         if ((payload.selectedSubtitleTrackId === null || payload.selectedSubtitleTrackId === undefined) && existing.selectedSubtitleTrackId != null) {
           payload.selectedSubtitleTrackId = existing.selectedSubtitleTrackId;
           payload.selectedSubtitleTrackLang = existing.selectedSubtitleTrackLang ?? payload.selectedSubtitleTrackLang;
+        }
+        if ((payload.subtitlesVisible === null || payload.subtitlesVisible === undefined) && typeof existing.subtitlesVisible === 'boolean') {
+          payload.subtitlesVisible = !!existing.subtitlesVisible;
+        }
+        if ((payload.aid === null || payload.aid === undefined) && existing.aid != null) {
+          payload.aid = existing.aid;
+        }
+        if ((payload.sid === null || payload.sid === undefined) && existing.sid != null) {
+          payload.sid = existing.sid;
+        }
+        if ((payload.subVisibility === null || payload.subVisibility === undefined) && typeof existing.subVisibility === 'boolean') {
+          payload.subVisibility = !!existing.subVisibility;
         }
       }
     } catch {}
@@ -7975,35 +8058,57 @@ async function saveNow(force) {
       let selectedAudioTrackLang = null;
       let selectedSubtitleTrackId = null;
       let selectedSubtitleTrackLang = null;
+      let subtitlesVisible = null;
       let audioDelaySec = null;
       let subtitleDelaySec = null;
       // Capture current tracks and delays
       if (state.player && state.player.capabilities && state.player.capabilities.tracks) {
         if (typeof state.player.getAudioTracks === 'function') {
           const a = await state.player.getAudioTracks();
-          if (a && a.ok && Array.isArray(a.tracks)) {
-            const selA = a.tracks.find(t => t && t.selected);
+          const an = normalizeTracksResult(a);
+          if (Array.isArray(an.tracks)) {
+            const selA = an.tracks.find(t => t && t.selected);
             if (selA) {
               selectedAudioTrackId = selA.id;
               selectedAudioTrackLang = (selA.lang !== undefined && selA.lang !== null) ? String(selA.lang) : null;
+            } else if (typeof state.player.getCurrentAudioTrack === 'function') {
+              const curA = state.player.getCurrentAudioTrack();
+              if (curA !== null && curA !== undefined && curA !== 'no') {
+                selectedAudioTrackId = curA;
+              }
             }
           }
         }
 
         if (typeof state.player.getSubtitleTracks === 'function') {
           const s = await state.player.getSubtitleTracks();
-          if (s && s.ok && Array.isArray(s.tracks)) {
-            const selS = s.tracks.find(t => t && t.selected);
+          const sn = normalizeTracksResult(s);
+          if (Array.isArray(sn.tracks)) {
+            const selS = sn.tracks.find(t => t && t.selected);
             if (selS) {
               selectedSubtitleTrackId = selS.id;
               selectedSubtitleTrackLang = (selS.lang !== undefined && selS.lang !== null) ? String(selS.lang) : null;
             } else {
-              // In the prefs-change path, treat "no selected subtitle" as an explicit OFF.
-              selectedSubtitleTrackId = 'no';
-              selectedSubtitleTrackLang = null;
+              let curS = null;
+              if (typeof state.player.getCurrentSubtitleTrack === 'function') {
+                curS = state.player.getCurrentSubtitleTrack();
+              }
+              if (curS !== null && curS !== undefined && curS !== 'no') {
+                selectedSubtitleTrackId = curS;
+                const byId = sn.tracks.find(t => t && String(t.id) === String(curS));
+                if (byId && byId.lang !== undefined && byId.lang !== null) {
+                  selectedSubtitleTrackLang = String(byId.lang);
+                }
+              } else {
+                // In the prefs-change path, treat "no selected subtitle" as an explicit OFF.
+                selectedSubtitleTrackId = 'no';
+                selectedSubtitleTrackLang = null;
+              }
             }
           }
         }
+        const pst = (typeof state.player.getState === 'function') ? state.player.getState() : null;
+        if (pst && typeof pst.subtitlesVisible === 'boolean') subtitlesVisible = !!pst.subtitlesVisible;
       }
 
       if (state.player && state.player.capabilities && state.player.capabilities.delays) {
@@ -8028,6 +8133,11 @@ async function saveNow(force) {
         selectedAudioTrackLang,
         selectedSubtitleTrackId,
         selectedSubtitleTrackLang,
+        subtitlesVisible,
+        // Qt-compatible aliases used by player_core + player_qt persistence.
+        aid: selectedAudioTrackId,
+        sid: selectedSubtitleTrackId,
+        subVisibility: subtitlesVisible,
         audioDelaySec,
         subtitleDelaySec,
         updatedAt: Date.now(),
@@ -8039,7 +8149,7 @@ async function saveNow(force) {
         state.progress[id] = { ...state.progress[id], ...payload };
       }
 
-      vpLog('saved playback prefs', id, { selectedAudioTrackId, selectedAudioTrackLang, selectedSubtitleTrackId, selectedSubtitleTrackLang, audioDelaySec, subtitleDelaySec });
+      vpLog('saved playback prefs', id, { selectedAudioTrackId, selectedSubtitleTrackId, subtitlesVisible, audioDelaySec, subtitleDelaySec });
     } catch (err) {
       vpLog('savePlaybackPreferences failed', id, String((err && err.message) || err || ''));
     }

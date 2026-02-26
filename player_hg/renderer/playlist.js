@@ -16,6 +16,7 @@
   var currentIndex = -1;
   var autoAdvance = true;
   var loadFileFn = null;   // set by init
+  var fixedContext = null; // optional explicit playlist context from host
 
   // ── Build drawer content ──
 
@@ -71,6 +72,10 @@
 
   function buildFromFolder(filePath) {
     if (!filePath) return Promise.resolve();
+    if (fixedContext && Array.isArray(fixedContext.paths) && fixedContext.paths.length) {
+      setPlaylist(fixedContext.paths, filePath, fixedContext.folderLabel || '');
+      return Promise.resolve();
+    }
     // Extract folder from file path
     var folder = filePath.replace(/\\/g, '/');
     var lastSlash = folder.lastIndexOf('/');
@@ -111,6 +116,35 @@
       folderLabel.textContent = folder;
       renderList();
     });
+  }
+
+  function setPlaylist(paths, currentPath, label) {
+    var out = Array.isArray(paths) ? paths.filter(function (p) { return !!p; }) : [];
+    if (!out.length && currentPath) out = [String(currentPath)];
+    playlist = out.slice();
+    var normalizedCurrent = String(currentPath || '').replace(/\\/g, '/');
+    currentIndex = -1;
+    for (var i = 0; i < playlist.length; i++) {
+      if (String(playlist[i]).replace(/\\/g, '/') === normalizedCurrent) {
+        currentIndex = i;
+        break;
+      }
+    }
+    if (currentIndex < 0 && playlist.length) currentIndex = 0;
+    if (folderLabel) folderLabel.textContent = String(label || '');
+    renderList();
+  }
+
+  function setContext(ctx) {
+    if (!ctx || !Array.isArray(ctx.paths) || !ctx.paths.length) {
+      fixedContext = null;
+      return;
+    }
+    fixedContext = {
+      paths: ctx.paths.slice(),
+      folderLabel: String(ctx.folderLabel || ''),
+    };
+    setPlaylist(fixedContext.paths, ctx.currentPath || fixedContext.paths[0], fixedContext.folderLabel);
   }
 
   function renderList() {
@@ -155,7 +189,7 @@
     currentIndex = idx;
     renderList();
     if (loadFileFn && playlist[idx]) {
-      loadFileFn(playlist[idx]);
+      loadFileFn(playlist[idx], { source: 'playlist', index: idx, size: playlist.length });
     }
   }
 
@@ -213,6 +247,8 @@
     destroy: destroy,
     toggle: toggle,
     isOpen: isOpen,
+    setContext: setContext,
+    setPlaylist: setPlaylist,
     buildFromFolder: buildFromFolder,
     nextEpisode: nextEpisode,
     prevEpisode: prevEpisode,

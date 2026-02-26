@@ -33,6 +33,7 @@
   var seekSliderEl = null;
   var chapterTickContainer = null;
   var chapters = [];
+  var onWindowResize = null;
 
   // ── Helpers ──
 
@@ -408,6 +409,7 @@
     showCursor();
     // Also show top strip
     if (window.TankoPlayer.topStrip) window.TankoPlayer.topStrip.show();
+    pushSubtitleSafeMargin();
   }
 
   function hideHud() {
@@ -417,6 +419,13 @@
     armCursorHide(); // also start cursor hide countdown
     // Also hide top strip
     if (window.TankoPlayer.topStrip) window.TankoPlayer.topStrip.hide();
+    pushSubtitleSafeMargin();
+  }
+
+  function pushSubtitleSafeMargin() {
+    if (!adapter || typeof adapter.setSubtitleSafeMargin !== 'function' || !hudEl) return;
+    var h = Math.max(0, Math.round(hudEl.getBoundingClientRect().height || 0));
+    adapter.setSubtitleSafeMargin({ controlsVisible: !!visible, hudHeightPx: h }).catch(function () {});
   }
 
   function armAutoHide() {
@@ -537,6 +546,8 @@
     // HUD hover keeps it visible (bottom + top strip)
     hudEl.addEventListener('mouseenter', onHudMouseEnter);
     hudEl.addEventListener('mouseleave', onHudMouseLeave);
+    onWindowResize = function () { pushSubtitleSafeMargin(); };
+    window.addEventListener('resize', onWindowResize);
 
     // Defer top strip hover binding (it inits after us)
     requestAnimationFrame(function () {
@@ -546,6 +557,7 @@
         topStripEl.addEventListener('mouseleave', onHudMouseLeave);
       }
     });
+    pushSubtitleSafeMargin();
   }
 
   function destroy() {
@@ -555,6 +567,8 @@
     if (cursorTimer) clearTimeout(cursorTimer);
     showCursor();
     if (stageEl) stageEl.removeEventListener('mousemove', onStageMouseMove);
+    if (onWindowResize) window.removeEventListener('resize', onWindowResize);
+    onWindowResize = null;
     if (hudEl && hudEl.parentNode) hudEl.parentNode.removeChild(hudEl);
     hudEl = null;
     adapter = null;
