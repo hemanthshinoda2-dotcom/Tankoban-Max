@@ -330,7 +330,13 @@
       } else {
         await ensureWebModulesLoaded();
       }
-      if (typeof window.setMode === 'function') window.setMode('sources');
+      try {
+        if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
+          await window.Tanko.modeRouter.setMode('sources');
+        } else if (typeof window.setMode === 'function') {
+          window.setMode('sources');
+        }
+      } catch {}
       try {
         if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
           window.Tanko.sources.openSources();

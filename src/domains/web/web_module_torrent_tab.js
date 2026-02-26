@@ -333,7 +333,7 @@
       if (fileSummary) fileSummary.textContent = '';
       if (okBtn) okBtn.disabled = true;
       var seqCb = container.querySelector('#tt-add-sequential');
-      if (seqCb) seqCb.checked = false;
+      if (seqCb) seqCb.checked = true;
 
       // Set default save path
       if (!savePath) {
@@ -452,7 +452,7 @@
             '<button id="tt-add-browse">Change...</button>' +
           '</div>' +
           '<label class="tt-add-check-label">' +
-            '<input type="checkbox" id="tt-add-sequential">' +
+            '<input type="checkbox" id="tt-add-sequential" checked>' +
             '<span>Sequential download</span>' +
           '</label>' +
           '<div id="tt-add-files-section">' +
@@ -491,7 +491,21 @@
           resolveId: currentResolveId,
           savePath: savePath || undefined,
           selectedFiles: selectedFiles
-        });
+        }).then(function (started) {
+          if (!started || !started.ok) return;
+          var seq = !!(container.querySelector('#tt-add-sequential') && container.querySelector('#tt-add-sequential').checked);
+          var priorities = {};
+          selectedFiles.forEach(function (idx) { priorities[idx] = 'normal'; });
+          if (api.webTorrent && typeof api.webTorrent.selectFiles === 'function') {
+            api.webTorrent.selectFiles({
+              id: started.id,
+              selectedIndices: selectedFiles,
+              priorities: priorities,
+              sequential: seq,
+              destinationRoot: savePath || undefined
+            });
+          }
+        }).catch(function () {});
         currentResolveId = null;
         resolvedFiles = null;
         overlay.classList.remove('visible');
@@ -582,7 +596,13 @@
         propsContainer.querySelectorAll('.tt-file-check').forEach(function (c) {
           if (c.checked) checked.push(Number(c.dataset.idx));
         });
-        api.webTorrent.selectFiles({ id: entry.id, selectedIndices: checked });
+        api.webTorrent.selectFiles({
+          id: entry.id,
+          selectedIndices: checked,
+          priorities: entry.filePriorities || {},
+          sequential: entry.sequential !== false,
+          destinationRoot: entry.destinationRoot || entry.savePath || ''
+        });
       }
     }
 
@@ -616,18 +636,51 @@
       menu.innerHTML = '';
       var items = [
         { label: '\u2713  Download (select)', action: 'select' },
-        { label: '\u2717  Don\'t download (deselect)', action: 'deselect' }
+        { label: '\u2717  Don\'t download (deselect)', action: 'deselect' },
+        { sep: true },
+        { label: 'Priority: High', action: 'prioHigh' },
+        { label: 'Priority: Normal', action: 'prioNormal' },
+        { label: 'Priority: Low', action: 'prioLow' }
       ];
 
       items.forEach(function (item) {
+        if (item.sep) {
+          var sep = document.createElement('div');
+          sep.className = 'tt-ctx-sep';
+          menu.appendChild(sep);
+          return;
+        }
         var itemEl = document.createElement('div');
         itemEl.className = 'tt-ctx-item';
         itemEl.textContent = item.label;
         itemEl.addEventListener('click', function () {
           menu.style.display = 'none';
-          var newState = item.action === 'select';
-          targetCbs.forEach(function (cb) { cb.checked = newState; });
-          if (targetCbs.length > 0) fireFileChangeEvent(targetCbs[0]);
+          if (item.action === 'select' || item.action === 'deselect') {
+            var newState = item.action === 'select';
+            targetCbs.forEach(function (cb) { cb.checked = newState; });
+            if (targetCbs.length > 0) fireFileChangeEvent(targetCbs[0]);
+            return;
+          }
+          var ids = Array.from(selectedIds);
+          var entry = ids.length === 1 ? torrents[ids[0]] : null;
+          if (!entry) return;
+          entry.filePriorities = entry.filePriorities || {};
+          var prio = item.action === 'prioHigh' ? 'high' : (item.action === 'prioLow' ? 'low' : 'normal');
+          targetCbs.forEach(function (fileCb) {
+            var idx = Number(fileCb.dataset.idx);
+            if (!isNaN(idx) && idx >= 0) entry.filePriorities[idx] = prio;
+          });
+          var checked = [];
+          fileContainer.querySelectorAll('.tt-file-check').forEach(function (c) {
+            if (c.checked) checked.push(Number(c.dataset.idx));
+          });
+          api.webTorrent.selectFiles({
+            id: entry.id,
+            selectedIndices: checked,
+            priorities: entry.filePriorities,
+            sequential: entry.sequential !== false,
+            destinationRoot: entry.destinationRoot || entry.savePath || ''
+          });
         });
         menu.appendChild(itemEl);
       });
@@ -672,7 +725,11 @@
       items.push({ sep: true });
       items.push({ label: '\u2716  Delete', action: 'delete' });
       items.push({ label: '\u2716  Delete with files', action: 'deleteFiles' });
-      if (entry && entry.savePath) {
+      if (entry) {
+        items.push({ sep: true });
+        items.push({ label: (entry.sequential !== false ? 'Sequential: ON (toggle)' : 'Sequential: OFF (toggle)'), action: 'toggleSequential' });
+      }
+      if (entry && (entry.savePath || entry.destinationRoot)) {
         items.push({ sep: true });
         items.push({ label: '\uD83D\uDCC1  Open folder', action: 'folder' });
       }
@@ -739,7 +796,7 @@
           renderTable();
           break;
         case 'folder':
-          if (entry && entry.savePath) api.webTorrent.openFolder({ path: entry.savePath });
+          if (entry && (entry.savePath || entry.destinationRoot)) api.webTorrent.openFolder({ path: entry.savePath || entry.destinationRoot });
           break;
         case 'copyName':
           if (entry) navigator.clipboard.writeText(entry.name || '').catch(function () {});
@@ -749,6 +806,24 @@
           break;
         case 'copyHash':
           if (entry && entry.infoHash) navigator.clipboard.writeText(entry.infoHash).catch(function () {});
+          break;
+        case 'toggleSequential':
+          if (!entry) break;
+          entry.sequential = !(entry.sequential !== false);
+          var selectedIdx = [];
+          var priorities = entry.filePriorities || {};
+          var files = Array.isArray(entry.files) ? entry.files : [];
+          for (var i = 0; i < files.length; i++) {
+            if (files[i] && files[i].selected !== false) selectedIdx.push(i);
+          }
+          api.webTorrent.selectFiles({
+            id: entry.id,
+            selectedIndices: selectedIdx,
+            priorities: priorities,
+            sequential: entry.sequential,
+            destinationRoot: entry.destinationRoot || entry.savePath || ''
+          });
+          renderProps();
           break;
       }
     }
@@ -967,7 +1042,13 @@
               contentPanel.querySelectorAll('.tt-file-check').forEach(function (c) {
                 if (c.checked) checked.push(Number(c.dataset.idx));
               });
-              api.webTorrent.selectFiles({ id: entry.id, selectedIndices: checked });
+              api.webTorrent.selectFiles({
+                id: entry.id,
+                selectedIndices: checked,
+                priorities: entry.filePriorities || {},
+                sequential: entry.sequential !== false,
+                destinationRoot: entry.destinationRoot || entry.savePath || ''
+              });
             });
           });
         }

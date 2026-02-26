@@ -22,6 +22,12 @@ const DEFAULT_SETTINGS = {
     behavior: 'ask',
     folderModeHint: true
   },
+  sourcesMinimalTorrentV1: false,
+  sourcesLastDestinationByCategory: {
+    comics: '',
+    books: '',
+    videos: ''
+  },
   privacy: {
     doNotTrack: false,
     clearOnExit: {
@@ -123,6 +129,12 @@ function normalizeSettings(input) {
     downloads: {
       behavior: normalizeDownloadBehavior(downloadsInput.behavior || src.downloadBehavior),
       folderModeHint: downloadsInput.folderModeHint !== false
+    },
+    sourcesMinimalTorrentV1: !!src.sourcesMinimalTorrentV1,
+    sourcesLastDestinationByCategory: {
+      comics: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.comics || '').trim(),
+      books: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.books || '').trim(),
+      videos: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.videos || '').trim()
     },
     privacy: {
       doNotTrack: !!(privacyInput.doNotTrack || src.doNotTrack),

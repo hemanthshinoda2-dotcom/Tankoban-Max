@@ -1580,11 +1580,7 @@ COMMON ANCHORS
             <div id="webHomeView" class="homeView">
               <div class="panel sourcesSearchPanel">
                 <div class="panelTitleRow">
-                  <div class="panelTitle">Tankoban Torrent</div>
-                  <div class="panelActions" id="sourcesSubModeTabs">
-                    <button id="sourcesSearchTabBtn" class="btn btn-ghost btn-sm active" type="button">Search</button>
-                    <button id="sourcesDownloadsTabBtn" class="btn btn-ghost btn-sm" type="button">Downloads</button>
-                  </div>
+                  <div class="panelTitle">Tankoban Search</div>
                 </div>
                 <div id="sourcesSearchView">
                   <div class="sourcesSearchControls">
@@ -1597,7 +1593,7 @@ COMMON ANCHORS
                     </select>
                     <button id="sourcesSearchBtn" class="btn btn-sm" type="button">Search</button>
                   </div>
-                  <div id="sourcesSearchStatus" class="muted tiny">Enter a query and search.</div>
+                  <div id="sourcesSearchStatus" class="muted tiny"></div>
                   <div class="sourcesSearchTableWrap">
                     <table id="sourcesSearchTable" class="sourcesSearchTable">
                       <thead>
@@ -1615,9 +1611,28 @@ COMMON ANCHORS
                 </div>
               </div>
 
-              <div id="sourcesDownloadsView" class="panel hidden">
+              <div class="panel sourcesTorrentPanel">
                 <div class="panelTitleRow">
-                  <div class="panelTitle">Torrent Downloads</div>
+                  <div class="panelTitle">Tankoban Torrents</div>
+                  <div class="panelActions">
+                    <button id="sourcesUnhideBtn" class="btn btn-ghost btn-sm" type="button">Unhide</button>
+                  </div>
+                </div>
+                <div class="sourcesSearchTableWrap">
+                  <table id="sourcesTorrentTable" class="sourcesSearchTable">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        <th>Torrent Name</th>
+                        <th>Size</th>
+                        <th>Download Speed</th>
+                        <th>Download % / Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sourcesTorrentBody">
+                      <tr><td colspan="5" class="muted tiny">No torrents yet.</td></tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -1735,7 +1750,30 @@ COMMON ANCHORS
             <label class="settingsLabel" for="sourcesSaveNewFolder">New folder name</label>
             <input id="sourcesSaveNewFolder" class="search" type="text" placeholder="Folder name" autocomplete="off" />
           </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel">Final destination</label>
+            <div id="sourcesSaveResolvedPath" class="downloadDestPickerPath">Not selected</div>
+          </div>
+          <div class="settingsGroup">
+            <label class="tt-add-check-label">
+              <input id="sourcesSaveSequential" type="checkbox" checked />
+              <span>Sequential Download (default ON)</span>
+            </label>
+          </div>
+          <div class="settingsGroup">
+            <div class="settingsTop">
+              <label class="settingsLabel" for="sourcesSaveFilesList">Files</label>
+              <div class="panelActions">
+                <button id="sourcesSaveSelectAll" class="btn btn-ghost btn-sm" type="button">Select All</button>
+                <button id="sourcesSaveDeselectAll" class="btn btn-ghost btn-sm" type="button">Deselect All</button>
+              </div>
+            </div>
+            <div id="sourcesSaveFilesList" class="folderTree downloadDestPickerList">
+              <div class="muted tiny">Resolving metadata...</div>
+            </div>
+          </div>
           <div class="settingsActions">
+            <button id="sourcesSaveFlowBack" class="btn btn-ghost btn-sm hidden" type="button">Back</button>
             <button id="sourcesSaveFlowStart" class="btn" type="button">Start Download</button>
           </div>
         </div>

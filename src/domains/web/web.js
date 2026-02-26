@@ -223,10 +223,12 @@
     sourcesDownloadsTabBtn: qs('sourcesDownloadsTabBtn'),
     sourcesSearchView: qs('sourcesSearchView'),
     sourcesDownloadsView: qs('sourcesDownloadsView'),
+    sourcesTorrentBody: qs('sourcesTorrentBody'),
 
     // Save-to-library flow
     sourcesSaveOverlay: qs('sourcesSaveFlowOverlay'),
     sourcesSaveCancel: qs('sourcesSaveFlowCancel'),
+    sourcesSaveBack: qs('sourcesSaveFlowBack'),
     sourcesSaveStart: qs('sourcesSaveFlowStart'),
     sourcesSaveCategory: qs('sourcesSaveCategory'),
     sourcesSaveDestMode: qs('sourcesSaveDestMode'),
@@ -234,6 +236,12 @@
     sourcesSaveExistingFolder: qs('sourcesSaveExistingFolder'),
     sourcesSaveNewWrap: qs('sourcesSaveNewWrap'),
     sourcesSaveNewFolder: qs('sourcesSaveNewFolder'),
+    sourcesSaveResolvedPath: qs('sourcesSaveResolvedPath'),
+    sourcesSaveSequential: qs('sourcesSaveSequential'),
+    sourcesSaveFilesList: qs('sourcesSaveFilesList'),
+    sourcesSaveSelectAll: qs('sourcesSaveSelectAll'),
+    sourcesSaveDeselectAll: qs('sourcesSaveDeselectAll'),
+    sourcesUnhideBtn: qs('sourcesUnhideBtn'),
   };
 
   // ── Shared state ──
@@ -266,6 +274,8 @@
       startup: { mode: 'continue', customUrl: '' },
       home: { homeUrl: '', newTabBehavior: 'tankoban_home' },
       downloads: { behavior: 'ask', folderModeHint: true },
+      sourcesMinimalTorrentV1: false,
+      sourcesLastDestinationByCategory: { comics: '', books: '', videos: '' },
       privacy: { doNotTrack: false, clearOnExit: { history: false, downloads: false, cookies: false, cache: false } }
     },
     torActive: false,
@@ -302,6 +312,15 @@
     searchResults: [],
     searchLoading: false,
     pendingMagnet: null,
+    saveFlowMode: 'onboarding',
+    managingTorrentId: null,
+    pendingResolveId: null,
+    pendingResolveFiles: [],
+    pendingFileSelection: {},
+    pendingFilePriorities: {},
+    sourcesTorrents: [],
+    lastSaveCategory: 'comics',
+    hiddenSourceTorrentIds: {},
     destinationRoots: { books: null, comics: null, videos: null, allBooks: [], allComics: [], allVideos: [] },
   };
 
@@ -373,6 +392,18 @@
     _toastTimer = setTimeout(function () {
       el.toast.classList.add('hidden');
     }, 2500);
+  }
+
+  function loadHiddenSourcesTorrents() {
+    try {
+      var raw = localStorage.getItem('tankoSourcesHiddenTorrents');
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === 'object') state.hiddenSourceTorrentIds = parsed;
+    } catch (_e) {}
+  }
+
+  function saveHiddenSourcesTorrents() {
+    try { localStorage.setItem('tankoSourcesHiddenTorrents', JSON.stringify(state.hiddenSourceTorrentIds || {})); } catch (_e) {}
   }
 
   function isWebModeActive() {
@@ -856,6 +887,175 @@
     }).catch(function () {});
   }
 
+  function isSourcesV2Torrent(entry) {
+    var e = (entry && typeof entry === 'object') ? entry : null;
+    if (!e) return false;
+    return String(e.origin || '').toLowerCase() === 'sources_v2';
+  }
+
+  function refreshSourcesTorrents() {
+    if (!api.webTorrent) return;
+    var p1 = (typeof api.webTorrent.getActive === 'function')
+      ? api.webTorrent.getActive()
+      : Promise.resolve({ ok: false, torrents: [] });
+    var p2 = (typeof api.webTorrent.getHistory === 'function')
+      ? api.webTorrent.getHistory()
+      : Promise.resolve({ ok: false, torrents: [] });
+    Promise.all([p1, p2]).then(function (res) {
+      var a = (res[0] && res[0].ok && Array.isArray(res[0].torrents)) ? res[0].torrents : [];
+      var h = (res[1] && res[1].ok && Array.isArray(res[1].torrents)) ? res[1].torrents : [];
+      var map = Object.create(null);
+      for (var i = 0; i < h.length; i++) {
+        var itemH = h[i];
+        if (!itemH || !isSourcesV2Torrent(itemH)) continue;
+        map[String(itemH.id || '')] = itemH;
+      }
+      for (var j = 0; j < a.length; j++) {
+        var itemA = a[j];
+        if (!itemA || !isSourcesV2Torrent(itemA)) continue;
+        map[String(itemA.id || '')] = itemA;
+      }
+      var out = [];
+      var keys = Object.keys(map);
+      for (var k = 0; k < keys.length; k++) out.push(map[keys[k]]);
+      out.sort(function (x, y) { return Number(y.startedAt || 0) - Number(x.startedAt || 0); });
+      state.sourcesTorrents = out;
+      renderSourcesTorrentRows();
+    }).catch(function () {});
+  }
+
+  function getSourcesTorrentById(id) {
+    var key = String(id || '');
+    for (var i = 0; i < state.sourcesTorrents.length; i++) {
+      var t = state.sourcesTorrents[i];
+      if (t && String(t.id || '') === key) return t;
+    }
+    return null;
+  }
+
+  function openManageFilesOverlayByTorrentId(id) {
+    var entry = getSourcesTorrentById(id);
+    if (!entry) return;
+    resetSaveFlowState();
+    state.saveFlowMode = 'manage';
+    state.managingTorrentId = String(entry.id || '');
+    state.pendingMagnet = { magnetUri: String(entry.magnetUri || ''), title: String(entry.name || 'torrent') };
+    state.pendingResolveFiles = Array.isArray(entry.files) ? entry.files : [];
+    state.pendingFileSelection = {};
+    state.pendingFilePriorities = {};
+    for (var i = 0; i < state.pendingResolveFiles.length; i++) {
+      var f = state.pendingResolveFiles[i] || {};
+      state.pendingFileSelection[i] = f.selected !== false;
+      state.pendingFilePriorities[i] = String((entry.filePriorities && entry.filePriorities[i]) || f.priority || 'normal');
+    }
+    var cat = 'comics';
+    if ((entry.destinationRoot || '').toLowerCase().indexOf('\\tv') !== -1 || (entry.destinationRoot || '').toLowerCase().indexOf('/tv') !== -1) cat = 'videos';
+    if (el.sourcesSaveCategory) el.sourcesSaveCategory.value = cat;
+    if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.value = 'existing';
+    refreshSaveFlowInputs();
+    if (el.sourcesSaveSequential) el.sourcesSaveSequential.checked = entry.sequential !== false;
+    if (el.sourcesSaveStart) {
+      el.sourcesSaveStart.textContent = 'Apply';
+      el.sourcesSaveStart.disabled = !state.pendingResolveFiles.length;
+    }
+    if (el.sourcesSaveBack) el.sourcesSaveBack.classList.remove('hidden');
+    renderSaveFlowFiles();
+    if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.remove('hidden');
+  }
+
+  function showSourcesTorrentContextMenu(x, y, id) {
+    if (!el.webLibraryView) return;
+    var t0 = getSourcesTorrentById(id);
+    var seqOn = !t0 || t0.sequential !== false;
+    var existing = document.getElementById('sourcesTorrentCtxMenu');
+    if (existing && existing.parentElement) existing.parentElement.removeChild(existing);
+    var menu = document.createElement('div');
+    menu.id = 'sourcesTorrentCtxMenu';
+    menu.className = 'tt-ctx-menu';
+    menu.style.display = 'block';
+    menu.style.position = 'fixed';
+    menu.style.zIndex = '9999';
+    menu.innerHTML = ''
+      + '<div class="tt-ctx-item" data-action="see-files">See files</div>'
+      + '<div class="tt-ctx-item" data-action="toggle-seq">' + (seqOn ? '&#10003; ' : '') + 'Sequential download</div>'
+      + '<div class="tt-ctx-parent-wrap">'
+      +   '<div class="tt-ctx-item tt-ctx-parent">Remove <span class="tt-ctx-caret">&#9656;</span></div>'
+      +   '<div class="tt-ctx-submenu">'
+      +     '<div class="tt-ctx-item" data-action="remove-hide">Hide torrent</div>'
+      +     '<div class="tt-ctx-item" data-action="remove-only">Remove from Sources</div>'
+      +     '<div class="tt-ctx-item" data-action="remove-lib">Remove from Sources & Library</div>'
+      +     '<div class="tt-ctx-item" data-action="remove-delete">Remove and delete files</div>'
+      +   '</div>'
+      + '</div>';
+    document.body.appendChild(menu);
+    menu.style.left = Math.max(8, x) + 'px';
+    menu.style.top = Math.max(8, y) + 'px';
+    var cleanup = function () {
+      if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
+      document.removeEventListener('mousedown', onDocDown, true);
+    };
+    var onDocDown = function (e) {
+      if (menu.contains(e.target)) return;
+      cleanup();
+    };
+    document.addEventListener('mousedown', onDocDown, true);
+    menu.addEventListener('click', function (e) {
+      var item = e.target && e.target.closest ? e.target.closest('[data-action]') : null;
+      if (!item) return;
+      var action = item.getAttribute('data-action');
+      cleanup();
+      if (action === 'see-files') { openManageFilesOverlayByTorrentId(id); return; }
+      if (action === 'toggle-seq') {
+        var t = getSourcesTorrentById(id);
+        if (!t || !api.webTorrent || typeof api.webTorrent.selectFiles !== 'function') return;
+        var files = Array.isArray(t.files) ? t.files : [];
+        var selected = [];
+        var priorities = {};
+        for (var i = 0; i < files.length; i++) {
+          var f = files[i] || {};
+          if (f.selected === false) continue;
+          selected.push(i);
+          priorities[i] = String((t.filePriorities && t.filePriorities[i]) || f.priority || 'normal');
+        }
+        api.webTorrent.selectFiles({
+          id: id,
+          selectedIndices: selected,
+          priorities: priorities,
+          sequential: !(t.sequential === true),
+          destinationRoot: t.destinationRoot || t.savePath || ''
+        }).then(function () {
+          t.sequential = !(t.sequential === true);
+          refreshSourcesTorrents();
+        }).catch(function () {});
+        return;
+      }
+      if (action === 'remove-hide') {
+        state.hiddenSourceTorrentIds[String(id)] = true;
+        saveHiddenSourcesTorrents();
+        renderSourcesTorrentRows();
+        return;
+      }
+      if (!api.webTorrent) return;
+      if (action === 'remove-only') {
+        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: false, removeFromLibrary: false }) : { ok: false })
+          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+          .finally(refreshSourcesTorrents);
+        return;
+      }
+      if (action === 'remove-lib') {
+        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: false, removeFromLibrary: true }) : { ok: false })
+          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+          .finally(refreshSourcesTorrents);
+        return;
+      }
+      if (action === 'remove-delete') {
+        Promise.resolve(api.webTorrent.remove ? api.webTorrent.remove({ id: id, removeFiles: true, removeFromLibrary: true }) : { ok: false })
+          .then(function () { return api.webTorrent.removeHistory ? api.webTorrent.removeHistory({ id: id }) : { ok: true }; })
+          .finally(refreshSourcesTorrents);
+      }
+    });
+  }
+
   function formatBytesForSources(bytes) {
     var n = Number(bytes || 0);
     if (!isFinite(n) || n <= 0) return '-';
@@ -868,35 +1068,35 @@
   }
 
   function setSourcesSubMode(mode) {
-    var key = String(mode || 'search').toLowerCase() === 'downloads' ? 'downloads' : 'search';
+    var key = 'search';
     state.sourcesSubMode = key;
     if (el.sourcesSearchTabBtn) el.sourcesSearchTabBtn.classList.toggle('active', key === 'search');
     if (el.sourcesDownloadsTabBtn) el.sourcesDownloadsTabBtn.classList.toggle('active', key === 'downloads');
     if (el.sourcesSearchView) el.sourcesSearchView.classList.toggle('hidden', key !== 'search');
     if (el.sourcesDownloadsView) el.sourcesDownloadsView.classList.toggle('hidden', key !== 'downloads');
-    if (key === 'downloads') {
-      if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement !== el.sourcesDownloadsView) {
-        el.sourcesDownloadsView.appendChild(el.torrentContainer);
-      }
-      if (el.torrentContainer) el.torrentContainer.style.display = '';
-      if (torrentTab && typeof torrentTab.initTorrentTab === 'function') torrentTab.initTorrentTab();
-      if (torrentTab && typeof torrentTab.renderTable === 'function') torrentTab.renderTable();
-      if (hub && typeof hub.refreshTorrentState === 'function') hub.refreshTorrentState();
-      if (el.browserView) el.browserView.classList.add('hidden');
-      state.browserOpen = false;
-      return;
-    }
-    if (el.torrentContainer && el.sourcesDownloadsView && el.torrentContainer.parentElement === el.sourcesDownloadsView) {
-      if (el.browserView && el.contentArea && el.torrentContainer.parentElement !== el.contentArea) {
-        el.contentArea.appendChild(el.torrentContainer);
-      }
-      el.torrentContainer.style.display = 'none';
+    if (el.torrentContainer) el.torrentContainer.style.display = 'none';
+    if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement === el.sourcesDownloadsView && el.contentArea) {
+      el.contentArea.appendChild(el.torrentContainer);
     }
     if (el.sourcesSearchInput) {
       setTimeout(function () {
         try { el.sourcesSearchInput.focus(); } catch (_e) {}
       }, 0);
     }
+  }
+
+  function forceSourcesViewVisible() {
+    try {
+      var comicsView = document.getElementById('libraryView');
+      var booksView = document.getElementById('booksLibraryView');
+      var videosView = document.getElementById('videoLibraryView');
+      if (comicsView) comicsView.classList.add('hidden');
+      if (booksView) booksView.classList.add('hidden');
+      if (videosView) videosView.classList.add('hidden');
+      if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
+      document.body.classList.add('inSourcesMode');
+      document.body.classList.remove('inComicsMode', 'inBooksMode', 'inVideoMode');
+    } catch (_e) {}
   }
 
   function renderSourcesSearchRows() {
@@ -916,6 +1116,37 @@
       html = '<tr><td colspan="5" class="muted tiny">No results.</td></tr>';
     }
     el.sourcesSearchBody.innerHTML = html;
+  }
+
+  function asPct01(value) {
+    var n = Number(value || 0);
+    if (!isFinite(n) || n <= 0) return '0%';
+    if (n >= 1) return '100%';
+    return Math.round(n * 100) + '%';
+  }
+
+  function renderSourcesTorrentRows() {
+    if (!el.sourcesTorrentBody) return;
+    var rows = Array.isArray(state.sourcesTorrents) ? state.sourcesTorrents.filter(function (t) {
+      var id = String(t && t.id || '');
+      return !!id && !state.hiddenSourceTorrentIds[id];
+    }) : [];
+    if (!rows.length) {
+      el.sourcesTorrentBody.innerHTML = '<tr><td colspan="5" class="muted tiny">No torrents yet.</td></tr>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var t = rows[i] || {};
+      html += '<tr data-source-torrent-id="' + escapeHtml(String(t.id || '')) + '">'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(String(t.name || t.infoHash || 'Torrent')) + '">' + escapeHtml(String(t.name || t.infoHash || 'Torrent')) + '</td>'
+        + '<td>' + escapeHtml(formatBytesForSources(t.totalSize || 0)) + '</td>'
+        + '<td>' + escapeHtml(formatBytesForSources(t.downloadRate || 0)) + '/s</td>'
+        + '<td>' + escapeHtml(asPct01(t.progress)) + ' / ' + escapeHtml(String(t.state || 'unknown')) + '</td>'
+      + '</tr>';
+    }
+    el.sourcesTorrentBody.innerHTML = html;
   }
 
   function getSearchFilter() {
@@ -943,40 +1174,168 @@
     return api.webSources.listDestinationFolders({ mode: category, path: rootPath || '' });
   }
 
+  function renderSaveFlowFiles() {
+    if (!el.sourcesSaveFilesList) return;
+    var files = Array.isArray(state.pendingResolveFiles) ? state.pendingResolveFiles : [];
+    if (!files.length) {
+      el.sourcesSaveFilesList.innerHTML = '<div class="muted tiny">No file information available.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i] || {};
+      var checked = state.pendingFileSelection[i] !== false;
+      var priority = String(state.pendingFilePriorities[i] || 'normal');
+      html += '<label class="sourcesSaveFileRow">'
+        + '<input type="checkbox" class="sourcesSaveFileCheck" data-idx="' + i + '"' + (checked ? ' checked' : '') + ' />'
+        + '<span class="sourcesSaveFileName" title="' + escapeHtml(String(f.path || f.name || '')) + '">' + escapeHtml(String(f.name || f.path || ('File ' + (i + 1)))) + '</span>'
+        + '<select class="select sourcesSaveFilePriority" data-priority-idx="' + i + '">'
+          + '<option value="high"' + (priority === 'high' ? ' selected' : '') + '>High</option>'
+          + '<option value="normal"' + (priority === 'normal' ? ' selected' : '') + '>Normal</option>'
+          + '<option value="low"' + (priority === 'low' ? ' selected' : '') + '>Low</option>'
+        + '</select>'
+        + '<span class="sourcesSaveFileSize">' + escapeHtml(formatBytesForSources(f.length || 0)) + '</span>'
+      + '</label>';
+    }
+    el.sourcesSaveFilesList.innerHTML = html;
+  }
+
+  function updateSavePathPreview() {
+    var resolved = buildSavePath();
+    if (el.sourcesSaveResolvedPath) {
+      el.sourcesSaveResolvedPath.textContent = resolved || 'Destination not configured';
+      el.sourcesSaveResolvedPath.title = resolved || '';
+    }
+  }
+
   function refreshSaveFlowInputs() {
     var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
     var mode = String((el.sourcesSaveDestMode && el.sourcesSaveDestMode.value) || 'default').trim().toLowerCase();
+    var lastByCat = state.browserSettings && state.browserSettings.sourcesLastDestinationByCategory
+      ? state.browserSettings.sourcesLastDestinationByCategory : {};
+    var preferred = String(lastByCat[category] || '').trim();
+    var preferredNorm = preferred.replace(/\//g, '\\').toLowerCase();
+    if (mode === 'default' && preferred && el.sourcesSaveDestMode) {
+      el.sourcesSaveDestMode.value = 'existing';
+      mode = 'existing';
+    }
     if (el.sourcesSaveExistingWrap) el.sourcesSaveExistingWrap.classList.toggle('hidden', mode !== 'existing');
     if (el.sourcesSaveNewWrap) el.sourcesSaveNewWrap.classList.toggle('hidden', mode !== 'new');
-    if (mode !== 'existing') return;
+    if (mode !== 'existing') {
+      updateSavePathPreview();
+      return;
+    }
     var roots = getRootListByCategory(category);
     var root = roots.length ? roots[0] : getDestinationRootByCategory(category);
     listFoldersForSaveFlow(category, root).then(function (res) {
       if (!el.sourcesSaveExistingFolder) return;
       var rows = (res && res.ok && Array.isArray(res.folders)) ? res.folders : [];
       var html = '';
+      var seenPreferred = false;
       for (var i = 0; i < rows.length; i++) {
         var p = String(rows[i] && rows[i].path || '');
         if (!p) continue;
+        if (preferred && p.replace(/\//g, '\\').toLowerCase() === preferredNorm) seenPreferred = true;
         html += '<option value="' + escapeHtml(p) + '">' + escapeHtml(rows[i].name || p) + '</option>';
+      }
+      if (preferred && !seenPreferred) {
+        html = '<option value="' + escapeHtml(preferred) + '">' + escapeHtml(preferred) + '</option>' + html;
       }
       if (!html && root) html = '<option value="' + escapeHtml(root) + '">' + escapeHtml(root) + '</option>';
       el.sourcesSaveExistingFolder.innerHTML = html;
-    }).catch(function () {});
+      if (preferred) el.sourcesSaveExistingFolder.value = preferred;
+      updateSavePathPreview();
+    }).catch(function () {
+      updateSavePathPreview();
+    });
+  }
+
+  function resetSaveFlowState() {
+    if (state.pendingResolveId && api.webTorrent && typeof api.webTorrent.cancelResolve === 'function') {
+      api.webTorrent.cancelResolve({ resolveId: state.pendingResolveId }).catch(function () {});
+    }
+    state.pendingResolveId = null;
+    state.pendingResolveFiles = [];
+    state.pendingFileSelection = {};
+    state.pendingFilePriorities = {};
+    state.saveFlowMode = 'onboarding';
+    state.managingTorrentId = null;
+  }
+
+  function resolveFilesForSaveFlow() {
+    var row = state.pendingMagnet;
+    if (!row || !row.magnetUri || !api.webTorrent || typeof api.webTorrent.resolveMetadata !== 'function') {
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
+      renderSaveFlowFiles();
+      return;
+    }
+    if (el.sourcesSaveFilesList) el.sourcesSaveFilesList.innerHTML = '<div class="muted tiny">Resolving metadata...</div>';
+    function acceptMeta(meta) {
+      if (!meta || !meta.ok) throw new Error((meta && meta.error) || 'Metadata resolution failed');
+      state.pendingResolveId = meta.resolveId;
+      state.pendingResolveFiles = Array.isArray(meta.files) ? meta.files : [];
+      state.pendingFileSelection = {};
+      state.pendingFilePriorities = {};
+      for (var i = 0; i < state.pendingResolveFiles.length; i++) {
+        state.pendingFileSelection[i] = true;
+        state.pendingFilePriorities[i] = 'normal';
+      }
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = !state.pendingResolveFiles.length;
+      renderSaveFlowFiles();
+      if (!state.pendingResolveFiles.length) throw new Error('No file metadata returned for this torrent.');
+    }
+
+    function doResolve(withDestination) {
+      var payload = { source: row.magnetUri };
+      if (withDestination) payload.destinationRoot = buildSavePath() || undefined;
+      return api.webTorrent.resolveMetadata(payload).then(acceptMeta);
+    }
+
+    doResolve(true).catch(function () {
+      return doResolve(false);
+    }).catch(function (err) {
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
+      if (el.sourcesSaveFilesList) {
+        el.sourcesSaveFilesList.innerHTML = ''
+          + '<div class="muted tiny">' + escapeHtml(String((err && err.message) || err || 'Could not resolve files')) + '</div>'
+          + '<div class="tiny" style="margin-top:8px;"><button id="sourcesSaveRetryResolve" class="btn btn-ghost btn-sm" type="button">Retry</button></div>';
+        var retry = document.getElementById('sourcesSaveRetryResolve');
+        if (retry) retry.addEventListener('click', function () { resolveFilesForSaveFlow(); });
+      }
+    });
   }
 
   function openSaveFlow(resultRow) {
     if (!resultRow || !resultRow.magnetUri) return;
+    resetSaveFlowState();
     state.pendingMagnet = resultRow;
-    if (el.sourcesSaveCategory) el.sourcesSaveCategory.value = 'comics';
-    if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.value = 'default';
+    var filter = getSearchFilter();
+    var inferredCategory = filter === 'tv' ? 'videos'
+      : (filter === 'books' ? 'books'
+      : (filter === 'comics' ? 'comics' : state.lastSaveCategory || 'comics'));
+    if (el.sourcesSaveCategory) el.sourcesSaveCategory.value = inferredCategory;
+    var lastByCat = state.browserSettings && state.browserSettings.sourcesLastDestinationByCategory
+      ? state.browserSettings.sourcesLastDestinationByCategory : {};
+    var lastPath = String(lastByCat[inferredCategory] || '').trim();
+    if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.value = lastPath ? 'existing' : 'default';
     if (el.sourcesSaveNewFolder) el.sourcesSaveNewFolder.value = '';
+    if (el.sourcesSaveSequential) el.sourcesSaveSequential.checked = true;
+    if (el.sourcesSaveStart) {
+      el.sourcesSaveStart.disabled = true;
+      el.sourcesSaveStart.textContent = 'Start Download';
+    }
+    if (el.sourcesSaveBack) el.sourcesSaveBack.classList.add('hidden');
     refreshSaveFlowInputs();
     if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.remove('hidden');
+    state.saveFlowMode = 'onboarding';
+    resolveFilesForSaveFlow();
   }
 
   function closeSaveFlow() {
+    resetSaveFlowState();
     state.pendingMagnet = null;
+    if (el.sourcesSaveStart) el.sourcesSaveStart.textContent = 'Start Download';
+    if (el.sourcesSaveBack) el.sourcesSaveBack.classList.add('hidden');
     if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.add('hidden');
   }
 
@@ -995,36 +1354,109 @@
       var safeName = folderName.replace(/[\\\/]+/g, '_');
       return normalizedRoot + '/' + safeName;
     }
+    if (mode === 'default') {
+      var lastByCat = state.browserSettings && state.browserSettings.sourcesLastDestinationByCategory
+        ? state.browserSettings.sourcesLastDestinationByCategory : {};
+      var last = String(lastByCat[category] || '').trim();
+      if (last) return last;
+    }
     return root;
   }
 
   function startConfiguredDownload() {
     var row = state.pendingMagnet;
-    if (!row || !row.magnetUri || !api.webTorrent) return;
-    var savePath = buildSavePath();
-    if (!savePath) {
-      showToast('Select a valid destination');
+    if (!row || !row.magnetUri || !api.webTorrent) {
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'No magnet selected.';
+      showToast('No magnet selected');
       return;
     }
+    var savePath = buildSavePath();
+    if (!savePath) {
+      var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics');
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'No destination configured for ' + category + '. Add a library root folder first.';
+      showToast('No destination configured for ' + category);
+      return;
+    }
+
+    var selected = [];
+    var priorities = {};
+    if (Array.isArray(state.pendingResolveFiles) && state.pendingResolveFiles.length) {
+      for (var i = 0; i < state.pendingResolveFiles.length; i++) {
+        if (state.pendingFileSelection[i] !== false) {
+          selected.push(i);
+          priorities[i] = String(state.pendingFilePriorities[i] || 'normal');
+        }
+      }
+    }
+    if (!selected.length && Array.isArray(state.pendingResolveFiles) && state.pendingResolveFiles.length) {
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Select at least one file.';
+      showToast('Select at least one file');
+      return;
+    }
+
+    var sequential = !!(el.sourcesSaveSequential && el.sourcesSaveSequential.checked);
     if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
-    if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Resolving metadata...';
-    api.webTorrent.resolveMetadata({ source: row.magnetUri }).then(function (meta) {
-      if (!meta || !meta.ok) throw new Error((meta && meta.error) || 'Metadata resolution failed');
-      var selected = [];
-      var files = Array.isArray(meta.files) ? meta.files : [];
-      for (var i = 0; i < files.length; i++) selected.push(i);
-      return api.webTorrent.startConfigured({
-        resolveId: meta.resolveId,
-        savePath: savePath,
-        selectedFiles: selected
-      });
-    }).then(function (started) {
+
+    function persistDestinationChoice() {
+      var cat = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
+      state.lastSaveCategory = cat;
+      if (!state.browserSettings.sourcesLastDestinationByCategory) {
+        state.browserSettings.sourcesLastDestinationByCategory = { comics: '', books: '', videos: '' };
+      }
+      state.browserSettings.sourcesLastDestinationByCategory[cat] = savePath;
+      var patch = { sourcesLastDestinationByCategory: {} };
+      patch.sourcesLastDestinationByCategory[cat] = savePath;
+      saveBrowserSettings(patch);
+    }
+
+    function onStartedOk(started) {
       if (!started || !started.ok) throw new Error((started && started.error) || 'Failed to start download');
+      persistDestinationChoice();
       closeSaveFlow();
-      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Started: ' + (row.title || 'torrent');
-      setSourcesSubMode('downloads');
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = '';
+      forceSourcesViewVisible();
+      if (hub && typeof hub.refreshTorrentState === 'function') hub.refreshTorrentState();
       showToast('Torrent added to Downloads');
-    }).catch(function (err) {
+    }
+
+    var startPromise;
+    if (state.saveFlowMode === 'manage' && state.managingTorrentId && typeof api.webTorrent.selectFiles === 'function') {
+      startPromise = api.webTorrent.selectFiles({
+        id: state.managingTorrentId,
+        selectedIndices: selected,
+        priorities: priorities,
+        sequential: sequential,
+        destinationRoot: savePath
+      }).then(function (res) {
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to apply torrent file changes');
+        return { ok: true, id: state.managingTorrentId };
+      });
+    } else if (state.pendingResolveId && typeof api.webTorrent.startConfigured === 'function') {
+      startPromise = api.webTorrent.startConfigured({
+        resolveId: state.pendingResolveId,
+        origin: 'sources_v2',
+        savePath: savePath,
+        selectedFiles: selected.length ? selected : null
+      }).then(function (started) {
+        if (!started || !started.ok) throw new Error((started && started.error) || 'Failed to start download');
+        if (selected.length && typeof api.webTorrent.selectFiles === 'function') {
+          return api.webTorrent.selectFiles({
+            id: started.id,
+            selectedIndices: selected,
+            priorities: priorities,
+            sequential: sequential,
+            destinationRoot: savePath
+          }).then(function () { return started; });
+        }
+        return started;
+      });
+    } else if (typeof api.webTorrent.startMagnet === 'function') {
+      startPromise = api.webTorrent.startMagnet({ magnetUri: row.magnetUri, destinationRoot: savePath, origin: 'sources_v2' });
+    } else {
+      startPromise = Promise.reject(new Error('Download start unavailable'));
+    }
+
+    startPromise.then(onStartedOk).catch(function (err) {
       var msg = String((err && err.message) || err || 'Failed to start torrent');
       if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = msg;
       showToast(msg);
@@ -1038,7 +1470,7 @@
     if (!query) {
       state.searchResults = [];
       renderSourcesSearchRows();
-      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Enter a query and search.';
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = '';
       return;
     }
     if (!api.torrentSearch || typeof api.torrentSearch.query !== 'function') {
@@ -1129,8 +1561,18 @@
       startup: { mode: String(startup.mode || 'continue').trim().toLowerCase() || 'continue', customUrl: String(startup.customUrl || '').trim() },
       home: { homeUrl: String(home.homeUrl || '').trim(), newTabBehavior: String(home.newTabBehavior || 'tankoban_home').trim().toLowerCase() || 'tankoban_home' },
       downloads: { behavior: String(dls.behavior || 'ask').trim().toLowerCase() || 'ask', folderModeHint: dls.folderModeHint !== false },
+      sourcesMinimalTorrentV1: !!src.sourcesMinimalTorrentV1,
+      sourcesLastDestinationByCategory: {
+        comics: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.comics || '').trim(),
+        books: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.books || '').trim(),
+        videos: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.videos || '').trim()
+      },
       privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } }
     };
+  }
+
+  function applySourcesMinimalFlag() {
+    document.body.classList.toggle('sourcesMinimalTorrentV1', !!(state.browserSettings && state.browserSettings.sourcesMinimalTorrentV1));
   }
 
   function syncBrowserSettingsControls() {
@@ -1146,6 +1588,7 @@
     if (el.hubClearOnExitDownloads) el.hubClearOnExitDownloads.checked = s.privacy.clearOnExit.downloads;
     if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = s.privacy.clearOnExit.cookies;
     if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = s.privacy.clearOnExit.cache;
+    applySourcesMinimalFlag();
   }
 
   function loadBrowserSettings() {
@@ -1522,9 +1965,58 @@
       el.sourcesDownloadsTabBtn.addEventListener('click', function () { setSourcesSubMode('downloads'); });
     }
     if (el.sourcesSaveCancel) el.sourcesSaveCancel.addEventListener('click', closeSaveFlow);
+    if (el.sourcesSaveBack) el.sourcesSaveBack.addEventListener('click', closeSaveFlow);
     if (el.sourcesSaveStart) el.sourcesSaveStart.addEventListener('click', startConfiguredDownload);
     if (el.sourcesSaveCategory) el.sourcesSaveCategory.addEventListener('change', refreshSaveFlowInputs);
     if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.addEventListener('change', refreshSaveFlowInputs);
+    if (el.sourcesSaveExistingFolder) el.sourcesSaveExistingFolder.addEventListener('change', updateSavePathPreview);
+    if (el.sourcesSaveNewFolder) el.sourcesSaveNewFolder.addEventListener('input', updateSavePathPreview);
+    if (el.sourcesSaveSelectAll) {
+      el.sourcesSaveSelectAll.addEventListener('click', function () {
+        for (var i = 0; i < state.pendingResolveFiles.length; i++) state.pendingFileSelection[i] = true;
+        renderSaveFlowFiles();
+      });
+    }
+    if (el.sourcesSaveDeselectAll) {
+      el.sourcesSaveDeselectAll.addEventListener('click', function () {
+        for (var i = 0; i < state.pendingResolveFiles.length; i++) state.pendingFileSelection[i] = false;
+        renderSaveFlowFiles();
+      });
+    }
+    if (el.sourcesSaveFilesList) {
+      el.sourcesSaveFilesList.addEventListener('change', function (e) {
+        var cb = e.target && e.target.closest ? e.target.closest('.sourcesSaveFileCheck') : null;
+        if (cb) {
+          var idx = Number(cb.getAttribute('data-idx'));
+          if (!isFinite(idx) || idx < 0) return;
+          state.pendingFileSelection[idx] = !!cb.checked;
+          return;
+        }
+        var pr = e.target && e.target.closest ? e.target.closest('.sourcesSaveFilePriority') : null;
+        if (!pr) return;
+        var pidx = Number(pr.getAttribute('data-priority-idx'));
+        if (!isFinite(pidx) || pidx < 0) return;
+        var value = String(pr.value || 'normal').toLowerCase();
+        state.pendingFilePriorities[pidx] = (value === 'high' || value === 'low') ? value : 'normal';
+      });
+    }
+    if (el.sourcesTorrentBody) {
+      el.sourcesTorrentBody.addEventListener('contextmenu', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('tr[data-source-torrent-id]') : null;
+        if (!row) return;
+        e.preventDefault();
+        var id = row.getAttribute('data-source-torrent-id');
+        if (!id) return;
+        showSourcesTorrentContextMenu(e.clientX || 0, e.clientY || 0, id);
+      });
+    }
+    if (el.sourcesUnhideBtn) {
+      el.sourcesUnhideBtn.addEventListener('click', function () {
+        state.hiddenSourceTorrentIds = {};
+        saveHiddenSourcesTorrents();
+        renderSourcesTorrentRows();
+      });
+    }
 
     // Home panel add source
     if (el.homeAddSource) {
@@ -1706,15 +2198,19 @@
     if (api.webTorrent) {
       if (api.webTorrent.onStarted) api.webTorrent.onStarted(function () {
         if (hub.refreshTorrentState) hub.refreshTorrentState();
+        refreshSourcesTorrents();
       });
       if (api.webTorrent.onMetadata) api.webTorrent.onMetadata(function () {
         if (hub.refreshTorrentState) hub.refreshTorrentState();
+        refreshSourcesTorrents();
       });
       if (api.webTorrent.onProgress) api.webTorrent.onProgress(function () {
         if (hub.renderHubTorrentActive) hub.renderHubTorrentActive();
+        refreshSourcesTorrents();
       });
       if (api.webTorrent.onCompleted) api.webTorrent.onCompleted(function (info) {
         if (hub.refreshTorrentState) hub.refreshTorrentState();
+        refreshSourcesTorrents();
         var label = (info && info.name) ? String(info.name) : '';
         var stateName = String(info && info.state || '').toLowerCase();
         if (stateName === 'completed' || stateName === 'completed_with_errors') {
@@ -2027,6 +2523,7 @@
   } catch (e) {
     console.warn('[web.js] bindUI failed', e);
   }
+  loadHiddenSourcesTorrents();
   renderSourcesSearchRows();
   setSourcesSubMode('search');
 
@@ -2038,6 +2535,7 @@
 
   loadSources();
   loadDestinations();
+  refreshSourcesTorrents();
   if (hub.loadBrowsingHistory) hub.loadBrowsingHistory();
   if (hub.loadBookmarks) hub.loadBookmarks();
   if (hub.loadPermissions) hub.loadPermissions();
@@ -2086,10 +2584,19 @@
     if (tabsState.openTorrentTab) tabsState.openTorrentTab();
   };
 
-  function openSources() {
-    // Caller should already have switched mode to 'sources'. Do not call
-    // closeBrowser() here because it can restore the wrong library view if
-    // mode switch is still in-flight.
+  function ensureSourcesModeActive() {
+    var router = null;
+    try {
+      router = window.Tanko && window.Tanko.modeRouter;
+      if (!router || typeof router.setMode !== 'function') return Promise.resolve();
+      if (typeof router.getMode === 'function' && router.getMode() === 'sources') return Promise.resolve();
+      return Promise.resolve(router.setMode('sources', { force: true })).catch(function () {});
+    } catch (_e) {
+      return Promise.resolve();
+    }
+  }
+
+  function applySourcesWorkspace(mode) {
     state.browserOpen = false;
     state.showBrowserHome = false;
     if (el.browserView) el.browserView.classList.add('hidden');
@@ -2097,7 +2604,15 @@
     if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
     if (find.closeFind) find.closeFind();
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
-    setSourcesSubMode('search');
+    forceSourcesViewVisible();
+    setSourcesSubMode(mode === 'downloads' ? 'downloads' : 'search');
+  }
+
+  function openSources() {
+    ensureSourcesModeActive().then(function () {
+      applySourcesWorkspace('search');
+      refreshSourcesTorrents();
+    });
   }
 
   function openSourcesSearch() {
@@ -2106,10 +2621,7 @@
   }
 
   function openSourcesDownloads() {
-    state.browserOpen = false;
-    state.showBrowserHome = false;
-    if (el.browserView) el.browserView.classList.add('hidden');
-    setSourcesSubMode('downloads');
+    openSourcesSearch();
   }
 
   function openSaveFlowForResult(result) {

@@ -3060,6 +3060,7 @@ function closeTracksPanel(){
     if (typeof s.preferredSubtitleLanguage === 'string' || s.preferredSubtitleLanguage === null) {
       state.settings.preferredSubtitleLanguage = (typeof s.preferredSubtitleLanguage === 'string' && s.preferredSubtitleLanguage.trim()) ? s.preferredSubtitleLanguage.trim() : null;
     }
+    if (typeof s.forceQtPlayer === 'boolean') state.settings.forceQtPlayer = !!s.forceQtPlayer;
     // Embedded HG is now the primary player. Ignore legacy persisted forceQtPlayer=true.
     // The toggle button still works — user can switch to Qt, and that choice persists.
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.

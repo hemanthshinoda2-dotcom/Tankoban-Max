@@ -44,14 +44,14 @@
             switched = true;
           }
         } catch (_e) {}
-        // Groundwork builds may not expose appSections at all. In that case, the Web UI still
-        // lives under comics mode, so explicitly switch modes before showing the browser pane.
+        // Groundwork builds may not expose appSections at all. Route to Sources mode as the
+        // browser/torrent ownership mode in current architecture.
         try {
           if (!switched && tanko.modeRouter && typeof tanko.modeRouter.setMode === 'function') {
-            Promise.resolve(tanko.modeRouter.setMode('comics')).then(function() {
+            Promise.resolve(tanko.modeRouter.setMode('sources')).then(function() {
               resolve(true);
             }).catch(function(err){
-              try { console.error('[browserHost][aspect-embed] modeRouter.setMode(comics) failed', err); } catch (_e2) {}
+              try { console.error('[browserHost][aspect-embed] modeRouter.setMode(sources) failed', err); } catch (_e2) {}
               resolve(false);
             });
             return;
@@ -59,7 +59,7 @@
         } catch (_e3) {}
         try {
           if (!switched && typeof window.setMode === 'function') {
-            window.setMode('comics');
+            window.setMode('sources');
             switched = true;
           }
         } catch (_e4) {}

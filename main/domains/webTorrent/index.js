@@ -249,7 +249,12 @@ function createEntry(partial) {
     error: '',
     magnetUri: '',
     sourceUrl: '',
+    origin: '',
     destinationRoot: '',
+    savePath: '',
+    directWrite: false,
+    sequential: true,
+    filePriorities: {},
     files: null,
     metadataReady: false,
     routedFiles: 0,
@@ -268,6 +273,7 @@ function buildFileList(torrent) {
       length: Number(f.length || 0),
       progress: Number(f.progress || 0),
       selected: true,
+      priority: 'normal',
     };
   });
 }
@@ -346,6 +352,17 @@ async function onTorrentDone(ctx, rec) {
     return;
   }
 
+  if (entry.directWrite) {
+    detectLibrariesForPath(ctx, root).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
+    entry.state = 'completed';
+    entry.finishedAt = Date.now();
+    upsertHistory(ctx, entry);
+    removeActive(entry.id);
+    if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
+    emitUpdated(ctx);
+    return;
+  }
+
   await routeCompletedFiles(ctx, rec);
 
   entry.state = entry.failedFiles > 0 ? 'completed_with_errors' : 'completed';
@@ -364,6 +381,7 @@ function onMetadataReady(ctx, torrent, entry, rec) {
   entry.totalSize = Number(torrent.length || 0);
   entry.numPeers = Number(torrent.numPeers || 0);
   entry.files = buildFileList(torrent);
+  if (!entry.filePriorities || typeof entry.filePriorities !== 'object') entry.filePriorities = {};
   entry.metadataReady = true;
 
   // If no destination was set upfront, deselect all files so data doesn't download
@@ -385,6 +403,7 @@ function bindTorrent(ctx, torrent, entry) {
   var ipc = getIpc();
   entry.infoHash = String(torrent.infoHash || entry.infoHash || '');
   entry.name = String(torrent.name || entry.name || entry.infoHash || 'Torrent');
+  if (!entry.savePath && entry.destinationRoot) entry.savePath = entry.destinationRoot;
   entry.state = entry.destinationRoot ? 'downloading' : 'resolving_metadata';
   upsertHistory(ctx, entry);
 
@@ -464,7 +483,9 @@ function resolveDestinationRoot(payload, required) {
 async function addTorrentInput(ctx, entry, input) {
   var cl = await ensureClient();
   try {
-    var torrent = cl.add(input, { path: buildTorrentTmpPath(ctx, entry.id) });
+    var destinationRoot = String(entry && entry.destinationRoot || '').trim();
+    var addPath = destinationRoot ? destinationRoot : buildTorrentTmpPath(ctx, entry.id);
+    var torrent = cl.add(input, { path: addPath });
     bindTorrent(ctx, torrent, entry);
     return { ok: true, id: entry.id };
   } catch (err) {
@@ -504,6 +525,7 @@ function isTorActive() {
 
 async function startMagnet(ctx, evt, payload) {
   var magnetUri = String(payload && payload.magnetUri || '').trim();
+  var origin = String(payload && payload.origin || '').trim().toLowerCase();
   if (!magnetUri || magnetUri.indexOf('magnet:') !== 0) return { ok: false, error: 'Invalid magnet URI' };
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
@@ -514,14 +536,18 @@ async function startMagnet(ctx, evt, payload) {
   var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
     magnetUri: magnetUri,
+    origin: origin,
     sourceUrl: String(payload && payload.referer || ''),
-    destinationRoot: destRoot
+    destinationRoot: destRoot,
+    savePath: destRoot || '',
+    directWrite: !!destRoot
   });
   return addTorrentInput(ctx, entry, magnetUri);
 }
 
 async function startTorrentUrl(ctx, evt, payload) {
   var url = String(payload && payload.url || '').trim();
+  var origin = String(payload && payload.origin || '').trim().toLowerCase();
   if (!/^https?:\/\//i.test(url)) return { ok: false, error: 'Invalid torrent URL' };
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
@@ -538,11 +564,12 @@ async function startTorrentUrl(ctx, evt, payload) {
 
   // FEAT-TOR: Force empty destination when Tor is on
   var destRoot = isTorActive() ? '' : root.absRoot;
-  var entry = createEntry({ sourceUrl: url, destinationRoot: destRoot });
+  var entry = createEntry({ sourceUrl: url, origin: origin, destinationRoot: destRoot, savePath: destRoot || '', directWrite: !!destRoot });
   return addTorrentInput(ctx, entry, fetched.buffer);
 }
 
 async function startTorrentBuffer(ctx, evt, payload) {
+  var origin = String(payload && payload.origin || '').trim().toLowerCase();
   var root = resolveDestinationRoot(payload, false);
   if (!root.ok) return { ok: false, error: root.error };
   var input = payload && payload.buffer;
@@ -555,7 +582,10 @@ async function startTorrentBuffer(ctx, evt, payload) {
   var destRoot = isTorActive() ? '' : root.absRoot;
   var entry = createEntry({
     sourceUrl: sourceUrl,
-    destinationRoot: destRoot
+    origin: origin,
+    destinationRoot: destRoot,
+    savePath: destRoot || '',
+    directWrite: !!destRoot
   });
   return addTorrentInput(ctx, entry, input);
 }
@@ -645,15 +675,12 @@ async function selectFiles(ctx, _evt, payload) {
 
   var selectedIndices = payload && Array.isArray(payload.selectedIndices) ? payload.selectedIndices : [];
   var selectedSet = new Set(selectedIndices.map(Number));
+  var inPriorities = (payload && payload.priorities && typeof payload.priorities === 'object') ? payload.priorities : {};
 
-  // FEAT-TOR: keep torrent downloads in cart mode while Tor is active.
-  // WebTorrent traffic itself is not routed through Tor, so we block transition
-  // into active downloading/streaming until Tor is disconnected.
   if (isTorActive() && selectedSet.size > 0) {
     return { ok: false, error: 'Disable Tor to start torrent downloads' };
   }
 
-  // Optionally set destination root at the same time
   var dest = String(payload && payload.destinationRoot || '').trim();
   if (dest) {
     var absRoot = '';
@@ -661,39 +688,56 @@ async function selectFiles(ctx, _evt, payload) {
     if (absRoot) {
       try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
       entry.destinationRoot = absRoot;
+      entry.savePath = absRoot;
+      entry.directWrite = true;
     }
   }
 
-  if (!torrent.files || !torrent.files.length) return { ok: false, error: 'No files in torrent' };
-
-  var sequential = !!(payload && payload.sequential);
+  var sequential = (payload && Object.prototype.hasOwnProperty.call(payload, 'sequential'))
+    ? !!payload.sequential
+    : (entry.sequential !== false);
   entry.sequential = sequential;
+  if (!entry.filePriorities || typeof entry.filePriorities !== 'object') entry.filePriorities = {};
 
-  // Build priority-ordered list of selected file indices
+  if (!torrent.files || !torrent.files.length) {
+    upsertHistory(ctx, entry);
+    emitUpdated(ctx);
+    return { ok: true, pending: true };
+  }
+
   var selectedFiles = [];
   for (var i = 0; i < torrent.files.length; i++) {
     if (selectedSet.has(i)) {
       selectedFiles.push(i);
-      if (entry.files && entry.files[i]) entry.files[i].selected = true;
+      if (entry.files && entry.files[i]) {
+        entry.files[i].selected = true;
+        var pRaw = String(inPriorities[i] || entry.filePriorities[i] || entry.files[i].priority || 'normal').toLowerCase();
+        var pval = (pRaw === 'high' || pRaw === 'low') ? pRaw : 'normal';
+        entry.files[i].priority = pval;
+        entry.filePriorities[i] = pval;
+      }
     } else {
       try { torrent.files[i].deselect(); } catch {}
       if (entry.files && entry.files[i]) entry.files[i].selected = false;
     }
   }
 
-  // Select files — if sequential, assign descending priority so first file downloads first
+  function priorityWeight(priority) {
+    if (priority === 'high') return 9;
+    if (priority === 'low') return 1;
+    return 5;
+  }
+
   for (var si = 0; si < selectedFiles.length; si++) {
     var fileIdx = selectedFiles[si];
     try {
-      if (sequential) {
-        torrent.files[fileIdx].select(selectedFiles.length - si);
-      } else {
-        torrent.files[fileIdx].select();
-      }
+      var filePriority = String((entry.filePriorities && entry.filePriorities[fileIdx]) || 'normal').toLowerCase();
+      var basePr = priorityWeight(filePriority);
+      var wirePr = sequential ? (basePr + Math.max(0, selectedFiles.length - si)) : basePr;
+      torrent.files[fileIdx].select(wirePr);
     } catch {}
   }
 
-  // If we were in metadata_ready state and now have a destination + files, start downloading
   if (entry.state === 'metadata_ready' || entry.state === 'completed_pending') {
     if (entry.destinationRoot && selectedSet.size > 0) {
       entry.state = 'downloading';
@@ -719,6 +763,8 @@ async function setDestination(ctx, _evt, payload) {
   try { fs.mkdirSync(absRoot, { recursive: true }); } catch {}
 
   entry.destinationRoot = absRoot;
+  entry.savePath = absRoot;
+  entry.directWrite = true;
 
   // If torrent already completed but was waiting for destination, route files now
   if (entry.state === 'completed_pending' && rec.torrent) {
@@ -950,20 +996,55 @@ function buildTrackerList(torrent) {
   return trackers;
 }
 
+function tryDeleteTorrentData(entry) {
+  var root = String(entry && (entry.destinationRoot || entry.savePath) || '').trim();
+  if (!root) return;
+  var name = String(entry && entry.name || '').trim();
+  var candidates = [];
+  if (name) candidates.push(path.join(root, name));
+  if (entry && Array.isArray(entry.files) && entry.files.length) {
+    for (var i = 0; i < entry.files.length; i++) {
+      var f = entry.files[i];
+      if (!f || f.selected === false) continue;
+      var rel = String(f.path || f.name || '').replace(/^[\/]+/, '');
+      if (!rel) continue;
+      if (name && (rel.indexOf(name + '/') === 0 || rel.indexOf(name + '\\') === 0)) rel = rel.slice(name.length + 1);
+      candidates.push(path.join(root, rel));
+    }
+  }
+  for (var c = 0; c < candidates.length; c++) {
+    try { fs.rmSync(candidates[c], { recursive: true, force: true }); } catch {}
+  }
+}
+
 async function remove(ctx, _evt, payload) {
   var id = extractId(payload);
   if (!id) return { ok: false, error: 'Missing id' };
-  // 1. Stop progress interval FIRST — prevents upsertHistory re-insertion
+  var removeFiles = !!(payload && payload.removeFiles);
+  var removeFromLibrary = !!(payload && payload.removeFromLibrary);
   var rec = removeActive(id);
-  // 2. Destroy the torrent if it was active (keep downloaded files)
+  var entry = rec && rec.entry ? rec.entry : null;
   if (rec && rec.torrent) {
     try {
       await new Promise(function (resolve) {
-        rec.torrent.destroy({ destroyStore: false }, function () { resolve(); });
+        rec.torrent.destroy({ destroyStore: !!removeFiles }, function () { resolve(); });
       });
     } catch {}
   }
-  // 3. Filter from history
+  if (!entry) {
+    var c0 = ensureHistory(ctx);
+    for (var k = 0; k < c0.torrents.length; k++) {
+      var t0 = c0.torrents[k];
+      if (t0 && String(t0.id) === id) { entry = t0; break; }
+    }
+  }
+  if (removeFiles && entry) {
+    tryDeleteTorrentData(entry);
+  }
+  if (removeFromLibrary && entry) {
+    var root = String(entry.destinationRoot || entry.savePath || '').trim();
+    if (root) detectLibrariesForPath(ctx, root).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
+  }
   var c = ensureHistory(ctx);
   c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === id); });
   c.updatedAt = Date.now();
@@ -1026,6 +1107,18 @@ async function selectSaveFolder(ctx) {
 async function resolveMetadata(ctx, _evt, payload) {
   var input = String(payload && payload.source || payload || '').trim();
   if (!input) return { ok: false, error: 'No source provided' };
+  var preferredPath = String(payload && (payload.destinationRoot || payload.savePath || payload.path) || '').trim();
+  var resolvePath = '';
+  if (preferredPath) {
+    try { resolvePath = path.resolve(preferredPath); } catch {}
+    if (resolvePath) {
+      try { fs.mkdirSync(resolvePath, { recursive: true }); } catch {}
+    }
+  }
+  if (!resolvePath) {
+    resolvePath = path.join(os.tmpdir(), 'tanko-resolve-' + Date.now());
+    try { fs.mkdirSync(resolvePath, { recursive: true }); } catch {}
+  }
 
   var cl = await ensureClient();
   var resolveId = 'res_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
@@ -1043,10 +1136,12 @@ async function resolveMetadata(ctx, _evt, payload) {
   return new Promise(function (resolve) {
     var resolved = false;
     var torrent;
+    var pollTimer = null;
+    var timeoutTimer = null;
 
     try {
       torrent = cl.add(addSource, {
-        path: path.join(os.tmpdir(), 'tanko-resolve-' + resolveId)
+        path: resolvePath
       });
     } catch (err) {
       return resolve({ ok: false, error: String(err && err.message || err) });
@@ -1055,6 +1150,8 @@ async function resolveMetadata(ctx, _evt, payload) {
     function finish() {
       if (resolved) return;
       resolved = true;
+      if (pollTimer) { try { clearInterval(pollTimer); } catch {} pollTimer = null; }
+      if (timeoutTimer) { try { clearTimeout(timeoutTimer); } catch {} timeoutTimer = null; }
 
       // Deselect all files to prevent data download
       if (torrent.files) {
@@ -1084,32 +1181,43 @@ async function resolveMetadata(ctx, _evt, payload) {
       });
     }
 
-    if (torrent.files && torrent.files.length > 0 && torrent.ready) {
+    if (torrent.files && torrent.files.length > 0) {
       finish();
     } else {
       torrent.on('ready', finish);
+      pollTimer = setInterval(function () {
+        if (resolved) return;
+        try {
+          if (torrent.files && torrent.files.length > 0) finish();
+        } catch {}
+      }, 500);
     }
 
     torrent.on('error', function (err) {
       if (resolved) return;
       resolved = true;
+      if (pollTimer) { try { clearInterval(pollTimer); } catch {} pollTimer = null; }
+      if (timeoutTimer) { try { clearTimeout(timeoutTimer); } catch {} timeoutTimer = null; }
       try { torrent.destroy({ destroyStore: true }); } catch {}
       resolve({ ok: false, error: String(err && err.message || err) });
     });
 
-    // Timeout after 120s
-    setTimeout(function () {
+    // Timeout after 180s
+    timeoutTimer = setTimeout(function () {
       if (!resolved) {
         resolved = true;
+        if (pollTimer) { try { clearInterval(pollTimer); } catch {} pollTimer = null; }
+        timeoutTimer = null;
         try { torrent.destroy({ destroyStore: true }); } catch {}
-        resolve({ ok: false, error: 'Metadata resolution timed out (120s)' });
+        resolve({ ok: false, error: 'Metadata resolution timed out (180s)' });
       }
-    }, 120000);
+    }, 180000);
   });
 }
 
 async function startConfigured(ctx, _evt, payload) {
   var resolveId = payload && payload.resolveId ? String(payload.resolveId) : '';
+  var origin = String(payload && payload.origin || '').trim().toLowerCase();
   var pending = pendingById.get(resolveId);
   if (!pending) return { ok: false, error: 'No pending resolve with that ID' };
 
@@ -1130,6 +1238,9 @@ async function startConfigured(ctx, _evt, payload) {
   // Create entry and re-add with the correct save path
   var entry = createEntry({
     destinationRoot: savePath,
+    savePath: savePath,
+    directWrite: true,
+    origin: origin,
     magnetUri: magnetUri,
     name: infoName,
     infoHash: infoHash,

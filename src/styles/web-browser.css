@@ -51,17 +51,44 @@
 }
 
 .sourcesSearchControls {
-  display: grid;
-  grid-template-columns: 1fr 140px 100px;
+  display: flex;
   gap: 8px;
-  margin-bottom: 8px;
+  flex-wrap: nowrap;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
+.sourcesSearchControls .search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.sourcesSearchControls .select {
+  flex: 0 0 140px;
+  width: 140px;
+  min-width: 140px;
+}
+.sourcesSearchControls .btn {
+  flex: 0 0 112px;
+  width: 112px;
+  min-width: 112px;
+  margin: 0 !important;
+  position: relative;
+  z-index: 1;
+}
+.sourcesSearchControls > * {
+  margin: 0 !important;
+  position: relative;
+  z-index: 1;
+}
+.sourcesSearchControls { margin-bottom: 8px; }
 
 .sourcesSearchTableWrap {
   border: 1px solid var(--wb-border-subtle);
   border-radius: 8px;
   overflow: auto;
   max-height: 320px;
+  background: rgba(18, 24, 32, 0.9);
 }
 
 .sourcesSearchTable {
@@ -80,15 +107,79 @@
 .sourcesSearchTable th {
   position: sticky;
   top: 0;
-  background: var(--wb-surface);
-  z-index: 1;
+  background: rgba(22, 34, 46, 0.98);
+  z-index: 8;
+  border-bottom: 1px solid var(--wb-border);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.35);
 }
 
 .sourcesSearchTitleCell {
   max-width: 520px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+#sourcesSaveFilesList .sourcesSaveFileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--wb-border-subtle);
+}
+#sourcesSaveFilesList .sourcesSaveFileName {
+  flex: 1 1 auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+#sourcesSaveFilesList .sourcesSaveFileSize {
+  flex: 0 0 auto;
+  color: var(--wb-muted);
+  font-size: 11px;
+}
+
+#sourcesTorrentCtxMenu,
+.tt-ctx-menu {
+  background: rgba(17, 26, 36, 0.98) !important;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  min-width: 180px;
+  color: var(--wb-text);
+}
+
+#sourcesTorrentCtxMenu .tt-ctx-item,
+.tt-ctx-menu .tt-ctx-item {
+  color: var(--wb-text);
+}
+
+#sourcesSearchTabBtn,
+#sourcesDownloadsTabBtn {
+  display: none !important;
+}
+
+#webHomeView .sourcesSearchPanel .panelTitleRow .panelActions .btn {
+  display: none !important;
+}
+
+body.sourcesMinimalTorrentV1 #torrent-container #tt-sidebar,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-statusbar,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-resume,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-pause,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-delete,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-resume-all,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-pause-all,
+body.sourcesMinimalTorrentV1 #torrent-container .tt-sep,
+body.sourcesMinimalTorrentV1 #torrent-container #tt-btn-add {
+  display: none !important;
+}
+
+body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
+  display: block;
 }
 
 /* Sources mode should only show torrent UI; keep sidebar minimal (Web utility only). */
@@ -2069,7 +2160,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 #tt-file-ctx-menu {
   display: none;
   position: absolute;
-  background: var(--wb-surface-raised);
+  background: rgba(22, 30, 40, 0.98);
   border: 1px solid #505154;
   border-radius: 6px;
   padding: 4px 0;
@@ -2352,11 +2443,12 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
 
 /* ── Torrent context menu ── */
 
-#tt-ctx-menu {
+#tt-ctx-menu,
+.tt-ctx-menu {
   display: none;
   position: absolute;
   z-index: 20;
-  background: var(--wb-surface);
+  background: rgba(22, 30, 40, 0.98);
   border: 1px solid var(--wb-border);
   border-radius: 6px;
   padding: 4px 0;
@@ -2364,19 +2456,43 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   min-width: 180px;
 }
 
-.tt-ctx-item {
+#tt-ctx-menu .tt-ctx-item,
+.tt-ctx-menu .tt-ctx-item {
   padding: 6px 16px;
   font-size: 12px;
   color: var(--wb-text);
   cursor: pointer;
 }
-.tt-ctx-item:hover { background: var(--wb-border); }
-.tt-ctx-item.disabled { color: var(--wb-disabled); pointer-events: none; }
-.tt-ctx-sep {
+#tt-ctx-menu .tt-ctx-item:hover,
+.tt-ctx-menu .tt-ctx-item:hover { background: var(--wb-border); }
+#tt-ctx-menu .tt-ctx-item.disabled,
+.tt-ctx-menu .tt-ctx-item.disabled { color: var(--wb-disabled); pointer-events: none; }
+#tt-ctx-menu .tt-ctx-sep,
+.tt-ctx-menu .tt-ctx-sep {
   height: 1px;
   background: var(--wb-border);
   margin: 4px 0;
 }
+.tt-ctx-parent-wrap { position: relative; }
+.tt-ctx-parent { padding-right: 24px; }
+.tt-ctx-caret {
+  float: right;
+  opacity: 0.8;
+}
+.tt-ctx-submenu {
+  display: none;
+  position: absolute;
+  left: calc(100% - 4px);
+  top: 0;
+  min-width: 220px;
+  background: rgba(22, 30, 40, 0.98);
+  border: 1px solid var(--wb-border);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 4px 16px var(--wb-shadow);
+  z-index: 30;
+}
+.tt-ctx-parent-wrap:hover .tt-ctx-submenu { display: block; }
 
 /* ── Torrent scrollbars ── */
 
