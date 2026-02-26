@@ -1371,6 +1371,110 @@ async function addShowFolderPath(ctx, _evt, folderPath) {
   return { ok: true, state: snap };
 }
 
+function __isPathWithin(parentPath, targetPath) {
+  try {
+    const p = path.resolve(String(parentPath || '')).replace(/[\\\/]+$/, '');
+    const t = path.resolve(String(targetPath || '')).replace(/[\\\/]+$/, '');
+    if (!p || !t) return false;
+    const pCmp = process.platform === 'win32' ? p.toLowerCase() : p;
+    const tCmp = process.platform === 'win32' ? t.toLowerCase() : t;
+    const rel = path.relative(pCmp, tCmp);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  } catch {
+    return false;
+  }
+}
+
+function __isSameOrNested(parentPath, targetPath) {
+  try {
+    const p = path.resolve(String(parentPath || '')).replace(/[\\\/]+$/, '');
+    const t = path.resolve(String(targetPath || '')).replace(/[\\\/]+$/, '');
+    if (!p || !t) return false;
+    const pCmp = process.platform === 'win32' ? p.toLowerCase() : p;
+    const tCmp = process.platform === 'win32' ? t.toLowerCase() : t;
+    const rel = path.relative(pCmp, tCmp);
+    return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+  } catch {
+    return false;
+  }
+}
+
+function __pathExists(p) {
+  try { return !!(p && fs.existsSync(p)); } catch { return false; }
+}
+
+function __waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function __removeDirVerified(targetFolder, attempts, backoffMs) {
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  const baseBackoff = Math.max(20, Number(backoffMs) || 100);
+  for (let i = 0; i < maxAttempts; i++) {
+    try { fs.rmSync(targetFolder, { recursive: true, force: true }); } catch {}
+    if (!__pathExists(targetFolder)) return true;
+    if (i < maxAttempts - 1) {
+      // Backoff mitigates transient Windows locks from recently closed torrent handles.
+      // eslint-disable-next-line no-await-in-loop
+      await __waitMs(baseBackoff * (i + 1));
+    }
+  }
+  return !__pathExists(targetFolder);
+}
+
+async function removeStreamableFolder(ctx, _evt, payload) {
+  try {
+    const body = (payload && typeof payload === 'object') ? payload : {};
+    const showPathRaw = String(body.showPath || '').trim();
+    const folderRelPathRaw = String(body.folderRelPath || '').trim();
+    const deleteFiles = body.deleteFiles !== false;
+
+    if (!showPathRaw) return { ok: false, error: 'Missing showPath' };
+
+    const showPath = path.resolve(showPathRaw);
+    const targetFolder = folderRelPathRaw ? path.resolve(showPath, folderRelPathRaw) : showPath;
+    if (!__isPathWithin(showPath, targetFolder)) {
+      return { ok: false, error: 'Target folder must be within show path' };
+    }
+
+    let deleted = true;
+    if (deleteFiles) {
+      deleted = await __removeDirVerified(targetFolder, 8, 120);
+      if (!deleted) {
+        return { ok: false, error: 'Folder is in use or locked', targetFolder, showPath, deleted: false };
+      }
+    }
+
+    const state = readLibraryConfig(ctx);
+    state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
+    const beforeCount = state.videoShowFolders.length;
+    state.videoShowFolders = state.videoShowFolders.filter((p) => !__isSameOrNested(targetFolder, p));
+    if (state.videoShowFolders.length !== beforeCount) {
+      await writeLibraryConfig(ctx, state);
+    }
+
+    await ensureVideoIndexLoaded(ctx);
+
+    let didScan = false;
+    try {
+      const single = await scanShow(ctx, _evt, showPath);
+      didScan = !!(single && single.ok);
+    } catch {}
+    if (!didScan) {
+      const fresh = readLibraryConfig(ctx);
+      const folders = Array.isArray(fresh.videoFolders) ? fresh.videoFolders : [];
+      const showFolders = Array.isArray(fresh.videoShowFolders) ? fresh.videoShowFolders : [];
+      startVideoScan(ctx, folders, showFolders, { force: true });
+    }
+
+    const snapState = readLibraryConfig(ctx);
+    const snap = makeVideoStateSnapshot(ctx, snapState, { lite: true });
+    return { ok: true, state: snap, showPath, targetFolder, deleted: deleted };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err || 'Failed to remove streamable folder'), deleted: false };
+  }
+}
+
 /**
  * Remove video folder.
  * BUILD 88 FIX 1.1: ensureVideoIndexLoaded is now async.
@@ -1613,6 +1717,7 @@ module.exports = {
   addFolder,
   addShowFolder,
   addShowFolderPath,
+  removeStreamableFolder,
   removeFolder,
   hideShow,
   openFileDialog,

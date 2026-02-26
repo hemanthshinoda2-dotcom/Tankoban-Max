@@ -536,6 +536,7 @@ holyGrail: {
     torrentSearch: {
       query: (...a) => ea.torrentSearch?.query ? ea.torrentSearch.query(...a) : Promise.resolve({ ok: false, items: [], error: 'torrentSearch unavailable' }),
       health: (...a) => ea.torrentSearch?.health ? ea.torrentSearch.health(...a) : Promise.resolve({ ok: false, ready: false, error: 'torrentSearch unavailable' }),
+      indexers: (...a) => ea.torrentSearch?.indexers ? ea.torrentSearch.indexers(...a) : Promise.resolve({ ok: false, indexers: [], error: 'torrentSearch unavailable' }),
       onStatusChanged: (...a) => ea.torrentSearch?.onStatusChanged ? ea.torrentSearch.onStatusChanged(...a) : undefined,
     },
 

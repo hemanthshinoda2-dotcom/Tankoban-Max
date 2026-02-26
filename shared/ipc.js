@@ -345,6 +345,9 @@ const CHANNEL = {
 
   /** Remove video folder. Returns: void */
   VIDEO_REMOVE_FOLDER: 'video:removeFolder',
+
+  /** Remove streamable torrent folder (show root or nested subfolder). Returns: { ok, state? } */
+  VIDEO_REMOVE_STREAMABLE_FOLDER: 'video:removeStreamableFolder',
   
   /** Hide a video show. Returns: void */
   VIDEO_HIDE_SHOW: 'video:hideShow',
@@ -952,11 +955,14 @@ const CHANNEL = {
   // Torrent Search (Sources mode / Jackett)
   // ========================================
 
-  /** Query torrent search backend. Args: { query, category, limit, page }. Returns: { ok, items?, error? } */
+  /** Query torrent search backend. Args: { query, category?, source?, limit?, page? }. Returns: { ok, items?, page?, limit?, returned?, error? } */
   TORRENT_SEARCH_QUERY: 'torrentSearch:query',
 
   /** Check torrent search backend health/config. Returns: { ok, ready, error?, details? } */
   TORRENT_SEARCH_HEALTH: 'torrentSearch:health',
+
+  /** List configured torrent search indexers. Returns: { ok, indexers: Array<{id,name}>, source? } */
+  TORRENT_SEARCH_INDEXERS: 'torrentSearch:indexers',
 
   // ========================================
   // Web Browser Actions
@@ -1194,6 +1200,7 @@ const EVENT = {
 const CHANNEL_V2 = Object.freeze({
   SOURCES_SEARCH_QUERY: CHANNEL.TORRENT_SEARCH_QUERY,
   SOURCES_SEARCH_HEALTH: CHANNEL.TORRENT_SEARCH_HEALTH,
+  SOURCES_SEARCH_INDEXERS: CHANNEL.TORRENT_SEARCH_INDEXERS,
 
   TORRENT_START_MAGNET: CHANNEL.WEB_TORRENT_START_MAGNET,
   TORRENT_START_URL: CHANNEL.WEB_TORRENT_START_TORRENT_URL,
@@ -1231,6 +1238,7 @@ const DEPRECATED_CHANNEL_ALIASES = Object.freeze({
   WEB_TORRENT_REMOVE: 'TORRENT_REMOVE',
   TORRENT_SEARCH_QUERY: 'SOURCES_SEARCH_QUERY',
   TORRENT_SEARCH_HEALTH: 'SOURCES_SEARCH_HEALTH',
+  TORRENT_SEARCH_INDEXERS: 'SOURCES_SEARCH_INDEXERS',
   WEB_BROWSER_SETTINGS_GET: 'BROWSER_SETTINGS_GET',
   WEB_BROWSER_SETTINGS_SAVE: 'BROWSER_SETTINGS_SAVE',
 });

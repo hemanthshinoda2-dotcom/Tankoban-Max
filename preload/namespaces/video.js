@@ -28,6 +28,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
       addShowFolder: () => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_SHOW_FOLDER),
       addShowFolderPath: (folderPath) => ipcRenderer.invoke(CHANNEL.VIDEO_ADD_SHOW_FOLDER_PATH, folderPath),
       removeFolder: (folderPath) => ipcRenderer.invoke(CHANNEL.VIDEO_REMOVE_FOLDER, folderPath),
+      removeStreamableFolder: (payload) => ipcRenderer.invoke(CHANNEL.VIDEO_REMOVE_STREAMABLE_FOLDER, payload),
       hideShow: (showId) => ipcRenderer.invoke(CHANNEL.VIDEO_HIDE_SHOW, showId),
       openFileDialog: () => ipcRenderer.invoke(CHANNEL.VIDEO_OPEN_FILE_DIALOG),
       openSubtitleFileDialog: () => ipcRenderer.invoke(CHANNEL.VIDEO_OPEN_SUBTITLE_FILE_DIALOG),

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const http = require('http');
 const { session, dialog, shell } = require('electron');
 const IPC = require('../../../packages/core-ipc-contracts');
 const libraryBridge = require('../../../packages/core-main/library_bridge');
@@ -149,6 +150,10 @@ function removeActive(id) {
   if (rec.interval) {
     try { clearInterval(rec.interval); } catch {}
   }
+  try {
+    if (rec.http && rec.http.server) rec.http.server.close();
+  } catch {}
+  rec.http = null;
   activeById.delete(id);
   return rec;
 }
@@ -398,7 +403,7 @@ function bindTorrent(ctx, torrent, entry) {
   entry.state = entry.destinationRoot ? 'downloading' : 'resolving_metadata';
   upsertHistory(ctx, entry);
 
-  var rec = { torrent: torrent, entry: entry, interval: null, streams: {} };
+  var rec = { torrent: torrent, entry: entry, interval: null, streams: {}, http: null };
   activeById.set(entry.id, rec);
 
   // Handle metadata: for .torrent files, metadata is available immediately.
@@ -775,31 +780,485 @@ async function setDestination(ctx, _evt, payload) {
   return { ok: true };
 }
 
+function sanitizeFileName(name, fallback) {
+  var raw = String(name || '').trim();
+  var clean = raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').replace(/\s+/g, ' ').trim();
+  return clean || String(fallback || 'file');
+}
+
+function streamCachePathFor(ctx, entry, torrent, fileIndex, fileObj) {
+  var id = String(entry && entry.id || '');
+  var torrentName = sanitizeFileName(String((torrent && torrent.name) || (entry && entry.name) || 'torrent'), 'torrent');
+  var fileName = sanitizeFileName(String((fileObj && (fileObj.name || path.basename(fileObj.path || ''))) || ('file_' + fileIndex)), 'file_' + fileIndex);
+  var cacheDir = ctx.storage.dataPath(path.join('web_torrent_stream_cache', id, torrentName));
+  ensureDir(cacheDir);
+  return path.join(cacheDir, String(fileIndex) + '__' + fileName);
+}
+
+function markStreamReady(ctx, ipc, rec, streamKey, payload) {
+  try {
+    var s = rec && rec.streams ? rec.streams[streamKey] : null;
+    if (!s || s.ready) return;
+    s.ready = true;
+    if (Array.isArray(s.waiters) && s.waiters.length) {
+      var waiters = s.waiters.slice();
+      s.waiters.length = 0;
+      waiters.forEach(function (fn) { try { fn(); } catch {} });
+    }
+  } catch {}
+  if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_STREAM_READY, payload);
+}
+
+function failStreamWaiters(rec, streamKey) {
+  try {
+    var s = rec && rec.streams ? rec.streams[streamKey] : null;
+    if (!s || !Array.isArray(s.waiters) || !s.waiters.length) return;
+    var waiters = s.waiters.slice();
+    s.waiters.length = 0;
+    waiters.forEach(function (fn) { try { fn(new Error('stream_failed')); } catch {} });
+  } catch {}
+}
+
+function waitForStreamReady(rec, streamKey, timeoutMs) {
+  return new Promise(function (resolve) {
+    var s = rec && rec.streams ? rec.streams[streamKey] : null;
+    if (!s) return resolve(false);
+    if (s.ready) return resolve(true);
+    if (!Array.isArray(s.waiters)) s.waiters = [];
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      resolve(false);
+    }, Math.max(1000, Number(timeoutMs) || 15000));
+    s.waiters.push(function (err) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(!err);
+    });
+  });
+}
+
+function streamContentType(fileName) {
+  var ext = path.extname(String(fileName || '')).toLowerCase();
+  if (ext === '.mp4' || ext === '.m4v') return 'video/mp4';
+  if (ext === '.mkv') return 'video/x-matroska';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.avi') return 'video/x-msvideo';
+  if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.ts' || ext === '.m2ts') return 'video/mp2t';
+  return 'application/octet-stream';
+}
+
+function parseHttpRangeHeader(rangeHeader, totalLength) {
+  var raw = String(rangeHeader || '').trim();
+  var total = Number(totalLength || 0);
+  if (!raw || total <= 0) return null;
+  var m = /^bytes=(\d*)-(\d*)$/i.exec(raw);
+  if (!m) return null;
+
+  var start = 0;
+  var end = total - 1;
+  var a = m[1];
+  var b = m[2];
+
+  if (!a && !b) return null;
+  if (!a) {
+    var suffix = Number(b);
+    if (!Number.isFinite(suffix) || suffix <= 0) return { invalid: true };
+    start = Math.max(0, total - suffix);
+  } else {
+    start = Number(a);
+    if (!Number.isFinite(start) || start < 0) return { invalid: true };
+    if (b) {
+      end = Number(b);
+      if (!Number.isFinite(end) || end < start) return { invalid: true };
+    }
+  }
+
+  if (start >= total) return { invalid: true };
+  if (end >= total) end = total - 1;
+  return { start: start, end: end };
+}
+
+function prioritizeTorrentFile(rec, fileIndex) {
+  var torrent = rec && rec.torrent;
+  var entry = rec && rec.entry;
+  if (!torrent || !torrent.files || !torrent.files.length) return;
+  for (var i = 0; i < torrent.files.length; i++) {
+    try {
+      if (i === fileIndex) torrent.files[i].select(9999);
+      else torrent.files[i].deselect();
+    } catch {}
+    if (entry && Array.isArray(entry.files) && entry.files[i]) {
+      entry.files[i].selected = (i === fileIndex);
+      entry.files[i].priority = (i === fileIndex) ? 'high' : 'low';
+    }
+    if (entry && entry.filePriorities && typeof entry.filePriorities === 'object') {
+      entry.filePriorities[i] = (i === fileIndex) ? 'high' : 'low';
+    }
+  }
+}
+
+function waitForFirstStreamChunk(fileObj, timeoutMs) {
+  return new Promise(function (resolve) {
+    if (!fileObj || Number(fileObj.length || 0) <= 0) return resolve(false);
+    var maxBytes = Math.min(Number(fileObj.length || 0) - 1, (1024 * 1024) - 1);
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      try { if (rs) rs.destroy(); } catch {}
+      resolve(false);
+    }, Math.max(1000, Number(timeoutMs) || 15000));
+    var rs = null;
+    try {
+      rs = fileObj.createReadStream({ start: 0, end: Math.max(0, maxBytes) });
+    } catch {
+      clearTimeout(timer);
+      return resolve(false);
+    }
+    rs.once('data', function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { rs.destroy(); } catch {}
+      resolve(true);
+    });
+    rs.once('error', function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(false);
+    });
+    rs.once('end', function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+async function ensureHttpStreamServer(rec) {
+  if (rec && rec.http && rec.http.server && rec.http.port > 0) return rec.http;
+  var torrent = rec && rec.torrent;
+  if (!torrent) throw new Error('torrent_missing');
+
+  var server = http.createServer(function (req, res) {
+    (async function handle() {
+      var reqUrl = String((req && req.url) || '/');
+      var m = /^\/file\/(\d+)$/.exec(reqUrl.split('?')[0] || '');
+      if (!m) {
+        res.writeHead(404);
+        res.end('Not Found');
+        return;
+      }
+      var fileIndex = Number(m[1]);
+      if (!Number.isFinite(fileIndex) || fileIndex < 0) {
+        res.writeHead(400);
+        res.end('Invalid file index');
+        return;
+      }
+
+      var readyOk = await waitForTorrentMetadata(torrent, 15000);
+      if (!readyOk || !torrent.files || fileIndex >= torrent.files.length) {
+        res.writeHead(404);
+        res.end('File not ready');
+        return;
+      }
+
+      var fileObj = torrent.files[fileIndex];
+      var total = Number(fileObj && fileObj.length || 0);
+      if (!Number.isFinite(total) || total <= 0) {
+        res.writeHead(404);
+        res.end('Invalid file');
+        return;
+      }
+
+      try { fileObj.select(9999); } catch {}
+      var range = parseHttpRangeHeader(req && req.headers && req.headers.range, total);
+      if (range && range.invalid) {
+        res.writeHead(416, { 'Content-Range': 'bytes */' + total });
+        res.end();
+        return;
+      }
+
+      var start = range ? range.start : 0;
+      var end = range ? range.end : (total - 1);
+      var chunkLength = (end - start) + 1;
+      var headers = {
+        'Accept-Ranges': 'bytes',
+        'Content-Type': streamContentType(fileObj && fileObj.name),
+        'Content-Length': String(chunkLength),
+        'Cache-Control': 'no-store',
+      };
+      if (range) headers['Content-Range'] = 'bytes ' + start + '-' + end + '/' + total;
+      res.writeHead(range ? 206 : 200, headers);
+
+      var rs = null;
+      try {
+        rs = fileObj.createReadStream({ start: start, end: end });
+      } catch (err) {
+        try { res.writeHead(500); } catch {}
+        try { res.end('Stream error'); } catch {}
+        return;
+      }
+
+      var closed = false;
+      var cleanup = function () {
+        if (closed) return;
+        closed = true;
+        try { if (rs) rs.destroy(); } catch {}
+      };
+      req.on('close', cleanup);
+      res.on('close', cleanup);
+      rs.on('error', function () {
+        try { if (!res.headersSent) res.writeHead(500); } catch {}
+        try { res.end(); } catch {}
+      });
+      rs.pipe(res);
+    })().catch(function () {
+      try { res.writeHead(500); } catch {}
+      try { res.end('Internal error'); } catch {}
+    });
+  });
+
+  await new Promise(function (resolve, reject) {
+    var done = false;
+    server.once('error', function (err) {
+      if (done) return;
+      done = true;
+      reject(err || new Error('http_server_error'));
+    });
+    server.listen(0, '127.0.0.1', function () {
+      if (done) return;
+      done = true;
+      resolve();
+    });
+  });
+
+  var addr = server.address();
+  var port = Number(addr && addr.port || 0);
+  if (!port) {
+    try { server.close(); } catch {}
+    throw new Error('http_server_port_missing');
+  }
+
+  rec.http = { server: server, port: port };
+  return rec.http;
+}
+
+function writePlaybackPlaylist(ctx, id, fileIndex, fileObj, streamUrl) {
+  try {
+    var fileName = sanitizeFileName(String(fileObj && fileObj.name || ('stream_' + fileIndex)), 'stream_' + fileIndex);
+    var dir = ctx.storage.dataPath(path.join('web_torrent_stream_playlists', id));
+    ensureDir(dir);
+    var out = path.join(dir, String(fileIndex) + '__' + fileName + '.m3u8');
+    var txt = '#EXTM3U\n#EXTINF:-1,' + fileName + '\n' + String(streamUrl || '') + '\n';
+    fs.writeFileSync(out, txt, 'utf-8');
+    return out;
+  } catch {
+    return '';
+  }
+}
+
+function normalizeInfoHash(raw) {
+  var v = String(raw || '').trim();
+  if (!v) return '';
+  return v.replace(/^[^A-Za-z0-9]*btih:/i, '').trim();
+}
+
+function magnetFromInfoHash(infoHash) {
+  var h = normalizeInfoHash(infoHash);
+  if (!h) return '';
+  return 'magnet:?xt=urn:btih:' + h;
+}
+
+function waitForTorrentMetadata(torrent, timeoutMs) {
+  return new Promise(function (resolve) {
+    if (torrent && torrent.files && torrent.files.length > 0) return resolve(true);
+    var done = false;
+    var timer = setTimeout(function () {
+      if (done) return;
+      done = true;
+      resolve(false);
+    }, Math.max(1000, Number(timeoutMs) || 15000));
+    var finish = function () {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve(true);
+    };
+    try { torrent.once('ready', finish); } catch {}
+    try { torrent.once('metadata', finish); } catch {}
+  });
+}
+
+function historyEntryById(ctx, id) {
+  if (!id) return null;
+  try {
+    var c = ensureHistory(ctx);
+    var list = Array.isArray(c && c.torrents) ? c.torrents : [];
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i];
+      if (row && String(row.id) === String(id)) return row;
+    }
+  } catch {}
+  return null;
+}
+
+function streamActivationSource(payload, fallbackEntry) {
+  var pMagnet = String(payload && payload.magnetUri || '').trim();
+  if (pMagnet) return { input: pMagnet, source: 'payload_magnet' };
+  var pInfoHash = normalizeInfoHash(payload && payload.infoHash);
+  if (pInfoHash) return { input: magnetFromInfoHash(pInfoHash), source: 'payload_infohash' };
+
+  var eMagnet = String(fallbackEntry && fallbackEntry.magnetUri || '').trim();
+  if (eMagnet) return { input: eMagnet, source: 'history_magnet' };
+  var eInfoHash = normalizeInfoHash(fallbackEntry && fallbackEntry.infoHash);
+  if (eInfoHash) return { input: magnetFromInfoHash(eInfoHash), source: 'history_infohash' };
+  var eUrl = String(fallbackEntry && fallbackEntry.sourceUrl || '').trim();
+  if (eUrl) return { input: eUrl, source: 'history_torrent_url' };
+  return { input: '', source: 'none' };
+}
+
+async function activateForStream(ctx, id, payload) {
+  var existing = activeById.get(id);
+  if (existing && existing.torrent) {
+    return { ok: true, rec: existing, autoActivated: false, activationSource: 'already_active' };
+  }
+
+  var historyEntry = historyEntryById(ctx, id);
+  var src = streamActivationSource(payload, historyEntry);
+  if (!src.input) {
+    return { ok: false, error: 'Torrent not active and no source to auto-activate', autoActivated: false, activationSource: src.source };
+  }
+
+  var entry = createEntry(historyEntry || {});
+  entry.id = String(id);
+  entry.destinationRoot = '';
+  entry.savePath = '';
+  entry.directWrite = false;
+  entry.videoLibrary = true;
+  if (!entry.magnetUri && typeof src.input === 'string' && src.input.indexOf('magnet:') === 0) entry.magnetUri = src.input;
+  if (!entry.infoHash) {
+    var infoHash = normalizeInfoHash(payload && payload.infoHash) || normalizeInfoHash(historyEntry && historyEntry.infoHash);
+    if (infoHash) entry.infoHash = infoHash;
+  }
+  var addRes = await addTorrentInput(ctx, entry, src.input);
+  if (!addRes || !addRes.ok) {
+    return { ok: false, error: String((addRes && addRes.error) || 'Failed to auto-activate torrent'), autoActivated: false, activationSource: src.source };
+  }
+  var rec = activeById.get(id);
+  if (!rec || !rec.torrent) {
+    return { ok: false, error: 'Torrent auto-activation did not produce an active session', autoActivated: false, activationSource: src.source };
+  }
+  return { ok: true, rec: rec, autoActivated: true, activationSource: src.source };
+}
+
 async function streamFile(ctx, _evt, payload) {
   if (isTorActive()) {
     return { ok: false, error: 'Disable Tor to stream torrent files' };
   }
 
   var id = extractId(payload);
+  var autoActivate = !(payload && Object.prototype.hasOwnProperty.call(payload, 'autoActivate')) || !!payload.autoActivate;
   var rec = activeById.get(id);
-  if (!rec || !rec.torrent) return { ok: false, error: 'Torrent not active' };
+  var autoActivated = false;
+  var activationSource = 'already_active';
+  if ((!rec || !rec.torrent) && autoActivate) {
+    var activated = await activateForStream(ctx, id, payload || {});
+    if (!activated || !activated.ok) {
+      return {
+        ok: false,
+        error: String((activated && activated.error) || 'Torrent not active'),
+        autoActivated: false,
+        activationSource: String((activated && activated.activationSource) || 'none'),
+      };
+    }
+    rec = activated.rec;
+    autoActivated = !!activated.autoActivated;
+    activationSource = String(activated.activationSource || 'auto');
+  }
+  if (!rec || !rec.torrent) {
+    return { ok: false, error: 'Torrent not active', autoActivated: false, activationSource: 'none' };
+  }
   var torrent = rec.torrent;
+
+  var readyOk = await waitForTorrentMetadata(torrent, Number(payload && payload.readyTimeoutMs) || 15000);
+  if (!readyOk) {
+    return { ok: false, error: 'Timed out waiting for torrent metadata', autoActivated: autoActivated, activationSource: activationSource };
+  }
 
   var fileIndex = Number(payload && payload.fileIndex);
   if (isNaN(fileIndex) || fileIndex < 0 || fileIndex >= torrent.files.length) {
-    return { ok: false, error: 'Invalid file index' };
+    return { ok: false, error: 'Invalid file index', autoActivated: autoActivated, activationSource: activationSource };
+  }
+
+  var forPlaybackCache = !!(payload && payload.forPlaybackCache);
+  var awaitReady = !!(payload && payload.awaitReady);
+  var preferHttp = !!(forPlaybackCache && (!(payload && Object.prototype.hasOwnProperty.call(payload, 'preferHttp')) || !!payload.preferHttp));
+
+  if (preferHttp) {
+    prioritizeTorrentFile(rec, fileIndex);
+    var fileObj = torrent.files[fileIndex];
+    if (!fileObj) return { ok: false, error: 'Invalid file', autoActivated: autoActivated, activationSource: activationSource };
+
+    var httpInfo = null;
+    try {
+      httpInfo = await ensureHttpStreamServer(rec);
+    } catch (err) {
+      return {
+        ok: false,
+        error: 'Failed to start HTTP stream server: ' + String((err && err.message) || err || 'unknown'),
+        autoActivated: autoActivated,
+        activationSource: activationSource,
+      };
+    }
+
+    var streamUrl = 'http://127.0.0.1:' + String(httpInfo.port) + '/file/' + String(fileIndex);
+    var playlistPath = writePlaybackPlaylist(ctx, id, fileIndex, fileObj, streamUrl);
+    if (!playlistPath) {
+      return { ok: false, error: 'Failed to create stream playlist', autoActivated: autoActivated, activationSource: activationSource };
+    }
+
+    if (awaitReady) {
+      var firstChunkOk = await waitForFirstStreamChunk(fileObj, Number(payload && payload.readyTimeoutMs) || 15000);
+      if (!firstChunkOk) {
+        return { ok: false, error: 'Timed out waiting for initial torrent data', path: playlistPath, url: streamUrl, autoActivated: autoActivated, activationSource: activationSource };
+      }
+    }
+
+    return {
+      ok: true,
+      path: playlistPath,
+      url: streamUrl,
+      transport: 'http_playlist',
+      autoActivated: autoActivated,
+      activationSource: activationSource,
+    };
   }
 
   var destPath = String(payload && payload.destinationPath || '').trim();
-  if (!destPath) return { ok: false, error: 'Destination path required' };
+  if (!destPath && forPlaybackCache) {
+    try {
+      destPath = streamCachePathFor(ctx, rec.entry, torrent, fileIndex, torrent.files[fileIndex]);
+    } catch {}
+  }
+  if (!destPath) return { ok: false, error: 'Destination path required', autoActivated: autoActivated, activationSource: activationSource };
 
   var absPath = '';
   try { absPath = path.resolve(destPath); } catch {}
-  if (!absPath) return { ok: false, error: 'Invalid destination path' };
+  if (!absPath) return { ok: false, error: 'Invalid destination path', autoActivated: autoActivated, activationSource: activationSource };
 
-  // Ensure the file is selected for download
-  try { torrent.files[fileIndex].select(); } catch {}
-  if (rec.entry.files && rec.entry.files[fileIndex]) rec.entry.files[fileIndex].selected = true;
+  // Ensure the target file gets priority during playback-oriented streaming.
+  if (forPlaybackCache) prioritizeTorrentFile(rec, fileIndex);
+  else {
+    try { torrent.files[fileIndex].select(); } catch {}
+    if (rec.entry.files && rec.entry.files[fileIndex]) rec.entry.files[fileIndex].selected = true;
+  }
 
   try { ensureDir(path.dirname(absPath)); } catch {}
 
@@ -809,7 +1268,11 @@ async function streamFile(ctx, _evt, payload) {
 
   // Avoid duplicate streams for the same file
   if (rec.streams && rec.streams[streamKey]) {
-    return { ok: true, path: absPath, alreadyStreaming: true };
+    if (awaitReady) {
+      var readyExisting = await waitForStreamReady(rec, streamKey, Number(payload && payload.readyTimeoutMs) || 15000);
+      if (!readyExisting) return { ok: false, error: 'Timed out waiting for stream readiness', path: absPath, alreadyStreaming: true, autoActivated: autoActivated, activationSource: activationSource };
+    }
+    return { ok: true, path: absPath, alreadyStreaming: true, autoActivated: autoActivated, activationSource: activationSource };
   }
 
   try {
@@ -824,7 +1287,7 @@ async function streamFile(ctx, _evt, payload) {
       written += chunk.length;
       if (!readyFired && written >= READY_THRESHOLD) {
         readyFired = true;
-        if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_STREAM_READY, {
+        markStreamReady(ctx, ipc, rec, streamKey, {
           id: id, fileIndex: fileIndex, path: absPath, bytesWritten: written
         });
       }
@@ -832,40 +1295,78 @@ async function streamFile(ctx, _evt, payload) {
 
     rs.on('error', function (err) {
       try { ws.end(); } catch {}
+      failStreamWaiters(rec, streamKey);
       delete rec.streams[streamKey];
     });
 
     ws.on('error', function (err) {
       try { rs.destroy(); } catch {}
+      failStreamWaiters(rec, streamKey);
       delete rec.streams[streamKey];
     });
 
     ws.on('finish', function () {
-      delete rec.streams[streamKey];
       // If stream wasn't ready yet (small file), fire ready now
-      if (!readyFired && ipc) {
-        emit(ctx, ipc.EVENT.WEB_TORRENT_STREAM_READY, {
+      if (!readyFired) {
+        markStreamReady(ctx, ipc, rec, streamKey, {
           id: id, fileIndex: fileIndex, path: absPath, bytesWritten: written
         });
       }
+      delete rec.streams[streamKey];
     });
 
     rs.pipe(ws);
-    rec.streams[streamKey] = { rs: rs, ws: ws };
+    rec.streams[streamKey] = { rs: rs, ws: ws, path: absPath, ready: false, waiters: [] };
   } catch (err) {
-    return { ok: false, error: String((err && err.message) || err) };
+    return { ok: false, error: String((err && err.message) || err), autoActivated: autoActivated, activationSource: activationSource };
   }
 
-  return { ok: true, path: absPath };
+  if (awaitReady) {
+    var ready = await waitForStreamReady(rec, streamKey, Number(payload && payload.readyTimeoutMs) || 15000);
+    if (!ready) return { ok: false, error: 'Timed out waiting for stream readiness', path: absPath, autoActivated: autoActivated, activationSource: activationSource };
+  }
+
+  return { ok: true, path: absPath, autoActivated: autoActivated, activationSource: activationSource };
 }
 
 // ── Video library integration ──
 
 var VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.webm', '.mov', '.wmv', '.flv', '.m4v', '.ts', '.m2ts'];
+var STREAMABLE_MANIFEST_FILE = '.tanko_torrent_stream.json';
 
 function isVideoFile(fileName) {
   var ext = path.extname(String(fileName || '')).toLowerCase();
   return VIDEO_EXTS.indexOf(ext) !== -1;
+}
+
+function normalizeVideoRelativePath(filePath, torrentName) {
+  var relPath = String(filePath || '').trim().replace(/\\/g, '/');
+  var tName = String(torrentName || '').trim().replace(/\\/g, '/');
+  if (!relPath) return '';
+  if (tName && relPath.indexOf(tName + '/') === 0) relPath = relPath.slice(tName.length + 1);
+  return relPath.replace(/^\/+/, '');
+}
+
+function ensurePlaceholderFile(filePath) {
+  try {
+    ensureDir(path.dirname(filePath));
+    if (fs.existsSync(filePath)) return true;
+    fs.closeSync(fs.openSync(filePath, 'w'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeStreamableManifest(showPath, manifest) {
+  try {
+    ensureDir(showPath);
+    var manifestPath = path.join(showPath, STREAMABLE_MANIFEST_FILE);
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+    return { ok: true, path: manifestPath };
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err || 'Failed writing stream manifest') };
+  }
 }
 
 async function addToVideoLibrary(ctx, evt, payload) {
@@ -885,6 +1386,9 @@ async function addToVideoLibrary(ctx, evt, payload) {
   }
 
   var dest = String(payload && payload.destinationRoot || '').trim();
+  if (!dest) {
+    try { dest = require('electron').app.getPath('downloads'); } catch {}
+  }
   if (!dest) return { ok: false, error: 'Destination folder required' };
   var absRoot = '';
   try { absRoot = path.resolve(dest); } catch {}
@@ -906,38 +1410,72 @@ async function addToVideoLibrary(ctx, evt, payload) {
 
   if (!videoIndices.length) return { ok: false, error: 'No video files found in torrent' };
 
-  // Select video files with sequential mode via internal selectFiles call
-  var selectRes = await selectFiles(ctx, evt, {
-    id: id,
-    selectedIndices: videoIndices,
-    destinationRoot: absRoot,
-    sequential: true
-  });
-  if (!selectRes || !selectRes.ok) return selectRes || { ok: false, error: 'Failed to prepare torrent files' };
+  var streamable = !!(payload && payload.streamable);
 
   // Mark as video library torrent
   entry.videoLibrary = true;
   entry.showFolderPath = showPath;
+  entry.videoLibraryStreamable = streamable;
 
-  // Stream each video file to the show folder
-  for (var si = 0; si < videoIndices.length; si++) {
-    var fileIdx = videoIndices[si];
-    var tFile = torrent.files[fileIdx];
-    if (!tFile) continue;
+  if (streamable) {
+    var manifest = {
+      version: 1,
+      streamable: true,
+      createdAt: Date.now(),
+      torrentId: String(entry.id || id),
+      infoHash: String(entry.infoHash || torrent.infoHash || ''),
+      magnetUri: String(entry.magnetUri || torrent.magnetURI || ''),
+      torrentName: torrentName,
+      files: [],
+    };
 
-    // Build destination path: showPath + relative path within torrent
-    var relPath = String(tFile.path || tFile.name || '').trim();
-    // Strip leading torrent name prefix if present (WebTorrent includes it in file.path)
-    if (relPath.indexOf(torrentName + '/') === 0 || relPath.indexOf(torrentName + '\\') === 0) {
-      relPath = relPath.substring(torrentName.length + 1);
+    for (var sm = 0; sm < videoIndices.length; sm++) {
+      var smIdx = videoIndices[sm];
+      var smFile = torrent.files[smIdx];
+      if (!smFile) continue;
+      var relStreamPath = normalizeVideoRelativePath(smFile.path || smFile.name || '', torrentName);
+      if (!relStreamPath) continue;
+
+      // Create a tiny placeholder so the existing video scanner indexes this episode.
+      var placeholderPath = path.join(showPath, relStreamPath);
+      ensurePlaceholderFile(placeholderPath);
+
+      manifest.files.push({
+        fileIndex: smIdx,
+        relativePath: relStreamPath,
+        length: Number(smFile.length || 0),
+        name: String(smFile.name || ''),
+      });
     }
-    var fileDest = path.join(showPath, relPath);
 
-    await streamFile(ctx, evt, {
+    var mw = writeStreamableManifest(showPath, manifest);
+    if (!mw.ok) return { ok: false, error: mw.error || 'Failed to create streamable manifest' };
+  } else {
+    // Select video files with sequential mode via internal selectFiles call.
+    var selectRes = await selectFiles(ctx, evt, {
       id: id,
-      fileIndex: fileIdx,
-      destinationPath: fileDest
+      selectedIndices: videoIndices,
+      destinationRoot: absRoot,
+      sequential: true
     });
+    if (!selectRes || !selectRes.ok) return selectRes || { ok: false, error: 'Failed to prepare torrent files' };
+
+    // Stream each video file to the show folder.
+    for (var si = 0; si < videoIndices.length; si++) {
+      var fileIdx = videoIndices[si];
+      var tFile = torrent.files[fileIdx];
+      if (!tFile) continue;
+
+      var relPath = normalizeVideoRelativePath(tFile.path || tFile.name || '', torrentName);
+      if (!relPath) continue;
+      var fileDest = path.join(showPath, relPath);
+
+      await streamFile(ctx, evt, {
+        id: id,
+        fileIndex: fileIdx,
+        destinationPath: fileDest
+      });
+    }
   }
 
   // Register the show folder in the video library
@@ -948,8 +1486,8 @@ async function addToVideoLibrary(ctx, evt, payload) {
 
   upsertHistory(ctx, entry);
   emitUpdated(ctx);
-  wtLog('addToVideoLibrary: success, showPath=' + showPath + ', videoFiles=' + videoIndices.length);
-  return { ok: true, showPath: showPath };
+  wtLog('addToVideoLibrary: success, showPath=' + showPath + ', videoFiles=' + videoIndices.length + ', streamable=' + (streamable ? '1' : '0'));
+  return { ok: true, showPath: showPath, streamable: streamable };
 }
 
 // ── FEAT-BROWSER: New capabilities from Aspect browser ──
@@ -1006,6 +1544,12 @@ function tryDeleteTorrentData(entry) {
   }
 }
 
+function tryDeleteDir(targetPath) {
+  var p = String(targetPath || '').trim();
+  if (!p) return;
+  try { fs.rmSync(p, { recursive: true, force: true }); } catch {}
+}
+
 async function remove(ctx, _evt, payload) {
   var id = extractId(payload);
   if (!id) return { ok: false, error: 'Missing id' };
@@ -1027,8 +1571,14 @@ async function remove(ctx, _evt, payload) {
       if (t0 && String(t0.id) === id) { entry = t0; break; }
     }
   }
+  if (removeFiles) {
+    tryDeleteDir(ctx.storage.dataPath(path.join('web_torrent_stream_cache', id)));
+    tryDeleteDir(ctx.storage.dataPath(path.join('web_torrent_tmp', id)));
+    tryDeleteDir(ctx.storage.dataPath(path.join('web_torrent_stream_playlists', id)));
+  }
   if (removeFiles && entry) {
     tryDeleteTorrentData(entry);
+    if (entry.showFolderPath) tryDeleteDir(entry.showFolderPath);
   }
   if (removeFromLibrary && entry) {
     var root = String(entry.destinationRoot || entry.savePath || '').trim();
@@ -1207,10 +1757,13 @@ async function resolveMetadata(ctx, _evt, payload) {
 async function startConfigured(ctx, _evt, payload) {
   var resolveId = payload && payload.resolveId ? String(payload.resolveId) : '';
   var origin = String(payload && payload.origin || '').trim().toLowerCase();
+  var streamableOnly = !!(payload && payload.streamableOnly);
   var pending = pendingById.get(resolveId);
   if (!pending) return { ok: false, error: 'No pending resolve with that ID' };
 
-  var savePath = String(payload && payload.savePath || '').trim() || require('electron').app.getPath('downloads');
+  var savePath = streamableOnly
+    ? ''
+    : (String(payload && payload.savePath || '').trim() || require('electron').app.getPath('downloads'));
   var selectedFiles = payload && Array.isArray(payload.selectedFiles) ? payload.selectedFiles : null;
 
   // Save info before destroying the temp torrent
@@ -1224,11 +1777,11 @@ async function startConfigured(ctx, _evt, payload) {
   try { pending.torrent.destroy({ destroyStore: true }); } catch {}
   pendingById.delete(resolveId);
 
-  // Create entry and re-add with the correct save path
+  // Create entry and re-add in the requested mode.
   var entry = createEntry({
-    destinationRoot: savePath,
-    savePath: savePath,
-    directWrite: true,
+    destinationRoot: streamableOnly ? '' : savePath,
+    savePath: streamableOnly ? '' : savePath,
+    directWrite: streamableOnly ? false : true,
     origin: origin,
     magnetUri: magnetUri,
     name: infoName,
@@ -1239,17 +1792,18 @@ async function startConfigured(ctx, _evt, payload) {
   var cl = await ensureClient();
   var source = torrentBuf || magnetUri;
   var torrent;
+  var addPath = streamableOnly ? buildTorrentTmpPath(ctx, entry.id) : path.join(savePath, infoName || entry.id);
 
   try {
-    torrent = cl.add(source, { path: path.join(savePath, infoName || entry.id) });
+    torrent = cl.add(source, { path: addPath });
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
   }
 
   bindTorrent(ctx, torrent, entry);
 
-  // If specific files were selected, apply selection after binding
-  if (selectedFiles && selectedFiles.length > 0) {
+  // If specific files were selected, apply selection after binding.
+  if (!streamableOnly && selectedFiles && selectedFiles.length > 0) {
     // Wait for metadata to be ready before selecting files
     var waitForReady = torrent.files && torrent.files.length > 0
       ? Promise.resolve()
@@ -1259,7 +1813,7 @@ async function startConfigured(ctx, _evt, payload) {
     });
   }
 
-  wtLog('startConfigured: ' + infoName + ' → ' + savePath);
+  wtLog('startConfigured: ' + infoName + ' -> ' + (streamableOnly ? '(streamable-only)' : savePath));
   return { ok: true, id: entry.id };
 }
 
@@ -1305,3 +1859,4 @@ module.exports = {
   cancelResolve,
   openFolder,
 };
+

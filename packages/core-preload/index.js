@@ -9,6 +9,7 @@ function createFeatureFacade(api) {
       openDownloads: function () { return src.web && src.web.openSourcesDownloads ? src.web.openSourcesDownloads() : Promise.resolve({ ok: false }); },
       health: function () { return src.torrentSearch && src.torrentSearch.health ? src.torrentSearch.health() : Promise.resolve({ ok: false }); },
       search: function (payload) { return src.torrentSearch && src.torrentSearch.query ? src.torrentSearch.query(payload) : Promise.resolve({ ok: false, items: [] }); },
+      indexers: function () { return src.torrentSearch && src.torrentSearch.indexers ? src.torrentSearch.indexers() : Promise.resolve({ ok: false, indexers: [] }); },
       resolveMetadata: function (payload) { return src.webTorrent && src.webTorrent.resolveMetadata ? src.webTorrent.resolveMetadata(payload) : Promise.resolve({ ok: false }); },
       startConfigured: function (payload) { return src.webTorrent && src.webTorrent.startConfigured ? src.webTorrent.startConfigured(payload) : Promise.resolve({ ok: false }); },
       cancelResolve: function (payload) { return src.webTorrent && src.webTorrent.cancelResolve ? src.webTorrent.cancelResolve(payload) : Promise.resolve({ ok: false }); },

@@ -42,10 +42,10 @@ function registerTorrentSearchHandlers(registry) {
   if (!ipcMain || !CHANNEL || !d) return;
   ipcMain.handle(CHANNEL.TORRENT_SEARCH_QUERY, function (e, payload) { return d.query(ctx, e, payload); });
   ipcMain.handle(CHANNEL.TORRENT_SEARCH_HEALTH, function (e) { return d.health(ctx, e); });
+  ipcMain.handle(CHANNEL.TORRENT_SEARCH_INDEXERS, function (e) { return d.indexers(ctx, e); });
 }
 
 module.exports = {
   registerWebTorrentHandlers: registerWebTorrentHandlers,
   registerTorrentSearchHandlers: registerTorrentSearchHandlers,
 };
-

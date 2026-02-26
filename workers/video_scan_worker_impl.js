@@ -13,6 +13,7 @@ const { rootIdForPath, showIdForPath, looseShowIdForRoot, videoIdForPath } = req
 
 
 const VIDEO_EXT_RE = /\.(mp4|mkv|avi|mov|webm|m4v|mpg|mpeg|ts)$/i;
+const STREAMABLE_MANIFEST_FILE = '.tanko_torrent_stream.json';
 
 const HIDDEN_SHOW_IDS = new Set(
   Array.isArray(workerData?.hiddenShowIds) ? workerData.hiddenShowIds.map(x => String(x || '')).filter(Boolean) : []
@@ -99,6 +100,136 @@ function findPosterInFolder(dirPath) {
     }
   } catch {}
   return null;
+}
+
+function normalizeRelPath(relPath) {
+  return String(relPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function normalizeAbsPathKey(p) {
+  try {
+    return normLower(path.resolve(String(p || '')).replace(/\\/g, '/'));
+  } catch {
+    return '';
+  }
+}
+
+function parseStreamableManifestFile(manifestPath) {
+  try {
+    const raw = fs.readFileSync(manifestPath, 'utf-8');
+    const json = JSON.parse(raw);
+    if (!json || json.streamable !== true || !Array.isArray(json.files)) return null;
+
+    const torrentId = String(json.torrentId || '');
+    const infoHash = String(json.infoHash || '');
+    const magnetUri = String(json.magnetUri || '');
+    const baseDir = path.dirname(manifestPath);
+    const files = [];
+
+    for (const f of json.files) {
+      const rel = normalizeRelPath(f && f.relativePath);
+      if (!rel) continue;
+      const absPath = path.resolve(baseDir, rel);
+      const absKey = normalizeAbsPathKey(absPath);
+      if (!absKey) continue;
+      files.push({
+        absKey,
+        fileIndex: Number(f && f.fileIndex),
+        length: Number(f && f.length),
+        torrentId,
+        infoHash,
+        magnetUri,
+      });
+    }
+
+    return { files, torrentId, infoHash, magnetUri };
+  } catch {
+    return null;
+  }
+}
+
+function loadStreamableManifestIndex(showPath, ignoreCfg) {
+  const byAbsPath = new Map();
+  const torrentIds = new Set();
+  const infoHashes = new Set();
+  const magnetUris = new Set();
+  const stack = [showPath];
+  const seenReal = new Set();
+
+  while (stack.length) {
+    const dir = stack.pop();
+    let key = '';
+    try {
+      const rp = fs.realpathSync(dir);
+      key = normLower(String(rp || ''));
+    } catch {}
+    if (key) {
+      if (seenReal.has(key)) continue;
+      seenReal.add(key);
+    }
+
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+
+    for (const e of entries) {
+      const name = e && e.name ? e.name : '';
+      const full = path.join(dir, name);
+
+      let isDir = false;
+      let isFile = false;
+      try {
+        if (e.isDirectory && e.isDirectory()) isDir = true;
+        else if (e.isFile && e.isFile()) isFile = true;
+        else if (e.isSymbolicLink && e.isSymbolicLink()) {
+          const st = statSafe(full);
+          if (st && st.isDirectory()) isDir = true;
+          else if (st && st.isFile()) isFile = true;
+        }
+      } catch {}
+
+      if (shouldIgnorePath(full, name, isDir, ignoreCfg)) continue;
+
+      if (isDir) {
+        stack.push(full);
+        continue;
+      }
+
+      if (!isFile) continue;
+      if (normLower(name) !== normLower(STREAMABLE_MANIFEST_FILE)) continue;
+
+      const parsed = parseStreamableManifestFile(full);
+      if (!parsed) continue;
+
+      for (const row of parsed.files) {
+        if (!row || !row.absKey) continue;
+        byAbsPath.set(row.absKey, {
+          fileIndex: Number(row.fileIndex),
+          length: Number(row.length),
+          torrentId: String(row.torrentId || ''),
+          infoHash: String(row.infoHash || ''),
+          magnetUri: String(row.magnetUri || ''),
+        });
+        if (row.torrentId) torrentIds.add(String(row.torrentId));
+        if (row.infoHash) infoHashes.add(String(row.infoHash));
+        if (row.magnetUri) magnetUris.add(String(row.magnetUri));
+      }
+    }
+  }
+
+  const torrentIdList = Array.from(torrentIds.values());
+  const infoHashList = Array.from(infoHashes.values());
+  const magnetList = Array.from(magnetUris.values());
+
+  return {
+    streamable: byAbsPath.size > 0,
+    byAbsPath,
+    torrentIds: torrentIdList,
+    infoHashes: infoHashList,
+    magnetUris: magnetList,
+    torrentId: torrentIdList[0] || '',
+    infoHash: infoHashList[0] || '',
+    magnetUri: magnetList[0] || '',
+  };
 }
 
 function listVideoFilesRecursive(rootDir, ignoreCfg) {
@@ -215,8 +346,11 @@ async function buildVideoIndex(videoFolders, showFolders) {
         displayPath: normalizeDisplayPath(sp),
         isLoose: false,
         thumbPath: posterPath || null,
+        torrentStreamable: false,
+        sourceKind: 'local',
         folders: [],
       };
+      const streamManifest = loadStreamableManifestIndex(sp, ignoreCfg);
       shows.push(showObj);
       seenShowPaths.add(sp);
 
@@ -241,6 +375,14 @@ async function buildVideoIndex(videoFolders, showFolders) {
           const rel = path.relative(sp, path.dirname(fp));
           if (rel && rel !== '.' && !rel.startsWith('..')) folderRelPath = normalizeDisplayPath(rel);
         } catch {}
+        const streamMeta = streamManifest ? streamManifest.byAbsPath.get(normalizeAbsPathKey(fp)) : null;
+        if (streamMeta) {
+          showObj.torrentStreamable = true;
+          showObj.sourceKind = 'torrent_stream';
+          if (!showObj.torrentId) showObj.torrentId = String(streamMeta.torrentId || streamManifest.torrentId || '');
+          if (!showObj.torrentInfoHash) showObj.torrentInfoHash = String(streamMeta.infoHash || streamManifest.infoHash || '');
+          if (!showObj.torrentMagnetUri) showObj.torrentMagnetUri = String(streamMeta.magnetUri || streamManifest.magnetUri || '');
+        }
         const folderKey = folderKeyFor(sid, folderRelPath);
         const fHit = folderMap.get(folderKey);
         if (fHit) {
@@ -278,6 +420,12 @@ async function buildVideoIndex(videoFolders, showFolders) {
           width: meta.width ?? null,
           height: meta.height ?? null,
           thumbPath: thumbPath || null,
+          sourceKind: streamMeta ? 'torrent_stream' : 'local',
+          torrentStreamable: !!streamMeta,
+          torrentId: streamMeta ? String(streamMeta.torrentId || streamManifest.torrentId || '') : '',
+          torrentInfoHash: streamMeta ? String(streamMeta.infoHash || streamManifest.infoHash || '') : '',
+          torrentMagnetUri: streamMeta ? String(streamMeta.magnetUri || streamManifest.magnetUri || '') : '',
+          torrentFileIndex: streamMeta ? Number(streamMeta.fileIndex) : null,
         });
         
         // BUILD 88 FIX 1.2: Yield to event loop every 10 files to prevent freeze
@@ -435,8 +583,11 @@ async function buildVideoIndex(videoFolders, showFolders) {
         displayPath: normalizeDisplayPath(sp),
         isLoose: false,
         thumbPath: posterPath || null,
+        torrentStreamable: false,
+        sourceKind: 'local',
         folders: [],
       };
+      const streamManifest = loadStreamableManifestIndex(sp, ignoreCfg);
       shows.push(showObj);
       seenShowPaths.add(sp);
 
@@ -458,6 +609,14 @@ async function buildVideoIndex(videoFolders, showFolders) {
           const rel = path.relative(sp, path.dirname(fp));
           if (rel && rel !== '.' && !rel.startsWith('..')) folderRelPath = normalizeDisplayPath(rel);
         } catch {}
+        const streamMeta = streamManifest ? streamManifest.byAbsPath.get(normalizeAbsPathKey(fp)) : null;
+        if (streamMeta) {
+          showObj.torrentStreamable = true;
+          showObj.sourceKind = 'torrent_stream';
+          if (!showObj.torrentId) showObj.torrentId = String(streamMeta.torrentId || streamManifest.torrentId || '');
+          if (!showObj.torrentInfoHash) showObj.torrentInfoHash = String(streamMeta.infoHash || streamManifest.infoHash || '');
+          if (!showObj.torrentMagnetUri) showObj.torrentMagnetUri = String(streamMeta.magnetUri || streamManifest.magnetUri || '');
+        }
         const folderKey = folderKeyFor(sid, folderRelPath);
         const fHit = folderMap.get(folderKey);
         if (fHit) fHit.episodeCount += 1;
@@ -484,6 +643,12 @@ async function buildVideoIndex(videoFolders, showFolders) {
           width: meta.width ?? null,
           height: meta.height ?? null,
           thumbPath: thumbPath || null,
+          sourceKind: streamMeta ? 'torrent_stream' : 'local',
+          torrentStreamable: !!streamMeta,
+          torrentId: streamMeta ? String(streamMeta.torrentId || streamManifest.torrentId || '') : '',
+          torrentInfoHash: streamMeta ? String(streamMeta.infoHash || streamManifest.infoHash || '') : '',
+          torrentMagnetUri: streamMeta ? String(streamMeta.magnetUri || streamManifest.magnetUri || '') : '',
+          torrentFileIndex: streamMeta ? Number(streamMeta.fileIndex) : null,
         });
 
         fileCount++;

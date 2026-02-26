@@ -1585,16 +1585,21 @@ COMMON ANCHORS
                 <div id="sourcesSearchView">
                   <div class="sourcesSearchControls">
                     <input id="sourcesSearchInput" class="search" type="text" placeholder="Search torrents..." autocomplete="off" />
-                    <select id="sourcesSearchFilter" class="select">
-                      <option value="all">All</option>
-                      <option value="comics">Comics</option>
-                      <option value="books">Books</option>
-                      <option value="tv">TV</option>
+                    <select id="sourcesSearchSource" class="select">
+                      <option value="all">All Sources</option>
+                    </select>
+                    <select id="sourcesSearchType" class="select">
+                      <option value="all">All Types</option>
+                    </select>
+                    <select id="sourcesSearchSort" class="select">
+                      <option value="relevance">Sort: Relevance</option>
+                      <option value="seeders_desc">Sort: Seeders</option>
+                      <option value="size_desc">Sort: Size</option>
                     </select>
                     <button id="sourcesSearchBtn" class="btn btn-sm" type="button">Search</button>
                   </div>
                   <div id="sourcesSearchStatus" class="muted tiny"></div>
-                  <div class="sourcesSearchTableWrap">
+                  <div id="sourcesSearchTableWrap" class="sourcesSearchTableWrap">
                     <table id="sourcesSearchTable" class="sourcesSearchTable">
                       <thead>
                         <tr>
@@ -1774,6 +1779,7 @@ COMMON ANCHORS
           </div>
           <div class="settingsActions">
             <button id="sourcesSaveFlowBack" class="btn btn-ghost btn-sm hidden" type="button">Back</button>
+            <button id="sourcesSaveFlowStream" class="btn btn-ghost btn-sm hidden" type="button">Add Streamable Folder to Library</button>
             <button id="sourcesSaveFlowStart" class="btn" type="button">Start Download</button>
           </div>
         </div>

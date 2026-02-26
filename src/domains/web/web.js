@@ -215,8 +215,11 @@
 
     // Sources search UI
     sourcesSearchInput: qs('sourcesSearchInput'),
-    sourcesSearchFilter: qs('sourcesSearchFilter'),
+    sourcesSearchSource: qs('sourcesSearchSource'),
+    sourcesSearchType: qs('sourcesSearchType'),
+    sourcesSearchSort: qs('sourcesSearchSort'),
     sourcesSearchBtn: qs('sourcesSearchBtn'),
+    sourcesSearchTableWrap: qs('sourcesSearchTableWrap'),
     sourcesSearchBody: qs('sourcesSearchBody'),
     sourcesSearchStatus: qs('sourcesSearchStatus'),
     sourcesSearchTabBtn: qs('sourcesSearchTabBtn'),
@@ -229,6 +232,7 @@
     sourcesSaveOverlay: qs('sourcesSaveFlowOverlay'),
     sourcesSaveCancel: qs('sourcesSaveFlowCancel'),
     sourcesSaveBack: qs('sourcesSaveFlowBack'),
+    sourcesSaveStream: qs('sourcesSaveFlowStream'),
     sourcesSaveStart: qs('sourcesSaveFlowStart'),
     sourcesSaveCategory: qs('sourcesSaveCategory'),
     sourcesSaveDestMode: qs('sourcesSaveDestMode'),
@@ -309,8 +313,16 @@
     hubTorrentFilter: 'active',
     destPickerData: null,
     sourcesSubMode: 'search',
+    searchResultsRaw: [],
     searchResults: [],
+    searchQuery: '',
+    searchPage: 0,
+    searchHasMore: false,
     searchLoading: false,
+    searchLoadingMore: false,
+    searchRequestToken: 0,
+    searchLimit: 40,
+    searchSourceOptions: [],
     pendingMagnet: null,
     saveFlowMode: 'onboarding',
     managingTorrentId: null,
@@ -408,6 +420,7 @@
     var feat = getFeature('sources');
     return {
       search: feat && typeof feat.search === 'function' ? feat.search : (api.torrentSearch && api.torrentSearch.query ? api.torrentSearch.query : null),
+      indexers: feat && typeof feat.indexers === 'function' ? feat.indexers : (api.torrentSearch && api.torrentSearch.indexers ? api.torrentSearch.indexers : null),
       resolveMetadata: feat && typeof feat.resolveMetadata === 'function' ? feat.resolveMetadata : (api.webTorrent && api.webTorrent.resolveMetadata ? api.webTorrent.resolveMetadata : null),
       startConfigured: feat && typeof feat.startConfigured === 'function' ? feat.startConfigured : (api.webTorrent && api.webTorrent.startConfigured ? api.webTorrent.startConfigured : null),
       cancelResolve: feat && typeof feat.cancelResolve === 'function' ? feat.cancelResolve : (api.webTorrent && api.webTorrent.cancelResolve ? api.webTorrent.cancelResolve : null),
@@ -430,6 +443,7 @@
       onProgress: feat && typeof feat.onProgress === 'function' ? feat.onProgress : (api.webTorrent && api.webTorrent.onProgress ? api.webTorrent.onProgress : null),
       onCompleted: feat && typeof feat.onCompleted === 'function' ? feat.onCompleted : (api.webTorrent && api.webTorrent.onCompleted ? api.webTorrent.onCompleted : null),
       onMagnetDetected: feat && typeof feat.onMagnetDetected === 'function' ? feat.onMagnetDetected : (api.webTorrent && api.webTorrent.onMagnetDetected ? api.webTorrent.onMagnetDetected : null),
+      addToVideoLibrary: feat && typeof feat.addToVideoLibrary === 'function' ? feat.addToVideoLibrary : (api.webTorrent && api.webTorrent.addToVideoLibrary ? api.webTorrent.addToVideoLibrary : null),
     };
   }
 
@@ -1029,6 +1043,7 @@
     }
     if (el.sourcesSaveBack) el.sourcesSaveBack.classList.remove('hidden');
     renderSaveFlowFiles();
+    updateStreamableButtonState();
     if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.remove('hidden');
   }
 
@@ -1175,8 +1190,12 @@
     var html = '';
     for (var i = 0; i < state.searchResults.length; i++) {
       var row = state.searchResults[i] || {};
+      var metaBits = [];
+      if (row.sourceName) metaBits.push(String(row.sourceName));
+      if (Array.isArray(row.typeLabels) && row.typeLabels.length) metaBits.push(String(row.typeLabels.slice(0, 2).join(', ')));
+      var sub = metaBits.length ? ('<div class="muted tiny">' + escapeHtml(metaBits.join(' • ')) + '</div>') : '';
       html += '<tr>'
-        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(row.title || '') + '">' + escapeHtml(row.title || '-') + '</td>'
+        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(row.title || '') + '">' + escapeHtml(row.title || '-') + sub + '</td>'
         + '<td>' + escapeHtml(formatBytesForSources(row.sizeBytes)) + '</td>'
         + '<td>' + escapeHtml(String(row.fileCount != null ? row.fileCount : '-')) + '</td>'
         + '<td>' + escapeHtml(String(row.seeders != null ? row.seeders : 0)) + '</td>'
@@ -1187,6 +1206,134 @@
       html = '<tr><td colspan="5" class="muted tiny">No results.</td></tr>';
     }
     el.sourcesSearchBody.innerHTML = html;
+  }
+
+  function getSearchSource() {
+    return String((el.sourcesSearchSource && el.sourcesSearchSource.value) || 'all').trim() || 'all';
+  }
+
+  function getSearchTypeFilter() {
+    return String((el.sourcesSearchType && el.sourcesSearchType.value) || 'all').trim().toLowerCase() || 'all';
+  }
+
+  function getSearchSort() {
+    return String((el.sourcesSearchSort && el.sourcesSearchSort.value) || 'relevance').trim().toLowerCase() || 'relevance';
+  }
+
+  function applySourcesSearchView() {
+    var rows = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.slice() : [];
+    var typeFilter = getSearchTypeFilter();
+    if (typeFilter !== 'all') {
+      rows = rows.filter(function (row) {
+        var keys = Array.isArray(row && row.typeKeys) ? row.typeKeys : [];
+        for (var i = 0; i < keys.length; i++) {
+          if (String(keys[i] || '').trim().toLowerCase() === typeFilter) return true;
+        }
+        return false;
+      });
+    }
+
+    var sortMode = getSearchSort();
+    if (sortMode === 'seeders_desc') {
+      rows.sort(function (a, b) {
+        var sa = Number(a && a.seeders || 0);
+        var sb = Number(b && b.seeders || 0);
+        if (sb !== sa) return sb - sa;
+        var za = Number(a && a.sizeBytes || 0);
+        var zb = Number(b && b.sizeBytes || 0);
+        if (zb !== za) return zb - za;
+        return String(a && a.title || '').localeCompare(String(b && b.title || ''), undefined, { sensitivity: 'base' });
+      });
+    } else if (sortMode === 'size_desc') {
+      rows.sort(function (a, b) {
+        var za = Number(a && a.sizeBytes || 0);
+        var zb = Number(b && b.sizeBytes || 0);
+        if (zb !== za) return zb - za;
+        var sa = Number(a && a.seeders || 0);
+        var sb = Number(b && b.seeders || 0);
+        if (sb !== sa) return sb - sa;
+        return String(a && a.title || '').localeCompare(String(b && b.title || ''), undefined, { sensitivity: 'base' });
+      });
+    }
+
+    state.searchResults = rows;
+    renderSourcesSearchRows();
+  }
+
+  function renderSearchTypeOptions() {
+    if (!el.sourcesSearchType) return;
+    var selected = getSearchTypeFilter();
+    var map = new Map();
+    var rows = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw : [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      var keys = Array.isArray(row.typeKeys) ? row.typeKeys : [];
+      var labels = Array.isArray(row.typeLabels) ? row.typeLabels : [];
+      for (var j = 0; j < keys.length; j++) {
+        var key = String(keys[j] || '').trim().toLowerCase();
+        if (!key) continue;
+        if (map.has(key)) continue;
+        var label = String(labels[j] || key).trim() || key;
+        map.set(key, label);
+      }
+    }
+    var entries = Array.from(map.entries()).sort(function (a, b) {
+      return String(a[1] || a[0] || '').localeCompare(String(b[1] || b[0] || ''), undefined, { sensitivity: 'base' });
+    });
+    var html = '<option value="all">All Types</option>';
+    for (var k = 0; k < entries.length; k++) {
+      html += '<option value="' + escapeHtml(entries[k][0]) + '">' + escapeHtml(entries[k][1]) + '</option>';
+    }
+    el.sourcesSearchType.innerHTML = html;
+    if (selected !== 'all' && map.has(selected)) el.sourcesSearchType.value = selected;
+    else el.sourcesSearchType.value = 'all';
+  }
+
+  function renderSearchSourceOptions() {
+    if (!el.sourcesSearchSource) return;
+    var selected = getSearchSource();
+    var list = Array.isArray(state.searchSourceOptions) ? state.searchSourceOptions.slice() : [];
+    list.sort(function (a, b) {
+      var aName = String((a && (a.name || a.id)) || '');
+      var bName = String((b && (b.name || b.id)) || '');
+      var aNyaa = /nyaa/i.test(aName);
+      var bNyaa = /nyaa/i.test(bName);
+      if (aNyaa !== bNyaa) return aNyaa ? -1 : 1;
+      return aName.localeCompare(bName, undefined, { sensitivity: 'base' });
+    });
+    var html = '<option value="all">All Sources</option>';
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i] || {};
+      var id = String(row.id || '').trim();
+      if (!id) continue;
+      var name = String(row.name || id).trim() || id;
+      html += '<option value="' + escapeHtml(id) + '">' + escapeHtml(name) + '</option>';
+    }
+    el.sourcesSearchSource.innerHTML = html;
+    if (selected !== 'all' && list.some(function (row) { return String(row && row.id || '') === selected; })) {
+      el.sourcesSearchSource.value = selected;
+    } else {
+      el.sourcesSearchSource.value = 'all';
+    }
+  }
+
+  function appendSearchResults(items) {
+    var src = Array.isArray(items) ? items : [];
+    if (!src.length) return;
+    var seen = new Set();
+    var out = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.slice() : [];
+    for (var i = 0; i < out.length; i++) {
+      var key0 = String(out[i] && (out[i].magnetUri || out[i].id || out[i].title) || '').trim();
+      if (key0) seen.add(key0);
+    }
+    for (var j = 0; j < src.length; j++) {
+      var row = src[j] || {};
+      var key = String(row.magnetUri || row.id || row.title || '').trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+    state.searchResultsRaw = out;
   }
 
   function asPct01(value) {
@@ -1218,10 +1365,6 @@
       + '</tr>';
     }
     el.sourcesTorrentBody.innerHTML = html;
-  }
-
-  function getSearchFilter() {
-    return String((el.sourcesSearchFilter && el.sourcesSearchFilter.value) || 'all').trim().toLowerCase() || 'all';
   }
 
   function getDestinationRootByCategory(category) {
@@ -1280,6 +1423,51 @@
     }
   }
 
+  function shouldShowStreamableButton() {
+    var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
+    return category === 'videos';
+  }
+
+  function updateStreamableButtonState() {
+    if (!el.sourcesSaveStream) return;
+    var show = shouldShowStreamableButton();
+    el.sourcesSaveStream.classList.toggle('hidden', !show);
+    if (!show) {
+      el.sourcesSaveStream.disabled = true;
+      return;
+    }
+    var hasResolve = !!state.pendingResolveId;
+    var hasManage = !!(state.saveFlowMode === 'manage' && state.managingTorrentId);
+    el.sourcesSaveStream.disabled = !(hasResolve || hasManage);
+  }
+
+  function waitForTorrentState(torrentId, wantedState, timeoutMs) {
+    var id = String(torrentId || '').trim();
+    if (!id) return Promise.resolve(false);
+    var wanted = String(wantedState || 'metadata_ready').trim();
+    var torOps = getTorrentOps();
+    if (!torOps || typeof torOps.getActive !== 'function') return Promise.resolve(false);
+    var timeout = Math.max(2000, Number(timeoutMs) || 30000);
+    var startedAt = Date.now();
+    return new Promise(function (resolve) {
+      function tick() {
+        torOps.getActive().then(function (res) {
+          var rows = (res && res.ok && Array.isArray(res.torrents)) ? res.torrents : [];
+          for (var i = 0; i < rows.length; i++) {
+            var t = rows[i] || {};
+            if (String(t.id || '') === id && String(t.state || '') === wanted) return resolve(true);
+          }
+          if ((Date.now() - startedAt) >= timeout) return resolve(false);
+          setTimeout(tick, 450);
+        }).catch(function () {
+          if ((Date.now() - startedAt) >= timeout) return resolve(false);
+          setTimeout(tick, 700);
+        });
+      }
+      tick();
+    });
+  }
+
   function refreshSaveFlowInputs() {
     var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
     var mode = String((el.sourcesSaveDestMode && el.sourcesSaveDestMode.value) || 'default').trim().toLowerCase();
@@ -1295,6 +1483,7 @@
     if (el.sourcesSaveNewWrap) el.sourcesSaveNewWrap.classList.toggle('hidden', mode !== 'new');
     if (mode !== 'existing') {
       updateSavePathPreview();
+      updateStreamableButtonState();
       return;
     }
     var roots = getRootListByCategory(category);
@@ -1317,8 +1506,10 @@
       el.sourcesSaveExistingFolder.innerHTML = html;
       if (preferred) el.sourcesSaveExistingFolder.value = preferred;
       updateSavePathPreview();
+      updateStreamableButtonState();
     }).catch(function () {
       updateSavePathPreview();
+      updateStreamableButtonState();
     });
   }
 
@@ -1341,6 +1532,7 @@
     if (!row || !row.magnetUri || typeof srcOps.resolveMetadata !== 'function') {
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
       renderSaveFlowFiles();
+      updateStreamableButtonState();
       return;
     }
     if (el.sourcesSaveFilesList) el.sourcesSaveFilesList.innerHTML = '<div class="muted tiny">Resolving metadata...</div>';
@@ -1356,6 +1548,7 @@
       }
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = !state.pendingResolveFiles.length;
       renderSaveFlowFiles();
+      updateStreamableButtonState();
       if (!state.pendingResolveFiles.length) throw new Error('No file metadata returned for this torrent.');
     }
 
@@ -1369,6 +1562,7 @@
       return doResolve(false);
     }).catch(function (err) {
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
+      updateStreamableButtonState();
       if (el.sourcesSaveFilesList) {
         el.sourcesSaveFilesList.innerHTML = ''
           + '<div class="muted tiny">' + escapeHtml(String((err && err.message) || err || 'Could not resolve files')) + '</div>'
@@ -1379,14 +1573,37 @@
     });
   }
 
+  function inferSaveCategoryFromRow(row) {
+    var r = (row && typeof row === 'object') ? row : {};
+    var keys = [];
+    if (Array.isArray(r.typeKeys)) {
+      for (var i = 0; i < r.typeKeys.length; i++) keys.push(String(r.typeKeys[i] || '').toLowerCase());
+    }
+    if (Array.isArray(r.typeLabels)) {
+      for (var j = 0; j < r.typeLabels.length; j++) keys.push(String(r.typeLabels[j] || '').toLowerCase());
+    }
+
+    var hasAny = function (patterns) {
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        for (var j = 0; j < patterns.length; j++) {
+          if (patterns[j].test(k)) return true;
+        }
+      }
+      return false;
+    };
+
+    if (hasAny([/comic/, /manga/, /manhwa/, /graphic/])) return 'comics';
+    if (hasAny([/book/, /ebook/, /novel/, /audiobook/, /literature/])) return 'books';
+    if (hasAny([/\btv\b/, /series/, /show/, /movie/, /film/, /video/, /anime/])) return 'videos';
+    return String(state.lastSaveCategory || 'comics').trim().toLowerCase() || 'comics';
+  }
+
   function openSaveFlow(resultRow) {
     if (!resultRow || !resultRow.magnetUri) return;
     resetSaveFlowState();
     state.pendingMagnet = resultRow;
-    var filter = getSearchFilter();
-    var inferredCategory = filter === 'tv' ? 'videos'
-      : (filter === 'books' ? 'books'
-      : (filter === 'comics' ? 'comics' : state.lastSaveCategory || 'comics'));
+    var inferredCategory = inferSaveCategoryFromRow(resultRow);
     if (el.sourcesSaveCategory) el.sourcesSaveCategory.value = inferredCategory;
     var lastByCat = state.browserSettings && state.browserSettings.sourcesLastDestinationByCategory
       ? state.browserSettings.sourcesLastDestinationByCategory : {};
@@ -1398,8 +1615,10 @@
       el.sourcesSaveStart.disabled = true;
       el.sourcesSaveStart.textContent = 'Start Download';
     }
+    if (el.sourcesSaveStream) el.sourcesSaveStream.disabled = true;
     if (el.sourcesSaveBack) el.sourcesSaveBack.classList.add('hidden');
     refreshSaveFlowInputs();
+    updateStreamableButtonState();
     if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.remove('hidden');
     state.saveFlowMode = 'onboarding';
     resolveFilesForSaveFlow();
@@ -1410,6 +1629,10 @@
     state.pendingMagnet = null;
     if (el.sourcesSaveStart) el.sourcesSaveStart.textContent = 'Start Download';
     if (el.sourcesSaveBack) el.sourcesSaveBack.classList.add('hidden');
+    if (el.sourcesSaveStream) {
+      el.sourcesSaveStream.classList.add('hidden');
+      el.sourcesSaveStream.disabled = true;
+    }
     if (el.sourcesSaveOverlay) el.sourcesSaveOverlay.classList.add('hidden');
   }
 
@@ -1538,43 +1761,243 @@
       showToast(msg);
     }).finally(function () {
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
+      updateStreamableButtonState();
     });
   }
 
-function runSourcesSearch() {
+  function startStreamableVideoFolder() {
+    var row = state.pendingMagnet;
+    var srcOps = getSourcesOps();
+    var torOps = getTorrentOps();
+    if (!row || !row.magnetUri) {
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'No magnet selected.';
+      showToast('No magnet selected');
+      return;
+    }
+    var category = String((el.sourcesSaveCategory && el.sourcesSaveCategory.value) || 'comics').trim().toLowerCase();
+    if (category !== 'videos') {
+      showToast('Streamable folders are only supported for TV/Videos');
+      return;
+    }
+    var savePath = buildSavePath();
+    if (!savePath) {
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'No destination configured for videos. Add a Videos root folder first.';
+      showToast('No destination configured for videos');
+      return;
+    }
+    if (!torOps || typeof torOps.addToVideoLibrary !== 'function') {
+      showToast('Streamable video library integration is unavailable');
+      return;
+    }
+
+    if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
+    if (el.sourcesSaveStream) el.sourcesSaveStream.disabled = true;
+
+    function persistDestinationChoice() {
+      state.lastSaveCategory = 'videos';
+      if (!state.browserSettings.sourcesLastDestinationByCategory) {
+        state.browserSettings.sourcesLastDestinationByCategory = { comics: '', books: '', videos: '' };
+      }
+      state.browserSettings.sourcesLastDestinationByCategory.videos = savePath;
+      saveBrowserSettings({ sourcesLastDestinationByCategory: { videos: savePath } });
+    }
+
+    var startPromise;
+    if (state.saveFlowMode === 'manage' && state.managingTorrentId) {
+      startPromise = waitForTorrentState(state.managingTorrentId, 'metadata_ready', 30000).then(function (ready) {
+        if (!ready) throw new Error('Torrent metadata is not ready');
+        return { ok: true, id: state.managingTorrentId };
+      });
+    } else if (state.pendingResolveId && typeof srcOps.startConfigured === 'function') {
+      startPromise = srcOps.startConfigured({
+        resolveId: state.pendingResolveId,
+        origin: 'sources_v2',
+        streamableOnly: true
+      }).then(function (started) {
+        if (!started || !started.ok || !started.id) throw new Error((started && started.error) || 'Failed to start torrent');
+        return waitForTorrentState(started.id, 'metadata_ready', 30000).then(function (ready) {
+          if (!ready) throw new Error('Torrent metadata is not ready');
+          return started;
+        });
+      });
+    } else {
+      startPromise = Promise.reject(new Error('Resolve metadata first'));
+    }
+
+    startPromise.then(function (started) {
+      return torOps.addToVideoLibrary({
+        id: started.id,
+        destinationRoot: savePath,
+        streamable: true
+      });
+    }).then(function (res) {
+      if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to add streamable folder');
+      persistDestinationChoice();
+      closeSaveFlow();
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = '';
+      forceSourcesViewVisible();
+      if (hub && typeof hub.refreshTorrentState === 'function') hub.refreshTorrentState();
+      showToast('Streamable folder added to Video Library');
+    }).catch(function (err) {
+      var msg = String((err && err.message) || err || 'Failed to add streamable folder');
+      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = msg;
+      showToast(msg);
+    }).finally(function () {
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
+      updateStreamableButtonState();
+    });
+  }
+
+  function setSourcesSearchStatus(text) {
+    if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = String(text || '');
+  }
+
+  function updateSourcesSearchStatusTail() {
+    var filteredCount = Array.isArray(state.searchResults) ? state.searchResults.length : 0;
+    var totalCount = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
+    if (!totalCount) {
+      setSourcesSearchStatus(state.searchQuery ? '0 result(s)' : '');
+      return;
+    }
+    var msg = filteredCount === totalCount
+      ? (totalCount + ' result(s)')
+      : (filteredCount + ' filtered / ' + totalCount + ' result(s)');
+    if (state.searchLoadingMore) msg += ' • loading more...';
+    else if (!state.searchHasMore) msg += ' • end reached';
+    setSourcesSearchStatus(msg);
+  }
+
+  function resetSourcesSearchState() {
+    state.searchRequestToken += 1;
+    state.searchQuery = '';
+    state.searchPage = 0;
+    state.searchHasMore = false;
+    state.searchLoading = false;
+    state.searchLoadingMore = false;
+    state.searchResultsRaw = [];
+    state.searchResults = [];
+    renderSearchTypeOptions();
+    renderSourcesSearchRows();
+    setSourcesSearchStatus('');
+  }
+
+  function runSourcesSearch(opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var append = !!options.append;
     var query = String((el.sourcesSearchInput && el.sourcesSearchInput.value) || '').trim();
     if (!query) {
-      state.searchResults = [];
-      renderSourcesSearchRows();
-      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = '';
+      resetSourcesSearchState();
       return;
     }
+
     var srcOps = getSourcesOps();
     if (typeof srcOps.search !== 'function') {
-      if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Torrent search backend is unavailable.';
+      setSourcesSearchStatus('Torrent search backend is unavailable.');
       return;
     }
-    state.searchLoading = true;
-    if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = 'Searching...';
-    srcOps.search({ query: query, category: getSearchFilter(), limit: 40, page: 0 })
-      .then(function (res) {
-        state.searchLoading = false;
-        if (!res || !res.ok) {
+
+    if (!append) {
+      state.searchQuery = query;
+      state.searchPage = 0;
+      state.searchHasMore = true;
+      state.searchResultsRaw = [];
+      state.searchResults = [];
+      state.searchRequestToken += 1;
+      renderSourcesSearchRows();
+      renderSearchTypeOptions();
+    } else {
+      if (state.searchLoading || state.searchLoadingMore || !state.searchHasMore) return;
+      if (query !== state.searchQuery) {
+        runSourcesSearch({ append: false });
+        return;
+      }
+    }
+
+    var token = state.searchRequestToken;
+    var page = append ? state.searchPage : 0;
+    var source = getSearchSource();
+    if (append) {
+      state.searchLoadingMore = true;
+      setSourcesSearchStatus('Loading more...');
+    } else {
+      state.searchLoading = true;
+      setSourcesSearchStatus('Searching...');
+    }
+
+    srcOps.search({
+      query: query,
+      category: 'all',
+      source: source,
+      limit: state.searchLimit,
+      page: page
+    }).then(function (res) {
+      if (token !== state.searchRequestToken) return;
+      if (!res || !res.ok) {
+        state.searchHasMore = false;
+        if (!append) {
+          state.searchResultsRaw = [];
           state.searchResults = [];
+          renderSearchTypeOptions();
           renderSourcesSearchRows();
-          if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = (res && res.error) || 'Search failed';
-          return;
         }
-        state.searchResults = Array.isArray(res.items) ? res.items : [];
-        renderSourcesSearchRows();
-        if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = state.searchResults.length + ' result(s)';
-      })
-      .catch(function (err) {
-        state.searchLoading = false;
+        setSourcesSearchStatus((res && res.error) || 'Search failed');
+        return;
+      }
+
+      var items = Array.isArray(res.items) ? res.items : [];
+      if (!append) state.searchResultsRaw = [];
+      appendSearchResults(items);
+      state.searchPage = page + 1;
+      state.searchHasMore = items.length > 0;
+      renderSearchTypeOptions();
+      applySourcesSearchView();
+      updateSourcesSearchStatusTail();
+    }).catch(function (err) {
+      if (token !== state.searchRequestToken) return;
+      state.searchHasMore = false;
+      if (!append) {
+        state.searchResultsRaw = [];
         state.searchResults = [];
+        renderSearchTypeOptions();
         renderSourcesSearchRows();
-        if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = String((err && err.message) || err || 'Search failed');
-      });
+      }
+      setSourcesSearchStatus(String((err && err.message) || err || 'Search failed'));
+    }).finally(function () {
+      if (token !== state.searchRequestToken) return;
+      state.searchLoading = false;
+      state.searchLoadingMore = false;
+      if (Array.isArray(state.searchResultsRaw) && state.searchResultsRaw.length) updateSourcesSearchStatusTail();
+    });
+  }
+
+  function maybeLoadMoreSourcesSearch() {
+    if (state.sourcesSubMode !== 'search') return;
+    if (!el.sourcesSearchTableWrap) return;
+    if (state.searchLoading || state.searchLoadingMore || !state.searchHasMore) return;
+    if (!state.searchQuery) return;
+    var wrap = el.sourcesSearchTableWrap;
+    var remain = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight;
+    if (remain > 120) return;
+    runSourcesSearch({ append: true });
+  }
+
+  function loadSourcesSearchIndexers() {
+    var srcOps = getSourcesOps();
+    if (!srcOps || typeof srcOps.indexers !== 'function') {
+      state.searchSourceOptions = [];
+      renderSearchSourceOptions();
+      return;
+    }
+    srcOps.indexers().then(function (res) {
+      var rows = (res && res.ok && Array.isArray(res.indexers)) ? res.indexers : [];
+      state.searchSourceOptions = rows.map(function (row) {
+        return { id: String(row && row.id || '').trim(), name: String(row && row.name || row && row.id || '').trim() };
+      }).filter(function (row) { return !!row.id; });
+      renderSearchSourceOptions();
+    }).catch(function () {
+      state.searchSourceOptions = [];
+      renderSearchSourceOptions();
+    });
   }
 
   function openAddSourceDialog(source) {
@@ -2020,12 +2443,30 @@ function runSourcesSearch() {
       el.sourcesSearchInput.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
         e.preventDefault();
-        runSourcesSearch();
+        runSourcesSearch({ append: false });
       });
     }
-    if (el.sourcesSearchFilter) {
-      el.sourcesSearchFilter.addEventListener('change', function () {
-        if ((el.sourcesSearchInput && el.sourcesSearchInput.value || '').trim()) runSourcesSearch();
+    if (el.sourcesSearchSource) {
+      el.sourcesSearchSource.addEventListener('change', function () {
+        if (el.sourcesSearchType) el.sourcesSearchType.value = 'all';
+        if ((el.sourcesSearchInput && el.sourcesSearchInput.value || '').trim()) runSourcesSearch({ append: false });
+      });
+    }
+    if (el.sourcesSearchType) {
+      el.sourcesSearchType.addEventListener('change', function () {
+        applySourcesSearchView();
+        updateSourcesSearchStatusTail();
+      });
+    }
+    if (el.sourcesSearchSort) {
+      el.sourcesSearchSort.addEventListener('change', function () {
+        applySourcesSearchView();
+        updateSourcesSearchStatusTail();
+      });
+    }
+    if (el.sourcesSearchTableWrap) {
+      el.sourcesSearchTableWrap.addEventListener('scroll', function () {
+        maybeLoadMoreSourcesSearch();
       });
     }
     if (el.sourcesSearchBody) {
@@ -2049,6 +2490,7 @@ function runSourcesSearch() {
     if (el.sourcesSaveCancel) el.sourcesSaveCancel.addEventListener('click', closeSaveFlow);
     if (el.sourcesSaveBack) el.sourcesSaveBack.addEventListener('click', closeSaveFlow);
     if (el.sourcesSaveStart) el.sourcesSaveStart.addEventListener('click', startConfiguredDownload);
+    if (el.sourcesSaveStream) el.sourcesSaveStream.addEventListener('click', startStreamableVideoFolder);
     if (el.sourcesSaveCategory) el.sourcesSaveCategory.addEventListener('change', refreshSaveFlowInputs);
     if (el.sourcesSaveDestMode) el.sourcesSaveDestMode.addEventListener('change', refreshSaveFlowInputs);
     if (el.sourcesSaveExistingFolder) el.sourcesSaveExistingFolder.addEventListener('change', updateSavePathPreview);
@@ -2611,12 +3053,16 @@ function runSourcesSearch() {
     console.warn('[web.js] bindUI failed', e);
   }
   loadHiddenSourcesTorrents();
+  renderSearchSourceOptions();
+  renderSearchTypeOptions();
   renderSourcesSearchRows();
   setSourcesSubMode('search');
 
   loadBrowserSettings().then(function () {
+    loadSourcesSearchIndexers();
     if (tabsState.loadSessionAndRestore) tabsState.loadSessionAndRestore();
   }).catch(function () {
+    loadSourcesSearchIndexers();
     if (tabsState.loadSessionAndRestore) tabsState.loadSessionAndRestore();
   });
 
@@ -2698,6 +3144,7 @@ function runSourcesSearch() {
   function openSources() {
     ensureSourcesModeActive().then(function () {
       applySourcesWorkspace('search');
+      loadSourcesSearchIndexers();
       refreshSourcesTorrents();
     });
   }
@@ -2753,9 +3200,9 @@ function runSourcesSearch() {
     openDownloads: openSourcesDownloads,
     search: function (query, filter) {
       if (el.sourcesSearchInput) el.sourcesSearchInput.value = String(query || '');
-      if (el.sourcesSearchFilter && filter) el.sourcesSearchFilter.value = String(filter || 'all').toLowerCase();
+      if (el.sourcesSearchType && filter) el.sourcesSearchType.value = String(filter || 'all').toLowerCase();
       setSourcesSubMode('search');
-      runSourcesSearch();
+      runSourcesSearch({ append: false });
     },
     openSaveFlow: openSaveFlowForResult,
     startConfiguredDownload: startConfiguredDownload

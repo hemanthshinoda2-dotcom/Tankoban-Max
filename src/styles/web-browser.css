@@ -60,13 +60,13 @@
   overflow: hidden;
 }
 .sourcesSearchControls .search {
-  flex: 1 1 auto;
+  flex: 1 1 48%;
   min-width: 0;
 }
 .sourcesSearchControls .select {
-  flex: 0 0 140px;
-  width: 140px;
-  min-width: 140px;
+  flex: 0 0 132px;
+  width: 132px;
+  min-width: 132px;
 }
 .sourcesSearchControls .btn {
   flex: 0 0 112px;
@@ -82,6 +82,16 @@
   z-index: 1;
 }
 .sourcesSearchControls { margin-bottom: 8px; }
+
+@media (max-width: 980px) {
+  .sourcesSearchControls {
+    flex-wrap: wrap;
+  }
+  .sourcesSearchControls .search {
+    flex: 1 1 100%;
+    min-width: 200px;
+  }
+}
 
 .sourcesSearchTableWrap {
   border: 1px solid var(--wb-border-subtle);
@@ -2327,6 +2337,15 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   color: var(--wb-text);
 }
 .tt-add-btn.cancel:hover { background: var(--wb-active-press); }
+
+.tt-add-btn.secondary {
+  background: var(--wb-surface-raised);
+  border: 1px solid var(--wb-border);
+  color: var(--wb-text);
+}
+.tt-add-btn.secondary:hover { background: var(--wb-border); }
+.tt-add-btn.secondary:disabled { opacity: 0.5; cursor: default; }
+.tt-add-btn.secondary:disabled:hover { background: var(--wb-surface-raised); }
 
 .tt-add-btn.primary {
   background: var(--wb-accent);

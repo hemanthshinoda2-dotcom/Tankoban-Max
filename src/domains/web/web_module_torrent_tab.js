@@ -321,6 +321,7 @@
       var filesList = container.querySelector('#tt-add-files-list');
       var fileSummary = container.querySelector('#tt-add-file-summary');
       var okBtn = container.querySelector('#tt-add-ok');
+      var streamBtn = container.querySelector('#tt-add-stream-lib');
 
       // Reset state
       if (currentResolveId) {
@@ -332,6 +333,7 @@
       if (filesList) filesList.innerHTML = '<div class="tt-add-placeholder">Paste a magnet link to see files</div>';
       if (fileSummary) fileSummary.textContent = '';
       if (okBtn) okBtn.disabled = true;
+      if (streamBtn) streamBtn.disabled = true;
       var seqCb = container.querySelector('#tt-add-sequential');
       if (seqCb) seqCb.checked = true;
 
@@ -362,6 +364,7 @@
       var filesList = container.querySelector('#tt-add-files-list');
       var fileSummary = container.querySelector('#tt-add-file-summary');
       var okBtn = container.querySelector('#tt-add-ok');
+      var streamBtn = container.querySelector('#tt-add-stream-lib');
 
       if (currentResolveId) {
         api.webTorrent.cancelResolve({ resolveId: currentResolveId });
@@ -370,6 +373,7 @@
 
       resolvedFiles = null;
       if (okBtn) okBtn.disabled = true;
+      if (streamBtn) streamBtn.disabled = true;
       lastClickedFileIdx = null;
       selectedFileRows.clear();
       if (filesList) {
@@ -384,12 +388,14 @@
       api.webTorrent.resolveMetadata({ source: source }).then(function (result) {
         if (!result.ok) {
           if (filesList) filesList.innerHTML = '<div class="tt-add-error">Failed: ' + esc(result.error || 'Unknown error') + '</div>';
+          if (streamBtn) streamBtn.disabled = true;
           return;
         }
 
         currentResolveId = result.resolveId;
         resolvedFiles = result.files;
         if (okBtn) okBtn.disabled = false;
+        if (streamBtn) streamBtn.disabled = false;
 
         if (fileSummary) fileSummary.textContent = '(' + result.files.length + ' file' + (result.files.length !== 1 ? 's' : '') + ', ' + fmtBytes(result.totalSize) + ')';
 
@@ -435,6 +441,31 @@
       if (overlay) overlay.classList.remove('visible');
     }
 
+    function waitForMetadataReady(torrentId, timeoutMs) {
+      var id = String(torrentId || '').trim();
+      if (!id) return Promise.resolve(false);
+      var timeout = Math.max(2000, Number(timeoutMs) || 30000);
+      var startedAt = Date.now();
+      return new Promise(function (resolve) {
+        var tick = function () {
+          api.webTorrent.getActive().then(function (r) {
+            var list = (r && r.ok && Array.isArray(r.torrents)) ? r.torrents : [];
+            var hit = null;
+            for (var i = 0; i < list.length; i++) {
+              if (String(list[i] && list[i].id || '') === id) { hit = list[i]; break; }
+            }
+            if (hit && String(hit.state || '') === 'metadata_ready') return resolve(true);
+            if ((Date.now() - startedAt) >= timeout) return resolve(false);
+            setTimeout(tick, 450);
+          }).catch(function () {
+            if ((Date.now() - startedAt) >= timeout) return resolve(false);
+            setTimeout(tick, 600);
+          });
+        };
+        tick();
+      });
+    }
+
     function createAddDialog() {
       var container = el.torrentContainer;
       if (!container) return null;
@@ -469,6 +500,7 @@
           '</div>' +
           '<div class="tt-add-buttons">' +
             '<button class="tt-add-btn cancel" id="tt-add-cancel">Cancel</button>' +
+            '<button class="tt-add-btn secondary" id="tt-add-stream-lib" disabled>Add Streamable Folder to Library</button>' +
             '<button class="tt-add-btn primary" id="tt-add-ok" disabled>Download</button>' +
           '</div>' +
         '</div>';
@@ -509,6 +541,38 @@
         currentResolveId = null;
         resolvedFiles = null;
         overlay.classList.remove('visible');
+      });
+
+      overlay.querySelector('#tt-add-stream-lib').addEventListener('click', function () {
+        if (!currentResolveId) return;
+        var streamBtn = overlay.querySelector('#tt-add-stream-lib');
+        var downloadBtn = overlay.querySelector('#tt-add-ok');
+        if (streamBtn) streamBtn.disabled = true;
+        if (downloadBtn) downloadBtn.disabled = true;
+
+        api.webTorrent.startConfigured({
+          resolveId: currentResolveId,
+          streamableOnly: true
+        }).then(function (started) {
+          if (!started || !started.ok || !started.id) throw new Error((started && started.error) || 'Failed to start torrent');
+          return waitForMetadataReady(started.id, 30000).then(function (ready) {
+            if (!ready) throw new Error('Torrent metadata did not become ready in time');
+            return api.webTorrent.addToVideoLibrary({
+              id: started.id,
+              destinationRoot: savePath || undefined,
+              streamable: true
+            });
+          });
+        }).then(function (res) {
+          if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to add streamable folder');
+          currentResolveId = null;
+          resolvedFiles = null;
+          overlay.classList.remove('visible');
+        }).catch(function (err) {
+          try { console.warn('Add Streamable Folder failed:', err); } catch {}
+          if (streamBtn) streamBtn.disabled = !currentResolveId;
+          if (downloadBtn) downloadBtn.disabled = !currentResolveId;
+        });
       });
 
       // Source input — auto-resolve on paste/change with debounce
