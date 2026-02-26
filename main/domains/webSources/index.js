@@ -7,6 +7,7 @@ const { session } = require('electron');
 
 const CONFIG_FILE = 'web_sources.json';
 const DOWNLOAD_HISTORY_FILE = 'web_download_history.json';
+const libraryBridge = require('../../../packages/core-main/library_bridge');
 
 const DEFAULT_SOURCES = [
   { id: 'annasarchive', name: "Anna's Archive", url: 'https://annas-archive.org', color: '#e74c3c', builtIn: true },
@@ -996,18 +997,7 @@ async function pushFailedDownload(ctx, info) {
 }
 
 function triggerLibraryRescan(ctx, library) {
-  try {
-    if (library === 'books') {
-      var booksDomain = require('../books');
-      booksDomain.scan(ctx, null, {}).catch(function () {});
-    } else if (library === 'comics') {
-      var libraryDomain = require('../library');
-      libraryDomain.scan(ctx, null, {}).catch(function () {});
-    } else if (library === 'videos') {
-      var videoDomain = require('../video');
-      videoDomain.scan(ctx, null, {}).catch(function () {});
-    }
-  } catch {}
+  libraryBridge.triggerLibraryRescan(ctx, library);
 }
 
 async function runDirectDownload(ctx, dlId, payload, evt) {

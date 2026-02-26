@@ -9,6 +9,7 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 const { CHANNEL, EVENT } = require('../shared/ipc');
+const { createFeatureFacade } = require('../packages/core-preload');
 const deps = { ipcRenderer, CHANNEL, EVENT };
 
 // ========================================
@@ -42,6 +43,7 @@ const legacy = require('./namespaces/_legacy')({ api, ipcRenderer, CHANNEL });
 // ========================================
 
 const exposed = Object.assign({}, api, legacy);
+exposed.features = createFeatureFacade(exposed);
 
 // BUILD14: Add event listener support
 exposed._setupBuild14EventForwarding = () => {

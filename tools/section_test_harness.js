@@ -15,10 +15,11 @@ const ROOT = path.resolve(__dirname, '..');
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const out = { section: '', all: false, extended: false };
+  const out = { section: '', all: false, extended: false, baselineOut: '' };
   for (const a of args) {
     if (a === '--all') out.all = true;
     else if (a === '--extended') out.extended = true;
+    else if (a.startsWith('--baseline-out=')) out.baselineOut = String(a.slice('--baseline-out='.length) || '').trim();
     else if (a.startsWith('--section=')) out.section = String(a.slice('--section='.length) || '').trim().toLowerCase();
     else if (!a.startsWith('--') && !out.section) out.section = String(a).trim().toLowerCase();
   }
@@ -38,7 +39,14 @@ function run(command, args) {
 }
 
 function runSection(section, opts) {
-  run('node', ['tools/section_smoke.js', `--section=${section}`]);
+  const smokeArgs = ['tools/section_smoke.js', `--section=${section}`];
+  if (opts.baselineOut) {
+    const baselineFile = opts.all
+      ? opts.baselineOut
+      : opts.baselineOut.replace(/\.json$/i, `.${section}.json`);
+    smokeArgs.push(`--baseline-out=${baselineFile}`);
+  }
+  run('node', smokeArgs);
 
   if (!opts.extended) return;
 
@@ -59,7 +67,7 @@ function main() {
   const sections = Object.keys(SECTIONS);
 
   if (!args.all && !args.section) {
-    console.error(`Usage: node tools/section_test_harness.js --section=<${sections.join('|')}> | --all [--extended]`);
+    console.error(`Usage: node tools/section_test_harness.js --section=<${sections.join('|')}> | --all [--extended] [--baseline-out=path.json]`);
     process.exit(1);
   }
 

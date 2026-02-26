@@ -32,6 +32,7 @@
         "smoke:video": "node tools/section_smoke.js --section=video",
         "smoke:browser": "node tools/section_smoke.js --section=browser",
         "smoke:torrent": "node tools/section_smoke.js --section=torrent",
+        "smoke:baseline": "node tools/section_smoke.js --all --baseline-out=qa/baselines/section_smoke.all.json",
         "smoke:all": "npm run smoke:library && npm run smoke:comic && npm run smoke:book && npm run smoke:audiobook && npm run smoke:video && npm run smoke:browser && npm run smoke:torrent",
         "test:section": "node tools/section_test_harness.js",
         "test:section:library": "node tools/section_test_harness.js --section=library",

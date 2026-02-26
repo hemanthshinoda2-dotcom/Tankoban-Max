@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { session, dialog, shell } = require('electron');
+const libraryBridge = require('../../../packages/core-main/library_bridge');
 
 const HISTORY_FILE = 'web_torrent_history.json';
 const MAX_HISTORY = 1000;
@@ -217,18 +218,7 @@ function copyTorrentFile(fileObj, destination) {
 }
 
 function triggerLibraryRescan(ctx, library) {
-  try {
-    if (library === 'books') {
-      var booksDomain = require('../books');
-      booksDomain.scan(ctx, null, {}).catch(function () {});
-    } else if (library === 'comics') {
-      var libraryDomain = require('../library');
-      libraryDomain.scan(ctx, null, {}).catch(function () {});
-    } else if (library === 'videos') {
-      var videoDomain = require('../video');
-      videoDomain.scan(ctx, null, {}).catch(function () {});
-    }
-  } catch {}
+  libraryBridge.triggerLibraryRescan(ctx, library);
 }
 
 function createEntry(partial) {
@@ -950,11 +940,9 @@ async function addToVideoLibrary(ctx, evt, payload) {
   }
 
   // Register the show folder in the video library
-  try {
-    var videoDomain = require('../video');
-    await videoDomain.addShowFolderPath(ctx, null, showPath);
-  } catch (err) {
-    wtLog('addToVideoLibrary: video domain error: ' + String(err && err.message || err));
+  var addRes = await libraryBridge.addVideoShowFolderPath(ctx, showPath);
+  if (!addRes || addRes.ok === false) {
+    wtLog('addToVideoLibrary: video domain error: ' + String((addRes && addRes.error) || 'addShowFolderPath failed'));
   }
 
   upsertHistory(ctx, entry);

@@ -3061,6 +3061,16 @@ function closeTracksPanel(){
       state.settings.preferredSubtitleLanguage = (typeof s.preferredSubtitleLanguage === 'string' && s.preferredSubtitleLanguage.trim()) ? s.preferredSubtitleLanguage.trim() : null;
     }
     if (typeof s.forceQtPlayer === 'boolean') state.settings.forceQtPlayer = !!s.forceQtPlayer;
+    else {
+      // Compatibility fallback: older builds persisted Qt preference in localStorage.
+      try {
+        if (typeof localStorage !== 'undefined') {
+          var legacyQtPref = localStorage.getItem('tankobanUseQtPlayer');
+          if (legacyQtPref === '1' || legacyQtPref === 'true') state.settings.forceQtPlayer = true;
+          if (legacyQtPref === '0' || legacyQtPref === 'false') state.settings.forceQtPlayer = false;
+        }
+      } catch {}
+    }
     // Embedded HG is now the primary player. Ignore legacy persisted forceQtPlayer=true.
     // The toggle button still works — user can switch to Qt, and that choice persists.
 // Back-compat: older builds stored subtitle preference under preferredSubLanguage.

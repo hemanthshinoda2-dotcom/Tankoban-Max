@@ -36,6 +36,7 @@
   // INITIALIZE TANKO NAMESPACE
   // ========================================
   window.Tanko = window.Tanko || {};
+  window.Tanko.features = window.Tanko.features || (ea.features && typeof ea.features === 'object' ? ea.features : {});
 
   // BUILD14: wire preload -> renderer event forwarding from the gateway layer
   // so non-gateway renderer files never access window.electronAPI directly.

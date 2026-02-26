@@ -1,0 +1,19 @@
+{
+  "createdAt": "2026-02-26T12:35:37.110Z",
+  "sections": [
+    {
+      "section": "torrent",
+      "startScript": "start:torrent",
+      "appEntry": "apps/torrent-app/main.js",
+      "featurePackage": "packages/feature-torrent/index.js",
+      "fixtures": [
+        "qa/fixtures/torrent/magnets.txt"
+      ],
+      "keyFiles": [
+        "src/domains/web/web_module_torrent_tab.js",
+        "main/domains/webTorrent/index.js",
+        "main/domains/torProxy/index.js"
+      ]
+    }
+  ]
+}

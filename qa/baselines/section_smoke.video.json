@@ -1,0 +1,19 @@
+{
+  "createdAt": "2026-02-26T12:35:38.060Z",
+  "sections": [
+    {
+      "section": "video",
+      "startScript": "start:video",
+      "appEntry": "apps/video-player-app/main.js",
+      "featurePackage": "packages/feature-video/index.js",
+      "fixtures": [
+        "qa/fixtures/video/library"
+      ],
+      "keyFiles": [
+        "src/domains/video/video.js",
+        "main/domains/video/index.js",
+        "main/domains/player_core/index.js"
+      ]
+    }
+  ]
+}

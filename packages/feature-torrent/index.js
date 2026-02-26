@@ -1,5 +1,7 @@
 'use strict';
 
+const registerIpc = require('./register_ipc');
+
 module.exports = {
   name: 'feature-torrent',
   section: 'torrent',
@@ -10,5 +12,5 @@ module.exports = {
     preload: ['preload/namespaces/web.js'],
     tools: ['tools/fetch_tor.js'],
   },
+  registerIpc: registerIpc,
 };
-

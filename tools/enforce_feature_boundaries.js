@@ -12,6 +12,10 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const PACKAGES_DIR = path.join(ROOT, 'packages');
 const APPS_DIR = path.join(ROOT, 'apps');
+const RENDERER_DOMAINS_DIR = path.join(ROOT, 'src', 'domains');
+const MAIN_DOMAINS_DIR = path.join(ROOT, 'main', 'domains');
+const OWNERSHIP_DIR = path.join(ROOT, 'docs', 'ownership');
+const LEGACY_ALLOWED_CROSS_DOMAIN_IMPORTS = new Set([]);
 
 function walkJsFiles(dir) {
   const out = [];
@@ -67,6 +71,28 @@ function resolveImportAbsolute(fromFile, spec) {
   return base;
 }
 
+function topFeatureFromRendererDomain(relPath) {
+  const top = String((relPath.split('/')[0] || '')).toLowerCase();
+  if (!top) return '';
+  if (top === 'reader' || top === 'library') return 'comics';
+  if (top === 'books') return 'books';
+  if (top === 'video') return 'video';
+  if (top === 'web' || top === 'browser_host') return 'browser_torrent';
+  if (top === 'shell' || top === 'state' || top === 'services' || top === 'ui') return '';
+  return top;
+}
+
+function topFeatureFromMainDomain(relPath) {
+  const top = String((relPath.split('/')[0] || '')).toLowerCase();
+  if (!top) return '';
+  if (top.startsWith('books')) return 'books';
+  if (top.startsWith('video') || top === 'holyGrail' || top === 'player_core') return 'video';
+  if (top.startsWith('web') || top === 'torrentSearch' || top === 'torProxy') return 'browser_torrent';
+  if (top === 'library' || top === 'comic' || top === 'archives') return 'comics';
+  if (top.startsWith('audiobook')) return 'audiobook';
+  return '';
+}
+
 function main() {
   const errors = [];
   const features = listFeaturePackages();
@@ -117,6 +143,63 @@ function main() {
     }
   }
 
+  // Rule 3: renderer feature domains should not import unrelated feature internals
+  const rendererDomainFiles = walkJsFiles(RENDERER_DOMAINS_DIR);
+  for (const filePath of rendererDomainFiles) {
+    const rel = path.relative(RENDERER_DOMAINS_DIR, filePath).replace(/\\/g, '/');
+    const owner = topFeatureFromRendererDomain(rel);
+    if (!owner) continue;
+    const src = fs.readFileSync(filePath, 'utf8');
+    const specs = extractImportLikeSpecifiers(src);
+    for (const spec of specs) {
+      const resolved = resolveImportAbsolute(filePath, spec);
+      if (!resolved) continue;
+      if (!resolved.startsWith(RENDERER_DOMAINS_DIR)) continue;
+      const depRel = path.relative(RENDERER_DOMAINS_DIR, resolved).replace(/\\/g, '/');
+      const depOwner = topFeatureFromRendererDomain(depRel);
+      if (!depOwner || depOwner === owner) continue;
+      errors.push(`${path.relative(ROOT, filePath)} imports renderer domain ${spec} -> ${depRel} (${owner} -> ${depOwner})`);
+    }
+  }
+
+  // Rule 4: main feature domains should not import unrelated feature internals
+  const mainDomainFiles = walkJsFiles(MAIN_DOMAINS_DIR);
+  for (const filePath of mainDomainFiles) {
+    const rel = path.relative(MAIN_DOMAINS_DIR, filePath).replace(/\\/g, '/');
+    const owner = topFeatureFromMainDomain(rel);
+    if (!owner) continue;
+    const src = fs.readFileSync(filePath, 'utf8');
+    const specs = extractImportLikeSpecifiers(src);
+    for (const spec of specs) {
+      const resolved = resolveImportAbsolute(filePath, spec);
+      if (!resolved) continue;
+      if (!resolved.startsWith(MAIN_DOMAINS_DIR)) continue;
+      const depRel = path.relative(MAIN_DOMAINS_DIR, resolved).replace(/\\/g, '/');
+      const depOwner = topFeatureFromMainDomain(depRel);
+      if (!depOwner || depOwner === owner) continue;
+      const legacyKey = `${path.relative(ROOT, filePath).replace(/\\/g, '/')}->${spec}`;
+      if (LEGACY_ALLOWED_CROSS_DOMAIN_IMPORTS.has(legacyKey)) continue;
+      errors.push(`${path.relative(ROOT, filePath)} imports main domain ${spec} -> ${depRel} (${owner} -> ${depOwner})`);
+    }
+  }
+
+  // Rule 5: ownership manifests must exist for each section
+  const requiredOwnershipDocs = [
+    'library.md',
+    'comic.md',
+    'book.md',
+    'audiobook.md',
+    'video.md',
+    'browser.md',
+    'torrent.md',
+  ];
+  for (const docName of requiredOwnershipDocs) {
+    const abs = path.join(OWNERSHIP_DIR, docName);
+    if (!fs.existsSync(abs)) {
+      errors.push(`missing ownership manifest docs/ownership/${docName}`);
+    }
+  }
+
   if (errors.length) {
     console.error(`Boundary check failed (${errors.length} issue(s))`);
     for (const err of errors) console.error(`  - ${err}`);
@@ -127,4 +210,3 @@ function main() {
 }
 
 main();
-

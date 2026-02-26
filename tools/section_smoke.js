@@ -12,10 +12,11 @@ const ROOT = path.resolve(__dirname, '..');
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const out = { section: '', all: false };
+  const out = { section: '', all: false, baselineOut: '' };
   for (const a of args) {
     if (a === '--all') out.all = true;
     else if (a.startsWith('--section=')) out.section = String(a.slice('--section='.length) || '').trim().toLowerCase();
+    else if (a.startsWith('--baseline-out=')) out.baselineOut = String(a.slice('--baseline-out='.length) || '').trim();
     else if (!a.startsWith('--') && !out.section) out.section = String(a).trim().toLowerCase();
   }
   return out;
@@ -87,11 +88,15 @@ function main() {
   const sectionNames = Object.keys(SECTIONS);
 
   if (!args.all && !args.section) {
-    console.error(`Usage: node tools/section_smoke.js --section=<${sectionNames.join('|')}> | --all`);
+    console.error(`Usage: node tools/section_smoke.js --section=<${sectionNames.join('|')}> | --all [--baseline-out=path.json]`);
     process.exit(1);
   }
 
   const targets = args.all ? sectionNames : [args.section];
+  const baseline = {
+    createdAt: new Date().toISOString(),
+    sections: [],
+  };
   for (const section of targets) {
     const def = SECTIONS[section];
     if (!def) {
@@ -99,6 +104,21 @@ function main() {
       continue;
     }
     checkSection(section, def);
+    baseline.sections.push({
+      section,
+      startScript: def.startScript,
+      appEntry: def.appEntry,
+      featurePackage: def.featurePackage,
+      fixtures: def.fixtures || [],
+      keyFiles: def.keyFiles || [],
+    });
+  }
+
+  if (args.baselineOut) {
+    const outPath = path.isAbsolute(args.baselineOut) ? args.baselineOut : path.join(ROOT, args.baselineOut);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(baseline, null, 2));
+    ok(`baseline snapshot written: ${path.relative(ROOT, outPath)}`);
   }
 
   if (process.exitCode) process.exit(process.exitCode);
@@ -106,4 +126,3 @@ function main() {
 }
 
 main();
-

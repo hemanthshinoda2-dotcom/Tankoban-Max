@@ -1,5 +1,7 @@
 'use strict';
 
+const storage = require('../../main/lib/storage');
+
 module.exports = {
   name: 'core-storage',
   ownership: 'Atomic json persistence and shared storage primitives.',
@@ -14,5 +16,5 @@ module.exports = {
       'web_browser_settings.json',
     ],
   },
+  storage,
 };
-
