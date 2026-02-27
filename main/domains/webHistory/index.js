@@ -18,13 +18,14 @@ function normalizeScope(raw) {
 function runMigrations(c) {
   if (!c || typeof c !== 'object') return;
   if (!c.migrations || typeof c.migrations !== 'object') c.migrations = {};
-  if (c.migrations[MIGRATION_KEY]) return;
+  if (c.migrations[MIGRATION_KEY]) return false;
   var src = Array.isArray(c.entries) ? c.entries : [];
   c.entries = src.filter(function (e) {
     return e && e.scope === SCOPE_SOURCES_BROWSER;
   });
   c.updatedAt = Date.now();
   c.migrations[MIGRATION_KEY] = true;
+  return true;
 }
 
 async function ensureCache(ctx) {
@@ -42,7 +43,10 @@ async function ensureCache(ctx) {
     } else {
       cache = { entries: [], updatedAt: Date.now(), migrations: {} };
     }
-    runMigrations(cache);
+    var migrated = runMigrations(cache);
+    if (migrated) {
+      try { ctx.storage.writeJSONDebounced(p, cache, 60); } catch {}
+    }
     cacheLoading = null;
     return cache;
   })();
@@ -80,6 +84,13 @@ function normalizeEntry(payload) {
     sourceTabId: src.sourceTabId != null ? String(src.sourceTabId) : '',
     scope: normalizeScope(src.scope),
   };
+}
+
+function normalizeDedupeWindowMs(raw) {
+  var n = Number(raw);
+  if (!isFinite(n) || n < 0) return 3000;
+  if (n > 600000) n = 600000;
+  return Math.floor(n);
 }
 
 function applyFilters(entries, payload) {
@@ -131,6 +142,65 @@ async function add(ctx, _evt, payload) {
   return { ok: true, entry: entry };
 }
 
+async function upsert(ctx, _evt, payload) {
+  var src = (payload && typeof payload === 'object') ? payload : {};
+  var url = String(src.url || '').trim();
+  if (!url) return { ok: false, error: 'Missing URL' };
+  var scope = normalizeScope(src.scope);
+  var title = String(src.title || '').trim();
+  var favicon = String(src.favicon || '').trim();
+  var visitedAt = Number(src.visitedAt || src.timestamp || Date.now());
+  if (!isFinite(visitedAt) || visitedAt <= 0) visitedAt = Date.now();
+  var dedupeWindowMs = normalizeDedupeWindowMs(src.dedupeWindowMs);
+
+  var c = await ensureCache(ctx);
+  var idx = -1;
+  for (var i = 0; i < c.entries.length; i++) {
+    var e = c.entries[i];
+    if (!e) continue;
+    if (String(e.url || '') !== url) continue;
+    if (scope && normalizeScope(e.scope) !== scope) continue;
+    if (dedupeWindowMs > 0) {
+      var at = Number(e.visitedAt || 0) || 0;
+      if (Math.abs(visitedAt - at) > dedupeWindowMs) continue;
+    }
+    idx = i;
+    break;
+  }
+
+  if (idx !== -1) {
+    var entry = c.entries[idx] || {};
+    if (scope) entry.scope = scope;
+    if (title) entry.title = title;
+    if (favicon) entry.favicon = favicon;
+    entry.url = url;
+    entry.visitedAt = visitedAt;
+    c.entries.splice(idx, 1);
+    c.entries.unshift(entry);
+    c.updatedAt = Date.now();
+    await write(ctx);
+    await emitUpdated(ctx);
+    return { ok: true, entry: entry, mode: 'updated' };
+  }
+
+  var inserted = normalizeEntry({
+    url: url,
+    title: title,
+    favicon: favicon,
+    visitedAt: visitedAt,
+    scope: scope,
+    sourceTabId: src.sourceTabId,
+  });
+  if (!inserted) return { ok: false, error: 'Missing URL' };
+  if (!inserted.title) inserted.title = url;
+  c.entries.unshift(inserted);
+  if (c.entries.length > MAX_HISTORY) c.entries.length = MAX_HISTORY;
+  c.updatedAt = Date.now();
+  await write(ctx);
+  await emitUpdated(ctx);
+  return { ok: true, entry: inserted, mode: 'inserted' };
+}
+
 async function clear(ctx, _evt, payload) {
   var c = await ensureCache(ctx);
   var opts = (payload && typeof payload === 'object') ? payload : {};
@@ -169,4 +239,4 @@ async function remove(ctx, _evt, payload) {
   return { ok: true };
 }
 
-module.exports = { list, add, clear, remove };
+module.exports = { list, add, upsert, clear, remove };

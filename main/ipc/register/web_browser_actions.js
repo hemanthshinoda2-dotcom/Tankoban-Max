@@ -24,11 +24,27 @@ module.exports = function register({ ipcMain, CHANNEL, ctx }) {
       case 'copy':        wc.copy(); break;
       case 'cut':         wc.cut(); break;
       case 'paste':       wc.paste(); break;
+      case 'pasteAndMatchStyle':
+        if (typeof wc.pasteAndMatchStyle === 'function') wc.pasteAndMatchStyle();
+        else wc.paste();
+        break;
+      case 'undo':
+        if (typeof wc.undo === 'function') wc.undo();
+        break;
+      case 'redo':
+        if (typeof wc.redo === 'function') wc.redo();
+        break;
       case 'selectAll':   wc.selectAll(); break;
       case 'saveImage':   wc.downloadURL(data); break;
+      case 'saveLinkAs':
+        if (data) wc.downloadURL(String(data));
+        break;
       case 'copyImage':   if (data) wc.copyImageAt(data.x, data.y); break;
       case 'copyLink':
         if (data) require('electron').clipboard.writeText(String(data));
+        break;
+      case 'openLinkExternal':
+        if (data) shell.openExternal(String(data));
         break;
       case 'inspect':
         if (data) wc.inspectElement(data.x, data.y);

@@ -57,6 +57,7 @@ module.exports = function({ ipcRenderer, CHANNEL, EVENT }) {
     webHistory: {
       list: (payload) => ipcRenderer.invoke(CHANNEL.WEB_HISTORY_LIST, payload),
       add: (payload) => ipcRenderer.invoke(CHANNEL.WEB_HISTORY_ADD, payload),
+      upsert: (payload) => ipcRenderer.invoke(CHANNEL.WEB_HISTORY_UPSERT, payload),
       clear: (payload) => ipcRenderer.invoke(CHANNEL.WEB_HISTORY_CLEAR, payload),
       remove: (payload) => ipcRenderer.invoke(CHANNEL.WEB_HISTORY_REMOVE, payload),
       onUpdated: (cb) => {

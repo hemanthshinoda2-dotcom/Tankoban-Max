@@ -238,6 +238,81 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   margin-bottom: 10px;
 }
 
+.sourcesBrowserTabStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sourcesBrowserTabList {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+.sourcesBrowserTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 210px;
+  min-width: 80px;
+  padding: 4px 8px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  background: rgba(20, 27, 36, 0.85);
+  cursor: pointer;
+  color: var(--wb-muted);
+}
+
+.sourcesBrowserTab.active {
+  background: rgba(var(--accent-rgb), 0.12);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  color: var(--wb-text);
+}
+
+.sourcesBrowserTab.pinned .sourcesBrowserTabTitle::before {
+  content: '• ';
+  color: var(--wb-accent);
+}
+
+.sourcesBrowserTabTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourcesBrowserTabClose {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.sourcesBrowserTabClose:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
+.sourcesBrowserNewTabBtn {
+  flex: 0 0 auto;
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  font-weight: 700;
+}
+
 .sourcesBrowserToolbar {
   display: flex;
   align-items: center;
@@ -268,8 +343,63 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 }
 
 #sourcesBrowserUrlInput {
+  width: 100%;
+  min-width: 0;
+}
+
+.sourcesBrowserOmniWrap {
+  position: relative;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.sourcesBrowserOmniDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  background: rgba(17, 26, 36, 0.98);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.sourcesBrowserOmniRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--wb-text);
+  font-size: 12px;
+}
+
+.sourcesBrowserOmniRow.active {
+  background: rgba(var(--accent-rgb), 0.16);
+}
+
+.sourcesBrowserOmniLabel {
+  flex: 0 0 auto;
+  color: var(--wb-accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.sourcesBrowserOmniText {
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourcesBrowserOmniUrl {
+  color: var(--wb-muted);
 }
 
 .sourcesBrowserViewport {
@@ -282,6 +412,109 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   height: clamp(480px, calc(100vh - 210px), 980px);
 }
 
+#sourcesBrowserHome {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  padding: 20px;
+  overflow: auto;
+  background: linear-gradient(180deg, rgba(15, 23, 33, 0.96), rgba(12, 18, 27, 0.94));
+}
+
+.sourcesBrowserHomeSearchForm {
+  margin-bottom: 14px;
+}
+
+.sourcesBrowserHomeSearchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sourcesBrowserHomeSearchInput {
+  flex: 1 1 auto;
+}
+
+.sourcesBrowserHomeEngine {
+  flex: 0 0 170px;
+}
+
+.sourcesBrowserHomeSection {
+  margin-top: 14px;
+}
+
+.sourcesBrowserHomeSectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--wb-accent);
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.sourcesBrowserHomeShortcuts,
+.sourcesBrowserHomeRecentTabs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.sourcesBrowserHomeShortcut,
+.sourcesBrowserHomeRecentTab {
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  background: rgba(17, 26, 36, 0.9);
+  color: var(--wb-text);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sourcesBrowserHomeShortcut:hover,
+.sourcesBrowserHomeRecentTab:hover {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sourcesBrowserHomeShortcutTitle,
+.sourcesBrowserHomeRecentTabTitle {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourcesBrowserHomeFaviconWrap {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--accent-rgb), 0.18);
+  overflow: hidden;
+}
+
+.sourcesBrowserHomeFaviconWrap.isFallback::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.7);
+}
+
+.sourcesBrowserHomeFavicon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 #sourcesBrowserWebview {
   position: absolute;
   inset: 0;
@@ -290,6 +523,19 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   /* Electron docs recommend retaining flex display for webview layout. */
   display: flex;
   background: #ffffff;
+}
+
+.sourcesBrowserWebviewTab {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  background: #ffffff;
+}
+
+.sourcesBrowserWebviewTab.active {
+  display: flex;
 }
 
 @media (max-height: 820px) {
@@ -334,12 +580,218 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   animation: sourcesBrowserSpin 0.9s linear infinite;
 }
 
-#sourcesBrowserHistoryBody tr[data-history-url] {
+.sourcesBrowserHistoryListWrap {
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 8px;
+  background: rgba(18, 24, 32, 0.9);
+  max-height: 420px;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+.sourcesBrowserHistoryList {
+  display: flex;
+  flex-direction: column;
+}
+
+.sourcesBrowserHistoryEmpty {
+  padding: 12px 14px;
+}
+
+.sourcesBrowserHistoryDateGroup {
+  padding: 8px 14px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--wb-accent);
+  text-transform: uppercase;
+}
+
+.sourcesBrowserHistoryRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
   cursor: pointer;
 }
 
-#sourcesBrowserHistoryBody tr[data-history-url]:hover td {
+.sourcesBrowserHistoryRow:hover {
   background: rgba(var(--accent-rgb), 0.08);
+}
+
+.sourcesBrowserHistoryFavicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  flex: 0 0 16px;
+}
+
+.sourcesBrowserHistoryFaviconFallback {
+  border: 1px solid var(--wb-border-subtle);
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sourcesBrowserHistoryInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sourcesBrowserHistoryTitle {
+  font-size: 13px;
+  color: var(--wb-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourcesBrowserHistoryUrl {
+  font-size: 11px;
+  color: var(--wb-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.sourcesBrowserHistoryTime {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--wb-muted);
+  white-space: nowrap;
+}
+
+.sourcesBrowserHistoryRemoveBtn {
+  width: 22px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--wb-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.sourcesBrowserHistoryRow:hover .sourcesBrowserHistoryRemoveBtn {
+  opacity: 1;
+}
+
+.sourcesBrowserHistoryRemoveBtn:hover {
+  border-color: var(--wb-border-subtle);
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--wb-text);
+}
+
+.sourcesBrowserCtxOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 7000;
+  background: transparent;
+}
+
+.sourcesBrowserCtxMenu {
+  position: fixed;
+  z-index: 7001;
+  min-width: 220px;
+  max-width: 280px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  background: rgba(17, 26, 36, 0.98);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.sourcesBrowserCtxItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--wb-text);
+  text-align: left;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.sourcesBrowserCtxItem:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.sourcesBrowserCtxItem[disabled] {
+  color: var(--wb-muted);
+  cursor: default;
+}
+
+.sourcesBrowserCtxItem[disabled]:hover {
+  background: transparent;
+}
+
+.sourcesBrowserCtxSep {
+  height: 1px;
+  background: var(--wb-border-subtle);
+}
+
+.sourcesBrowserTabSearchCard {
+  width: min(760px, calc(100vw - 48px));
+}
+
+.sourcesBrowserTabSearchList {
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 8px;
+  max-height: 360px;
+  overflow: auto;
+  background: rgba(17, 26, 36, 0.9);
+}
+
+.sourcesBrowserTabSearchRow {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--wb-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sourcesBrowserTabSearchRow:hover,
+.sourcesBrowserTabSearchRow.active {
+  background: rgba(var(--accent-rgb), 0.14);
+}
+
+.sourcesBrowserTabSearchIndex {
+  color: var(--wb-muted);
+  font-size: 11px;
+  width: 28px;
+  flex: 0 0 28px;
+}
+
+.sourcesBrowserTabSearchMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sourcesBrowserTabSearchTitle {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourcesBrowserTabSearchUrl {
+  margin-top: 2px;
+  color: var(--wb-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @keyframes sourcesBrowserSpin {

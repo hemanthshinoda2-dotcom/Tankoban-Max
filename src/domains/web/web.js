@@ -242,16 +242,37 @@
     sourcesBrowserForwardBtn: qs('sourcesBrowserForwardBtn'),
     sourcesBrowserReloadBtn: qs('sourcesBrowserReloadBtn'),
     sourcesBrowserUrlInput: qs('sourcesBrowserUrlInput'),
+    sourcesBrowserOmniDropdown: qs('sourcesBrowserOmniDropdown'),
     sourcesBrowserGoBtn: qs('sourcesBrowserGoBtn'),
     sourcesBrowserBookmarkBtn: qs('sourcesBrowserBookmarkBtn'),
     sourcesBrowserHistoryBtn: qs('sourcesBrowserHistoryBtn'),
     sourcesBrowserStatus: qs('sourcesBrowserStatus'),
+    sourcesBrowserTabStrip: qs('sourcesBrowserTabStrip'),
+    sourcesBrowserTabList: qs('sourcesBrowserTabList'),
+    sourcesBrowserNewTabBtn: qs('sourcesBrowserNewTabBtn'),
     sourcesBrowserWebview: qs('sourcesBrowserWebview'),
+    sourcesBrowserCtxOverlay: qs('sourcesBrowserCtxOverlay'),
+    sourcesBrowserCtxMenu: qs('sourcesBrowserCtxMenu'),
     sourcesBrowserHistoryOverlay: qs('sourcesBrowserHistoryOverlay'),
     sourcesBrowserHistoryCloseBtn: qs('sourcesBrowserHistoryCloseBtn'),
     sourcesBrowserHistoryClearBtn: qs('sourcesBrowserHistoryClearBtn'),
     sourcesBrowserHistorySearchInput: qs('sourcesBrowserHistorySearchInput'),
-    sourcesBrowserHistoryBody: qs('sourcesBrowserHistoryBody'),
+    sourcesBrowserHistoryList: qs('sourcesBrowserHistoryList'),
+    sourcesBrowserHistoryEmpty: qs('sourcesBrowserHistoryEmpty'),
+    sourcesBrowserHome: qs('sourcesBrowserHome'),
+    sourcesBrowserHomeSearchForm: qs('sourcesBrowserHomeSearchForm'),
+    sourcesBrowserHomeSearchInput: qs('sourcesBrowserHomeSearchInput'),
+    sourcesBrowserHomeSearchBtn: qs('sourcesBrowserHomeSearchBtn'),
+    sourcesBrowserHomeEngine: qs('sourcesBrowserHomeEngine'),
+    sourcesBrowserHomeShortcuts: qs('sourcesBrowserHomeShortcuts'),
+    sourcesBrowserHomeShortcutsEmpty: qs('sourcesBrowserHomeShortcutsEmpty'),
+    sourcesBrowserHomeRecentTabs: qs('sourcesBrowserHomeRecentTabs'),
+    sourcesBrowserHomeRecentTabsEmpty: qs('sourcesBrowserHomeRecentTabsEmpty'),
+    sourcesBrowserTabSearchOverlay: qs('sourcesBrowserTabSearchOverlay'),
+    sourcesBrowserTabSearchCloseBtn: qs('sourcesBrowserTabSearchCloseBtn'),
+    sourcesBrowserTabSearchInput: qs('sourcesBrowserTabSearchInput'),
+    sourcesBrowserTabSearchList: qs('sourcesBrowserTabSearchList'),
+    sourcesBrowserTabSearchEmpty: qs('sourcesBrowserTabSearchEmpty'),
     sourcesBrowserDownloadsBody: qs('sourcesBrowserDownloadsBody'),
     sourcesBrowserDownloadsClearBtn: qs('sourcesBrowserDownloadsClearBtn'),
 
@@ -278,6 +299,9 @@
   // ── Shared state ──
 
   var MAX_BROWSING_HISTORY_UI = 500;
+  var SOURCES_MAX_TABS = 20;
+  var SOURCES_MAX_CLOSED_TABS = 20;
+  var SOURCES_OMNI_MAX = 8;
 
   var state = {
     sources: [],
@@ -386,6 +410,25 @@
     sourcesBrowserLastHostHeight: 0,
     sourcesBrowserResizeObserver: null,
     sourcesBrowserHistoryRows: [],
+    sourcesBrowserHomeShortcuts: [],
+    sourcesBrowserHomeReady: false,
+    sourcesTabs: [],
+    sourcesActiveTabId: null,
+    sourcesClosedTabs: [],
+    sourcesTabSeq: 1,
+    sourcesHomeByTab: {},
+    sourcesContextMenuMeta: null,
+    sourcesHistoryWriteState: { ok: true, mode: 'add', url: '', at: 0, reason: '' },
+    sourcesOmniResults: [],
+    sourcesOmniSelectedIdx: -1,
+    sourcesOmniOpen: false,
+    sourcesOmniDebounceTimer: 0,
+    sourcesOmniSuppressInputOnce: false,
+    sourcesOmniReqSeq: 0,
+    sourcesTabSearchOpen: false,
+    sourcesTabSearchQuery: '',
+    sourcesTabSearchSelectedIdx: -1,
+    sourcesTabSearchMatches: [],
   };
 
   // ── Event bus ──
@@ -545,8 +588,963 @@
     return mode === 'sources' || mode === 'web';
   }
 
+  function isSourcesModeActive() {
+    var router = window.Tanko && window.Tanko.modeRouter;
+    if (!router || typeof router.getMode !== 'function') return false;
+    return String(router.getMode() || '').toLowerCase() === 'sources';
+  }
+
+  function getSourcesTabById(id) {
+    var target = String(id || '').trim();
+    if (!target) return null;
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      var t = state.sourcesTabs[i];
+      if (t && String(t.id) === target) return t;
+    }
+    return null;
+  }
+
+  function getSourcesActiveTab() {
+    if (!state.sourcesActiveTabId) return null;
+    return getSourcesTabById(state.sourcesActiveTabId);
+  }
+
   function getSourcesBrowserWebview() {
+    var active = getSourcesActiveTab();
+    if (active && active.webview) return active.webview;
     return el.sourcesBrowserWebview || null;
+  }
+
+  function isAllowedSourcesHistoryUrl(url) {
+    var raw = String(url || '').trim();
+    if (!raw || raw === 'about:blank') return false;
+    return !/^(data|chrome|devtools):/i.test(raw);
+  }
+
+  function getSourcesHistoryTitle(url, rawTitle) {
+    var title = String(rawTitle || '').trim();
+    if (title) return title;
+    var site = siteNameFromUrl(url);
+    if (site) return site;
+    return String(url || '').trim();
+  }
+
+  function maybeRecordSourcesHistory(tab, url, reason) {
+    if (!tab || !api.webHistory || typeof api.webHistory.add !== 'function') return;
+    var target = String(url || '').trim();
+    if (!isAllowedSourcesHistoryUrl(target)) {
+      state.sourcesHistoryWriteState = { ok: false, mode: 'blocked', url: target, at: Date.now(), reason: String(reason || 'blocked') };
+      return;
+    }
+    var now = Date.now();
+    var mode = String(reason || '').trim().toLowerCase() === 'did-navigate' ? 'add' : 'upsert';
+    if (mode === 'add') {
+      if (tab.lastHistoryUrl === target && (now - Number(tab.lastHistoryAt || 0) < 3000)) {
+        return;
+      }
+      tab.lastHistoryUrl = target;
+      tab.lastHistoryAt = now;
+    }
+    var title = getSourcesHistoryTitle(target, tab.title);
+    var favicon = String(tab.favicon || getFaviconUrl(target) || '').trim();
+    var writer = mode === 'upsert' && typeof api.webHistory.upsert === 'function'
+      ? api.webHistory.upsert({
+          url: target,
+          title: title || target,
+          favicon: favicon,
+          visitedAt: now,
+          scope: 'sources_browser',
+          dedupeWindowMs: 3000,
+        })
+      : api.webHistory.add({
+          url: target,
+          title: title || target,
+          favicon: favicon,
+          timestamp: now,
+          scope: 'sources_browser',
+        });
+    writer.then(function () {
+      state.sourcesHistoryWriteState = { ok: true, mode: mode, url: target, at: now, reason: String(reason || 'write') };
+    }).catch(function () {
+      state.sourcesHistoryWriteState = { ok: false, mode: 'error', url: target, at: now, reason: String(reason || 'write_failed') };
+    });
+  }
+
+  function syncSourcesBrowserUrlInput() {
+    if (!el.sourcesBrowserUrlInput) return;
+    var active = getSourcesActiveTab();
+    if (!active) return;
+    if (document.activeElement !== el.sourcesBrowserUrlInput) {
+      el.sourcesBrowserUrlInput.value = active.home ? '' : String(active.url || '');
+    }
+  }
+
+  function ensureSourcesBrowserWebviewNode() {
+    var viewport = null;
+    var root = getSourcesBrowserWebview();
+    if (root && root.parentElement) viewport = root.parentElement;
+    if (!viewport && el.sourcesBrowserPanel) viewport = el.sourcesBrowserPanel.querySelector('.sourcesBrowserViewport');
+    if (!viewport) return null;
+    if (state.sourcesTabs.length === 0 && el.sourcesBrowserWebview) {
+      var base = el.sourcesBrowserWebview;
+      base.classList.add('sourcesBrowserWebviewTab');
+      return base;
+    }
+    var wv = document.createElement('webview');
+    wv.className = 'sourcesBrowserWebviewTab';
+    wv.setAttribute('partition', 'persist:webmode');
+    wv.setAttribute('allowpopups', '');
+    wv.setAttribute('webpreferences', 'contextIsolation=yes');
+    wv.src = 'about:blank';
+    viewport.appendChild(wv);
+    return wv;
+  }
+
+  function renderSourcesBrowserTabStrip() {
+    if (!el.sourcesBrowserTabList) return;
+    var html = '';
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      var tab = state.sourcesTabs[i];
+      if (!tab) continue;
+      var isAboutBlank = String(tab.url || '').trim().toLowerCase() === 'about:blank';
+      var title = (tab.home || isAboutBlank)
+        ? 'Home'
+        : String(tab.title || siteNameFromUrl(tab.url) || tab.url || 'New Tab');
+      html += '<div class="sourcesBrowserTab'
+        + (String(tab.id) === String(state.sourcesActiveTabId) ? ' active' : '')
+        + (tab.pinned ? ' pinned' : '')
+        + '" data-sources-tab-id="' + escapeHtml(String(tab.id || '')) + '" title="' + escapeHtml(title) + '">'
+        + '<span class="sourcesBrowserTabTitle">' + escapeHtml(title) + '</span>'
+        + '<button class="sourcesBrowserTabClose" type="button" data-sources-tab-close="' + escapeHtml(String(tab.id || '')) + '" aria-label="Close tab">×</button>'
+        + '</div>';
+    }
+    el.sourcesBrowserTabList.innerHTML = html;
+  }
+
+  function syncSourcesWebviewVisibility() {
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      var tab = state.sourcesTabs[i];
+      if (!tab || !tab.webview) continue;
+      var active = String(tab.id) === String(state.sourcesActiveTabId) && !tab.home;
+      tab.webview.classList.toggle('active', active);
+      tab.webview.style.display = active ? 'flex' : 'none';
+      tab.webview.style.pointerEvents = active ? 'auto' : 'none';
+    }
+  }
+
+  function getSourcesSearchEngines() {
+    var engines = (navOmnibox && navOmnibox.SEARCH_ENGINES && typeof navOmnibox.SEARCH_ENGINES === 'object')
+      ? navOmnibox.SEARCH_ENGINES : { google: { label: 'Google' } };
+    return engines;
+  }
+
+  function getSourcesHomeStateForTab(tab) {
+    if (!tab || !tab.id) return null;
+    if (!state.sourcesHomeByTab || typeof state.sourcesHomeByTab !== 'object') state.sourcesHomeByTab = {};
+    var key = String(tab.id);
+    if (!state.sourcesHomeByTab[key]) {
+      state.sourcesHomeByTab[key] = {
+        query: '',
+        engine: String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'google').trim().toLowerCase() || 'google',
+      };
+    }
+    return state.sourcesHomeByTab[key];
+  }
+
+  function ensureSourcesHomeEngineOptions() {
+    if (!el.sourcesBrowserHomeEngine || state.sourcesBrowserHomeReady) return;
+    var engines = getSourcesSearchEngines();
+    var keys = Object.keys(engines || {});
+    if (!keys.length) keys = ['google'];
+    var html = '';
+    for (var i = 0; i < keys.length; i++) {
+      var key = String(keys[i] || '').trim().toLowerCase();
+      if (!key) continue;
+      var meta = engines[key] || {};
+      html += '<option value="' + escapeHtml(key) + '">' + escapeHtml(String(meta.label || key)) + '</option>';
+    }
+    el.sourcesBrowserHomeEngine.innerHTML = html;
+    state.sourcesBrowserHomeReady = true;
+  }
+
+  function refreshSourcesBrowserHomeShortcuts() {
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < state.sources.length && out.length < 24; i++) {
+      var src = state.sources[i] || {};
+      var url = String(src.url || '').trim();
+      if (!url || seen[url]) continue;
+      seen[url] = 1;
+      out.push({
+        title: String(src.name || getSourcesHistoryTitle(url, '')).trim() || getSourcesHistoryTitle(url, ''),
+        url: url,
+      });
+    }
+    state.sourcesBrowserHomeShortcuts = out;
+    renderSourcesBrowserHome();
+    return Promise.resolve(out);
+  }
+
+  function renderSourcesBrowserHome() {
+    if (!el.sourcesBrowserHome) return;
+    var active = getSourcesActiveTab();
+    var show = !!(active && active.home);
+    el.sourcesBrowserHome.classList.toggle('hidden', !show);
+    if (!show) return;
+    ensureSourcesHomeEngineOptions();
+    var homeState = getSourcesHomeStateForTab(active) || { query: '', engine: 'google' };
+    if (el.sourcesBrowserHomeEngine) {
+      var engine = String(homeState.engine || state.browserSettings.defaultSearchEngine || 'google').trim().toLowerCase() || 'google';
+      if (el.sourcesBrowserHomeEngine.value !== engine) el.sourcesBrowserHomeEngine.value = engine;
+    }
+    if (el.sourcesBrowserHomeSearchInput && document.activeElement !== el.sourcesBrowserHomeSearchInput) {
+      el.sourcesBrowserHomeSearchInput.value = String(homeState.query || '');
+    }
+
+    if (el.sourcesBrowserHomeShortcuts) {
+      var shortcuts = Array.isArray(state.sourcesBrowserHomeShortcuts) ? state.sourcesBrowserHomeShortcuts : [];
+      var html = '';
+      for (var i = 0; i < shortcuts.length; i++) {
+        var sc = shortcuts[i] || {};
+        var u = String(sc.url || '').trim();
+        if (!u) continue;
+        html += '<button class="sourcesBrowserHomeShortcut" type="button" data-sources-home-url="' + escapeHtml(u) + '">'
+          + '<span class="sourcesBrowserHomeFaviconWrap"><img class="sourcesBrowserHomeFavicon" src="' + escapeHtml(getFaviconUrl(u)) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'isFallback\')"></span>'
+          + '<div class="sourcesBrowserHomeShortcutTitle">' + escapeHtml(getSourcesHistoryTitle(u, sc.title)) + '</div>'
+          + '</button>';
+      }
+      el.sourcesBrowserHomeShortcuts.innerHTML = html;
+      if (el.sourcesBrowserHomeShortcutsEmpty) el.sourcesBrowserHomeShortcutsEmpty.classList.toggle('hidden', !!html);
+    }
+
+    if (el.sourcesBrowserHomeRecentTabs) {
+      var recent = '';
+      for (var j = 0; j < state.sourcesTabs.length; j++) {
+        var tab = state.sourcesTabs[j];
+        if (!tab || String(tab.id) === String(active.id)) continue;
+        var tabUrl = String(tab.url || '').trim();
+        var tabTitle = String(tab.title || getSourcesHistoryTitle(tabUrl, '') || 'Tab');
+        recent += '<button class="sourcesBrowserHomeRecentTab" type="button" data-sources-recent-tab-id="' + escapeHtml(String(tab.id || '')) + '">'
+          + '<span class="sourcesBrowserHomeFaviconWrap"><img class="sourcesBrowserHomeFavicon" src="' + escapeHtml(getFaviconUrl(tabUrl || '')) + '" alt="" loading="lazy" onerror="this.style.display=\'none\';this.parentElement.classList.add(\'isFallback\')"></span>'
+          + '<div class="sourcesBrowserHomeRecentTabTitle">' + escapeHtml(tab.home ? 'Home' : tabTitle) + '</div>'
+          + '</button>';
+        if (j >= 7) break;
+      }
+      el.sourcesBrowserHomeRecentTabs.innerHTML = recent;
+      if (el.sourcesBrowserHomeRecentTabsEmpty) el.sourcesBrowserHomeRecentTabsEmpty.classList.toggle('hidden', !!recent);
+    }
+  }
+
+  function reorderSourcesTabsAfterPin(tab) {
+    if (!tab) return;
+    var idx = state.sourcesTabs.indexOf(tab);
+    if (idx === -1) return;
+    state.sourcesTabs.splice(idx, 1);
+    if (tab.pinned) {
+      var insertAt = 0;
+      while (insertAt < state.sourcesTabs.length && state.sourcesTabs[insertAt] && state.sourcesTabs[insertAt].pinned) insertAt++;
+      state.sourcesTabs.splice(insertAt, 0, tab);
+    } else {
+      state.sourcesTabs.push(tab);
+    }
+  }
+
+  function switchSourcesTab(tabId, opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var tab = getSourcesTabById(tabId);
+    if (!tab) return null;
+    state.sourcesActiveTabId = tab.id;
+    state.sourcesBrowserUrl = tab.home ? '' : String(tab.url || '');
+    state.sourcesBrowserLoading = !!tab.loading;
+    closeSourcesOmniDropdown();
+    syncSourcesWebviewVisibility();
+    renderSourcesBrowserTabStrip();
+    renderSourcesBrowserHome();
+    syncSourcesBrowserUrlInput();
+    syncSourcesBrowserOmniPlaceholder();
+    refreshSourcesBrowserNav();
+    refreshSourcesBrowserBookmarkUi(tab.home ? '' : (tab.url || ''));
+    scheduleSourcesBrowserViewportLayout();
+    if (options.focus && !tab.home && tab.webview && typeof tab.webview.focus === 'function') {
+      setTimeout(function () { try { tab.webview.focus(); } catch (_eFocus) {} }, 0);
+    }
+    return tab;
+  }
+
+  function closeSourcesTab(tabId) {
+    var tab = getSourcesTabById(tabId);
+    if (!tab) return;
+    var idx = state.sourcesTabs.indexOf(tab);
+    if (idx === -1) return;
+    state.sourcesTabs.splice(idx, 1);
+    if (state.sourcesHomeByTab && tab && tab.id != null) {
+      try { delete state.sourcesHomeByTab[String(tab.id)]; } catch (_eDelHome) {}
+    }
+    state.sourcesClosedTabs.unshift({
+      url: String(tab.url || ''),
+      title: String(tab.title || ''),
+      pinned: !!tab.pinned,
+      home: !!tab.home,
+    });
+    if (state.sourcesClosedTabs.length > SOURCES_MAX_CLOSED_TABS) state.sourcesClosedTabs.length = SOURCES_MAX_CLOSED_TABS;
+    if (tab.webview && tab.webview.parentElement) {
+      try {
+        if (tab.webview === el.sourcesBrowserWebview) {
+          tab.webview.src = 'about:blank';
+          tab.webview.style.display = 'none';
+        } else {
+          tab.webview.parentElement.removeChild(tab.webview);
+        }
+      } catch (_eRemove) {}
+    }
+    if (!state.sourcesTabs.length) {
+      openSourcesTab('', { switchTo: true, persist: false, home: true, focus: true });
+      return;
+    }
+    var next = state.sourcesTabs[Math.max(0, idx - 1)] || state.sourcesTabs[0];
+    switchSourcesTab(next && next.id, { focus: false });
+  }
+
+  function reopenSourcesClosedTab() {
+    if (!state.sourcesClosedTabs.length) return;
+    var snap = state.sourcesClosedTabs.shift();
+    if (!snap) return;
+    var hasUrl = !!String(snap.url || '').trim();
+    var homeMode = !!snap.home || !hasUrl;
+    var restored = openSourcesTab(hasUrl ? String(snap.url) : '', {
+      switchTo: true,
+      pinned: !!snap.pinned,
+      home: homeMode,
+      persist: false,
+    });
+    if (restored && snap.title) restored.title = String(snap.title);
+    renderSourcesBrowserTabStrip();
+  }
+
+  function duplicateSourcesTab(tabId) {
+    var tab = getSourcesTabById(tabId);
+    if (!tab) return;
+    openSourcesTab(tab.home ? '' : String(tab.url || getSourcesBrowserStartUrl()), {
+      switchTo: true,
+      pinned: !!tab.pinned,
+      home: !!tab.home,
+      persist: !tab.home,
+    });
+  }
+
+  function closeSourcesOtherTabs(tabId) {
+    var keep = String(tabId || '');
+    var ids = [];
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      var t = state.sourcesTabs[i];
+      if (!t) continue;
+      if (String(t.id) !== keep) ids.push(t.id);
+    }
+    for (var j = 0; j < ids.length; j++) closeSourcesTab(ids[j]);
+  }
+
+  function closeSourcesTabsToRight(tabId) {
+    var idx = -1;
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      if (state.sourcesTabs[i] && String(state.sourcesTabs[i].id) === String(tabId)) { idx = i; break; }
+    }
+    if (idx === -1) return;
+    var ids = [];
+    for (var j = idx + 1; j < state.sourcesTabs.length; j++) {
+      if (state.sourcesTabs[j]) ids.push(state.sourcesTabs[j].id);
+    }
+    for (var k = 0; k < ids.length; k++) closeSourcesTab(ids[k]);
+  }
+
+  function toggleSourcesTabPinned(tabId) {
+    var tab = getSourcesTabById(tabId);
+    if (!tab) return;
+    tab.pinned = !tab.pinned;
+    reorderSourcesTabsAfterPin(tab);
+    renderSourcesBrowserTabStrip();
+  }
+
+  function cycleSourcesTabs(direction) {
+    if (!state.sourcesTabs.length) return;
+    var dir = Number(direction || 1) < 0 ? -1 : 1;
+    var idx = -1;
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      if (state.sourcesTabs[i] && String(state.sourcesTabs[i].id) === String(state.sourcesActiveTabId)) { idx = i; break; }
+    }
+    if (idx === -1) idx = 0;
+    var next = idx + dir;
+    if (next < 0) next = state.sourcesTabs.length - 1;
+    if (next >= state.sourcesTabs.length) next = 0;
+    if (state.sourcesTabs[next]) switchSourcesTab(state.sourcesTabs[next].id, { focus: true });
+  }
+
+  function closeSourcesOmniDropdown() {
+    state.sourcesOmniResults = [];
+    state.sourcesOmniSelectedIdx = -1;
+    state.sourcesOmniOpen = false;
+    if (el.sourcesBrowserOmniDropdown) {
+      el.sourcesBrowserOmniDropdown.classList.add('hidden');
+      el.sourcesBrowserOmniDropdown.innerHTML = '';
+    }
+  }
+
+  function renderSourcesOmniDropdown() {
+    if (!el.sourcesBrowserOmniDropdown) return;
+    var rows = Array.isArray(state.sourcesOmniResults) ? state.sourcesOmniResults : [];
+    if (!rows.length) {
+      closeSourcesOmniDropdown();
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      var label = String(row.type || 'history').trim().toUpperCase();
+      var text = String(row.text || row.url || '').trim();
+      var url = String(row.url || '').trim();
+      html += '<div class="sourcesBrowserOmniRow' + (i === state.sourcesOmniSelectedIdx ? ' active' : '') + '" data-sources-omni-index="' + i + '">'
+        + '<span class="sourcesBrowserOmniLabel">' + escapeHtml(label) + '</span>'
+        + '<span class="sourcesBrowserOmniText">' + escapeHtml(text) + '</span>'
+        + (url ? '<span class="sourcesBrowserOmniText sourcesBrowserOmniUrl">' + escapeHtml(url) + '</span>' : '')
+        + '</div>';
+    }
+    el.sourcesBrowserOmniDropdown.innerHTML = html;
+    el.sourcesBrowserOmniDropdown.classList.remove('hidden');
+    state.sourcesOmniOpen = true;
+  }
+
+  function selectSourcesOmniRow(index, keepInput) {
+    var rows = Array.isArray(state.sourcesOmniResults) ? state.sourcesOmniResults : [];
+    if (!rows.length) return;
+    var idx = Number(index);
+    if (!isFinite(idx)) idx = 0;
+    if (idx < 0) idx = rows.length - 1;
+    if (idx >= rows.length) idx = 0;
+    state.sourcesOmniSelectedIdx = idx;
+    renderSourcesOmniDropdown();
+    if (keepInput === false || !el.sourcesBrowserUrlInput) return;
+    var row = rows[idx] || {};
+    var text = String(row.url || row.text || '').trim();
+    if (!text) return;
+    state.sourcesOmniSuppressInputOnce = true;
+    el.sourcesBrowserUrlInput.value = text;
+  }
+
+  function runSourcesOmniResult(index) {
+    var rows = Array.isArray(state.sourcesOmniResults) ? state.sourcesOmniResults : [];
+    if (!rows.length) return false;
+    var idx = Number(index);
+    if (!isFinite(idx)) idx = state.sourcesOmniSelectedIdx;
+    if (!isFinite(idx) || idx < 0 || idx >= rows.length) idx = 0;
+    var row = rows[idx] || {};
+    var text = String(row.url || row.text || '').trim();
+    if (!text) return false;
+    closeSourcesOmniDropdown();
+    navigateSourcesBrowser(text, { focus: true });
+    return true;
+  }
+
+  function requestSourcesOmniSuggestions(raw) {
+    if (state.sourcesOmniDebounceTimer) {
+      try { clearTimeout(state.sourcesOmniDebounceTimer); } catch (_eDebounce) {}
+      state.sourcesOmniDebounceTimer = 0;
+    }
+    var query = String(raw || '').trim();
+    if (!query) {
+      closeSourcesOmniDropdown();
+      return;
+    }
+    state.sourcesOmniDebounceTimer = setTimeout(function () {
+      state.sourcesOmniDebounceTimer = 0;
+      var seq = Number(state.sourcesOmniReqSeq || 0) + 1;
+      state.sourcesOmniReqSeq = seq;
+      var q = query.toLowerCase();
+      var historyPromise = (api.webHistory && typeof api.webHistory.list === 'function')
+        ? api.webHistory.list({ scope: 'sources_browser', query: query, limit: SOURCES_OMNI_MAX }).catch(function () { return null; })
+        : Promise.resolve(null);
+      var bookmarksPromise = (api.webBookmarks && typeof api.webBookmarks.list === 'function')
+        ? api.webBookmarks.list().catch(function () { return null; })
+        : Promise.resolve(null);
+      var searchPromise = (api.webSearch && typeof api.webSearch.suggest === 'function')
+        ? api.webSearch.suggest(query).catch(function () { return []; })
+        : Promise.resolve([]);
+      Promise.all([historyPromise, bookmarksPromise, searchPromise]).then(function (res) {
+        if (seq !== state.sourcesOmniReqSeq) return;
+        var historyRows = (res[0] && res[0].ok && Array.isArray(res[0].entries)) ? res[0].entries : [];
+        var bookmarks = (res[1] && res[1].ok && Array.isArray(res[1].bookmarks)) ? res[1].bookmarks : [];
+        var suggestions = Array.isArray(res[2]) ? res[2] : [];
+        var out = [];
+        var seen = {};
+        function push(type, text, url) {
+          var t = String(text || '').trim();
+          var u = String(url || '').trim();
+          var key = (u || t).toLowerCase();
+          if (!key || seen[key]) return;
+          seen[key] = 1;
+          out.push({ type: type, text: t || u, url: u });
+        }
+        for (var i = 0; i < historyRows.length && out.length < SOURCES_OMNI_MAX; i++) {
+          var h = historyRows[i] || {};
+          push('history', getSourcesHistoryTitle(h.url, h.title), h.url);
+        }
+        for (var j = 0; j < bookmarks.length && out.length < SOURCES_OMNI_MAX; j++) {
+          var b = bookmarks[j] || {};
+          var bTitle = String(b.title || '').toLowerCase();
+          var bUrl = String(b.url || '').toLowerCase();
+          if (bTitle.indexOf(q) === -1 && bUrl.indexOf(q) === -1) continue;
+          push('bookmark', b.title || b.url, b.url);
+        }
+        for (var k = 0; k < suggestions.length && out.length < SOURCES_OMNI_MAX; k++) {
+          var s = suggestions[k] || {};
+          push(s.type || 'search', s.text || s.url || '', s.url || '');
+        }
+        state.sourcesOmniResults = out;
+        state.sourcesOmniSelectedIdx = out.length ? 0 : -1;
+        renderSourcesOmniDropdown();
+      });
+    }, 130);
+  }
+
+  function openSourcesTabSearchOverlay() {
+    if (!el.sourcesBrowserTabSearchOverlay) return;
+    state.sourcesTabSearchOpen = true;
+    state.sourcesTabSearchQuery = '';
+    state.sourcesTabSearchSelectedIdx = -1;
+    el.sourcesBrowserTabSearchOverlay.classList.remove('hidden');
+    renderSourcesTabSearchRows('');
+    syncSourcesBrowserOverlayLock();
+    setTimeout(function () {
+      if (!el.sourcesBrowserTabSearchInput) return;
+      try { el.sourcesBrowserTabSearchInput.focus(); } catch (_eFocusTabSearch) {}
+      if (el.sourcesBrowserTabSearchInput.select) el.sourcesBrowserTabSearchInput.select();
+    }, 0);
+  }
+
+  function closeSourcesTabSearchOverlay() {
+    state.sourcesTabSearchOpen = false;
+    state.sourcesTabSearchQuery = '';
+    state.sourcesTabSearchSelectedIdx = -1;
+    if (el.sourcesBrowserTabSearchOverlay) el.sourcesBrowserTabSearchOverlay.classList.add('hidden');
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function renderSourcesTabSearchRows(query) {
+    if (!el.sourcesBrowserTabSearchList) return;
+    var q = String(query || '').trim().toLowerCase();
+    state.sourcesTabSearchQuery = q;
+    var matches = [];
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      var tab = state.sourcesTabs[i];
+      if (!tab) continue;
+      var title = String(tab.title || getSourcesHistoryTitle(tab.url, '') || 'New Tab');
+      var url = String(tab.url || '').trim();
+      if (q) {
+        var hay = (title + ' ' + url).toLowerCase();
+        if (hay.indexOf(q) === -1) continue;
+      }
+      matches.push({ tab: tab, title: title, url: url, index: i + 1 });
+    }
+    state.sourcesTabSearchMatches = matches;
+    if (!matches.length) {
+      el.sourcesBrowserTabSearchList.innerHTML = '';
+      if (el.sourcesBrowserTabSearchEmpty) el.sourcesBrowserTabSearchEmpty.classList.remove('hidden');
+      return;
+    }
+    if (el.sourcesBrowserTabSearchEmpty) el.sourcesBrowserTabSearchEmpty.classList.add('hidden');
+    if (state.sourcesTabSearchSelectedIdx < 0 || state.sourcesTabSearchSelectedIdx >= matches.length) {
+      state.sourcesTabSearchSelectedIdx = 0;
+    }
+    var html = '';
+    for (var j = 0; j < matches.length; j++) {
+      var m = matches[j] || {};
+      html += '<button class="sourcesBrowserTabSearchRow' + (j === state.sourcesTabSearchSelectedIdx ? ' active' : '') + '" type="button" data-sources-tab-search-index="' + j + '">'
+        + '<span class="sourcesBrowserTabSearchIndex">Tab ' + escapeHtml(String(m.index || '')) + '</span>'
+        + '<span class="sourcesBrowserTabSearchMain">'
+          + '<span class="sourcesBrowserTabSearchTitle">' + escapeHtml(String(m.title || '')) + '</span>'
+          + '<span class="sourcesBrowserTabSearchUrl">' + escapeHtml(String(m.url || 'New tab')) + '</span>'
+        + '</span>'
+        + '</button>';
+    }
+    el.sourcesBrowserTabSearchList.innerHTML = html;
+  }
+
+  function activateSourcesTabSearchResult(index) {
+    var matches = Array.isArray(state.sourcesTabSearchMatches) ? state.sourcesTabSearchMatches : [];
+    if (!matches.length) return false;
+    var idx = Number(index);
+    if (!isFinite(idx)) idx = state.sourcesTabSearchSelectedIdx;
+    if (!isFinite(idx) || idx < 0 || idx >= matches.length) idx = 0;
+    var match = matches[idx] || {};
+    if (!match.tab || !match.tab.id) return false;
+    closeSourcesTabSearchOverlay();
+    switchSourcesTab(match.tab.id, { focus: true });
+    return true;
+  }
+
+  function showSourcesBrowserContextMenu(items, x, y, meta) {
+    if (!el.sourcesBrowserCtxMenu || !el.sourcesBrowserCtxOverlay) return;
+    var html = '';
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item) continue;
+      if (item.separator) {
+        html += '<div class="sourcesBrowserCtxSep"></div>';
+        continue;
+      }
+      html += '<button class="sourcesBrowserCtxItem" type="button"'
+        + (item.disabled ? ' disabled' : '')
+        + ' data-sources-ctx-action="' + escapeHtml(String(item.action || '')) + '">'
+        + '<span>' + escapeHtml(String(item.label || '')) + '</span>'
+        + '<span class="muted tiny">' + escapeHtml(String(item.shortcut || '')) + '</span>'
+        + '</button>';
+    }
+    el.sourcesBrowserCtxMenu.innerHTML = html;
+    state.sourcesContextMenuMeta = meta || null;
+    el.sourcesBrowserCtxOverlay.classList.remove('hidden');
+    el.sourcesBrowserCtxMenu.classList.remove('hidden');
+    var w = Math.max(180, Number(el.sourcesBrowserCtxMenu.offsetWidth || 240));
+    var h = Math.max(32, Number(el.sourcesBrowserCtxMenu.offsetHeight || 120));
+    var left = Math.max(4, Math.min(Number(x || 0), window.innerWidth - w - 6));
+    var top = Math.max(4, Math.min(Number(y || 0), window.innerHeight - h - 6));
+    el.sourcesBrowserCtxMenu.style.left = left + 'px';
+    el.sourcesBrowserCtxMenu.style.top = top + 'px';
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function hideSourcesBrowserContextMenu() {
+    state.sourcesContextMenuMeta = null;
+    if (el.sourcesBrowserCtxOverlay) el.sourcesBrowserCtxOverlay.classList.add('hidden');
+    if (el.sourcesBrowserCtxMenu) {
+      el.sourcesBrowserCtxMenu.classList.add('hidden');
+      el.sourcesBrowserCtxMenu.innerHTML = '';
+    }
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function runSourcesContextAction(action) {
+    var meta = state.sourcesContextMenuMeta || {};
+    var active = getSourcesActiveTab();
+    var wv = active && active.webview ? active.webview : null;
+    var tabTarget = meta.tabId ? getSourcesTabById(meta.tabId) : null;
+    var targetWv = tabTarget && tabTarget.webview ? tabTarget.webview : wv;
+    var wcId = 0;
+    try { wcId = Number(targetWv && typeof targetWv.getWebContentsId === 'function' ? targetWv.getWebContentsId() : 0) || 0; } catch (_eWc) { wcId = 0; }
+    var ctx = meta.params || {};
+    var sendCtx = function (name, payload) {
+      if (!wcId || !api.webBrowserActions || typeof api.webBrowserActions.ctxAction !== 'function') return;
+      api.webBrowserActions.ctxAction({ webContentsId: wcId, action: name, payload: payload });
+    };
+    var runHomeEdit = function (kind) {
+      var input = document.activeElement;
+      if (!input || (input !== el.sourcesBrowserHomeSearchInput && input !== el.sourcesBrowserUrlInput)) return;
+      try {
+        if (kind === 'copy') document.execCommand('copy');
+        else if (kind === 'cut') document.execCommand('cut');
+        else if (kind === 'paste') document.execCommand('paste');
+        else if (kind === 'selectAll') input.select();
+      } catch (_eHomeEdit) {}
+    };
+    switch (String(action || '')) {
+      case 'back': if (wv && typeof wv.goBack === 'function') wv.goBack(); break;
+      case 'forward': if (wv && typeof wv.goForward === 'function') wv.goForward(); break;
+      case 'reload': if (targetWv && typeof targetWv.reload === 'function') targetWv.reload(); break;
+      case 'copy': sendCtx('copy'); break;
+      case 'cut': sendCtx('cut'); break;
+      case 'paste': sendCtx('paste'); break;
+      case 'pasteAndMatchStyle': sendCtx('pasteAndMatchStyle'); break;
+      case 'undo': sendCtx('undo'); break;
+      case 'redo': sendCtx('redo'); break;
+      case 'selectAll': sendCtx('selectAll'); break;
+      case 'homeCopy': runHomeEdit('copy'); break;
+      case 'homeCut': runHomeEdit('cut'); break;
+      case 'homePaste': runHomeEdit('paste'); break;
+      case 'homeSelectAll': runHomeEdit('selectAll'); break;
+      case 'homeOpenShortcut': if (ctx.homeUrl) navigateSourcesBrowser(String(ctx.homeUrl), { focus: true }); break;
+      case 'homeOpenShortcutNewTab': if (ctx.homeUrl) openSourcesTab(String(ctx.homeUrl), { switchTo: true, focus: true }); break;
+      case 'homeCopyLink':
+        if (ctx.homeUrl) {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(String(ctx.homeUrl));
+            else if (api.webBrowserActions && api.webBrowserActions.ctxAction) sendCtx('copyLink', String(ctx.homeUrl));
+          } catch (_eClipHome) {}
+        }
+        break;
+      case 'copyLink': if (ctx.linkURL) sendCtx('copyLink', String(ctx.linkURL)); break;
+      case 'openLinkNewTab': if (ctx.linkURL) openSourcesTab(String(ctx.linkURL), { switchTo: true }); break;
+      case 'openLinkNewTabBg': if (ctx.linkURL) openSourcesTab(String(ctx.linkURL), { switchTo: false }); break;
+      case 'saveLinkAs': if (ctx.linkURL) sendCtx('saveLinkAs', String(ctx.linkURL)); break;
+      case 'openLinkExternal': if (ctx.linkURL) sendCtx('openLinkExternal', String(ctx.linkURL)); break;
+      case 'openImageNewTab': if (ctx.srcURL) openSourcesTab(String(ctx.srcURL), { switchTo: true }); break;
+      case 'saveImage': if (ctx.srcURL) sendCtx('saveImage', String(ctx.srcURL)); break;
+      case 'inspect':
+        if (ctx.x != null && ctx.y != null) sendCtx('inspect', { x: Number(ctx.x) || 0, y: Number(ctx.y) || 0 });
+        break;
+      case 'newTab': openSourcesTab('', { switchTo: true, persist: false, home: true, focus: true }); break;
+      case 'duplicateTab': if (meta.tabId) duplicateSourcesTab(meta.tabId); break;
+      case 'pinTab': if (meta.tabId) toggleSourcesTabPinned(meta.tabId); break;
+      case 'closeTab': if (meta.tabId) closeSourcesTab(meta.tabId); break;
+      case 'closeOthers': if (meta.tabId) closeSourcesOtherTabs(meta.tabId); break;
+      case 'closeRight': if (meta.tabId) closeSourcesTabsToRight(meta.tabId); break;
+      case 'reopenClosed': reopenSourcesClosedTab(); break;
+      case 'viewSource':
+        if (ctx.pageURL) openSourcesTab('view-source:' + String(ctx.pageURL), { switchTo: true, persist: false });
+        else if (active && active.url) openSourcesTab('view-source:' + String(active.url), { switchTo: true, persist: false });
+        break;
+      default:
+        break;
+    }
+  }
+
+  function showSourcesWebviewContextMenu(params, tab) {
+    var items = [];
+    var p = (params && typeof params === 'object') ? params : {};
+    var wv = tab && tab.webview ? tab.webview : getSourcesBrowserWebview();
+    var canGoBack = false;
+    var canGoForward = false;
+    try { canGoBack = !!(wv && typeof wv.canGoBack === 'function' && wv.canGoBack()); } catch (_eA) {}
+    try { canGoForward = !!(wv && typeof wv.canGoForward === 'function' && wv.canGoForward()); } catch (_eB) {}
+    items.push({ label: 'Back', action: 'back', disabled: !canGoBack, shortcut: 'Alt+Left' });
+    items.push({ label: 'Forward', action: 'forward', disabled: !canGoForward, shortcut: 'Alt+Right' });
+    items.push({ label: 'Reload', action: 'reload', shortcut: 'Ctrl+R' });
+    items.push({ separator: true });
+    if (p.linkURL) {
+      items.push({ label: 'Open Link in New Tab', action: 'openLinkNewTab' });
+      items.push({ label: 'Open Link in Background Tab', action: 'openLinkNewTabBg' });
+      items.push({ label: 'Copy Link Address', action: 'copyLink' });
+      items.push({ label: 'Save Link As...', action: 'saveLinkAs' });
+      items.push({ label: 'Open Link in External Browser', action: 'openLinkExternal' });
+      items.push({ separator: true });
+    }
+    if (String(p.mediaType || '').toLowerCase() === 'image' && p.srcURL) {
+      items.push({ label: 'Open Image in New Tab', action: 'openImageNewTab' });
+      items.push({ label: 'Save Image As...', action: 'saveImage' });
+      items.push({ separator: true });
+    }
+    if (p.isEditable) {
+      items.push({ label: 'Undo', action: 'undo', shortcut: 'Ctrl+Z' });
+      items.push({ label: 'Redo', action: 'redo', shortcut: 'Ctrl+Y' });
+      items.push({ separator: true });
+    }
+    if (p.selectionText) {
+      items.push({ label: 'Copy', action: 'copy', shortcut: 'Ctrl+C' });
+      if (p.isEditable) items.push({ label: 'Cut', action: 'cut', shortcut: 'Ctrl+X' });
+      items.push({ separator: true });
+    }
+    if (p.isEditable) {
+      items.push({ label: 'Paste', action: 'paste', shortcut: 'Ctrl+V' });
+      items.push({ label: 'Paste and Match Style', action: 'pasteAndMatchStyle' });
+      items.push({ label: 'Select All', action: 'selectAll', shortcut: 'Ctrl+A' });
+      items.push({ separator: true });
+    }
+    items.push({ label: 'View Page Source', action: 'viewSource' });
+    items.push({ label: 'Inspect', action: 'inspect', shortcut: 'Ctrl+Shift+I' });
+    showSourcesBrowserContextMenu(items, Number(p.x || p.screenX || 0), Number(p.y || p.screenY || 0), {
+      type: 'page',
+      tabId: tab && tab.id,
+      params: p,
+    });
+  }
+
+  function showSourcesHomeContextMenu(params) {
+    var p = (params && typeof params === 'object') ? params : {};
+    var items = [];
+    if (p.isEditable) {
+      items.push({ label: 'Copy', action: 'homeCopy', shortcut: 'Ctrl+C' });
+      items.push({ label: 'Cut', action: 'homeCut', shortcut: 'Ctrl+X' });
+      items.push({ label: 'Paste', action: 'homePaste', shortcut: 'Ctrl+V' });
+      items.push({ label: 'Select All', action: 'homeSelectAll', shortcut: 'Ctrl+A' });
+    } else if (p.homeUrl) {
+      items.push({ label: 'Open', action: 'homeOpenShortcut' });
+      items.push({ label: 'Open in New Tab', action: 'homeOpenShortcutNewTab' });
+      items.push({ label: 'Copy Link Address', action: 'homeCopyLink' });
+    } else {
+      items.push({ label: 'New Tab', action: 'newTab', shortcut: 'Ctrl+T' });
+    }
+    showSourcesBrowserContextMenu(items, Number(p.x || 0), Number(p.y || 0), {
+      type: 'home',
+      params: p,
+    });
+  }
+
+  function showSourcesTabContextMenu(tabId, x, y) {
+    var tab = getSourcesTabById(tabId);
+    if (!tab) return;
+    var items = [
+      { label: 'New Tab', action: 'newTab', shortcut: 'Ctrl+T' },
+      { label: 'Reload Tab', action: 'reload' },
+      { label: 'Duplicate', action: 'duplicateTab' },
+      { label: tab.pinned ? 'Unpin Tab' : 'Pin Tab', action: 'pinTab' },
+      { separator: true },
+      { label: 'Close Tab', action: 'closeTab', shortcut: 'Ctrl+W' },
+      { label: 'Close Other Tabs', action: 'closeOthers' },
+      { label: 'Close Tabs to the Right', action: 'closeRight' },
+      { separator: true },
+      { label: 'Reopen Closed Tab', action: 'reopenClosed', shortcut: 'Ctrl+Shift+T', disabled: !state.sourcesClosedTabs.length },
+    ];
+    showSourcesBrowserContextMenu(items, x, y, { type: 'tab', tabId: tab.id, params: {} });
+  }
+
+  function bindSourcesTabWebviewEvents(tab) {
+    if (!tab || !tab.webview || tab._bound) return;
+    tab._bound = true;
+    var wv = tab.webview;
+    wv.addEventListener('did-start-loading', function () {
+      tab.loading = true;
+      if (String(tab.id) === String(state.sourcesActiveTabId)) {
+        state.sourcesBrowserLoading = true;
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus('Loading...', true);
+      }
+      scheduleSourcesBrowserViewportLayout();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-stop-loading', function () {
+      tab.loading = false;
+      var url = '';
+      try { url = String(wv.getURL() || '').trim(); } catch (_e1) { url = ''; }
+      if (!tab.home && url) tab.url = url;
+      try {
+        var title = String(wv.getTitle() || '').trim();
+        if (!tab.home && title) tab.title = title;
+      } catch (_e2) {}
+      if (!tab.home && isAllowedSourcesHistoryUrl(tab.url)) maybeRecordSourcesHistory(tab, tab.url, 'did-stop-loading');
+      if (String(tab.id) === String(state.sourcesActiveTabId)) {
+        state.sourcesBrowserLoading = false;
+        state.sourcesBrowserUrl = tab.home ? '' : String(tab.url || '');
+        syncSourcesBrowserUrlInput();
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus(String((tab.home ? 'Home' : tab.url) || 'Ready'), false);
+        refreshSourcesBrowserBookmarkUi(tab.home ? '' : (tab.url || ''));
+      }
+      renderSourcesBrowserTabStrip();
+      scheduleSourcesBrowserViewportLayout();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-finish-load', function () {
+      tab.loading = false;
+      if (String(tab.id) === String(state.sourcesActiveTabId)) {
+        state.sourcesBrowserLoading = false;
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus(String(tab.url || state.sourcesBrowserUrl || 'Ready'), false);
+      }
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('dom-ready', function () {
+      if (String(tab.id) === String(state.sourcesActiveTabId)) refreshSourcesBrowserNav();
+      scheduleSourcesBrowserViewportLayout();
+    });
+    wv.addEventListener('did-fail-load', function (e) {
+      var code = Number(e && e.errorCode || 0);
+      if (code === -3) return;
+      tab.loading = false;
+      if (String(tab.id) === String(state.sourcesActiveTabId)) {
+        state.sourcesBrowserLoading = false;
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus('Load failed (HTTP/NET error)', false);
+      }
+    });
+    wv.addEventListener('did-navigate', function (e) {
+      var next = String(e && e.url || '').trim();
+      if (/^magnet:/i.test(next)) {
+        emit('openMagnet', next);
+        return;
+      }
+      if (!next || tab.home) return;
+      tab.url = next;
+      if (isAllowedSourcesHistoryUrl(next)) maybeRecordSourcesHistory(tab, next, 'did-navigate');
+      if (isAllowedSourcesHistoryUrl(next)) persistSourcesBrowserLastUrl(next);
+      if (String(tab.id) === String(state.sourcesActiveTabId)) {
+        state.sourcesBrowserUrl = next;
+        syncSourcesBrowserUrlInput();
+        refreshSourcesBrowserBookmarkUi(next);
+        refreshSourcesBrowserNav();
+      }
+      renderSourcesBrowserTabStrip();
+    });
+    wv.addEventListener('page-title-updated', function (e) {
+      var t = String(e && e.title || '').trim();
+      if (!t || tab.home) return;
+      tab.title = t;
+      if (isAllowedSourcesHistoryUrl(tab.url)) maybeRecordSourcesHistory(tab, tab.url, 'page-title-updated');
+      renderSourcesBrowserTabStrip();
+    });
+    wv.addEventListener('page-favicon-updated', function (e) {
+      var favs = e && e.favicons;
+      if (!favs || !favs.length || tab.home) return;
+      tab.favicon = String(favs[0] || '').trim();
+      if (isAllowedSourcesHistoryUrl(tab.url)) maybeRecordSourcesHistory(tab, tab.url, 'page-favicon-updated');
+    });
+    wv.addEventListener('new-window', function (e) {
+      var next = String((e && e.url) || '').trim();
+      if (!next) return;
+      if (/^magnet:/i.test(next)) {
+        emit('openMagnet', next);
+        return;
+      }
+      openSourcesTab(next, { switchTo: true });
+    });
+    wv.addEventListener('context-menu', function (e) {
+      var p = (e && e.params && typeof e.params === 'object') ? e.params : (e || {});
+      showSourcesWebviewContextMenu(p, tab);
+    });
+  }
+
+  function openSourcesTab(rawUrl, opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    if (state.sourcesTabs.length >= SOURCES_MAX_TABS) {
+      showToast('Tab limit reached');
+      return null;
+    }
+    var wv = ensureSourcesBrowserWebviewNode();
+    if (!wv) return null;
+    var initialUrl = String(rawUrl || '').trim();
+    var homeMode = !!options.home || initialUrl === 'about:blank';
+    var id = 'st_' + String(state.sourcesTabSeq++);
+    var tab = {
+      id: id,
+      webview: wv,
+      url: '',
+      title: homeMode ? 'Home' : 'New Tab',
+      pinned: !!options.pinned,
+      loading: false,
+      favicon: '',
+      lastHistoryUrl: '',
+      lastHistoryAt: 0,
+      home: homeMode,
+    };
+    getSourcesHomeStateForTab(tab);
+    bindSourcesTabWebviewEvents(tab);
+    if (tab.pinned) {
+      var insertAt = 0;
+      while (insertAt < state.sourcesTabs.length && state.sourcesTabs[insertAt] && state.sourcesTabs[insertAt].pinned) insertAt++;
+      state.sourcesTabs.splice(insertAt, 0, tab);
+    } else {
+      state.sourcesTabs.push(tab);
+    }
+    renderSourcesBrowserTabStrip();
+    switchSourcesTab(tab.id, { focus: false });
+    if (!homeMode) {
+      var target = normalizeSourcesBrowserInput(rawUrl || '');
+      if (!target) target = getSourcesBrowserStartUrl();
+      try {
+        tab.webview.loadURL(target);
+        tab.loading = true;
+        tab.url = target;
+        if (String(tab.id) === String(state.sourcesActiveTabId)) {
+          state.sourcesBrowserLoading = true;
+          state.sourcesBrowserUrl = target;
+          if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = target;
+          refreshSourcesBrowserNav();
+        }
+        if (options.persist !== false) persistSourcesBrowserLastUrl(target);
+      } catch (_eLoad) {}
+    } else if (String(tab.id) === String(state.sourcesActiveTabId)) {
+      state.sourcesBrowserLoading = false;
+      state.sourcesBrowserUrl = '';
+      if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = '';
+      refreshSourcesBrowserNav();
+    }
+    if (options.switchTo !== false) switchSourcesTab(tab.id, { focus: !!options.focus });
+    return tab;
   }
 
   function getSourcesBrowserDownloadsList() {
@@ -647,6 +1645,40 @@
     setSourcesBrowserBookmarkUi(false);
   }
 
+  function getSourcesActiveSearchEngineKey() {
+    var engines = getSourcesSearchEngines();
+    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'google').trim().toLowerCase();
+    var active = getSourcesActiveTab();
+    var homeState = getSourcesHomeStateForTab(active);
+    if (active && active.home && homeState && homeState.engine) key = String(homeState.engine).trim().toLowerCase();
+    if (!engines[key]) key = 'google';
+    if (!engines[key]) {
+      var keys = Object.keys(engines || {});
+      key = keys.length ? String(keys[0]) : 'google';
+    }
+    return key;
+  }
+
+  function getSourcesSearchUrl(query, forcedEngine) {
+    var q = String(query || '').trim();
+    if (!q) return '';
+    var engines = getSourcesSearchEngines();
+    var key = String(forcedEngine || getSourcesActiveSearchEngineKey() || 'google').trim().toLowerCase();
+    if (!engines[key]) key = 'google';
+    var meta = engines[key] || engines.google || null;
+    if (!meta || !meta.url) return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+    return String(meta.url) + encodeURIComponent(q);
+  }
+
+  function syncSourcesBrowserOmniPlaceholder() {
+    if (!el.sourcesBrowserUrlInput) return;
+    var engines = getSourcesSearchEngines();
+    var key = getSourcesActiveSearchEngineKey();
+    var meta = engines[key] || engines.google || null;
+    var label = String(meta && meta.label || 'Google');
+    el.sourcesBrowserUrlInput.placeholder = 'Search with ' + label + ' or enter URL';
+  }
+
   function normalizeSourcesBrowserInput(raw) {
     var input = String(raw || '').trim();
     if (!input) return '';
@@ -654,7 +1686,7 @@
     if (/^about:/i.test(input)) return input;
     if (/^(https?:\/\/|magnet:)/i.test(input)) return input;
     if (/^[a-z0-9-]+\.[a-z0-9.-]+(\/.*)?$/i.test(input)) return 'https://' + input;
-    return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+    return getSourcesSearchUrl(input);
   }
 
   function persistSourcesBrowserLastUrl(url) {
@@ -665,7 +1697,21 @@
 
   function refreshSourcesBrowserNav() {
     var wv = getSourcesBrowserWebview();
+    var activeTab = getSourcesActiveTab();
+    var activeHome = !!(activeTab && activeTab.home);
+    state.sourcesBrowserLoading = !!(activeTab && activeTab.loading && !activeHome);
     if (!wv) return;
+    if (activeHome) {
+      if (el.sourcesBrowserBackBtn) el.sourcesBrowserBackBtn.disabled = true;
+      if (el.sourcesBrowserForwardBtn) el.sourcesBrowserForwardBtn.disabled = true;
+      if (el.sourcesBrowserReloadBtn) {
+        el.sourcesBrowserReloadBtn.classList.remove('isLoading');
+        el.sourcesBrowserReloadBtn.innerHTML = '&#x21bb;';
+        el.sourcesBrowserReloadBtn.title = 'Reload';
+        el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Reload');
+      }
+      return;
+    }
     if (el.sourcesBrowserBackBtn) {
       try { el.sourcesBrowserBackBtn.disabled = !wv.canGoBack(); } catch (_e) { el.sourcesBrowserBackBtn.disabled = true; }
     }
@@ -687,18 +1733,21 @@
   }
 
   function applySourcesBrowserViewportLayout() {
+    syncSourcesWebviewVisibility();
     var metrics = getSourcesBrowserViewportMetrics();
     if (!metrics) return;
+    var activeTab = getSourcesActiveTab();
+    var activeHome = !!(activeTab && activeTab.home);
     var wv = metrics.wv;
     var vw = metrics.width;
     var vh = metrics.height;
     var visible = metrics.visible;
-    var interactive = visible && !state.sourcesBrowserOverlayLocked;
-    wv.style.visibility = visible ? 'visible' : 'hidden';
+    var interactive = visible && !state.sourcesBrowserOverlayLocked && !activeHome;
+    wv.style.visibility = (visible && !activeHome) ? 'visible' : 'hidden';
     wv.style.pointerEvents = interactive ? 'auto' : 'none';
     wv.style.position = 'absolute';
     // Electron docs: keep webview as flex so internal iframe fills host bounds.
-    wv.style.display = 'flex';
+    wv.style.display = activeHome ? 'none' : 'flex';
     wv.style.left = '0px';
     wv.style.top = '0px';
     wv.style.right = '0px';
@@ -786,11 +1835,21 @@
 
   function navigateSourcesBrowser(raw, opts) {
     var options = (opts && typeof opts === 'object') ? opts : {};
-    var wv = getSourcesBrowserWebview();
+    var active = getSourcesActiveTab();
+    if (!active) {
+      active = openSourcesTab('', { switchTo: true, persist: false, home: true });
+      if (!active) return false;
+    }
+    var wv = active.webview;
     if (!wv) return false;
     var target = normalizeSourcesBrowserInput(raw);
     if (!target) return false;
     if (target === 'about:blank') target = getSourcesBrowserStartUrl();
+    var rawInput = String(raw || '').trim();
+    var searchUrlForRaw = getSourcesSearchUrl(rawInput);
+    if (rawInput && searchUrlForRaw && target === searchUrlForRaw && api.webSearch && typeof api.webSearch.add === 'function') {
+      try { api.webSearch.add(rawInput); } catch (_eSearchAdd) {}
+    }
     state.sourcesBrowserNavToken += 1;
     state.sourcesBrowserRecoveryStage = 0;
     state.sourcesBrowserRecoveryNavToken = -1;
@@ -798,11 +1857,16 @@
       try { clearTimeout(state.sourcesBrowserRecoveryTimer); } catch (_eClear) {}
       state.sourcesBrowserRecoveryTimer = 0;
     }
+    active.home = false;
     setSourcesBrowserRenderState('ok');
     state.sourcesBrowserUrl = target;
+    active.url = target;
     if (el.sourcesBrowserUrlInput && !options.keepInput) el.sourcesBrowserUrlInput.value = target;
+    syncSourcesBrowserOmniPlaceholder();
+    renderSourcesBrowserHome();
     try {
       wv.loadURL(target);
+      active.loading = true;
       state.sourcesBrowserLoading = true;
       refreshSourcesBrowserNav();
       setSourcesBrowserStatus('Loading...', true);
@@ -820,8 +1884,25 @@
     }
   }
 
+  function submitSourcesHomeSearch(raw, engineKey) {
+    var active = getSourcesActiveTab();
+    if (!active) return;
+    var homeState = getSourcesHomeStateForTab(active);
+    if (homeState) {
+      homeState.query = String(raw || '').trim();
+      var chosen = String(engineKey || '').trim().toLowerCase();
+      if (!chosen) chosen = getSourcesActiveSearchEngineKey();
+      homeState.engine = chosen;
+      if (state.browserSettings && String(state.browserSettings.defaultSearchEngine || '') !== chosen) {
+        saveBrowserSettings({ defaultSearchEngine: chosen });
+      }
+    }
+    syncSourcesBrowserOmniPlaceholder();
+    navigateSourcesBrowser(raw, { focus: true });
+  }
+
   function renderSourcesBrowserHistoryRows(query) {
-    if (!el.sourcesBrowserHistoryBody) return;
+    if (!el.sourcesBrowserHistoryList) return;
     var q = String(query || '').trim().toLowerCase();
     var rows = Array.isArray(state.sourcesBrowserHistoryRows) ? state.sourcesBrowserHistoryRows.slice() : [];
     if (q) {
@@ -833,19 +1914,51 @@
     }
     rows.sort(function (a, b) { return Number(b && b.visitedAt || 0) - Number(a && a.visitedAt || 0); });
     var html = '';
-    for (var i = 0; i < Math.min(rows.length, 200); i++) {
+    var lastDateKey = '';
+    for (var i = 0; i < Math.min(rows.length, MAX_BROWSING_HISTORY_UI); i++) {
       var r = rows[i] || {};
+      var visitedAt = Number(r.visitedAt || Date.now());
+      var dt = new Date(visitedAt);
+      var dateKey = '';
+      var dateLabel = '';
+      try {
+        dateKey = dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+        var now = new Date();
+        var todayKey = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        var yd = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+        var yesterdayKey = yd.getFullYear() + '-' + String(yd.getMonth() + 1).padStart(2, '0') + '-' + String(yd.getDate()).padStart(2, '0');
+        if (dateKey === todayKey) dateLabel = 'Today';
+        else if (dateKey === yesterdayKey) dateLabel = 'Yesterday';
+        else dateLabel = dt.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      } catch (_eDate) {
+        dateKey = '';
+        dateLabel = 'Earlier';
+      }
+      if (dateKey !== lastDateKey) {
+        html += '<div class="sourcesBrowserHistoryDateGroup">' + escapeHtml(dateLabel) + '</div>';
+        lastDateKey = dateKey;
+      }
       var when = '';
-      try { when = new Date(Number(r.visitedAt || Date.now())).toLocaleString(); } catch (_e) { when = ''; }
+      try { when = dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); } catch (_eWhen) { when = ''; }
       var url = String(r.url || '').trim();
-      html += '<tr data-history-url="' + escapeHtml(url) + '">'
-        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(String(r.title || url || '-')) + '">' + escapeHtml(String(r.title || url || '-')) + '</td>'
-        + '<td title="' + escapeHtml(url) + '">' + escapeHtml(url || '-') + '</td>'
-        + '<td>' + escapeHtml(when || '-') + '</td>'
-      + '</tr>';
+      var id = String(r.id || '');
+      var title = getSourcesHistoryTitle(url, r.title) || '-';
+      var favicon = String(r.favicon || '').trim();
+      var faviconHtml = favicon
+        ? '<img class="sourcesBrowserHistoryFavicon" src="' + escapeHtml(favicon) + '" alt="">'
+        : '<span class="sourcesBrowserHistoryFavicon sourcesBrowserHistoryFaviconFallback"></span>';
+      html += '<div class="sourcesBrowserHistoryRow" data-history-url="' + escapeHtml(url) + '" data-history-id="' + escapeHtml(id) + '">'
+        + faviconHtml
+        + '<div class="sourcesBrowserHistoryInfo">'
+          + '<div class="sourcesBrowserHistoryTitle" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>'
+          + '<div class="sourcesBrowserHistoryUrl" title="' + escapeHtml(url) + '">' + escapeHtml(url || '-') + '</div>'
+        + '</div>'
+        + '<div class="sourcesBrowserHistoryTime">' + escapeHtml(when || '-') + '</div>'
+        + '<button class="sourcesBrowserHistoryRemoveBtn" type="button" title="Remove" data-history-remove-id="' + escapeHtml(id) + '">×</button>'
+      + '</div>';
     }
-    if (!html) html = '<tr><td colspan="3" class="muted tiny">No history yet.</td></tr>';
-    el.sourcesBrowserHistoryBody.innerHTML = html;
+    el.sourcesBrowserHistoryList.innerHTML = html;
+    if (el.sourcesBrowserHistoryEmpty) el.sourcesBrowserHistoryEmpty.classList.toggle('hidden', !!html);
   }
 
   function openSourcesBrowserHistoryOverlay() {
@@ -853,7 +1966,7 @@
       showToast('History service unavailable');
       return;
     }
-    api.webHistory.list().then(function (res) {
+    api.webHistory.list({ scope: 'sources_browser', limit: MAX_BROWSING_HISTORY_UI }).then(function (res) {
       state.sourcesBrowserHistoryRows = (res && res.ok && Array.isArray(res.entries)) ? res.entries : [];
       renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput && el.sourcesBrowserHistorySearchInput.value);
       if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.remove('hidden');
@@ -876,7 +1989,9 @@
   function syncSourcesBrowserOverlayLock() {
     var locked = false;
     if (el.sourcesBrowserHistoryOverlay && !el.sourcesBrowserHistoryOverlay.classList.contains('hidden')) locked = true;
+    if (el.sourcesBrowserTabSearchOverlay && !el.sourcesBrowserTabSearchOverlay.classList.contains('hidden')) locked = true;
     if (el.torrentProvidersOverlay && !el.torrentProvidersOverlay.classList.contains('hidden')) locked = true;
+    if (el.sourcesBrowserCtxOverlay && !el.sourcesBrowserCtxOverlay.classList.contains('hidden')) locked = true;
     state.sourcesBrowserOverlayLocked = locked;
     scheduleSourcesBrowserViewportLayout();
     if (!locked) runSourcesBrowserRenderWatchdog();
@@ -886,10 +2001,10 @@
     if (state.sourcesBrowserBound) return;
     state.sourcesBrowserBound = true;
 
-    var wv = getSourcesBrowserWebview();
-    if (!wv) return;
-    try { wv.removeAttribute('autosize'); } catch (_e0) {}
-    var viewport = wv.parentElement;
+    var baseWv = el.sourcesBrowserWebview;
+    if (!baseWv) return;
+    try { baseWv.removeAttribute('autosize'); } catch (_e0) {}
+    var viewport = baseWv.parentElement;
     if (viewport && !state.sourcesBrowserResizeObserver && typeof ResizeObserver === 'function') {
       try {
         state.sourcesBrowserResizeObserver = new ResizeObserver(function () {
@@ -906,35 +2021,88 @@
       el.sourcesBrowserGoBtn.title = 'Go';
       el.sourcesBrowserGoBtn.setAttribute('aria-label', 'Go');
     }
-    if (el.sourcesBrowserUrlInput) {
-      el.sourcesBrowserUrlInput.placeholder = 'Search with Google or enter URL';
-    }
+    syncSourcesBrowserOmniPlaceholder();
 
     if (el.sourcesBrowserGoBtn) {
       el.sourcesBrowserGoBtn.addEventListener('click', function () {
+        closeSourcesOmniDropdown();
         navigateSourcesBrowser(el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value, { focus: true });
       });
     }
     if (el.sourcesBrowserUrlInput) {
       el.sourcesBrowserUrlInput.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') {
+          if (!state.sourcesOmniOpen) return;
+          e.preventDefault();
+          selectSourcesOmniRow(state.sourcesOmniSelectedIdx + 1, true);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          if (!state.sourcesOmniOpen) return;
+          e.preventDefault();
+          selectSourcesOmniRow(state.sourcesOmniSelectedIdx - 1, true);
+          return;
+        }
+        if (e.key === 'Tab') {
+          if (!state.sourcesOmniOpen) return;
+          e.preventDefault();
+          selectSourcesOmniRow(state.sourcesOmniSelectedIdx, true);
+          return;
+        }
+        if (e.key === 'Escape') {
+          if (!state.sourcesOmniOpen) return;
+          e.preventDefault();
+          closeSourcesOmniDropdown();
+          return;
+        }
         if (e.key !== 'Enter') return;
         e.preventDefault();
+        if (state.sourcesOmniOpen && runSourcesOmniResult(state.sourcesOmniSelectedIdx)) return;
+        closeSourcesOmniDropdown();
         navigateSourcesBrowser(el.sourcesBrowserUrlInput.value, { focus: true });
+      });
+      el.sourcesBrowserUrlInput.addEventListener('input', function () {
+        if (state.sourcesOmniSuppressInputOnce) {
+          state.sourcesOmniSuppressInputOnce = false;
+          return;
+        }
+        requestSourcesOmniSuggestions(el.sourcesBrowserUrlInput.value);
+      });
+      el.sourcesBrowserUrlInput.addEventListener('focus', function () {
+        requestSourcesOmniSuggestions(el.sourcesBrowserUrlInput.value);
+      });
+      el.sourcesBrowserUrlInput.addEventListener('blur', function () {
+        setTimeout(function () {
+          closeSourcesOmniDropdown();
+        }, 120);
+      });
+    }
+    if (el.sourcesBrowserOmniDropdown) {
+      el.sourcesBrowserOmniDropdown.addEventListener('mousedown', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-omni-index]') : null;
+        if (!row) return;
+        e.preventDefault();
+        runSourcesOmniResult(Number(row.getAttribute('data-sources-omni-index')));
       });
     }
     if (el.sourcesBrowserBackBtn) {
       el.sourcesBrowserBackBtn.addEventListener('click', function () {
-        try { if (wv.canGoBack()) wv.goBack(); } catch (_e) {}
+        var wv = getSourcesBrowserWebview();
+        try { if (wv && wv.canGoBack()) wv.goBack(); } catch (_e) {}
       });
     }
     if (el.sourcesBrowserForwardBtn) {
       el.sourcesBrowserForwardBtn.addEventListener('click', function () {
-        try { if (wv.canGoForward()) wv.goForward(); } catch (_e) {}
+        var wv = getSourcesBrowserWebview();
+        try { if (wv && wv.canGoForward()) wv.goForward(); } catch (_e) {}
       });
     }
     if (el.sourcesBrowserReloadBtn) {
       el.sourcesBrowserReloadBtn.addEventListener('click', function () {
+        var active = getSourcesActiveTab();
+        var wv = active && active.webview ? active.webview : getSourcesBrowserWebview();
         try {
+          if (!wv) return;
           if (state.sourcesBrowserLoading && typeof wv.stop === 'function') wv.stop();
           else if (typeof wv.reload === 'function') wv.reload();
         } catch (_e) {}
@@ -943,10 +2111,12 @@
     if (el.sourcesBrowserBookmarkBtn) {
       el.sourcesBrowserBookmarkBtn.addEventListener('click', function () {
         if (!api.webBookmarks || typeof api.webBookmarks.toggle !== 'function') return;
-        var target = String(state.sourcesBrowserUrl || (el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value) || '').trim();
+        var active = getSourcesActiveTab();
+        var wv = active && active.webview ? active.webview : getSourcesBrowserWebview();
+        var target = String((active && active.url) || state.sourcesBrowserUrl || (el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value) || '').trim();
         if (!target) return;
         var title = '';
-        try { title = String(wv.getTitle() || '').trim(); } catch (_e) {}
+        try { title = String((active && active.title) || (wv && wv.getTitle && wv.getTitle()) || '').trim(); } catch (_e) {}
         api.webBookmarks.toggle({ url: target, title: title, favicon: getFaviconUrl(target) }).then(function () {
           refreshSourcesBrowserBookmarkUi(target);
           if (panels.renderBookmarkBar) panels.renderBookmarkBar();
@@ -975,18 +2145,34 @@
     if (el.sourcesBrowserHistoryClearBtn) {
       el.sourcesBrowserHistoryClearBtn.addEventListener('click', function () {
         if (!api.webHistory || typeof api.webHistory.clear !== 'function') return;
-        api.webHistory.clear().then(function () {
+        api.webHistory.clear({ scope: 'sources_browser' }).then(function () {
           state.sourcesBrowserHistoryRows = [];
           renderSourcesBrowserHistoryRows('');
           if (el.sourcesBrowserHistorySearchInput) el.sourcesBrowserHistorySearchInput.value = '';
+          refreshSourcesBrowserHomeShortcuts();
         }).catch(function () {
           showToast('Failed to clear history');
         });
       });
     }
-    if (el.sourcesBrowserHistoryBody) {
-      el.sourcesBrowserHistoryBody.addEventListener('click', function (e) {
-        var row = e.target && e.target.closest ? e.target.closest('tr[data-history-url]') : null;
+    if (el.sourcesBrowserHistoryList) {
+      el.sourcesBrowserHistoryList.addEventListener('click', function (e) {
+        var removeBtn = e.target && e.target.closest ? e.target.closest('[data-history-remove-id]') : null;
+        if (removeBtn) {
+          var removeId = String(removeBtn.getAttribute('data-history-remove-id') || '').trim();
+          if (!removeId || !api.webHistory || typeof api.webHistory.remove !== 'function') return;
+          api.webHistory.remove({ id: removeId }).then(function () {
+            state.sourcesBrowserHistoryRows = (state.sourcesBrowserHistoryRows || []).filter(function (x) {
+              return !(x && String(x.id) === removeId);
+            });
+            renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput && el.sourcesBrowserHistorySearchInput.value);
+            refreshSourcesBrowserHomeShortcuts();
+          }).catch(function () {
+            showToast('Failed to remove history entry');
+          });
+          return;
+        }
+        var row = e.target && e.target.closest ? e.target.closest('.sourcesBrowserHistoryRow[data-history-url]') : null;
         if (!row) return;
         var url = String(row.getAttribute('data-history-url') || '').trim();
         if (!url) return;
@@ -994,6 +2180,177 @@
         navigateSourcesBrowser(url, { focus: true });
       });
     }
+    if (el.sourcesBrowserHomeSearchForm) {
+      el.sourcesBrowserHomeSearchForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var query = el.sourcesBrowserHomeSearchInput ? el.sourcesBrowserHomeSearchInput.value : '';
+        var engine = el.sourcesBrowserHomeEngine ? el.sourcesBrowserHomeEngine.value : '';
+        submitSourcesHomeSearch(query, engine);
+      });
+    }
+    if (el.sourcesBrowserHomeSearchInput) {
+      el.sourcesBrowserHomeSearchInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        var query = el.sourcesBrowserHomeSearchInput.value;
+        var engine = el.sourcesBrowserHomeEngine ? el.sourcesBrowserHomeEngine.value : '';
+        submitSourcesHomeSearch(query, engine);
+      });
+      el.sourcesBrowserHomeSearchInput.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        showSourcesHomeContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          isEditable: true,
+        });
+      });
+    }
+    if (el.sourcesBrowserHomeEngine) {
+      el.sourcesBrowserHomeEngine.addEventListener('change', function () {
+        var active = getSourcesActiveTab();
+        var homeState = getSourcesHomeStateForTab(active);
+        if (homeState) homeState.engine = String(el.sourcesBrowserHomeEngine.value || 'google').trim().toLowerCase() || 'google';
+        syncSourcesBrowserOmniPlaceholder();
+      });
+    }
+    if (el.sourcesBrowserHomeShortcuts) {
+      el.sourcesBrowserHomeShortcuts.addEventListener('click', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-home-url]') : null;
+        if (!row) return;
+        var url = String(row.getAttribute('data-sources-home-url') || '').trim();
+        if (!url) return;
+        navigateSourcesBrowser(url, { focus: true });
+      });
+      el.sourcesBrowserHomeShortcuts.addEventListener('contextmenu', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-home-url]') : null;
+        if (!row) return;
+        e.preventDefault();
+        showSourcesHomeContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          homeUrl: String(row.getAttribute('data-sources-home-url') || '').trim(),
+        });
+      });
+    }
+    if (el.sourcesBrowserHomeRecentTabs) {
+      el.sourcesBrowserHomeRecentTabs.addEventListener('click', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-recent-tab-id]') : null;
+        if (!row) return;
+        var id = String(row.getAttribute('data-sources-recent-tab-id') || '').trim();
+        if (!id) return;
+        switchSourcesTab(id, { focus: true });
+      });
+      el.sourcesBrowserHomeRecentTabs.addEventListener('contextmenu', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-recent-tab-id]') : null;
+        if (!row) return;
+        e.preventDefault();
+        var id = String(row.getAttribute('data-sources-recent-tab-id') || '').trim();
+        var tab = getSourcesTabById(id);
+        showSourcesHomeContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          homeUrl: String(tab && tab.url || '').trim(),
+        });
+      });
+    }
+    if (el.sourcesBrowserTabSearchCloseBtn) {
+      el.sourcesBrowserTabSearchCloseBtn.addEventListener('click', closeSourcesTabSearchOverlay);
+    }
+    if (el.sourcesBrowserTabSearchOverlay) {
+      el.sourcesBrowserTabSearchOverlay.addEventListener('click', function (e) {
+        if (e.target === el.sourcesBrowserTabSearchOverlay) closeSourcesTabSearchOverlay();
+      });
+    }
+    if (el.sourcesBrowserTabSearchInput) {
+      el.sourcesBrowserTabSearchInput.addEventListener('input', function () {
+        renderSourcesTabSearchRows(el.sourcesBrowserTabSearchInput.value);
+      });
+      el.sourcesBrowserTabSearchInput.addEventListener('keydown', function (e) {
+        var matches = Array.isArray(state.sourcesTabSearchMatches) ? state.sourcesTabSearchMatches : [];
+        if (e.key === 'ArrowDown') {
+          if (!matches.length) return;
+          e.preventDefault();
+          state.sourcesTabSearchSelectedIdx = (state.sourcesTabSearchSelectedIdx + 1 + matches.length) % matches.length;
+          renderSourcesTabSearchRows(el.sourcesBrowserTabSearchInput.value);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          if (!matches.length) return;
+          e.preventDefault();
+          state.sourcesTabSearchSelectedIdx = (state.sourcesTabSearchSelectedIdx - 1 + matches.length) % matches.length;
+          renderSourcesTabSearchRows(el.sourcesBrowserTabSearchInput.value);
+          return;
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          activateSourcesTabSearchResult(state.sourcesTabSearchSelectedIdx);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          closeSourcesTabSearchOverlay();
+        }
+      });
+    }
+    if (el.sourcesBrowserTabSearchList) {
+      el.sourcesBrowserTabSearchList.addEventListener('click', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-tab-search-index]') : null;
+        if (!row) return;
+        activateSourcesTabSearchResult(Number(row.getAttribute('data-sources-tab-search-index')));
+      });
+    }
+    if (el.sourcesBrowserTabList) {
+      el.sourcesBrowserTabList.addEventListener('click', function (e) {
+        var closeBtn = e.target && e.target.closest ? e.target.closest('[data-sources-tab-close]') : null;
+        if (closeBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          closeSourcesTab(closeBtn.getAttribute('data-sources-tab-close'));
+          return;
+        }
+        var tabEl = e.target && e.target.closest ? e.target.closest('[data-sources-tab-id]') : null;
+        if (!tabEl) return;
+        switchSourcesTab(tabEl.getAttribute('data-sources-tab-id'), { focus: true });
+      });
+      el.sourcesBrowserTabList.addEventListener('contextmenu', function (e) {
+        var tabEl = e.target && e.target.closest ? e.target.closest('[data-sources-tab-id]') : null;
+        if (!tabEl) return;
+        e.preventDefault();
+        showSourcesTabContextMenu(tabEl.getAttribute('data-sources-tab-id'), e.clientX, e.clientY);
+      });
+    }
+    if (el.sourcesBrowserNewTabBtn) {
+      el.sourcesBrowserNewTabBtn.addEventListener('click', function () {
+        openSourcesTab('', { switchTo: true, focus: true, persist: false, home: true });
+      });
+    }
+    if (el.sourcesBrowserCtxOverlay) {
+      el.sourcesBrowserCtxOverlay.addEventListener('mousedown', function () {
+        hideSourcesBrowserContextMenu();
+      });
+    }
+    if (el.sourcesBrowserCtxMenu) {
+      el.sourcesBrowserCtxMenu.addEventListener('click', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('[data-sources-ctx-action]') : null;
+        if (!row || row.disabled) return;
+        var action = String(row.getAttribute('data-sources-ctx-action') || '').trim();
+        hideSourcesBrowserContextMenu();
+        runSourcesContextAction(action);
+      });
+    }
+    document.addEventListener('mousedown', function (e) {
+      if (!state.sourcesContextMenuMeta) return;
+      if (el.sourcesBrowserCtxMenu && el.sourcesBrowserCtxMenu.contains(e.target)) return;
+      if (el.sourcesBrowserCtxOverlay && e.target === el.sourcesBrowserCtxOverlay) return;
+      hideSourcesBrowserContextMenu();
+    });
+    if (api.webHistory && typeof api.webHistory.onUpdated === 'function') {
+      api.webHistory.onUpdated(function () {
+        refreshSourcesBrowserHomeShortcuts();
+      });
+    }
+    refreshSourcesBrowserHomeShortcuts();
+    renderSourcesBrowserHome();
     if (el.sourcesBrowserDownloadsClearBtn) {
       el.sourcesBrowserDownloadsClearBtn.addEventListener('click', function () {
         var src = state.downloads;
@@ -1017,100 +2374,19 @@
       });
     }
 
-    wv.addEventListener('did-start-loading', function () {
-      state.sourcesBrowserNavToken += 1;
-      state.sourcesBrowserRecoveryStage = 0;
-      state.sourcesBrowserRecoveryNavToken = -1;
-      if (state.sourcesBrowserRecoveryTimer) {
-        try { clearTimeout(state.sourcesBrowserRecoveryTimer); } catch (_eClear2) {}
-        state.sourcesBrowserRecoveryTimer = 0;
-      }
-      state.sourcesBrowserLoading = true;
-      setSourcesBrowserRenderState('ok');
-      refreshSourcesBrowserNav();
-      setSourcesBrowserStatus('Loading...', true);
-      state.sourcesBrowserRenderRecovered = false;
-      scheduleSourcesBrowserViewportLayout();
-      scheduleSourcesBrowserLoadingSettleCheck();
-    });
-    wv.addEventListener('did-stop-loading', function () {
-      state.sourcesBrowserLoading = false;
-      var url = '';
-      try { url = String(wv.getURL() || '').trim(); } catch (_e) {}
-      if (url && url !== 'about:blank') {
-        state.sourcesBrowserUrl = url;
-        if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = url;
-        persistSourcesBrowserLastUrl(url);
-        refreshSourcesBrowserBookmarkUi(url);
-        if (api.webHistory && typeof api.webHistory.add === 'function' && url !== 'about:blank') {
-          var title = '';
-          try { title = String(wv.getTitle() || '').trim(); } catch (_titleErr) {}
-          api.webHistory.add({ url: url, title: title || url, favicon: getFaviconUrl(url), timestamp: Date.now() });
-        }
-        scheduleSourcesBrowserRepaintKick();
-      }
-      refreshSourcesBrowserNav();
-      setSourcesBrowserStatus((url && url !== 'about:blank') ? url : 'Ready', false);
-      scheduleSourcesBrowserViewportLayout();
-      runSourcesBrowserRenderWatchdog();
-      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
-      scheduleSourcesBrowserLoadingSettleCheck();
-    });
-    wv.addEventListener('did-finish-load', function () {
-      state.sourcesBrowserLoading = false;
-      refreshSourcesBrowserNav();
-      setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
-      scheduleSourcesBrowserViewportLayout();
-      runSourcesBrowserRenderWatchdog();
-      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
-      scheduleSourcesBrowserLoadingSettleCheck();
-    });
-    wv.addEventListener('did-fail-load', function (e) {
-      var code = Number(e && e.errorCode || 0);
-      if (code === -3) return;
-      state.sourcesBrowserLoading = false;
-      refreshSourcesBrowserNav();
-      setSourcesBrowserStatus('Load failed (HTTP/NET error)', false);
-      setSourcesBrowserRenderState('ok');
-      scheduleSourcesBrowserViewportLayout();
-      scheduleSourcesBrowserLoadingSettleCheck();
-    });
-    wv.addEventListener('did-navigate', function (e) {
-      var next = String(e && e.url || '').trim();
-      if (/^magnet:/i.test(next)) {
-        emit('openMagnet', next);
-        return;
-      }
-      if (!next) return;
-      state.sourcesBrowserUrl = next;
-      if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = next;
-      refreshSourcesBrowserBookmarkUi(next);
-      refreshSourcesBrowserNav();
-      scheduleSourcesBrowserViewportLayout();
-      runSourcesBrowserRenderWatchdog();
-    });
-    wv.addEventListener('new-window', function (e) {
-      var next = String((e && e.url) || '').trim();
-      if (!next) return;
-      if (/^magnet:/i.test(next)) {
-        emit('openMagnet', next);
-        return;
-      }
-      navigateSourcesBrowser(next, { focus: true });
-    });
-    wv.addEventListener('dom-ready', function () {
-      state.sourcesBrowserLoading = false;
-      refreshSourcesBrowserNav();
-      setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
-      scheduleSourcesBrowserViewportLayout();
-      runSourcesBrowserRenderWatchdog();
-      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
-      scheduleSourcesBrowserLoadingSettleCheck();
-    });
-
     refreshSourcesBrowserNav();
     setSourcesBrowserStatus('Ready', false);
     window.addEventListener('resize', scheduleSourcesBrowserViewportLayout);
+    if (!state.sourcesTabs.length) {
+      var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
+      var initialUrl = String((cfg && cfg.lastUrl) || '').trim();
+      if (!initialUrl || initialUrl === 'about:blank') initialUrl = getSourcesBrowserStartUrl();
+      openSourcesTab(initialUrl, { switchTo: true, focus: false, persist: false });
+    } else {
+      var current = getSourcesActiveTab() || state.sourcesTabs[0];
+      if (current) switchSourcesTab(current.id, { focus: false });
+    }
+    renderSourcesBrowserTabStrip();
     scheduleSourcesBrowserViewportLayout();
   }
 
@@ -1362,26 +2638,28 @@
     ensureSourcesModeActive().then(function () {
       applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
       initSourcesBrowser();
-      if (el.sourcesBrowserUrlInput) {
-        try {
-          el.sourcesBrowserUrlInput.focus();
-          if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
-        } catch (_e) {}
-      }
+      openSourcesTab('', { switchTo: true, focus: true, persist: false, home: true });
     });
   }
 
   function openBrowserForTab(tabId) {
-    var t = null;
-    for (var x = 0; x < state.tabs.length; x++) {
-      if (state.tabs[x] && state.tabs[x].id === tabId) { t = state.tabs[x]; break; }
+    var t = getSourcesTabById(tabId);
+    if (t) {
+      ensureSourcesModeActive().then(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+        initSourcesBrowser();
+        switchSourcesTab(t.id, { focus: true });
+      });
     }
-    if (t && t.url) openBrowser({ url: t.url });
     else openHome();
   }
 
   function openNewTab() {
-    openHome();
+    ensureSourcesModeActive().then(function () {
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      initSourcesBrowser();
+      openSourcesTab('', { switchTo: true, focus: true, persist: false, home: true });
+    });
   }
 
   function closeBrowser() {
@@ -1415,19 +2693,16 @@
   function renderSources() {
     var sidebarHtml = '';
     var settingsHtml = '';
+    var activeSourcesTab = getSourcesActiveTab();
+    var activeUrl = String(activeSourcesTab && activeSourcesTab.url || '').trim();
     for (var i = 0; i < state.sources.length; i++) {
       var s = state.sources[i];
-      var isActive = false;
-      for (var j = 0; j < state.tabs.length; j++) {
-        if (state.tabs[j].sourceId === s.id && state.tabs[j].id === state.activeTabId) {
-          isActive = true;
-          break;
-        }
-      }
+      var sourceUrl = String(s && s.url || '').trim();
+      var isActive = !!(activeUrl && sourceUrl && activeUrl.indexOf(sourceUrl) === 0);
       sidebarHtml += '<div class="webSourceItem' + (isActive ? ' active' : '') + '" data-source-id="' + s.id + '" role="listitem">'
         + '<span class="webSourceDot" style="background:' + (s.color || '#888') + '"></span>'
         + '<span class="webSourceName">' + escapeHtml(s.name) + '</span>'
-        + '</div>';
+      + '</div>';
       settingsHtml += '<div class="webHubItem" data-settings-source-id="' + escapeHtml(String(s.id || '')) + '">'
         + '<div class="webHubItemTop">'
           + '<div class="webHubItemTitle">' + escapeHtml(s.name || 'Source') + '</div>'
@@ -1494,6 +2769,14 @@
     if (!q) return;
     var url = navOmnibox.resolveInput ? navOmnibox.resolveInput(q) : (navOmnibox.getSearchUrl ? navOmnibox.getSearchUrl(q) : q);
     if (!url) return;
+    if (isSourcesModeActive() || !state.browserOpen) {
+      ensureSourcesModeActive().then(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+        initSourcesBrowser();
+        openSourcesTab(url, { switchTo: true, focus: true });
+      });
+      return;
+    }
     if (tabsState.createTab) tabsState.createTab(null, url, { switchTo: true });
     state.showBrowserHome = false;
     syncContentVisibility();
@@ -1564,6 +2847,7 @@
         renderSources();
         renderSourcesGrid();
         renderBrowserHome();
+        refreshSourcesBrowserHomeShortcuts();
         renderContinue();
       }
     }).catch(function () {});
@@ -1783,11 +3067,8 @@
     if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement === el.sourcesDownloadsView && el.contentArea) {
       el.contentArea.appendChild(el.torrentContainer);
     }
-    if (key === 'search' && el.sourcesSearchInput) {
-      setTimeout(function () {
-        try { el.sourcesSearchInput.focus(); } catch (_e) {}
-      }, 0);
-    }
+    // Do not auto-focus search on mode entry; it scrolls the Sources page
+    // away from the top now that TankoBrowser is the first panel.
   }
 
   function enforceProvidersOnlySidebar() {
@@ -2767,12 +4048,25 @@
         forceSourcesViewVisible();
         applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
         initSourcesBrowser();
-        var ok = navigateSourcesBrowser(url, { focus: true });
         closeTorrentProvidersDialog();
-        if (ok) {
-          showToast('Opened provider UI in TankoBrowser');
+        var ok = navigateSourcesBrowser(url, { focus: true });
+        if (!ok) {
+          // One delayed retry handles transient webview readiness timing.
+          setTimeout(function () {
+            var okRetry = false;
+            try { okRetry = navigateSourcesBrowser(url, { focus: true }); } catch (_retryErr) { okRetry = false; }
+            if (okRetry) {
+              showToast('Opened provider UI in TankoBrowser');
+              return;
+            }
+            forceSourcesViewVisible();
+            applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+            showToast('Unable to open provider UI');
+          }, 120);
           return;
         }
+        showToast('Opened provider UI in TankoBrowser');
+        return;
       } catch (_e) {}
       // Self-heal: keep Sources visible even if webview navigation fails.
       forceSourcesViewVisible();
@@ -2914,6 +4208,10 @@
     if (el.prowlarrBaseUrl) el.prowlarrBaseUrl.value = String(s.prowlarr && s.prowlarr.baseUrl || '');
     if (el.prowlarrApiKey) el.prowlarrApiKey.value = String(s.prowlarr && s.prowlarr.apiKey || '');
     applySourcesMinimalFlag();
+    state.sourcesBrowserHomeReady = false;
+    ensureSourcesHomeEngineOptions();
+    syncSourcesBrowserOmniPlaceholder();
+    renderSourcesBrowserHome();
   }
 
   function loadBrowserSettings() {
@@ -3010,6 +4308,99 @@
     var ctrl = e.ctrlKey || e.metaKey;
     var shift = e.shiftKey;
     var key = e.key;
+    var sourcesActive = isSourcesModeActive() && !state.browserOpen;
+
+    if (sourcesActive) {
+      if (ctrl && !shift && key === 't') {
+        e.preventDefault();
+        openSourcesTab('', { switchTo: true, focus: true, persist: false, home: true });
+        return;
+      }
+      if (ctrl && !shift && /^[1-9]$/.test(key)) {
+        e.preventDefault();
+        var idxTarget = Number(key) - 1;
+        if (key === '9') idxTarget = Math.max(0, state.sourcesTabs.length - 1);
+        var targetTab = state.sourcesTabs[idxTarget];
+        if (targetTab && targetTab.id) switchSourcesTab(targetTab.id, { focus: true });
+        return;
+      }
+      if (ctrl && !shift && key === 'w') {
+        e.preventDefault();
+        var activeClose = getSourcesActiveTab();
+        if (activeClose) closeSourcesTab(activeClose.id);
+        return;
+      }
+      if (ctrl && key === 'Tab') {
+        e.preventDefault();
+        cycleSourcesTabs(shift ? -1 : 1);
+        return;
+      }
+      if (ctrl && shift && (key === 'T' || key === 't')) {
+        e.preventDefault();
+        reopenSourcesClosedTab();
+        return;
+      }
+      if (ctrl && !shift && key === 'l') {
+        e.preventDefault();
+        if (el.sourcesBrowserUrlInput) {
+          el.sourcesBrowserUrlInput.focus();
+          if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
+        }
+        return;
+      }
+      if (ctrl && !shift && key === 'h') {
+        e.preventDefault();
+        openSourcesBrowserHistoryOverlay();
+        return;
+      }
+      if (ctrl && shift && (key === 'A' || key === 'a')) {
+        e.preventDefault();
+        openSourcesTabSearchOverlay();
+        return;
+      }
+      if (ctrl && !shift && key === 'r') {
+        e.preventDefault();
+        var rwv = getSourcesBrowserWebview();
+        if (rwv && typeof rwv.reload === 'function') rwv.reload();
+        return;
+      }
+      if (e.altKey && key === 'ArrowLeft') {
+        e.preventDefault();
+        var bwv0 = getSourcesBrowserWebview();
+        if (bwv0 && typeof bwv0.goBack === 'function') bwv0.goBack();
+        return;
+      }
+      if (e.altKey && key === 'ArrowRight') {
+        e.preventDefault();
+        var fwv0 = getSourcesBrowserWebview();
+        if (fwv0 && typeof fwv0.goForward === 'function') fwv0.goForward();
+        return;
+      }
+      if (key === 'Escape') {
+        if (state.sourcesContextMenuMeta) {
+          hideSourcesBrowserContextMenu();
+          e.preventDefault();
+          return;
+        }
+        if (state.sourcesOmniOpen) {
+          closeSourcesOmniDropdown();
+          e.preventDefault();
+          return;
+        }
+        if (state.sourcesTabSearchOpen) {
+          closeSourcesTabSearchOverlay();
+          e.preventDefault();
+          return;
+        }
+        if (el.sourcesBrowserHistoryOverlay && !el.sourcesBrowserHistoryOverlay.classList.contains('hidden')) {
+          closeSourcesBrowserHistoryOverlay();
+          e.preventDefault();
+          return;
+        }
+      }
+    }
+
+    if (sourcesActive) return;
 
     // Ctrl+T — new tab
     if (ctrl && !shift && key === 't') {
@@ -3589,6 +4980,14 @@
           if (tabsState.openTorrentTab) tabsState.openTorrentTab(popupUrl);
           return;
         }
+        if (isSourcesModeActive() || !state.browserOpen) {
+          ensureSourcesModeActive().then(function () {
+            applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+            initSourcesBrowser();
+            openSourcesTab(popupUrl, { switchTo: true, focus: true });
+          });
+          return;
+        }
         if (tabsState.createTab) tabsState.createTab(null, data.url);
         if (!state.browserOpen) openBrowserForTab(state.activeTabId);
       });
@@ -3951,10 +5350,8 @@
 
   loadBrowserSettings().then(function () {
     loadSourcesSearchIndexers();
-    if (tabsState.loadSessionAndRestore) tabsState.loadSessionAndRestore();
   }).catch(function () {
     loadSourcesSearchIndexers();
-    if (tabsState.loadSessionAndRestore) tabsState.loadSessionAndRestore();
   });
 
   loadSources();
@@ -3996,12 +5393,12 @@
   // ── Public API ──
 
   var openDefaultBrowserEntry = standalone.openDefaultBrowserEntry || function () {
-    if (state.tabs.length) {
-      var targetId = state.activeTabId != null ? state.activeTabId : state.tabs[0].id;
+    if (state.sourcesTabs.length) {
+      var targetId = state.sourcesActiveTabId != null ? state.sourcesActiveTabId : state.sourcesTabs[0].id;
       openBrowserForTab(targetId);
-    } else {
-      openNewTab();
+      return;
     }
+    openNewTab();
   };
   var openTorrentWorkspace = standalone.openTorrentWorkspace || function () {
     openDefaultBrowserEntry();
@@ -4025,6 +5422,7 @@
     state.showBrowserHome = false;
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
+    hideSourcesBrowserContextMenu();
     if (find.closeFind) find.closeFind();
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
     forceSourcesViewVisible();
@@ -4037,39 +5435,17 @@
       var mode = state.sourcesSubMode === 'downloads' ? 'downloads' : 'search';
       applySourcesWorkspace(mode);
       initSourcesBrowser();
-      var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
-      var shouldRestore = !cfg || cfg.expandedByDefault !== false;
-      var lastUrl = String(cfg && cfg.lastUrl || '').trim();
-      if (lastUrl === 'about:blank') lastUrl = '';
-      if (shouldRestore && lastUrl) {
-        var wv = getSourcesBrowserWebview();
-        var currentUrl = String(state.sourcesBrowserUrl || '').trim();
-        if (currentUrl === 'about:blank') currentUrl = '';
-        var liveUrl = '';
-        try {
-          liveUrl = String((wv && (typeof wv.getURL === 'function' ? wv.getURL() : wv.src)) || '').trim();
-        } catch (_e) {
-          liveUrl = '';
-        }
-        if (liveUrl === 'about:blank') liveUrl = '';
-        if (!currentUrl && (!liveUrl || liveUrl === 'about:blank')) {
-          navigateSourcesBrowser(lastUrl, { focus: false });
+      if (!state.sourcesTabs.length) {
+        var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
+        var lastUrl = String(cfg && cfg.lastUrl || '').trim();
+        if (!lastUrl || lastUrl === 'about:blank') {
+          openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
+        } else {
+          openSourcesTab(lastUrl, { switchTo: true, focus: false, persist: false });
         }
       } else {
-        var startUrl = getSourcesBrowserStartUrl();
-        var wv2 = getSourcesBrowserWebview();
-        var activeUrl = String(state.sourcesBrowserUrl || '').trim();
-        if (activeUrl === 'about:blank') activeUrl = '';
-        var live = '';
-        try {
-          live = String((wv2 && (typeof wv2.getURL === 'function' ? wv2.getURL() : wv2.src)) || '').trim();
-        } catch (_e2) {
-          live = '';
-        }
-        if (live === 'about:blank') live = '';
-        if (!activeUrl && (!live || live === 'about:blank')) {
-          navigateSourcesBrowser(startUrl, { focus: false, persist: false });
-        }
+        var active = getSourcesActiveTab() || state.sourcesTabs[0];
+        if (active) switchSourcesTab(active.id, { focus: false });
       }
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();

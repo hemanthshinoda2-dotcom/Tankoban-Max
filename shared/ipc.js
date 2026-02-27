@@ -768,6 +768,9 @@ const CHANNEL = {
   /** Add one browsing history entry. Args: { url, title?, visitedAt?, sourceTabId? }. Returns: { ok, entry } */
   WEB_HISTORY_ADD: 'webHistory:add',
 
+  /** Upsert one browsing history entry by url/scope. Args: { url, scope?, title?, favicon?, visitedAt?, dedupeWindowMs? }. Returns: { ok, entry, mode } */
+  WEB_HISTORY_UPSERT: 'webHistory:upsert',
+
   /** Clear browsing history. Args: { from?, to? }. Returns: { ok } */
   WEB_HISTORY_CLEAR: 'webHistory:clear',
 

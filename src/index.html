@@ -1648,17 +1648,43 @@ COMMON ANCHORS
                 <div class="panelTitleRow">
                   <div class="panelTitle">TankoBrowser</div>
                 </div>
+                <div id="sourcesBrowserTabStrip" class="sourcesBrowserTabStrip">
+                  <div id="sourcesBrowserTabList" class="sourcesBrowserTabList"></div>
+                  <button id="sourcesBrowserNewTabBtn" class="btn btn-ghost btn-sm sourcesBrowserNewTabBtn" type="button" title="New tab" aria-label="New tab">+</button>
+                </div>
                 <div class="sourcesBrowserToolbar">
                   <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back" aria-label="Back">&#x2039;</button>
                   <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward" aria-label="Forward">&#x203a;</button>
                   <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload" aria-label="Reload">&#x21bb;</button>
-                  <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
+                  <div class="sourcesBrowserOmniWrap">
+                    <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
+                    <div id="sourcesBrowserOmniDropdown" class="sourcesBrowserOmniDropdown hidden" role="listbox" aria-label="Address bar suggestions"></div>
+                  </div>
                   <button id="sourcesBrowserGoBtn" class="btn btn-sm sourcesBrowserIconBtn" type="button" title="Go" aria-label="Go">&#x27a4;</button>
                   <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm" type="button">Bookmark</button>
                   <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm" type="button">History</button>
                 </div>
                 <div id="sourcesBrowserStatus" class="muted tiny"></div>
                 <div class="sourcesBrowserViewport">
+                  <div id="sourcesBrowserHome" class="sourcesBrowserHome hidden" aria-label="New tab page">
+                    <form id="sourcesBrowserHomeSearchForm" class="sourcesBrowserHomeSearchForm">
+                      <div class="sourcesBrowserHomeSearchRow">
+                        <input id="sourcesBrowserHomeSearchInput" class="search sourcesBrowserHomeSearchInput" type="text" placeholder="Search the web or type a URL" autocomplete="off" />
+                        <select id="sourcesBrowserHomeEngine" class="select sourcesBrowserHomeEngine" aria-label="Search engine"></select>
+                        <button id="sourcesBrowserHomeSearchBtn" class="btn btn-sm" type="submit">Search</button>
+                      </div>
+                    </form>
+                    <div class="sourcesBrowserHomeSection">
+                      <div class="sourcesBrowserHomeSectionTitle">Shortcuts</div>
+                      <div id="sourcesBrowserHomeShortcuts" class="sourcesBrowserHomeShortcuts"></div>
+                      <div id="sourcesBrowserHomeShortcutsEmpty" class="muted tiny hidden">No shortcuts yet.</div>
+                    </div>
+                    <div class="sourcesBrowserHomeSection">
+                      <div class="sourcesBrowserHomeSectionTitle">Recent Tabs</div>
+                      <div id="sourcesBrowserHomeRecentTabs" class="sourcesBrowserHomeRecentTabs"></div>
+                      <div id="sourcesBrowserHomeRecentTabsEmpty" class="muted tiny hidden">No recent tabs.</div>
+                    </div>
+                  </div>
                   <webview id="sourcesBrowserWebview"
                     src="about:blank"
                     partition="persist:webmode"
@@ -1666,6 +1692,8 @@ COMMON ANCHORS
                     webpreferences="contextIsolation=yes"></webview>
                 </div>
               </div>
+              <div id="sourcesBrowserCtxOverlay" class="sourcesBrowserCtxOverlay hidden" aria-hidden="true"></div>
+              <div id="sourcesBrowserCtxMenu" class="sourcesBrowserCtxMenu hidden" role="menu" aria-label="TankoBrowser context menu"></div>
 
               <div id="sourcesBrowserHistoryOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="TankoBrowser history">
                 <div class="settingsCard">
@@ -1679,20 +1707,24 @@ COMMON ANCHORS
                   <div class="settingsActions" style="justify-content:flex-start;">
                     <button id="sourcesBrowserHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
                   </div>
-                  <div class="sourcesSearchTableWrap">
-                    <table class="sourcesSearchTable">
-                      <thead>
-                        <tr>
-                          <th>Title</th>
-                          <th>URL</th>
-                          <th>Visited</th>
-                        </tr>
-                      </thead>
-                      <tbody id="sourcesBrowserHistoryBody">
-                        <tr><td colspan="3" class="muted tiny">No history yet.</td></tr>
-                      </tbody>
-                    </table>
+                  <div class="sourcesBrowserHistoryListWrap">
+                    <div id="sourcesBrowserHistoryList" class="sourcesBrowserHistoryList"></div>
+                    <div id="sourcesBrowserHistoryEmpty" class="muted tiny sourcesBrowserHistoryEmpty">No history yet.</div>
                   </div>
+                </div>
+              </div>
+
+              <div id="sourcesBrowserTabSearchOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Search tabs">
+                <div class="settingsCard sourcesBrowserTabSearchCard">
+                  <div class="settingsTop">
+                    <div class="settingsTitle">Search Tabs</div>
+                    <button id="sourcesBrowserTabSearchCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
+                  </div>
+                  <div class="settingsGroup">
+                    <input id="sourcesBrowserTabSearchInput" class="search" type="text" placeholder="Search tabs by title or URL..." autocomplete="off" />
+                  </div>
+                  <div id="sourcesBrowserTabSearchList" class="sourcesBrowserTabSearchList"></div>
+                  <div id="sourcesBrowserTabSearchEmpty" class="muted tiny hidden">No tabs match your search.</div>
                 </div>
               </div>
 

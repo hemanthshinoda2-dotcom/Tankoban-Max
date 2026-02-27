@@ -504,7 +504,8 @@
               url: url,
               title: tab.title || url,
               favicon: tab.favicon || '',
-              timestamp: Date.now()
+              timestamp: Date.now(),
+              scope: 'legacy_browser'
             });
             bridge.emit('history:updated');
           }
