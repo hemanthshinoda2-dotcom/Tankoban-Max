@@ -102,11 +102,13 @@
   }
 
   // Build 12: keep the shared top-bar button label correct when switching between Comics/Videos.
+  // Store reference so the observer can be disconnected if needed.
   try {
     const mo = new MutationObserver(() => {
       try { window.videoApp && window.videoApp.syncThumbsBtn && window.videoApp.syncThumbsBtn(); } catch {}
     });
     mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    window.__tankoShellBodyClassObserver = mo;
   } catch {}
 
   // Build 7 (UI): Sidebar -> off-canvas drawer. Keep existing sidebar DOM + buttons, just toggle visibility.

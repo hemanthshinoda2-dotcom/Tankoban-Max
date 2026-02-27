@@ -523,6 +523,7 @@ videoProgress IPC calls
   const thumbUrlCache = new Map();
   const thumbPreload = new Map();
   const THUMB_CACHE_MAX = 400;
+  const SHOW_POSTER_CACHE_MAX = 200;
 
   // Build 21: per-show custom posters (stored in userData via main process)
   const showPosterCache = new Map(); // showId -> file:// url | null
@@ -597,6 +598,10 @@ videoProgress IPC calls
     if (!sid) return;
     showPosterInFlight.delete(sid);
     showPosterCache.set(sid, withPosterRev(sid, url));
+    if (showPosterCache.size > SHOW_POSTER_CACHE_MAX) {
+      const k0 = showPosterCache.keys().next().value;
+      if (k0) { showPosterCache.delete(k0); showPosterRev.delete(k0); }
+    }
     refreshMountedPosters(sid);
   }
 
@@ -618,9 +623,17 @@ videoProgress IPC calls
         const v0 = url ? String(url) : null;
         const v = v0 ? withPosterRev(sid, v0) : null;
         showPosterCache.set(sid, v);
+        if (showPosterCache.size > SHOW_POSTER_CACHE_MAX) {
+          const k0 = showPosterCache.keys().next().value;
+          if (k0) { showPosterCache.delete(k0); showPosterRev.delete(k0); }
+        }
         return v;
       } catch {
         showPosterCache.set(sid, null);
+        if (showPosterCache.size > SHOW_POSTER_CACHE_MAX) {
+          const k0 = showPosterCache.keys().next().value;
+          if (k0) { showPosterCache.delete(k0); showPosterRev.delete(k0); }
+        }
         return null;
       } finally {
         showPosterInFlight.delete(sid);
