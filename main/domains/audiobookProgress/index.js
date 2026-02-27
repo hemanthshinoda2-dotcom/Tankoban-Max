@@ -5,22 +5,28 @@ Same pattern as booksProgress/index.js.
 */
 
 let progressMem = null;
+let progressLoading = null;
 
-function getProgressMem(ctx) {
+async function getProgressMem(ctx) {
   if (progressMem) return progressMem;
-  progressMem = ctx.storage.readJSON(ctx.storage.dataPath('audiobook_progress.json'), {});
-  return progressMem;
+  if (progressLoading) return progressLoading;
+  progressLoading = (async () => {
+    progressMem = await ctx.storage.readJSONAsync(ctx.storage.dataPath('audiobook_progress.json'), {});
+    progressLoading = null;
+    return progressMem;
+  })();
+  return progressLoading;
 }
 
 async function getAll(ctx) {
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   return { ...all };
 }
 
 async function get(ctx, _evt, abId) {
   const id = String(abId || '');
   if (!id) return null;
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   return all[id] || null;
 }
 
@@ -29,7 +35,7 @@ async function save(ctx, _evt, abId, progress) {
   if (!id) return { ok: false, error: 'invalid_id' };
 
   const p = ctx.storage.dataPath('audiobook_progress.json');
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   const prev = (all[id] && typeof all[id] === 'object') ? all[id] : {};
   const next = (progress && typeof progress === 'object') ? progress : {};
   all[id] = { ...prev, ...next, updatedAt: Date.now() };
@@ -42,7 +48,7 @@ async function clear(ctx, _evt, abId) {
   if (!id) return { ok: false, error: 'invalid_id' };
 
   const p = ctx.storage.dataPath('audiobook_progress.json');
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   delete all[id];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };

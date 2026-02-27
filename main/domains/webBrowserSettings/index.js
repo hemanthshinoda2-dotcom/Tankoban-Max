@@ -72,6 +72,7 @@ const DEFAULT_SETTINGS = {
 };
 
 var cache = null;
+var cacheLoading = null;
 
 function normalizeSearchEngine(value) {
   var key = String(value || '').trim().toLowerCase();
@@ -198,13 +199,18 @@ function normalizeSettings(input) {
   return out;
 }
 
-function ensureCache(ctx) {
+async function ensureCache(ctx) {
   if (cache) return cache;
-  var p = ctx.storage.dataPath(SETTINGS_FILE);
-  var data = ctx.storage.readJSON(p, null);
-  var settings = normalizeSettings(data && data.settings ? data.settings : data);
-  cache = { settings: settings, updatedAt: Date.now() };
-  return cache;
+  if (cacheLoading) return cacheLoading;
+  cacheLoading = (async () => {
+    var p = ctx.storage.dataPath(SETTINGS_FILE);
+    var data = await ctx.storage.readJSONAsync(p, null);
+    var settings = normalizeSettings(data && data.settings ? data.settings : data);
+    cache = { settings: settings, updatedAt: Date.now() };
+    cacheLoading = null;
+    return cache;
+  })();
+  return cacheLoading;
 }
 
 function write(ctx) {
@@ -229,12 +235,12 @@ function mergeSettings(base, patch) {
 }
 
 async function get(ctx) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   return { ok: true, settings: c.settings };
 }
 
 async function save(ctx, _evt, payload) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   var next = mergeSettings(c.settings, payload);
   c.settings = normalizeSettings(next);
   c.updatedAt = Date.now();

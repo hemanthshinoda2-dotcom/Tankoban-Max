@@ -15,6 +15,7 @@ const fs = require('fs');
  * Lifted from Build 77 index.js line 2288.
  */
 let videoSettingsMem = null;
+let videoSettingsLoading = null;
 
 /**
  * Normalize video settings structure.
@@ -32,25 +33,37 @@ function normalizeVideoSettings(raw) {
  * Get cached video settings data, loading from disk if needed.
  * Includes Build 5.4D migration from legacy video_settings.json to video_prefs.json.
  * Lifted from Build 77 index.js lines 2310-2328.
+ * BUILD 88 FIX 2: async to avoid blocking main process.
  */
-function getVideoSettingsMem(ctx) {
+async function getVideoSettingsMem(ctx) {
   if (videoSettingsMem) return videoSettingsMem;
+  if (videoSettingsLoading) return videoSettingsLoading;
+  videoSettingsLoading = (async () => {
+    // Build 5.4D (mpv-only): migrate legacy video_settings.json -> video_prefs.json once, then remove the old file.
+    const legacyPath = ctx.storage.dataPath('video_settings.json');
+    const prefsPath = ctx.storage.dataPath('video_prefs.json');
+    try {
+      let prefsExists = false;
+      try { await fs.promises.access(prefsPath); prefsExists = true; } catch {}
+      if (!prefsExists) {
+        let legacyExists = false;
+        try { await fs.promises.access(legacyPath); legacyExists = true; } catch {}
+        if (legacyExists) {
+          const legacy = normalizeVideoSettings(await ctx.storage.readJSONAsync(legacyPath, {}));
+          try { await ctx.storage.writeJSON(prefsPath, legacy); } catch {}
+          try { await fs.promises.unlink(legacyPath); } catch {}
+          videoSettingsMem = legacy;
+          videoSettingsLoading = null;
+          return videoSettingsMem;
+        }
+      }
+    } catch {}
 
-  // Build 5.4D (mpv-only): migrate legacy video_settings.json -> video_prefs.json once, then remove the old file.
-  const legacyPath = ctx.storage.dataPath('video_settings.json');
-  const prefsPath = ctx.storage.dataPath('video_prefs.json');
-  try {
-    if (!fs.existsSync(prefsPath) && fs.existsSync(legacyPath)) {
-      const legacy = normalizeVideoSettings(ctx.storage.readJSON(legacyPath, {}));
-      try { ctx.storage.writeJSON(prefsPath, legacy).catch(() => {}); } catch {}
-      try { fs.unlinkSync(legacyPath); } catch {}
-      videoSettingsMem = legacy;
-      return videoSettingsMem;
-    }
-  } catch {}
-
-  videoSettingsMem = normalizeVideoSettings(ctx.storage.readJSON(prefsPath, {}));
-  return videoSettingsMem;
+    videoSettingsMem = normalizeVideoSettings(await ctx.storage.readJSONAsync(prefsPath, {}));
+    videoSettingsLoading = null;
+    return videoSettingsMem;
+  })();
+  return videoSettingsLoading;
 }
 
 // ========== DOMAIN HANDLERS ==========
@@ -60,7 +73,7 @@ function getVideoSettingsMem(ctx) {
  * Lifted from Build 77 index.js lines 2423-2426.
  */
 async function get(ctx) {
-  const v = getVideoSettingsMem(ctx);
+  const v = await getVideoSettingsMem(ctx);
   return { settings: { ...(v.settings || {}) }, updatedAt: v.updatedAt || 0 };
 }
 
@@ -70,7 +83,7 @@ async function get(ctx) {
  */
 async function save(ctx, _evt, settings) {
   const p = ctx.storage.dataPath('video_prefs.json');
-  const v = getVideoSettingsMem(ctx);
+  const v = await getVideoSettingsMem(ctx);
   const next = (settings && typeof settings === 'object') ? settings : {};
   v.settings = { ...(v.settings || {}), ...next };
   v.updatedAt = Date.now();

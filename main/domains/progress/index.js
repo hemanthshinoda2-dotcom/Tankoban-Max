@@ -12,15 +12,22 @@ Extracted from Build 77 IPC registry lines 2284-2386 with ZERO behavior changes.
  * Lifted from Build 77 index.js line 2284.
  */
 let progressMem = null;
+let progressLoading = null;
 
 /**
  * Get cached progress data, loading from disk if needed.
  * Lifted from Build 77 index.js lines 2290-2294.
+ * BUILD 88 FIX 2: async to avoid blocking main process.
  */
-function getProgressMem(ctx) {
+async function getProgressMem(ctx) {
   if (progressMem) return progressMem;
-  progressMem = ctx.storage.readJSON(ctx.storage.dataPath('progress.json'), {});
-  return progressMem;
+  if (progressLoading) return progressLoading;
+  progressLoading = (async () => {
+    progressMem = await ctx.storage.readJSONAsync(ctx.storage.dataPath('progress.json'), {});
+    progressLoading = null;
+    return progressMem;
+  })();
+  return progressLoading;
 }
 
 // ========== DOMAIN HANDLERS ==========
@@ -30,7 +37,7 @@ function getProgressMem(ctx) {
  * Lifted from Build 77 index.js lines 2353-2356.
  */
 async function getAll(ctx) {
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   return { ...all }; // defensive copy
 }
 
@@ -39,7 +46,7 @@ async function getAll(ctx) {
  * Lifted from Build 77 index.js lines 2358-2361.
  */
 async function get(ctx, _evt, bookId) {
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   return all[bookId] || null;
 }
 
@@ -49,7 +56,7 @@ async function get(ctx, _evt, bookId) {
  */
 async function save(ctx, _evt, bookId, progress) {
   const p = ctx.storage.dataPath('progress.json');
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   all[bookId] = { ...progress, updatedAt: Date.now() };
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };
@@ -61,7 +68,7 @@ async function save(ctx, _evt, bookId, progress) {
  */
 async function clear(ctx, _evt, bookId) {
   const p = ctx.storage.dataPath('progress.json');
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   delete all[bookId];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };
@@ -73,7 +80,7 @@ async function clear(ctx, _evt, bookId) {
  */
 async function clearAll(ctx) {
   const p = ctx.storage.dataPath('progress.json');
-  const all = getProgressMem(ctx);
+  const all = await getProgressMem(ctx);
   for (const k of Object.keys(all)) delete all[k];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };

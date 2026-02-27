@@ -908,7 +908,7 @@ async function __launchVideoFromFileAssoc(videoPath) {
   // Look up the video in the library index (best-effort)
   try {
     const idxPath = path.join(app.getPath('userData'), 'video_index.json');
-    const raw = fs.readFileSync(idxPath, 'utf8');
+    const raw = await fs.promises.readFile(idxPath, 'utf8');
     const idx = JSON.parse(raw);
     const episodes = Array.isArray(idx.episodes) ? idx.episodes : [];
 
@@ -937,7 +937,7 @@ async function __launchVideoFromFileAssoc(videoPath) {
       if (videoId) {
         try {
           const progressPath = path.join(app.getPath('userData'), 'video_progress.json');
-          const progressRaw = fs.readFileSync(progressPath, 'utf8');
+          const progressRaw = await fs.promises.readFile(progressPath, 'utf8');
           const allProgress = JSON.parse(progressRaw);
           const prog = allProgress[videoId];
           if (prog && typeof prog === 'object') {

@@ -51,9 +51,9 @@ function uniq(list) {
   return out;
 }
 
-function readAudiobookConfig(ctx) {
+async function readAudiobookConfig(ctx) {
   const p = ctx.storage.dataPath('audiobook_config.json');
-  const state = ctx.storage.readJSON(p, {
+  const state = await ctx.storage.readJSONAsync(p, {
     audiobookRootFolders: [],
   });
   state.audiobookRootFolders = uniq(state.audiobookRootFolders);
@@ -67,20 +67,25 @@ async function writeAudiobookConfig(ctx, state) {
   });
 }
 
-function ensureAudiobookIndexLoaded(ctx) {
+let audiobookIdxLoading = null;
+async function ensureAudiobookIndexLoaded(ctx) {
   if (audiobookCache.idxLoaded) return;
-  audiobookCache.idxLoaded = true;
-
-  const idx = ctx.storage.readJSON(ctx.storage.dataPath('audiobook_index.json'), null);
-  if (idx && Array.isArray(idx.audiobooks)) {
-    audiobookCache.idx = { audiobooks: idx.audiobooks };
-    return;
-  }
-  audiobookCache.idx = { audiobooks: [] };
+  if (audiobookIdxLoading) return audiobookIdxLoading;
+  audiobookIdxLoading = (async () => {
+    const idx = await ctx.storage.readJSONAsync(ctx.storage.dataPath('audiobook_index.json'), null);
+    if (idx && Array.isArray(idx.audiobooks)) {
+      audiobookCache.idx = { audiobooks: idx.audiobooks };
+    } else {
+      audiobookCache.idx = { audiobooks: [] };
+    }
+    audiobookCache.idxLoaded = true;
+    audiobookIdxLoading = null;
+  })();
+  return audiobookIdxLoading;
 }
 
-function makeAudiobookStateSnapshot(ctx, state) {
-  const s = state || readAudiobookConfig(ctx);
+async function makeAudiobookStateSnapshot(ctx, state) {
+  const s = state || await readAudiobookConfig(ctx);
   return {
     audiobookRootFolders: uniq(s.audiobookRootFolders),
     audiobooks: Array.isArray(audiobookCache.idx.audiobooks) ? audiobookCache.idx.audiobooks : [],
@@ -90,9 +95,9 @@ function makeAudiobookStateSnapshot(ctx, state) {
   };
 }
 
-function emitAudiobooksUpdated(ctx) {
+async function emitAudiobooksUpdated(ctx) {
   try {
-    ctx.win?.webContents?.send(ctx.EVENT.AUDIOBOOK_UPDATED, makeAudiobookStateSnapshot(ctx));
+    ctx.win?.webContents?.send(ctx.EVENT.AUDIOBOOK_UPDATED, await makeAudiobookStateSnapshot(ctx));
   } catch {}
 }
 
@@ -104,22 +109,22 @@ function scanKeyFromConfig(cfg) {
 }
 
 // Collect all roots: audiobook-specific roots + books root folders (shared)
-function collectAllRoots(ctx, cfg) {
+async function collectAllRoots(ctx, cfg) {
   const abRoots = uniq((cfg || {}).audiobookRootFolders);
   // Also scan books root folders so audiobooks inside book roots are auto-discovered
   let booksRoots = [];
   try {
-    const booksConfig = ctx.storage.readJSON(ctx.storage.dataPath('books_library_state.json'), {});
+    const booksConfig = await ctx.storage.readJSONAsync(ctx.storage.dataPath('books_library_state.json'), {});
     booksRoots = Array.isArray(booksConfig.bookRootFolders) ? booksConfig.bookRootFolders : [];
   } catch {}
   return uniq([...abRoots, ...booksRoots]);
 }
 
-function startAudiobookScan(ctx, cfg, opts = null) {
-  ensureAudiobookIndexLoaded(ctx);
+async function startAudiobookScan(ctx, cfg, opts = null) {
+  await ensureAudiobookIndexLoaded(ctx);
 
-  const c = cfg || readAudiobookConfig(ctx);
-  const allRoots = collectAllRoots(ctx, c);
+  const c = cfg || await readAudiobookConfig(ctx);
+  const allRoots = await collectAllRoots(ctx, c);
   const key = JSON.stringify({ audiobookRootFolders: allRoots });
 
   if (audiobookCache.scanning) {
@@ -177,7 +182,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
     audiobookCache.scanQueuedCfg = null;
 
     if (queued && scanKeyFromConfig(queued) !== audiobookCache.lastScanKey) {
-      startAudiobookScan(ctx, queued, { force: true });
+      startAudiobookScan(ctx, queued, { force: true }).catch(() => {});
       return;
     }
 
@@ -212,7 +217,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
         audiobooks: Array.isArray(idx.audiobooks) ? idx.audiobooks : [],
       };
 
-      emitAudiobooksUpdated(ctx);
+      emitAudiobooksUpdated(ctx).catch(() => {});
       finish(true);
     }
   });
@@ -220,7 +225,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
   w.on('error', (err) => {
     if (myScanId !== audiobookCache.scanId) return;
     audiobookCache.error = String(err && err.message ? err.message : err);
-    emitAudiobooksUpdated(ctx);
+    emitAudiobooksUpdated(ctx).catch(() => {});
     finish(false);
   });
 
@@ -228,7 +233,7 @@ function startAudiobookScan(ctx, cfg, opts = null) {
     if (myScanId !== audiobookCache.scanId) return;
     if (code !== 0) {
       audiobookCache.error = `Audiobook scan worker exited ${code}`;
-      emitAudiobooksUpdated(ctx);
+      emitAudiobooksUpdated(ctx).catch(() => {});
       finish(false);
     }
   });
@@ -249,16 +254,16 @@ function getDialogParent(evt) {
 // ── IPC Handlers ──────────────────────────────────────────────
 
 async function getState(ctx) {
-  ensureAudiobookIndexLoaded(ctx);
-  const state = readAudiobookConfig(ctx);
-  const snap = makeAudiobookStateSnapshot(ctx, state);
-  startAudiobookScan(ctx, state);
+  await ensureAudiobookIndexLoaded(ctx);
+  const state = await readAudiobookConfig(ctx);
+  const snap = await makeAudiobookStateSnapshot(ctx, state);
+  await startAudiobookScan(ctx, state);
   return snap;
 }
 
 async function scan(ctx) {
-  const state = readAudiobookConfig(ctx);
-  startAudiobookScan(ctx, state, { force: true });
+  const state = await readAudiobookConfig(ctx);
+  await startAudiobookScan(ctx, state, { force: true });
   return { ok: true };
 }
 
@@ -278,12 +283,12 @@ async function addRootFolder(ctx, evt, folderPath) {
   }
   if (!folder) return { ok: false };
 
-  const state = readAudiobookConfig(ctx);
+  const state = await readAudiobookConfig(ctx);
   state.audiobookRootFolders = uniq([folder, ...(state.audiobookRootFolders || [])]);
   await writeAudiobookConfig(ctx, state);
 
-  const snap = makeAudiobookStateSnapshot(ctx, state);
-  startAudiobookScan(ctx, state, { force: true });
+  const snap = await makeAudiobookStateSnapshot(ctx, state);
+  await startAudiobookScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 
@@ -300,12 +305,12 @@ async function addFolder(ctx, evt) {
 
   // The selected folder IS the audiobook — add its parent as a root so the scanner picks it up
   const parentDir = path.dirname(folder);
-  const state = readAudiobookConfig(ctx);
+  const state = await readAudiobookConfig(ctx);
   state.audiobookRootFolders = uniq([parentDir, ...(state.audiobookRootFolders || [])]);
   await writeAudiobookConfig(ctx, state);
 
-  const snap = makeAudiobookStateSnapshot(ctx, state);
-  startAudiobookScan(ctx, state, { force: true });
+  const snap = await makeAudiobookStateSnapshot(ctx, state);
+  await startAudiobookScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 
@@ -313,12 +318,12 @@ async function removeRootFolder(ctx, _evt, rootPath) {
   const target = String(rootPath || '');
   if (!target) return { ok: false };
 
-  const state = readAudiobookConfig(ctx);
+  const state = await readAudiobookConfig(ctx);
   state.audiobookRootFolders = (state.audiobookRootFolders || []).filter((p) => pathKey(p) !== pathKey(target));
   await writeAudiobookConfig(ctx, state);
 
-  const snap = makeAudiobookStateSnapshot(ctx, state);
-  startAudiobookScan(ctx, state, { force: true });
+  const snap = await makeAudiobookStateSnapshot(ctx, state);
+  await startAudiobookScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 

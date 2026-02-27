@@ -4,6 +4,7 @@ const BOOKMARKS_FILE = 'web_bookmarks.json';
 const MAX_BOOKMARKS = 5000;
 
 var cache = null;
+var cacheLoading = null;
 
 function sanitizeBookmark(input) {
   var src = (input && typeof input === 'object') ? input : {};
@@ -20,30 +21,35 @@ function sanitizeBookmark(input) {
   };
 }
 
-function ensureCache(ctx) {
+async function ensureCache(ctx) {
   if (cache) return cache;
-  var p = ctx.storage.dataPath(BOOKMARKS_FILE);
-  var raw = ctx.storage.readJSON(p, null);
-  if (raw && Array.isArray(raw.bookmarks)) {
-    cache = { bookmarks: raw.bookmarks, updatedAt: Number(raw.updatedAt || Date.now()) || Date.now() };
-  } else {
-    cache = { bookmarks: [], updatedAt: Date.now() };
-  }
-  return cache;
+  if (cacheLoading) return cacheLoading;
+  cacheLoading = (async () => {
+    var p = ctx.storage.dataPath(BOOKMARKS_FILE);
+    var raw = await ctx.storage.readJSONAsync(p, null);
+    if (raw && Array.isArray(raw.bookmarks)) {
+      cache = { bookmarks: raw.bookmarks, updatedAt: Number(raw.updatedAt || Date.now()) || Date.now() };
+    } else {
+      cache = { bookmarks: [], updatedAt: Date.now() };
+    }
+    cacheLoading = null;
+    return cache;
+  })();
+  return cacheLoading;
 }
 
-function write(ctx) {
+async function write(ctx) {
   var p = ctx.storage.dataPath(BOOKMARKS_FILE);
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   if (!Array.isArray(c.bookmarks)) c.bookmarks = [];
   if (c.bookmarks.length > MAX_BOOKMARKS) c.bookmarks.length = MAX_BOOKMARKS;
   ctx.storage.writeJSONDebounced(p, c);
 }
 
-function emitUpdated(ctx) {
+async function emitUpdated(ctx) {
   try {
     var ipc = require('../../../shared/ipc');
-    var c = ensureCache(ctx);
+    var c = await ensureCache(ctx);
     ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_BOOKMARKS_UPDATED, {
       bookmarks: c.bookmarks || [],
       updatedAt: c.updatedAt,
@@ -62,12 +68,12 @@ function findByUrl(bookmarks, url) {
 }
 
 async function list(ctx) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   return { ok: true, bookmarks: c.bookmarks || [] };
 }
 
 async function add(ctx, _evt, payload) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   var b = sanitizeBookmark(payload);
   if (!b) return { ok: false, error: 'Missing URL' };
   var existing = findByUrl(c.bookmarks, b.url);
@@ -75,13 +81,13 @@ async function add(ctx, _evt, payload) {
   c.bookmarks.unshift(b);
   if (c.bookmarks.length > MAX_BOOKMARKS) c.bookmarks.length = MAX_BOOKMARKS;
   c.updatedAt = Date.now();
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true, bookmark: b, existed: false };
 }
 
 async function update(ctx, _evt, payload) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
   var target = null;
@@ -98,34 +104,34 @@ async function update(ctx, _evt, payload) {
   if (payload && payload.folder != null) target.folder = String(payload.folder || '').trim();
   target.updatedAt = Date.now();
   c.updatedAt = target.updatedAt;
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true, bookmark: target };
 }
 
 async function remove(ctx, _evt, payload) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
   var before = c.bookmarks.length;
   c.bookmarks = c.bookmarks.filter(function (b) { return !(b && String(b.id) === id); });
   if (c.bookmarks.length === before) return { ok: false, error: 'Not found' };
   c.updatedAt = Date.now();
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
 async function toggle(ctx, _evt, payload) {
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   var url = payload && payload.url ? String(payload.url).trim() : '';
   if (!url) return { ok: false, error: 'Missing URL' };
   var existing = findByUrl(c.bookmarks, url);
   if (existing) {
     c.bookmarks = c.bookmarks.filter(function (b) { return b && String(b.id) !== String(existing.id); });
     c.updatedAt = Date.now();
-    write(ctx);
-    emitUpdated(ctx);
+    await write(ctx);
+    await emitUpdated(ctx);
     return { ok: true, added: false, bookmark: existing };
   }
   var created = sanitizeBookmark({
@@ -137,8 +143,8 @@ async function toggle(ctx, _evt, payload) {
   if (!created) return { ok: false, error: 'Missing URL' };
   c.bookmarks.unshift(created);
   c.updatedAt = Date.now();
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true, added: true, bookmark: created };
 }
 

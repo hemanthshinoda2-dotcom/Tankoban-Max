@@ -318,7 +318,7 @@ function __broadcastVideoProgressCleared(ctx, videoId){
   } catch {}
 }
 
-function __pruneOrphanedVideoProgress(ctx, idx){
+async function __pruneOrphanedVideoProgress(ctx, idx){
   try {
     const liveIds = __collectLiveEpisodeIds(idx);
     // If we don't have an index, don't guess.
@@ -328,7 +328,7 @@ function __pruneOrphanedVideoProgress(ctx, idx){
     const backupPath = ctx.storage.dataPath('video_progress.backup.json');
 
     let prog = {};
-    try { prog = ctx.storage.readJSON(progressPath, {}) || {}; } catch { prog = {}; }
+    try { prog = await ctx.storage.readJSONAsync(progressPath, {}) || {}; } catch { prog = {}; }
 
     const keys = Object.keys(prog || {});
     if (!keys.length) return { ok: true, removed: 0 };
@@ -537,7 +537,7 @@ async function ensureVideoIndexLoaded(ctx) {
   
   if (idx && Array.isArray(idx.roots) && Array.isArray(idx.shows) && Array.isArray(idx.episodes)) {
     videoCache.idx = { roots: idx.roots, shows: idx.shows, episodes: idx.episodes };
-    try { __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
+    try { await __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
     return;
   }
 
@@ -545,7 +545,7 @@ async function ensureVideoIndexLoaded(ctx) {
   if (idx && Array.isArray(idx.folders) && Array.isArray(idx.videos)) {
     // Do not try to "fix" the old model here; Build 3.2 worker will rebuild on next scan.
     videoCache.idx = { roots: [], shows: [], episodes: [] };
-    try { __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
+    try { await __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
   }
 }
 
@@ -605,8 +605,8 @@ function filterVideoIdxForHiddenShows(idx, hiddenIds) {
  * Create video state snapshot for renderer.
  * Lifted from Build 78B index.js lines 406-447.
  */
-function makeVideoStateSnapshot(ctx, state, opts) {
-  const s = state || readLibraryConfig(ctx);
+async function makeVideoStateSnapshot(ctx, state, opts) {
+  const s = state || await readLibraryConfig(ctx);
   const folders = Array.isArray(s.videoFolders) ? s.videoFolders : [];
   const showFolders = Array.isArray(s.videoShowFolders) ? s.videoShowFolders : [];
   let rootsCfg = rootsFromConfig(folders);
@@ -653,6 +653,58 @@ function makeVideoStateSnapshot(ctx, state, opts) {
     }
   }
 
+  // Build 85: Lite snapshot mode.
+  // When lite=true, omit the full episodes list (it can be enormous) and only include a small subset
+  // needed for Continue Watching. Full episode lists are fetched on-demand via getEpisodesForShow/root.
+  let episodes;
+  {
+    const o = (opts && typeof opts === 'object') ? opts : {};
+    const lite = !!o.lite;
+
+    const all = Array.isArray(episodesAll) ? episodesAll : [];
+    if (!lite) {
+      episodes = all;
+    } else {
+      // Continue Watching requires episode objects for items with saved progress.
+      // Pull the most recently updated items from video_progress.json and include only those episodes.
+      // BUILD 88 FIX 2.4: Cache sorted keys to avoid re-sorting on every snapshot
+      let prog = {};
+      try {
+        prog = await ctx.storage.readJSONAsync(ctx.storage.dataPath('video_progress.json'), {}) || {};
+      } catch { prog = {}; }
+
+      const keys = Object.keys(prog || {});
+      if (!keys.length) {
+        episodes = [];
+      } else {
+        // Create hash of progress data to detect changes
+        const progHash = keys.length + '_' + keys.slice(0, 10).join('_');
+        let sortedKeys;
+
+        if (progressSortCache.lastProgHash === progHash) {
+          // Use cached sorted keys
+          sortedKeys = progressSortCache.sortedKeys;
+        } else {
+          // Sort by updatedAt (desc) and cache the result
+          sortedKeys = keys.slice().sort((a, b) => Number((prog[b] && prog[b].updatedAt) || 0) - Number((prog[a] && prog[a].updatedAt) || 0));
+          progressSortCache.lastProgHash = progHash;
+          progressSortCache.sortedKeys = sortedKeys;
+        }
+
+        const cap = Math.max(0, Math.min(60, sortedKeys.length));
+        const want = new Set(sortedKeys.slice(0, cap).map(k => String(k)));
+
+        const out = [];
+        for (const ep of all) {
+          const id = String(ep?.id || '');
+          if (id && want.has(id)) out.push(ep);
+          if (out.length >= cap) break;
+        }
+        episodes = out;
+      }
+    }
+  }
+
   return {
     videoFolders: folders,
     videoShowFolders: showFolders,
@@ -661,53 +713,8 @@ function makeVideoStateSnapshot(ctx, state, opts) {
       ...show,
       episodeCount: episodeCounts[String(show?.id || '')] || 0,
     })),
-// Build 85: Lite snapshot mode.
-// When lite=true, omit the full episodes list (it can be enormous) and only include a small subset
-// needed for Continue Watching. Full episode lists are fetched on-demand via getEpisodesForShow/root.
-episodes: (() => {
-  const o = (opts && typeof opts === 'object') ? opts : {};
-  const lite = !!o.lite;
-
-  const all = Array.isArray(episodesAll) ? episodesAll : [];
-  if (!lite) return all;
-
-  // Continue Watching requires episode objects for items with saved progress.
-  // Pull the most recently updated items from video_progress.json and include only those episodes.
-  // BUILD 88 FIX 2.4: Cache sorted keys to avoid re-sorting on every snapshot
-  let prog = {};
-  try {
-    prog = ctx.storage.readJSON(ctx.storage.dataPath('video_progress.json'), {}) || {};
-  } catch { prog = {}; }
-
-  const keys = Object.keys(prog || {});
-  if (!keys.length) return [];
-
-  // Create hash of progress data to detect changes
-  const progHash = keys.length + '_' + keys.slice(0, 10).join('_');
-  let sortedKeys;
-  
-  if (progressSortCache.lastProgHash === progHash) {
-    // Use cached sorted keys
-    sortedKeys = progressSortCache.sortedKeys;
-  } else {
-    // Sort by updatedAt (desc) and cache the result
-    sortedKeys = keys.slice().sort((a, b) => Number((prog[b] && prog[b].updatedAt) || 0) - Number((prog[a] && prog[a].updatedAt) || 0));
-    progressSortCache.lastProgHash = progHash;
-    progressSortCache.sortedKeys = sortedKeys;
-  }
-  
-  const cap = Math.max(0, Math.min(60, sortedKeys.length));
-  const want = new Set(sortedKeys.slice(0, cap).map(k => String(k)));
-
-  const out = [];
-  for (const ep of all) {
-    const id = String(ep?.id || '');
-    if (id && want.has(id)) out.push(ep);
-    if (out.length >= cap) break;
-  }
-  return out;
-})(),
-episodeCounts,
+    episodes,
+    episodeCounts,
 
     scanning: !!videoCache.scanning,
     lastScanAt: videoCache.lastScanAt || 0,
@@ -719,11 +726,11 @@ episodeCounts,
  * Emit video updated event to renderer.
  * Lifted from Build 78B index.js lines 449-451.
  */
-function emitVideoUpdated(ctx, opts = {}) {
+async function emitVideoUpdated(ctx, opts = {}) {
   const w = ctx.win;
   __diagLog(`emitVideoUpdated: ctx.win=${w ? 'BrowserWindow' : 'null'}, webContents=${w?.webContents ? 'yes' : 'no'}`);
   try {
-    const snap = makeVideoStateSnapshot(ctx, undefined, { lite: !opts.full });
+    const snap = await makeVideoStateSnapshot(ctx, undefined, { lite: !opts.full });
     __diagLog(`emitVideoUpdated: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}, snap.episodes=${snap?.episodes?.length}, error=${snap?.error || 'none'}, scanning=${snap?.scanning}`);
     ctx.win?.webContents?.send(ctx.EVENT.VIDEO_UPDATED, snap);
   } catch (e) { __diagLog(`emitVideoUpdated ERROR: ${e.message}`); }
@@ -733,9 +740,9 @@ function emitVideoUpdated(ctx, opts = {}) {
  * Read library configuration (shared with library domain).
  * Lifted from Build 78B index.js lines 579-594.
  */
-function readLibraryConfig(ctx) {
+async function readLibraryConfig(ctx) {
   const p = ctx.storage.dataPath('library_state.json');
-  const state = ctx.storage.readJSON(p, { seriesFolders: [], rootFolders: [], ignoredSeries: [], scanIgnore: [], videoFolders: [], videoShowFolders: [], videoHiddenShowIds: [], videoFiles: [] });
+  const state = await ctx.storage.readJSONAsync(p, { seriesFolders: [], rootFolders: [], ignoredSeries: [], scanIgnore: [], videoFolders: [], videoShowFolders: [], videoHiddenShowIds: [], videoFiles: [] });
 
   // Migration: older builds used { folders: [] }.
   if (state.folders && !state.seriesFolders) state.seriesFolders = state.folders;
@@ -775,8 +782,8 @@ async function writeLibraryConfig(ctx, state) {
  * Start video scan worker.
  * Lifted from Build 78B index.js lines 465-578.
  */
-function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
-  ensureVideoIndexLoaded(ctx);
+async function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
+  await ensureVideoIndexLoaded(ctx);
 
   const folders = Array.isArray(videoFolders) ? videoFolders : [];
   const showFolders = Array.isArray(videoShowFolders) ? videoShowFolders : [];
@@ -808,7 +815,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
 
   const indexPath = ctx.storage.dataPath('video_index.json');
   const thumbsDir = ctx.storage.dataPath('video_thumbs');
-  const cfg = readLibraryConfig(ctx);
+  const cfg = await readLibraryConfig(ctx);
   const scanIgnore = Array.isArray(cfg.scanIgnore) ? cfg.scanIgnore : [];
   const hiddenShowIds = videoHiddenShowIdsFromConfig(cfg);
 
@@ -846,7 +853,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     videoCache.scanQueuedKey = null;
 
     if (queued && queuedKey && queuedKey !== videoCache.lastScanKey) {
-      startVideoScan(ctx, queued, queuedShow, { force: true });
+      startVideoScan(ctx, queued, queuedShow, { force: true }).catch(() => {});
       return;
     }
 
@@ -880,7 +887,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
           shows: Array.isArray(idx.shows) ? idx.shows : [],
           episodes: Array.isArray(idx.episodes) ? idx.episodes : [],
         };
-        try { __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
+        try { await __pruneOrphanedVideoProgress(ctx, videoCache.idx); } catch {}
 
         // Build 110: auto-generate posters for shows missing thumbnails (best-effort, post-scan).
         try {
@@ -914,9 +921,9 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
           }
         } catch {}
 
-        emitVideoUpdated(ctx, { full: true });  // Show all episodes after scan
+        await emitVideoUpdated(ctx, { full: true });  // Show all episodes after scan
         finish(true);
-      })();
+      })().catch(() => {});
       return;
     }
   });
@@ -925,7 +932,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     __diagLog(`scan WORKER ERROR: ${err?.message || err}\n${err?.stack || ''}`);
     if (myScanId !== videoCache.scanId) return;
     videoCache.error = String(err?.message || err);
-    emitVideoUpdated(ctx, { full: true });  // Show all episodes even after error
+    emitVideoUpdated(ctx, { full: true }).catch(() => {});  // Show all episodes even after error
     finish(false);
   });
 
@@ -934,7 +941,7 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
     if (myScanId !== videoCache.scanId) return;
     if (code !== 0) {
       videoCache.error = `Video scan worker exited ${code}`;
-      emitVideoUpdated(ctx, { full: true });  // Show all episodes even after error
+      emitVideoUpdated(ctx, { full: true }).catch(() => {});  // Show all episodes even after error
       finish(false);
     } else {
       // code 0 but no 'done' message = silent failure
@@ -954,13 +961,13 @@ function startVideoScan(ctx, videoFolders, videoShowFolders, opts = {}) {
 async function getState(ctx, _evt, opts) {
   __diagLog('getState: ENTERED');
   await ensureVideoIndexLoaded(ctx);
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   __diagLog(`getState: videoFolders=${JSON.stringify(state.videoFolders)}, videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
-  const snap = makeVideoStateSnapshot(ctx, state, opts);
+  const snap = await makeVideoStateSnapshot(ctx, state, opts);
   __diagLog(`getState: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}, snap.episodes=${snap?.episodes?.length}`);
 
   // Refresh once per run (deduped by lastScanKey/lastScanAt).
-  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders);
+  await startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders);
   return snap;
 }
 
@@ -974,12 +981,12 @@ async function getEpisodesForShow(ctx, _evt, showId) {
 
   // BUILD 93: Added Files pseudo-show
   if (String(showId || '') === ADDED_FILES_SHOW_ID) {
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     const hidden = new Set(videoHiddenShowIdsFromConfig(cfg).map(x => String(x || '')));
     const added = __buildAddedFilesEntities(cfg, hidden);
     return { ok: true, episodes: Array.isArray(added.episodes) ? added.episodes : [] };
   }
-  const hiddenShowIds = videoHiddenShowIdsFromConfig(readLibraryConfig(ctx));
+  const hiddenShowIds = videoHiddenShowIdsFromConfig(await readLibraryConfig(ctx));
   const hiddenSet = new Set(hiddenShowIds);
   
   const allEpisodes = Array.isArray(videoCache.idx.episodes) ? videoCache.idx.episodes : [];
@@ -1001,12 +1008,12 @@ async function getEpisodesForRoot(ctx, _evt, rootId) {
 
   // BUILD 93: Added Files pseudo-root
   if (String(rootId || '') === ADDED_FILES_ROOT_ID) {
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     const hidden = new Set(videoHiddenShowIdsFromConfig(cfg).map(x => String(x || '')));
     const added = __buildAddedFilesEntities(cfg, hidden);
     return { ok: true, episodes: Array.isArray(added.episodes) ? added.episodes : [] };
   }
-  const hiddenShowIds = videoHiddenShowIdsFromConfig(readLibraryConfig(ctx));
+  const hiddenShowIds = videoHiddenShowIdsFromConfig(await readLibraryConfig(ctx));
   const hiddenSet = new Set(hiddenShowIds);
   
   // Get all shows for this root
@@ -1046,7 +1053,7 @@ async function getEpisodesByIds(ctx, _evt, ids) {
   const wantSet = new Set(want);
 
   // Mirror makeVideoStateSnapshot's visibility rules (roots + hidden shows + Added Files).
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   const folders = Array.isArray(state?.videoFolders) ? state.videoFolders : [];
   const showFolders = Array.isArray(state?.videoShowFolders) ? state.videoShowFolders : [];
   let rootsCfg = rootsFromConfig(folders);
@@ -1137,17 +1144,17 @@ async function getEpisodesByIds(ctx, _evt, ids) {
  * Lifted from Build 78B index.js lines 1393-1398.
  */
 async function scan(ctx, _evt, opts) {
-  const cfg = readLibraryConfig(ctx);
+  const cfg = await readLibraryConfig(ctx);
   // Build 103: Manual rescan should restore any previously removed/hidden shows.
   if (Array.isArray(cfg.videoHiddenShowIds) && cfg.videoHiddenShowIds.length) {
     cfg.videoHiddenShowIds = [];
     await writeLibraryConfig(ctx, cfg);
     // Update renderer immediately so previously hidden shows can reappear if already indexed.
-    emitVideoUpdated(ctx);
+    await emitVideoUpdated(ctx);
   }
   const folders = Array.isArray(cfg.videoFolders) ? cfg.videoFolders : [];
   const showFolders = Array.isArray(cfg.videoShowFolders) ? cfg.videoShowFolders : [];
-  startVideoScan(ctx, folders, showFolders, { force: true });
+  await startVideoScan(ctx, folders, showFolders, { force: true });
   return { ok: true };
 }
 
@@ -1159,14 +1166,14 @@ async function scanShow(ctx, _evt, showPath) {
   const sp = String(showPath || '');
   if (!sp) return { ok: false };
 
-  const cfg = readLibraryConfig(ctx);
+  const cfg = await readLibraryConfig(ctx);
 
   // Determine if this show is in videoFolders (root child) or videoShowFolders (explicit)
   const isInShowFolders = (cfg.videoShowFolders || []).includes(sp);
 
   if (isInShowFolders) {
     // Rescan as a single show folder
-    startVideoScan(ctx, [], [sp], { force: true });
+    await startVideoScan(ctx, [], [sp], { force: true });
   } else {
     // Try to find parent root folder
     const rootFolders = cfg.videoFolders || [];
@@ -1174,7 +1181,7 @@ async function scanShow(ctx, _evt, showPath) {
 
     if (parentRoot) {
       // Rescan the entire root folder (could optimize to just this show, but requires worker changes)
-      startVideoScan(ctx, [parentRoot], [], { force: true });
+      await startVideoScan(ctx, [parentRoot], [], { force: true });
     } else {
       return { ok: false, reason: 'not_found' };
     }
@@ -1226,7 +1233,7 @@ async function generateShowThumbnail(ctx, _evt, showId, opts) {
     if (!posterPath) return { ok: true, generated: false, reason: 'generation_failed' };
 
     try { show.thumbPath = posterPath; } catch {}
-    emitVideoUpdated(ctx);
+    await emitVideoUpdated(ctx);
     return { ok: true, generated: true, path: posterPath };
   } catch (err) {
     return { ok: false, reason: 'error', error: String(err?.message || err) };
@@ -1252,7 +1259,7 @@ async function cancelScan(ctx) {
   try { await w.terminate(); } catch {}
 
   try { ctx.win?.webContents?.send(ctx.EVENT.VIDEO_SCAN_STATUS, { scanning: false, progress: null, canceled: true }); } catch {}
-  emitVideoUpdated(ctx);
+  await emitVideoUpdated(ctx);
   return { ok: true };
 }
 
@@ -1276,7 +1283,7 @@ async function addFolder(ctx, evt) {
     if (res.canceled || !res.filePaths?.length) return { ok: false };
 
     const folder = res.filePaths[0];
-    const state = readLibraryConfig(ctx);
+    const state = await readLibraryConfig(ctx);
     state.videoFolders = Array.isArray(state.videoFolders) ? state.videoFolders : [];
     __diagLog(`addFolder: existing videoFolders=${JSON.stringify(state.videoFolders)}`);
     if (!state.videoFolders.includes(folder)) state.videoFolders.unshift(folder);
@@ -1284,10 +1291,10 @@ async function addFolder(ctx, evt) {
     await writeLibraryConfig(ctx, state);
 
     await ensureVideoIndexLoaded(ctx);
-    const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
+    const snap = await makeVideoStateSnapshot(ctx, state, { lite: true });
     __diagLog(`addFolder: snap.videoFolders=${JSON.stringify(snap.videoFolders)}, snap.videoShowFolders=${JSON.stringify(snap.videoShowFolders)}`);
     __diagLog(`addFolder: snap.roots=${snap?.roots?.length}, snap.shows=${snap?.shows?.length}`);
-    startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+    await startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
     __diagLog('addFolder: returning ok=true');
     return { ok: true, state: snap };
@@ -1316,7 +1323,7 @@ async function addShowFolder(ctx, evt) {
     if (res.canceled || !res.filePaths?.length) return { ok: false };
 
     const folder = res.filePaths[0];
-    const state = readLibraryConfig(ctx);
+    const state = await readLibraryConfig(ctx);
     state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
     __diagLog(`addShowFolder: existing videoShowFolders=${JSON.stringify(state.videoShowFolders)}`);
 
@@ -1334,8 +1341,8 @@ async function addShowFolder(ctx, evt) {
     await writeLibraryConfig(ctx, state);
 
     await ensureVideoIndexLoaded(ctx);
-    const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
-    startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+    const snap = await makeVideoStateSnapshot(ctx, state, { lite: true });
+    await startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
     return { ok: true, state: snap };
   } catch (e) {
@@ -1352,7 +1359,7 @@ async function addShowFolderPath(ctx, _evt, folderPath) {
   const folder = String(folderPath || '').trim();
   if (!folder) return { ok: false, reason: 'empty_path' };
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
 
   // Skip if already covered by an existing show folder
@@ -1366,8 +1373,8 @@ async function addShowFolderPath(ctx, _evt, folderPath) {
   await writeLibraryConfig(ctx, state);
 
   await ensureVideoIndexLoaded(ctx);
-  const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
-  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+  const snap = await makeVideoStateSnapshot(ctx, state, { lite: true });
+  await startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -1472,7 +1479,7 @@ async function removeStreamableFolder(ctx, _evt, payload) {
       }
     }
 
-    const state = readLibraryConfig(ctx);
+    const state = await readLibraryConfig(ctx);
     state.videoShowFolders = Array.isArray(state.videoShowFolders) ? state.videoShowFolders : [];
     const beforeCount = state.videoShowFolders.length;
     state.videoShowFolders = state.videoShowFolders.filter((p) => !__isSameOrNested(targetFolder, p));
@@ -1488,14 +1495,14 @@ async function removeStreamableFolder(ctx, _evt, payload) {
       didScan = !!(single && single.ok);
     } catch {}
     if (!didScan) {
-      const fresh = readLibraryConfig(ctx);
+      const fresh = await readLibraryConfig(ctx);
       const folders = Array.isArray(fresh.videoFolders) ? fresh.videoFolders : [];
       const showFolders = Array.isArray(fresh.videoShowFolders) ? fresh.videoShowFolders : [];
-      startVideoScan(ctx, folders, showFolders, { force: true });
+      await startVideoScan(ctx, folders, showFolders, { force: true });
     }
 
-    const snapState = readLibraryConfig(ctx);
-    const snap = makeVideoStateSnapshot(ctx, snapState, { lite: true });
+    const snapState = await readLibraryConfig(ctx);
+    const snap = await makeVideoStateSnapshot(ctx, snapState, { lite: true });
     return { ok: true, state: snap, showPath, targetFolder, deleted: deleted };
   } catch (err) {
     return { ok: false, error: String(err?.message || err || 'Failed to remove streamable folder'), deleted: false };
@@ -1511,7 +1518,7 @@ async function removeFolder(ctx, _evt, folderPath) {
   const target = String(folderPath || '');
   if (!target) return { ok: false };
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   // BUILD 111 FIX: Also remove from videoShowFolders so show folders can be properly removed.
   state.videoFolders = Array.isArray(state.videoFolders) ? state.videoFolders : [];
   state.videoFolders = state.videoFolders.filter(p => p !== target);
@@ -1520,8 +1527,8 @@ async function removeFolder(ctx, _evt, folderPath) {
   await writeLibraryConfig(ctx, state);
 
   await ensureVideoIndexLoaded(ctx);
-  const snap = makeVideoStateSnapshot(ctx, state, { lite: true });
-  startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
+  const snap = await makeVideoStateSnapshot(ctx, state, { lite: true });
+  await startVideoScan(ctx, snap.videoFolders, snap.videoShowFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -1536,14 +1543,14 @@ async function hideShow(ctx, _evt, showId) {
   const sid = String(showId || '');
   if (!sid) return { ok: false };
 
-  const cfg = readLibraryConfig(ctx);
+  const cfg = await readLibraryConfig(ctx);
   cfg.videoHiddenShowIds = Array.isArray(cfg.videoHiddenShowIds) ? cfg.videoHiddenShowIds : [];
   if (!cfg.videoHiddenShowIds.includes(sid)) cfg.videoHiddenShowIds.push(sid);
   await writeLibraryConfig(ctx, cfg);
 
   // Filtering happens in makeVideoStateSnapshot — keep full index intact for restore.
-  emitVideoUpdated(ctx);
-  return { ok: true, state: makeVideoStateSnapshot(ctx, cfg) };
+  await emitVideoUpdated(ctx);
+  return { ok: true, state: await makeVideoStateSnapshot(ctx, cfg) };
 }
 
 /**
@@ -1619,7 +1626,7 @@ async function addFiles(ctx, evt) {
     });
     if (!res || res.canceled || !Array.isArray(res.filePaths) || !res.filePaths.length) return { ok: false };
 
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     cfg.videoFiles = Array.isArray(cfg.videoFiles) ? cfg.videoFiles : [];
     const set = new Set(cfg.videoFiles.map(x => String(x || '')));
     for (const fp of res.filePaths) {
@@ -1632,8 +1639,8 @@ async function addFiles(ctx, evt) {
     }
 
     await writeLibraryConfig(ctx, cfg);
-    const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-    emitVideoUpdated(ctx);
+    const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+    await emitVideoUpdated(ctx);
     return { ok: true, state: snap };
   } catch {
     return { ok: false };
@@ -1644,12 +1651,12 @@ async function removeFile(ctx, _evt, filePath) {
   try {
     const target = String(filePath || '');
     if (!target) return { ok: false };
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     cfg.videoFiles = Array.isArray(cfg.videoFiles) ? cfg.videoFiles : [];
     cfg.videoFiles = cfg.videoFiles.filter(p => String(p || '') !== target);
     await writeLibraryConfig(ctx, cfg);
-    const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-    emitVideoUpdated(ctx);
+    const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+    await emitVideoUpdated(ctx);
     return { ok: true, state: snap };
   } catch {
     return { ok: false };
@@ -1659,12 +1666,12 @@ async function removeFile(ctx, _evt, filePath) {
 // BUILD 93: Restore removed shows
 async function restoreAllHiddenShows(ctx) {
   try {
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     cfg.videoHiddenShowIds = [];
     await writeLibraryConfig(ctx, cfg);
     // Rescan is initiated from renderer (keeps existing scan behavior)
-    const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-    emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
+    const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+    await emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
     return { ok: true, state: snap };
   } catch {
     return { ok: false };
@@ -1674,15 +1681,15 @@ async function restoreAllHiddenShows(ctx) {
 async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
   try {
     const rid = String(rootId || '');
-    const cfg = readLibraryConfig(ctx);
+    const cfg = await readLibraryConfig(ctx);
     cfg.videoHiddenShowIds = Array.isArray(cfg.videoHiddenShowIds) ? cfg.videoHiddenShowIds : [];
 
     // Added Files pseudo-root: just unhide the pseudo-show id
     if (rid === ADDED_FILES_ROOT_ID) {
       cfg.videoHiddenShowIds = cfg.videoHiddenShowIds.filter(x => String(x || '') !== ADDED_FILES_SHOW_ID);
       await writeLibraryConfig(ctx, cfg);
-      const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-      emitVideoUpdated(ctx);
+      const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+      await emitVideoUpdated(ctx);
       return { ok: true, state: snap };
     }
 
@@ -1697,14 +1704,14 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
         return !(showPath && setPaths.has(showPath));
       });
       await writeLibraryConfig(ctx, cfg);
-      const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-      emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
+      const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+      await emitVideoUpdated(ctx, { full: true });  // Show all episodes when restoring
       return { ok: true, state: snap };
     }
 
     const rootPath = __decodeBase64Url(rid);
     if (!rootPath) {
-      return restoreAllHiddenShows(ctx);
+      return await restoreAllHiddenShows(ctx);
     }
 
     const looseId = __looseShowIdForRoot(rootPath);
@@ -1724,8 +1731,8 @@ async function restoreHiddenShowsForRoot(ctx, _evt, rootId) {
 
     cfg.videoHiddenShowIds = keep;
     await writeLibraryConfig(ctx, cfg);
-    const snap = makeVideoStateSnapshot(ctx, cfg, { lite: true });
-    emitVideoUpdated(ctx);
+    const snap = await makeVideoStateSnapshot(ctx, cfg, { lite: true });
+    await emitVideoUpdated(ctx);
     return { ok: true, state: snap };
   } catch {
     return { ok: false };

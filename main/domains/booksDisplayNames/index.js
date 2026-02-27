@@ -5,13 +5,19 @@ Shape: { [bookId]: "Custom Name" }
 */
 
 var displayNamesMem = null;
+var displayNamesLoading = null;
 
-function getMem(ctx) {
+async function getMem(ctx) {
   if (displayNamesMem) return displayNamesMem;
-  var p = ctx.storage.dataPath('books_display_names.json');
-  var raw = ctx.storage.readJSON(p, {});
-  displayNamesMem = (raw && typeof raw === 'object') ? raw : {};
-  return displayNamesMem;
+  if (displayNamesLoading) return displayNamesLoading;
+  displayNamesLoading = (async () => {
+    var p = ctx.storage.dataPath('books_display_names.json');
+    var raw = await ctx.storage.readJSONAsync(p, {});
+    displayNamesMem = (raw && typeof raw === 'object') ? raw : {};
+    displayNamesLoading = null;
+    return displayNamesMem;
+  })();
+  return displayNamesLoading;
 }
 
 function persist(ctx) {
@@ -20,7 +26,7 @@ function persist(ctx) {
 }
 
 async function getAll(ctx) {
-  return getMem(ctx);
+  return await getMem(ctx);
 }
 
 async function save(ctx, _evt, bookId, displayName) {
@@ -28,7 +34,7 @@ async function save(ctx, _evt, bookId, displayName) {
   if (!id) return { ok: false };
   var name = String(displayName || '').trim();
   if (!name) return clear(ctx, _evt, bookId);
-  var mem = getMem(ctx);
+  var mem = await getMem(ctx);
   mem[id] = name;
   persist(ctx);
   return { ok: true };
@@ -37,15 +43,15 @@ async function save(ctx, _evt, bookId, displayName) {
 async function clear(ctx, _evt, bookId) {
   var id = String(bookId || '');
   if (!id) return { ok: false };
-  var mem = getMem(ctx);
+  var mem = await getMem(ctx);
   delete mem[id];
   persist(ctx);
   return { ok: true };
 }
 
-function pruneByRemovedIds(ctx, removedIds) {
+async function pruneByRemovedIds(ctx, removedIds) {
   if (!Array.isArray(removedIds) || !removedIds.length) return;
-  var mem = getMem(ctx);
+  var mem = await getMem(ctx);
   var changed = false;
   for (var i = 0; i < removedIds.length; i++) {
     var k = String(removedIds[i] || '');

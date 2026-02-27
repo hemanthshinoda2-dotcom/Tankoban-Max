@@ -7,41 +7,45 @@ const MAX_ENTRIES = 1000;
 const MAX_SUGGESTIONS = 8;
 
 var cache = null;
+var cacheLoading = null;
 
-function ensureCache(ctx) {
+async function ensureCache(ctx) {
   if (cache) return cache;
-  var p = ctx.storage.dataPath(SEARCH_FILE);
-  var data = ctx.storage.readJSON(p, null);
-  if (data && Array.isArray(data.queries)) {
-    cache = { queries: data.queries, updatedAt: data.updatedAt || Date.now() };
-  } else {
-    cache = { queries: [], updatedAt: Date.now() };
-  }
-  return cache;
+  if (cacheLoading) return cacheLoading;
+  cacheLoading = (async () => {
+    var p = ctx.storage.dataPath(SEARCH_FILE);
+    var data = await ctx.storage.readJSONAsync(p, null);
+    if (data && Array.isArray(data.queries)) {
+      cache = { queries: data.queries, updatedAt: data.updatedAt || Date.now() };
+    } else {
+      cache = { queries: [], updatedAt: Date.now() };
+    }
+    cacheLoading = null;
+    return cache;
+  })();
+  return cacheLoading;
 }
 
-function write(ctx) {
+async function write(ctx) {
   var p = ctx.storage.dataPath(SEARCH_FILE);
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   if (c.queries.length > MAX_ENTRIES) c.queries.length = MAX_ENTRIES;
   ctx.storage.writeJSONDebounced(p, c, 120);
 }
 
 // Load bookmarks and history caches for cross-source suggestions
-function getBookmarks(ctx) {
+async function getBookmarks(ctx) {
   try {
-    var bookmarksDomain = require('../webBookmarks');
-    // Read bookmarks from storage directly (avoid async)
     var p = ctx.storage.dataPath('web_bookmarks.json');
-    var data = ctx.storage.readJSON(p, null);
+    var data = await ctx.storage.readJSONAsync(p, null);
     return (data && Array.isArray(data.bookmarks)) ? data.bookmarks : [];
   } catch { return []; }
 }
 
-function getHistory(ctx) {
+async function getHistory(ctx) {
   try {
     var p = ctx.storage.dataPath('web_browsing_history.json');
-    var data = ctx.storage.readJSON(p, null);
+    var data = await ctx.storage.readJSONAsync(p, null);
     return (data && Array.isArray(data.entries)) ? data.entries : [];
   } catch { return []; }
 }
@@ -52,7 +56,7 @@ async function suggest(ctx, _evt, input) {
 
   var seen = new Set();
   var results = [];
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
 
   // 1. Match search history (type: 'search')
   for (var i = 0; i < c.queries.length && results.length < MAX_SUGGESTIONS; i++) {
@@ -67,7 +71,7 @@ async function suggest(ctx, _evt, input) {
   }
 
   // 2. Match bookmarks (type: 'bookmark')
-  var bookmarks = getBookmarks(ctx);
+  var bookmarks = await getBookmarks(ctx);
   for (var bi = 0; bi < bookmarks.length && results.length < MAX_SUGGESTIONS; bi++) {
     var b = bookmarks[bi];
     if (!b) continue;
@@ -83,7 +87,7 @@ async function suggest(ctx, _evt, input) {
   }
 
   // 3. Match browsing history (type: 'history')
-  var history = getHistory(ctx);
+  var history = await getHistory(ctx);
   for (var hi = 0; hi < history.length && results.length < MAX_SUGGESTIONS; hi++) {
     var h = history[hi];
     if (!h) continue;
@@ -105,13 +109,13 @@ async function add(ctx, _evt, query) {
   if (!query || typeof query !== 'string') return;
   var q = query.trim();
   if (!q) return;
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   // Remove duplicate if exists (move to top)
   c.queries = c.queries.filter(function (s) { return !(s && s.query === q); });
   c.queries.unshift({ query: q, timestamp: Date.now() });
   if (c.queries.length > MAX_ENTRIES) c.queries.length = MAX_ENTRIES;
   c.updatedAt = Date.now();
-  write(ctx);
+  await write(ctx);
 }
 
 module.exports = { suggest, add };

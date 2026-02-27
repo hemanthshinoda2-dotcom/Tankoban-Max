@@ -85,21 +85,31 @@ function ensureDir(dir) {
   try { fs.mkdirSync(dir, { recursive: true }); } catch {}
 }
 
-function readHistory(ctx) {
+async function readHistory(ctx) {
   var p = ctx.storage.dataPath(HISTORY_FILE);
-  var data = ctx.storage.readJSON(p, null);
+  var data = await ctx.storage.readJSONAsync(p, null);
   if (data && Array.isArray(data.torrents)) return data;
   return { torrents: [], updatedAt: Date.now() };
 }
 
-function ensureHistory(ctx) {
-  if (!historyCache) historyCache = readHistory(ctx);
-  if (!Array.isArray(historyCache.torrents)) historyCache.torrents = [];
-  return historyCache;
+var historyLoading = null;
+async function ensureHistory(ctx) {
+  if (historyCache) {
+    if (!Array.isArray(historyCache.torrents)) historyCache.torrents = [];
+    return historyCache;
+  }
+  if (historyLoading) return historyLoading;
+  historyLoading = (async () => {
+    historyCache = await readHistory(ctx);
+    if (!Array.isArray(historyCache.torrents)) historyCache.torrents = [];
+    historyLoading = null;
+    return historyCache;
+  })();
+  return historyLoading;
 }
 
-function writeHistory(ctx) {
-  var c = ensureHistory(ctx);
+async function writeHistory(ctx) {
+  var c = await ensureHistory(ctx);
   if (c.torrents.length > MAX_HISTORY) c.torrents.length = MAX_HISTORY;
   var p = ctx.storage.dataPath(HISTORY_FILE);
   ctx.storage.writeJSONDebounced(p, c, 120);
@@ -111,10 +121,11 @@ function emit(ctx, eventName, payload) {
   try { ctx.win && ctx.win.webContents && ctx.win.webContents.send(eventName, payload || {}); } catch {}
 }
 
-function emitUpdated(ctx) {
+async function emitUpdated(ctx) {
   var ipc = getIpc();
   if (!ipc) return;
-  emit(ctx, ipc.EVENT.WEB_TORRENTS_UPDATED, { torrents: listActiveEntries(), history: ensureHistory(ctx).torrents });
+  var h = await ensureHistory(ctx);
+  emit(ctx, ipc.EVENT.WEB_TORRENTS_UPDATED, { torrents: listActiveEntries(), history: h.torrents });
 }
 
 function listActiveEntries() {
@@ -126,8 +137,8 @@ function listActiveEntries() {
   return out;
 }
 
-function upsertHistory(ctx, entry) {
-  var c = ensureHistory(ctx);
+async function upsertHistory(ctx, entry) {
+  var c = await ensureHistory(ctx);
   var id = String(entry && entry.id || '');
   if (!id) return;
   var found = null;
@@ -141,7 +152,7 @@ function upsertHistory(ctx, entry) {
   Object.assign(found, entry);
   c.updatedAt = Date.now();
   if (c.torrents.length > MAX_HISTORY) c.torrents.length = MAX_HISTORY;
-  writeHistory(ctx);
+  await writeHistory(ctx);
 }
 
 function removeActive(id) {
@@ -166,16 +177,16 @@ function extractId(payload) {
   return '';
 }
 
-function getLibraryRoots(ctx) {
+async function getLibraryRoots(ctx) {
   var books = [];
   var comics = [];
   var videos = [];
   try {
-    var b = ctx.storage.readJSON(ctx.storage.dataPath('books_library_state.json'), {});
+    var b = await ctx.storage.readJSONAsync(ctx.storage.dataPath('books_library_state.json'), {});
     books = Array.isArray(b.bookRootFolders) ? b.bookRootFolders.filter(Boolean) : [];
   } catch {}
   try {
-    var l = ctx.storage.readJSON(ctx.storage.dataPath('library_state.json'), {});
+    var l = await ctx.storage.readJSONAsync(ctx.storage.dataPath('library_state.json'), {});
     comics = Array.isArray(l.rootFolders) ? l.rootFolders.filter(Boolean) : [];
     videos = Array.isArray(l.videoFolders) ? l.videoFolders.filter(Boolean) : [];
   } catch {}
@@ -196,9 +207,9 @@ function isPathWithin(parent, target) {
   }
 }
 
-function detectLibrariesForPath(ctx, destination) {
+async function detectLibrariesForPath(ctx, destination) {
   var libs = new Set();
-  var roots = getLibraryRoots(ctx);
+  var roots = await getLibraryRoots(ctx);
   for (var i = 0; i < roots.books.length; i++) if (isPathWithin(roots.books[i], destination)) libs.add('books');
   for (var j = 0; j < roots.comics.length; j++) if (isPathWithin(roots.comics[j], destination)) libs.add('comics');
   for (var k = 0; k < roots.videos.length; k++) if (isPathWithin(roots.videos[k], destination)) libs.add('videos');
@@ -308,13 +319,13 @@ async function routeCompletedFiles(ctx, rec) {
       if (entry.videoLibrary) {
         try {
           var stat = fs.statSync(destination);
-          if (stat && stat.size >= f.length) { routed += 1; detectLibrariesForPath(ctx, destination).forEach(function (lib) { routedLibraries.add(lib); }); continue; }
+          if (stat && stat.size >= f.length) { routed += 1; (await detectLibrariesForPath(ctx, destination)).forEach(function (lib) { routedLibraries.add(lib); }); continue; }
         } catch {}
       }
       ensureDir(path.dirname(destination));
       await copyTorrentFile(f, destination);
       routed += 1;
-      detectLibrariesForPath(ctx, destination).forEach(function (lib) { routedLibraries.add(lib); });
+      (await detectLibrariesForPath(ctx, destination)).forEach(function (lib) { routedLibraries.add(lib); });
     } catch {
       failed += 1;
     }
@@ -342,20 +353,20 @@ async function onTorrentDone(ctx, rec) {
   if (!root) {
     // No destination set yet — hold files in temp, wait for user to set destination.
     entry.state = 'completed_pending';
-    upsertHistory(ctx, entry);
+    await upsertHistory(ctx, entry);
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-    emitUpdated(ctx);
+    await emitUpdated(ctx);
     return;
   }
 
   if (entry.directWrite) {
-    detectLibrariesForPath(ctx, root).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
+    (await detectLibrariesForPath(ctx, root)).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
     entry.state = 'completed';
     entry.finishedAt = Date.now();
-    upsertHistory(ctx, entry);
+    await upsertHistory(ctx, entry);
     removeActive(entry.id);
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-    emitUpdated(ctx);
+    await emitUpdated(ctx);
     return;
   }
 
@@ -363,14 +374,14 @@ async function onTorrentDone(ctx, rec) {
 
   entry.state = entry.failedFiles > 0 ? 'completed_with_errors' : 'completed';
   entry.finishedAt = Date.now();
-  upsertHistory(ctx, entry);
+  await upsertHistory(ctx, entry);
   removeActive(entry.id);
 
   if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
 }
 
-function onMetadataReady(ctx, torrent, entry, rec) {
+async function onMetadataReady(ctx, torrent, entry, rec) {
   var ipc = getIpc();
   entry.infoHash = String(torrent.infoHash || entry.infoHash || '');
   entry.name = String(torrent.name || entry.name || entry.infoHash || 'Torrent');
@@ -390,18 +401,18 @@ function onMetadataReady(ctx, torrent, entry, rec) {
     }
   }
 
-  upsertHistory(ctx, entry);
+  await upsertHistory(ctx, entry);
   if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_METADATA, entry);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
 }
 
-function bindTorrent(ctx, torrent, entry) {
+async function bindTorrent(ctx, torrent, entry) {
   var ipc = getIpc();
   entry.infoHash = String(torrent.infoHash || entry.infoHash || '');
   entry.name = String(torrent.name || entry.name || entry.infoHash || 'Torrent');
   if (!entry.savePath && entry.destinationRoot) entry.savePath = entry.destinationRoot;
   entry.state = entry.destinationRoot ? 'downloading' : 'resolving_metadata';
-  upsertHistory(ctx, entry);
+  await upsertHistory(ctx, entry);
 
   var rec = { torrent: torrent, entry: entry, interval: null, streams: {}, http: null };
   activeById.set(entry.id, rec);
@@ -409,14 +420,14 @@ function bindTorrent(ctx, torrent, entry) {
   // Handle metadata: for .torrent files, metadata is available immediately.
   // For magnet links, we need to wait for the 'ready' event.
   if (torrent.files && torrent.files.length > 0) {
-    onMetadataReady(ctx, torrent, entry, rec);
+    onMetadataReady(ctx, torrent, entry, rec).catch(function () {});
   } else {
     torrent.on('ready', function () {
-      onMetadataReady(ctx, torrent, entry, rec);
+      onMetadataReady(ctx, torrent, entry, rec).catch(function () {});
     });
   }
 
-  rec.interval = setInterval(function () {
+  rec.interval = setInterval(async function () {
     if (!activeById.has(entry.id)) return;
     entry.progress = Number(torrent.progress || 0);
     entry.downloadRate = Number(torrent.downloadSpeed || 0);
@@ -426,35 +437,35 @@ function bindTorrent(ctx, torrent, entry) {
     entry.numPeers = Number(torrent.numPeers || 0);
     entry.name = String(torrent.name || entry.name || '');
     updateFileProgress(entry, torrent);
-    upsertHistory(ctx, entry);
+    await upsertHistory(ctx, entry);
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_PROGRESS, entry);
-    emitUpdated(ctx);
+    await emitUpdated(ctx);
   }, 800);
 
-  torrent.on('error', function (err) {
+  torrent.on('error', async function (err) {
     entry.state = 'failed';
     entry.error = String((err && err.message) || err || 'Torrent error');
     entry.finishedAt = Date.now();
-    upsertHistory(ctx, entry);
+    await upsertHistory(ctx, entry);
     removeActive(entry.id);
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-    emitUpdated(ctx);
+    await emitUpdated(ctx);
   });
 
   torrent.on('done', function () {
-    onTorrentDone(ctx, rec).catch(function (err) {
+    onTorrentDone(ctx, rec).catch(async function (err) {
       entry.state = 'failed';
       entry.error = String((err && err.message) || err || 'Failed to finalize torrent');
       entry.finishedAt = Date.now();
-      upsertHistory(ctx, entry);
+      await upsertHistory(ctx, entry);
       removeActive(entry.id);
       if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-      emitUpdated(ctx);
+      await emitUpdated(ctx);
     });
   });
 
   if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_STARTED, entry);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
 }
 
 function buildTorrentTmpPath(ctx, id) {
@@ -482,7 +493,7 @@ async function addTorrentInput(ctx, entry, input) {
     var destinationRoot = String(entry && entry.destinationRoot || '').trim();
     var addPath = destinationRoot ? destinationRoot : buildTorrentTmpPath(ctx, entry.id);
     var torrent = cl.add(input, { path: addPath });
-    bindTorrent(ctx, torrent, entry);
+    await bindTorrent(ctx, torrent, entry);
     return { ok: true, id: entry.id };
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
@@ -593,8 +604,8 @@ async function pause(ctx, _evt, payload) {
   if (typeof rec.torrent.pause !== 'function') return { ok: false, error: 'Pause unsupported' };
   try { rec.torrent.pause(); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
   rec.entry.state = 'paused';
-  upsertHistory(ctx, rec.entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, rec.entry);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -605,8 +616,8 @@ async function resume(ctx, _evt, payload) {
   if (typeof rec.torrent.resume !== 'function') return { ok: false, error: 'Resume unsupported' };
   try { rec.torrent.resume(); } catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
   rec.entry.state = 'downloading';
-  upsertHistory(ctx, rec.entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, rec.entry);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -622,8 +633,8 @@ async function cancel(ctx, _evt, payload) {
       rec.torrent.destroy({ destroyStore: true }, function () { resolve(); });
     });
   } catch {}
-  upsertHistory(ctx, rec.entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, rec.entry);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -632,19 +643,19 @@ async function getActive(ctx) {
 }
 
 async function getHistory(ctx) {
-  var c = ensureHistory(ctx);
+  var c = await ensureHistory(ctx);
   return { ok: true, torrents: c.torrents || [] };
 }
 
 async function clearHistory(ctx) {
-  var c = ensureHistory(ctx);
+  var c = await ensureHistory(ctx);
   var activeStates = { downloading: 1, paused: 1, resolving_metadata: 1, metadata_ready: 1, completed_pending: 1 };
   c.torrents = (c.torrents || []).filter(function (t) {
     return t && activeStates[String(t.state)];
   });
   c.updatedAt = Date.now();
-  writeHistory(ctx);
-  emitUpdated(ctx);
+  await writeHistory(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -652,13 +663,13 @@ async function removeHistory(ctx, _evt, payload) {
   var id = extractId(payload);
   if (!id) return { ok: false, error: 'Missing id' };
   if (activeById.has(id)) return { ok: false, error: 'Torrent active' };
-  var c = ensureHistory(ctx);
+  var c = await ensureHistory(ctx);
   var before = c.torrents.length;
   c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === id); });
   if (c.torrents.length === before) return { ok: false, error: 'Not found' };
   c.updatedAt = Date.now();
-  writeHistory(ctx);
-  emitUpdated(ctx);
+  await writeHistory(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -696,8 +707,8 @@ async function selectFiles(ctx, _evt, payload) {
   if (!entry.filePriorities || typeof entry.filePriorities !== 'object') entry.filePriorities = {};
 
   if (!torrent.files || !torrent.files.length) {
-    upsertHistory(ctx, entry);
-    emitUpdated(ctx);
+    await upsertHistory(ctx, entry);
+    await emitUpdated(ctx);
     return { ok: true, pending: true };
   }
 
@@ -740,8 +751,8 @@ async function selectFiles(ctx, _evt, payload) {
     }
   }
 
-  upsertHistory(ctx, entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, entry);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -770,16 +781,16 @@ async function setDestination(ctx, _evt, payload) {
     await routeCompletedFiles(ctx, rec);
     entry.state = entry.failedFiles > 0 ? 'completed_with_errors' : 'completed';
     entry.finishedAt = Date.now();
-    upsertHistory(ctx, entry);
+    await upsertHistory(ctx, entry);
     removeActive(entry.id);
     var ipc = getIpc();
     if (ipc) emit(ctx, ipc.EVENT.WEB_TORRENT_COMPLETED, entry);
-    emitUpdated(ctx);
+    await emitUpdated(ctx);
     return { ok: true };
   }
 
-  upsertHistory(ctx, entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, entry);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -1099,10 +1110,10 @@ function waitForTorrentMetadata(torrent, timeoutMs) {
   });
 }
 
-function historyEntryById(ctx, id) {
+async function historyEntryById(ctx, id) {
   if (!id) return null;
   try {
-    var c = ensureHistory(ctx);
+    var c = await ensureHistory(ctx);
     var list = Array.isArray(c && c.torrents) ? c.torrents : [];
     for (var i = 0; i < list.length; i++) {
       var row = list[i];
@@ -1133,7 +1144,7 @@ async function activateForStream(ctx, id, payload) {
     return { ok: true, rec: existing, autoActivated: false, activationSource: 'already_active' };
   }
 
-  var historyEntry = historyEntryById(ctx, id);
+  var historyEntry = await historyEntryById(ctx, id);
   var src = streamActivationSource(payload, historyEntry);
   if (!src.input) {
     return { ok: false, error: 'Torrent not active and no source to auto-activate', autoActivated: false, activationSource: src.source };
@@ -1487,8 +1498,8 @@ async function addToVideoLibrary(ctx, evt, payload) {
     wtLog('addToVideoLibrary: video domain error: ' + String((addRes && addRes.error) || 'addShowFolderPath failed'));
   }
 
-  upsertHistory(ctx, entry);
-  emitUpdated(ctx);
+  await upsertHistory(ctx, entry);
+  await emitUpdated(ctx);
   wtLog('addToVideoLibrary: success, showPath=' + showPath + ', videoFiles=' + videoIndices.length + ', streamable=' + (streamable ? '1' : '0'));
   return { ok: true, showPath: showPath, streamable: streamable };
 }
@@ -1568,7 +1579,7 @@ async function remove(ctx, _evt, payload) {
     } catch {}
   }
   if (!entry) {
-    var c0 = ensureHistory(ctx);
+    var c0 = await ensureHistory(ctx);
     for (var k = 0; k < c0.torrents.length; k++) {
       var t0 = c0.torrents[k];
       if (t0 && String(t0.id) === id) { entry = t0; break; }
@@ -1585,37 +1596,41 @@ async function remove(ctx, _evt, payload) {
   }
   if (removeFromLibrary && entry) {
     var root = String(entry.destinationRoot || entry.savePath || '').trim();
-    if (root) detectLibrariesForPath(ctx, root).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
+    if (root) (await detectLibrariesForPath(ctx, root)).forEach(function (lib) { triggerLibraryRescan(ctx, lib); });
   }
-  var c = ensureHistory(ctx);
+  var c = await ensureHistory(ctx);
   c.torrents = c.torrents.filter(function (t) { return !(t && String(t.id) === id); });
   c.updatedAt = Date.now();
-  writeHistory(ctx);
-  emitUpdated(ctx);
+  await writeHistory(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
 async function pauseAll(ctx) {
-  activeById.forEach(function (rec) {
+  var recs = Array.from(activeById.values());
+  for (var i = 0; i < recs.length; i++) {
+    var rec = recs[i];
     if (rec.entry.state === 'downloading' || rec.entry.state === 'seeding') {
       try { rec.torrent.pause(); } catch {}
       rec.entry.state = 'paused';
-      upsertHistory(ctx, rec.entry);
+      await upsertHistory(ctx, rec.entry);
     }
-  });
-  emitUpdated(ctx);
+  }
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
 async function resumeAll(ctx) {
-  activeById.forEach(function (rec) {
+  var recs = Array.from(activeById.values());
+  for (var i = 0; i < recs.length; i++) {
+    var rec = recs[i];
     if (rec.entry.state === 'paused') {
       try { rec.torrent.resume(); } catch {}
       rec.entry.state = rec.entry.progress >= 1 ? 'seeding' : 'downloading';
-      upsertHistory(ctx, rec.entry);
+      await upsertHistory(ctx, rec.entry);
     }
-  });
-  emitUpdated(ctx);
+  }
+  await emitUpdated(ctx);
   return { ok: true };
 }
 
@@ -1803,7 +1818,7 @@ async function startConfigured(ctx, _evt, payload) {
     return { ok: false, error: String(err && err.message || err) };
   }
 
-  bindTorrent(ctx, torrent, entry);
+  await bindTorrent(ctx, torrent, entry);
 
   // If specific files were selected, apply selection after binding.
   if (!streamableOnly && selectedFiles && selectedFiles.length > 0) {

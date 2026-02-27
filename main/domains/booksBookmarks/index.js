@@ -4,13 +4,19 @@ Stores bookmarks in books_bookmarks.json keyed by bookId.
 */
 
 let bookmarksMem = null;
+let bookmarksLoading = null;
 
-function getBookmarksMem(ctx) {
+async function getBookmarksMem(ctx) {
   if (bookmarksMem) return bookmarksMem;
-  const p = ctx.storage.dataPath('books_bookmarks.json');
-  const raw = ctx.storage.readJSON(p, {});
-  bookmarksMem = (raw && typeof raw === 'object') ? raw : {};
-  return bookmarksMem;
+  if (bookmarksLoading) return bookmarksLoading;
+  bookmarksLoading = (async () => {
+    const p = ctx.storage.dataPath('books_bookmarks.json');
+    const raw = await ctx.storage.readJSONAsync(p, {});
+    bookmarksMem = (raw && typeof raw === 'object') ? raw : {};
+    bookmarksLoading = null;
+    return bookmarksMem;
+  })();
+  return bookmarksLoading;
 }
 
 function persist(ctx) {
@@ -21,7 +27,7 @@ function persist(ctx) {
 async function get(ctx, _evt, bookId) {
   const id = String(bookId || '');
   if (!id) return [];
-  const mem = getBookmarksMem(ctx);
+  const mem = await getBookmarksMem(ctx);
   const arr = Array.isArray(mem[id]) ? mem[id] : [];
   return arr;
 }
@@ -35,7 +41,7 @@ async function save(ctx, _evt, bookId, bookmark) {
   bm.updatedAt = Date.now();
   if (!bm.createdAt) bm.createdAt = bm.updatedAt;
 
-  const mem = getBookmarksMem(ctx);
+  const mem = await getBookmarksMem(ctx);
   if (!Array.isArray(mem[id])) mem[id] = [];
 
   const idx = mem[id].findIndex(x => x && x.id === bm.id);
@@ -54,7 +60,7 @@ async function del(ctx, _evt, bookId, bookmarkId) {
   const bmId = String(bookmarkId || '');
   if (!id || !bmId) return { ok: false };
 
-  const mem = getBookmarksMem(ctx);
+  const mem = await getBookmarksMem(ctx);
   if (!Array.isArray(mem[id])) return { ok: true };
 
   mem[id] = mem[id].filter(x => x && x.id !== bmId);
@@ -68,15 +74,15 @@ async function clear(ctx, _evt, bookId) {
   const id = String(bookId || '');
   if (!id) return { ok: false };
 
-  const mem = getBookmarksMem(ctx);
+  const mem = await getBookmarksMem(ctx);
   delete mem[id];
   persist(ctx);
   return { ok: true };
 }
 
-function pruneByRemovedIds(ctx, removedIds) {
+async function pruneByRemovedIds(ctx, removedIds) {
   if (!Array.isArray(removedIds) || !removedIds.length) return;
-  const mem = getBookmarksMem(ctx);
+  const mem = await getBookmarksMem(ctx);
   let changed = false;
   for (const id of removedIds) {
     const k = String(id || '');

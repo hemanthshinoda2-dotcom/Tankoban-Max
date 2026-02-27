@@ -5,13 +5,19 @@ Shape: { [showId]: "Custom Name" }
 */
 
 var displayNamesMem = null;
+var displayNamesLoading = null;
 
-function getMem(ctx) {
+async function getMem(ctx) {
   if (displayNamesMem) return displayNamesMem;
-  var p = ctx.storage.dataPath('video_display_names.json');
-  var raw = ctx.storage.readJSON(p, {});
-  displayNamesMem = (raw && typeof raw === 'object') ? raw : {};
-  return displayNamesMem;
+  if (displayNamesLoading) return displayNamesLoading;
+  displayNamesLoading = (async () => {
+    var p = ctx.storage.dataPath('video_display_names.json');
+    var raw = await ctx.storage.readJSONAsync(p, {});
+    displayNamesMem = (raw && typeof raw === 'object') ? raw : {};
+    displayNamesLoading = null;
+    return displayNamesMem;
+  })();
+  return displayNamesLoading;
 }
 
 function persist(ctx) {
@@ -20,7 +26,7 @@ function persist(ctx) {
 }
 
 async function getAll(ctx) {
-  return getMem(ctx);
+  return await getMem(ctx);
 }
 
 async function save(ctx, _evt, showId, displayName) {
@@ -28,7 +34,7 @@ async function save(ctx, _evt, showId, displayName) {
   if (!id) return { ok: false };
   var name = String(displayName || '').trim();
   if (!name) return clear(ctx, _evt, showId);
-  var mem = getMem(ctx);
+  var mem = await getMem(ctx);
   mem[id] = name;
   persist(ctx);
   return { ok: true };
@@ -37,7 +43,7 @@ async function save(ctx, _evt, showId, displayName) {
 async function clear(ctx, _evt, showId) {
   var id = String(showId || '');
   if (!id) return { ok: false };
-  var mem = getMem(ctx);
+  var mem = await getMem(ctx);
   delete mem[id];
   persist(ctx);
   return { ok: true };

@@ -127,9 +127,9 @@ function computeAutoSeries(rootFolders, ignoredSeries, scanIgnore) {
  * Read library configuration.
  * Lifted from Build 78B index.js lines 579-594.
  */
-function readLibraryConfig(ctx) {
+async function readLibraryConfig(ctx) {
   const p = ctx.storage.dataPath('library_state.json');
-  const state = ctx.storage.readJSON(p, { seriesFolders: [], rootFolders: [], ignoredSeries: [], scanIgnore: [], videoFolders: [], videoShowFolders: [], videoHiddenShowIds: [], videoFiles: [] });
+  const state = await ctx.storage.readJSONAsync(p, { seriesFolders: [], rootFolders: [], ignoredSeries: [], scanIgnore: [], videoFolders: [], videoShowFolders: [], videoHiddenShowIds: [], videoFiles: [] });
 
   // Migration: older builds used { folders: [] }.
   if (state.folders && !state.seriesFolders) state.seriesFolders = state.folders;
@@ -180,45 +180,54 @@ function computeEffectiveFromConfig(state) {
  * Load library index from disk if not already loaded.
  * Lifted from Build 78B index.js lines 615-647.
  */
-function ensureLibraryIndexLoaded(ctx) {
+let libraryIdxLoading = null;
+async function ensureLibraryIndexLoaded(ctx) {
   if (libraryCache.idxLoaded) return;
-  libraryCache.idxLoaded = true;
+  if (libraryIdxLoading) return libraryIdxLoading;
+  libraryIdxLoading = (async () => {
+    libraryCache.idxLoaded = true;
 
-  const idxPath = ctx.storage.dataPath('library_index.json');
+    const idxPath = ctx.storage.dataPath('library_index.json');
 
-  // Prefer dedicated index cache.
-  const idx = ctx.storage.readJSON(idxPath, null);
-  if (idx && Array.isArray(idx.series) && Array.isArray(idx.books)) {
-    libraryCache.idx = { series: idx.series, books: idx.books };
-    return;
-  }
+    // Prefer dedicated index cache.
+    const idx = await ctx.storage.readJSONAsync(idxPath, null);
+    if (idx && Array.isArray(idx.series) && Array.isArray(idx.books)) {
+      libraryCache.idx = { series: idx.series, books: idx.books };
+      libraryIdxLoading = null;
+      return;
+    }
 
-  // Migration: older builds persisted heavy index inside library_state.json.
-  const legacy = ctx.storage.readJSON(ctx.storage.dataPath('library_state.json'), null);
-  if (legacy && Array.isArray(legacy.series) && Array.isArray(legacy.books)) {
-    libraryCache.idx = { series: legacy.series, books: legacy.books };
+    // Migration: older builds persisted heavy index inside library_state.json.
+    const legacy = await ctx.storage.readJSONAsync(ctx.storage.dataPath('library_state.json'), null);
+    if (legacy && Array.isArray(legacy.series) && Array.isArray(legacy.books)) {
+      libraryCache.idx = { series: legacy.series, books: legacy.books };
 
-    // One-time migration: persist index separately and shrink library_state.json to config-only.
-    try {
-      if (!fs.existsSync(idxPath)) {
-        ctx.storage.writeJSON(idxPath, libraryCache.idx);
-      }
-      writeLibraryConfig(ctx, {
-        seriesFolders: Array.isArray(legacy.seriesFolders) ? legacy.seriesFolders : [],
-        rootFolders: Array.isArray(legacy.rootFolders) ? legacy.rootFolders : [],
-        ignoredSeries: Array.isArray(legacy.ignoredSeries) ? legacy.ignoredSeries : [],
-        scanIgnore: Array.isArray(legacy.scanIgnore) ? legacy.scanIgnore : [],
-      });
-    } catch {}
-  }
+      // One-time migration: persist index separately and shrink library_state.json to config-only.
+      try {
+        let exists = false;
+        try { await fs.promises.access(idxPath); exists = true; } catch { exists = false; }
+        if (!exists) {
+          ctx.storage.writeJSON(idxPath, libraryCache.idx);
+        }
+        await writeLibraryConfig(ctx, {
+          seriesFolders: Array.isArray(legacy.seriesFolders) ? legacy.seriesFolders : [],
+          rootFolders: Array.isArray(legacy.rootFolders) ? legacy.rootFolders : [],
+          ignoredSeries: Array.isArray(legacy.ignoredSeries) ? legacy.ignoredSeries : [],
+          scanIgnore: Array.isArray(legacy.scanIgnore) ? legacy.scanIgnore : [],
+        });
+      } catch {}
+    }
+    libraryIdxLoading = null;
+  })();
+  return libraryIdxLoading;
 }
 
 /**
  * Create library state snapshot for renderer.
  * Lifted from Build 78B index.js lines 649-669.
  */
-function makeLibraryStateSnapshot(ctx, state) {
-  const s = state || readLibraryConfig(ctx);
+async function makeLibraryStateSnapshot(ctx, state) {
+  const s = state || await readLibraryConfig(ctx);
   const { autoSeriesFolders, effectiveSeriesFolders } = computeEffectiveFromConfig(s);
 
   libraryCache.autoSeriesFolders = autoSeriesFolders;
@@ -243,22 +252,22 @@ function makeLibraryStateSnapshot(ctx, state) {
  * Emit library updated event to renderer.
  * Lifted from Build 78B index.js lines 671-673.
  */
-function emitLibraryUpdated(ctx) {
-  try { ctx.win?.webContents?.send(ctx.EVENT.LIBRARY_UPDATED, makeLibraryStateSnapshot(ctx)); } catch {}
+async function emitLibraryUpdated(ctx) {
+  try { ctx.win?.webContents?.send(ctx.EVENT.LIBRARY_UPDATED, await makeLibraryStateSnapshot(ctx)); } catch {}
 }
 
 /**
  * Prune progress entries for removed books.
  * Lifted from Build 78B index.js lines 675-687.
  */
-function pruneProgressByRemovedBookIds(ctx, removedIds) {
+async function pruneProgressByRemovedBookIds(ctx, removedIds) {
   // INTENT: Only delete progress entries for books that were removed from the library index.
   // This preserves Open File (external) progress that is not part of the library.
   try {
     if (!removedIds || !removedIds.length) return;
     // Note: getProgressMem is in the progress domain - we'll call it through ctx
     const progress = require('../progress');
-    const all = progress._getProgressMem ? progress._getProgressMem(ctx) : {};
+    const all = progress._getProgressMem ? await progress._getProgressMem(ctx) : {};
     let changed = false;
     for (const id of removedIds) {
       if (all && all[id]) { delete all[id]; changed = true; }
@@ -271,8 +280,8 @@ function pruneProgressByRemovedBookIds(ctx, removedIds) {
  * Start library scan worker.
  * Lifted from Build 78B index.js lines 701-837.
  */
-function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
-  ensureLibraryIndexLoaded(ctx);
+async function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
+  await ensureLibraryIndexLoaded(ctx);
 
   const folders = Array.isArray(effectiveSeriesFolders) ? effectiveSeriesFolders : [];
   const key = JSON.stringify(folders);
@@ -303,7 +312,7 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
   const indexPath = ctx.storage.dataPath('library_index.json');
 
   // BUILD27: load ignore patterns from config and pass to worker
-  const cfg = readLibraryConfig(ctx);
+  const cfg = await readLibraryConfig(ctx);
   const scanIgnore = Array.isArray(cfg.scanIgnore) ? cfg.scanIgnore : [];
 
   // BUILD 16 compat: use file URL for Worker so packaging remains reliable.
@@ -339,7 +348,7 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
 
     if (queued && queuedKey && queuedKey !== libraryCache.lastScanKey) {
       // Keep scanning indicator effectively "on" for chained scans.
-      startLibraryScan(ctx, queued, { force: true });
+      startLibraryScan(ctx, queued, { force: true }).catch(() => {});
       return;
     }
 
@@ -385,10 +394,10 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
           if (!cur.has(id)) removed.push(id);
         }
 
-        pruneProgressByRemovedBookIds(ctx, removed);
+        pruneProgressByRemovedBookIds(ctx, removed).catch(() => {});
       }
 
-      emitLibraryUpdated(ctx);
+      emitLibraryUpdated(ctx).catch(() => {});
       finish(true);
     }
   });
@@ -396,7 +405,7 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
   w.on('error', (err) => {
     if (myScanId !== libraryCache.scanId) return;
     libraryCache.error = String(err?.message || err);
-    emitLibraryUpdated(ctx);
+    emitLibraryUpdated(ctx).catch(() => {});
     finish(false);
   });
 
@@ -404,7 +413,7 @@ function startLibraryScan(ctx, effectiveSeriesFolders, opts = {}) {
     if (myScanId !== libraryCache.scanId) return;
     if (code !== 0) {
       libraryCache.error = `Library scan worker exited ${code}`;
-      emitLibraryUpdated(ctx);
+      emitLibraryUpdated(ctx).catch(() => {});
       finish(false);
     }
   });
@@ -428,14 +437,14 @@ async function getState(ctx) {
   // BUILD 19C_LIBCACHE
   // INTENT: Fast path on launch/open — return cached index immediately (from library_index.json),
   // and kick off ONE background scan per app session to refresh stale disk state.
-  ensureLibraryIndexLoaded(ctx);
+  await ensureLibraryIndexLoaded(ctx);
 
-  const state = readLibraryConfig(ctx);
-  const snap = makeLibraryStateSnapshot(ctx, state);
+  const state = await readLibraryConfig(ctx);
+  const snap = await makeLibraryStateSnapshot(ctx, state);
 
   // Refresh once per run (deduped by lastScanKey/lastScanAt).
   // This keeps the index current without blocking the renderer.
-  startLibraryScan(ctx, snap.effectiveSeriesFolders);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders);
 
   return snap;
 }
@@ -445,9 +454,9 @@ async function getState(ctx) {
  * Lifted from Build 78B index.js lines 1155-1160.
  */
 async function scan(ctx, _evt, opts) {
-  const state = readLibraryConfig(ctx);
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const state = await readLibraryConfig(ctx);
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
   return { ok: true };
 }
 
@@ -471,7 +480,7 @@ async function cancelScan(ctx) {
   try { await w.terminate(); } catch {}
 
   try { ctx.win?.webContents?.send(ctx.EVENT.LIBRARY_SCAN_STATUS, { scanning: false, progress: null, canceled: true }); } catch {}
-  emitLibraryUpdated(ctx);
+  await emitLibraryUpdated(ctx);
   return { ok: true };
 }
 
@@ -480,7 +489,7 @@ async function cancelScan(ctx) {
  * Lifted from Build 78B index.js lines 1184-1209.
  */
 async function setScanIgnore(ctx, _evt, patterns) {
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   const arr = Array.isArray(patterns) ? patterns : [];
 
   // sanitize: strings only, trim, de-dupe, cap size
@@ -499,9 +508,9 @@ async function setScanIgnore(ctx, _evt, patterns) {
   state.scanIgnore = out;
   await writeLibraryConfig(ctx, state);
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
-  emitLibraryUpdated(ctx);
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  await emitLibraryUpdated(ctx);
 
   return { ok: true, state: snap };
 }
@@ -521,12 +530,12 @@ async function addRootFolder(ctx, evt) {
 
   const root = res.filePaths[0];
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   if (!state.rootFolders.includes(root)) state.rootFolders.unshift(root);
   await writeLibraryConfig(ctx, state);
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   // Return immediately with cached index; renderer will update on library:updated.
   return { ok: true, state: snap };
@@ -540,18 +549,18 @@ async function removeRootFolder(ctx, _evt, rootPath) {
   const root = String(rootPath || '');
   if (!root) return { ok: false };
 
-  ensureLibraryIndexLoaded(ctx);
+  await ensureLibraryIndexLoaded(ctx);
   try { libraryCache.pendingPrunePrevBookIds = (libraryCache.idx.books || []).map(b => b.id); } catch {}
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   state.rootFolders = state.rootFolders.filter(r => r !== root);
   await writeLibraryConfig(ctx, state);
 
   // Defer orphan pruning until the new index is known (post-scan).
   libraryCache.pendingPruneProgress = true;
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -571,12 +580,12 @@ async function addSeriesFolder(ctx, evt) {
 
   const folder = res.filePaths[0];
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   if (!state.seriesFolders.includes(folder)) state.seriesFolders.unshift(folder);
   await writeLibraryConfig(ctx, state);
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -589,10 +598,10 @@ async function removeSeriesFolder(ctx, _evt, folder) {
   const target = String(folder || '');
   if (!target) return { ok: false };
 
-  ensureLibraryIndexLoaded(ctx);
+  await ensureLibraryIndexLoaded(ctx);
   try { libraryCache.pendingPrunePrevBookIds = (libraryCache.idx.books || []).map(b => b.id); } catch {}
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
 
   // If it's a manually-added series, remove it. If it was auto-detected from a root,
   // add it to ignoredSeries so it stays hidden.
@@ -610,7 +619,7 @@ async function removeSeriesFolder(ctx, _evt, folder) {
   try {
     const removedSeriesId = seriesIdForFolder(target);
     const progress = require('../progress');
-    const all = progress._getProgressMem ? progress._getProgressMem(ctx) : {};
+    const all = progress._getProgressMem ? await progress._getProgressMem(ctx) : {};
     let changed = false;
 
     for (const b of (libraryCache.idx.books || [])) {
@@ -625,8 +634,8 @@ async function removeSeriesFolder(ctx, _evt, folder) {
   // Also prune orphans after we have the new index (post-scan).
   libraryCache.pendingPruneProgress = true;
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -638,12 +647,12 @@ async function removeSeriesFolder(ctx, _evt, folder) {
 async function unignoreSeries(ctx, _evt, folder) {
   const target = String(folder || '');
 
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   state.ignoredSeries = state.ignoredSeries.filter(x => x !== target);
   await writeLibraryConfig(ctx, state);
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   return { ok: true, state: snap };
 }
@@ -653,12 +662,12 @@ async function unignoreSeries(ctx, _evt, folder) {
  * Lifted from Build 78B index.js lines 1332-1341.
  */
 async function clearIgnoredSeries(ctx) {
-  const state = readLibraryConfig(ctx);
+  const state = await readLibraryConfig(ctx);
   state.ignoredSeries = [];
   await writeLibraryConfig(ctx, state);
 
-  const snap = makeLibraryStateSnapshot(ctx, state);
-  startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
+  const snap = await makeLibraryStateSnapshot(ctx, state);
+  await startLibraryScan(ctx, snap.effectiveSeriesFolders, { force: true });
 
   return { ok: true, state: snap };
 }

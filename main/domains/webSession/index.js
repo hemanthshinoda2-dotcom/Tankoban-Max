@@ -5,6 +5,7 @@ const MAX_TABS = 32;
 const MAX_CLOSED = 30;
 
 var cache = null;
+var cacheLoading = null;
 
 function sanitizeTab(tab) {
   var t = (tab && typeof tab === 'object') ? tab : {};
@@ -52,25 +53,30 @@ function normalizeState(input) {
   };
 }
 
-function ensureCache(ctx) {
+async function ensureCache(ctx) {
   if (cache) return cache;
-  var p = ctx.storage.dataPath(SESSION_FILE);
-  var raw = ctx.storage.readJSON(p, null);
-  if (raw && typeof raw === 'object') cache = normalizeState(raw);
-  else cache = normalizeState({});
-  return cache;
+  if (cacheLoading) return cacheLoading;
+  cacheLoading = (async () => {
+    var p = ctx.storage.dataPath(SESSION_FILE);
+    var raw = await ctx.storage.readJSONAsync(p, null);
+    if (raw && typeof raw === 'object') cache = normalizeState(raw);
+    else cache = normalizeState({});
+    cacheLoading = null;
+    return cache;
+  })();
+  return cacheLoading;
 }
 
-function write(ctx) {
+async function write(ctx) {
   var p = ctx.storage.dataPath(SESSION_FILE);
-  var c = ensureCache(ctx);
+  var c = await ensureCache(ctx);
   ctx.storage.writeJSONDebounced(p, c);
 }
 
-function emitUpdated(ctx) {
+async function emitUpdated(ctx) {
   try {
     var ipc = require('../../../shared/ipc');
-    var c = ensureCache(ctx);
+    var c = await ensureCache(ctx);
     ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.WEB_SESSION_UPDATED, {
       state: c,
     });
@@ -78,22 +84,22 @@ function emitUpdated(ctx) {
 }
 
 async function get(ctx) {
-  return { ok: true, state: ensureCache(ctx) };
+  return { ok: true, state: await ensureCache(ctx) };
 }
 
 async function save(ctx, _evt, payload) {
   var incoming = (payload && payload.state && typeof payload.state === 'object') ? payload.state : payload;
   var next = normalizeState(incoming);
   cache = next;
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true, state: next };
 }
 
 async function clear(ctx) {
   cache = normalizeState({ tabs: [], activeTabId: '', closedTabs: [], restoreLastSession: true });
-  write(ctx);
-  emitUpdated(ctx);
+  await write(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 

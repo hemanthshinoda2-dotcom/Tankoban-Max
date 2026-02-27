@@ -12,6 +12,7 @@ Extracted from Build 77 IPC registry lines 2289-2466 with ZERO behavior changes.
  * Lifted from Build 77 index.js line 2289.
  */
 let videoUiStateMem = null;
+let videoUiStateLoading = null;
 
 /**
  * Normalize video UI state structure.
@@ -28,12 +29,18 @@ function normalizeVideoUiState(raw) {
 /**
  * Get cached video UI state data, loading from disk if needed.
  * Lifted from Build 77 index.js lines 2338-2343.
+ * BUILD 88 FIX 2: async to avoid blocking main process.
  */
-function getVideoUiStateMem(ctx) {
+async function getVideoUiStateMem(ctx) {
   if (videoUiStateMem) return videoUiStateMem;
-  const p = ctx.storage.dataPath('video_ui_state.json');
-  videoUiStateMem = normalizeVideoUiState(ctx.storage.readJSON(p, {}));
-  return videoUiStateMem;
+  if (videoUiStateLoading) return videoUiStateLoading;
+  videoUiStateLoading = (async () => {
+    const p = ctx.storage.dataPath('video_ui_state.json');
+    videoUiStateMem = normalizeVideoUiState(await ctx.storage.readJSONAsync(p, {}));
+    videoUiStateLoading = null;
+    return videoUiStateMem;
+  })();
+  return videoUiStateLoading;
 }
 
 // ========== DOMAIN HANDLERS ==========
@@ -43,7 +50,7 @@ function getVideoUiStateMem(ctx) {
  * Lifted from Build 77 index.js lines 2446-2449.
  */
 async function get(ctx) {
-  const v = getVideoUiStateMem(ctx);
+  const v = await getVideoUiStateMem(ctx);
   return { ui: { ...(v.ui || {}) }, updatedAt: v.updatedAt || 0 };
 }
 
@@ -53,7 +60,7 @@ async function get(ctx) {
  */
 async function save(ctx, _evt, ui) {
   const p = ctx.storage.dataPath('video_ui_state.json');
-  const v = getVideoUiStateMem(ctx);
+  const v = await getVideoUiStateMem(ctx);
   const next = (ui && typeof ui === 'object') ? ui : {};
   v.ui = { ...(v.ui || {}), ...next };
   v.updatedAt = Date.now();

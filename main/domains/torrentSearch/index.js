@@ -13,9 +13,9 @@ const CATEGORY_CODE_TYPE_MAP = {
   5070: { key: 'anime', label: 'Anime' },
 };
 
-function readSettings(ctx) {
+async function readSettings(ctx) {
   try {
-    const raw = ctx.storage.readJSON(ctx.storage.dataPath(WEB_SETTINGS_FILE), {});
+    const raw = await ctx.storage.readJSONAsync(ctx.storage.dataPath(WEB_SETTINGS_FILE), {});
     return (raw && raw.settings && typeof raw.settings === 'object') ? raw.settings : (raw || {});
   } catch (_e) {
     return {};
@@ -47,8 +47,8 @@ function normalizeCommonProviderConfig(src) {
   };
 }
 
-function getProviderConfig(ctx) {
-  const s = readSettings(ctx);
+async function getProviderConfig(ctx) {
+  const s = await readSettings(ctx);
   const torrentSearch = (s && s.torrentSearch && typeof s.torrentSearch === 'object') ? s.torrentSearch : {};
   const provider = normalizeProvider(torrentSearch.provider || s.torrentSearchProvider || 'jackett');
   const jackett = normalizeCommonProviderConfig((s && s.jackett && typeof s.jackett === 'object') ? s.jackett : {
@@ -709,7 +709,7 @@ function mergeProviderResults(results) {
 }
 
 async function health(ctx) {
-  const cfgSet = getProviderConfig(ctx);
+  const cfgSet = await getProviderConfig(ctx);
   const providerKey = cfgSet.provider;
   const providerImpl = providers[providerKey] || providers.jackett;
   const cfg = cfgSet.current;
@@ -739,7 +739,7 @@ async function health(ctx) {
 }
 
 async function query(ctx, _evt, payload) {
-  const cfgSet = getProviderConfig(ctx);
+  const cfgSet = await getProviderConfig(ctx);
   const providerKey = cfgSet.provider;
   const providerImpl = providers[providerKey] || providers.jackett;
   const cfg = cfgSet.current;
@@ -797,7 +797,7 @@ async function query(ctx, _evt, payload) {
 }
 
 async function indexers(ctx) {
-  const cfgSet = getProviderConfig(ctx);
+  const cfgSet = await getProviderConfig(ctx);
   const providerKey = cfgSet.provider;
   const providerImpl = providers[providerKey] || providers.jackett;
   const cfg = cfgSet.current;

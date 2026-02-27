@@ -33,9 +33,9 @@ var TERMINAL_DOWNLOAD_STATES = {
   interrupted: true,
 };
 
-function readDownloads(ctx) {
+async function readDownloads(ctx) {
   var p = ctx.storage.dataPath(DOWNLOAD_HISTORY_FILE);
-  var data = ctx.storage.readJSON(p, null);
+  var data = await ctx.storage.readJSONAsync(p, null);
   if (data && Array.isArray(data.downloads)) return data;
   return { downloads: [], updatedAt: 0 };
 }
@@ -45,10 +45,20 @@ function writeDownloads(ctx, data) {
   return ctx.storage.writeJSON(p, data);
 }
 
-function ensureDownloadsCache(ctx) {
-  if (!downloadsCache) downloadsCache = readDownloads(ctx);
-  if (!Array.isArray(downloadsCache.downloads)) downloadsCache.downloads = [];
-  return downloadsCache;
+var downloadsLoading = null;
+async function ensureDownloadsCache(ctx) {
+  if (downloadsCache) {
+    if (!Array.isArray(downloadsCache.downloads)) downloadsCache.downloads = [];
+    return downloadsCache;
+  }
+  if (downloadsLoading) return downloadsLoading;
+  downloadsLoading = (async () => {
+    downloadsCache = await readDownloads(ctx);
+    if (!Array.isArray(downloadsCache.downloads)) downloadsCache.downloads = [];
+    downloadsLoading = null;
+    return downloadsCache;
+  })();
+  return downloadsLoading;
 }
 
 function capDownloads(cfg) {
@@ -56,10 +66,11 @@ function capDownloads(cfg) {
   if (cfg.downloads.length > 1000) cfg.downloads.length = 1000;
 }
 
-function emitDownloadsUpdated(ctx) {
+async function emitDownloadsUpdated(ctx) {
   try {
+    var cache = await ensureDownloadsCache(ctx);
     ctx.win && ctx.win.webContents && ctx.win.webContents.send(IPC.EVENT.WEB_DOWNLOADS_UPDATED, {
-      downloads: (ensureDownloadsCache(ctx).downloads || []),
+      downloads: (cache.downloads || []),
     });
   } catch {}
 }
@@ -99,7 +110,7 @@ function updateDownloadEntry(record, patch) {
 
 function mutateDownloads(ctx, mutator) {
   return withDownloadsWriteQueue(async function () {
-    var cfg = ensureDownloadsCache(ctx);
+    var cfg = await ensureDownloadsCache(ctx);
     var shouldPersist = true;
     if (typeof mutator === 'function') shouldPersist = mutator(cfg) !== false;
     if (!shouldPersist) return cfg;
@@ -111,9 +122,9 @@ function mutateDownloads(ctx, mutator) {
   });
 }
 
-function readConfig(ctx) {
+async function readConfig(ctx) {
   var p = ctx.storage.dataPath(CONFIG_FILE);
-  var data = ctx.storage.readJSON(p, null);
+  var data = await ctx.storage.readJSONAsync(p, null);
   if (data && Array.isArray(data.sources)) return data;
   return { sources: DEFAULT_SOURCES.slice(), updatedAt: 0 };
 }
@@ -123,15 +134,22 @@ function writeConfig(ctx, data) {
   ctx.storage.writeJSONDebounced(p, data, 120);
 }
 
-function ensureCache(ctx) {
-  if (!sourcesCache) sourcesCache = readConfig(ctx);
-  return sourcesCache;
+var sourcesLoading = null;
+async function ensureCache(ctx) {
+  if (sourcesCache) return sourcesCache;
+  if (sourcesLoading) return sourcesLoading;
+  sourcesLoading = (async () => {
+    sourcesCache = await readConfig(ctx);
+    sourcesLoading = null;
+    return sourcesCache;
+  })();
+  return sourcesLoading;
 }
 
 // ---- Handlers ----
 
 async function get(ctx) {
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   return { ok: true, sources: cfg.sources || [] };
 }
 
@@ -141,7 +159,7 @@ async function add(ctx, _evt, payload) {
   var color = String((payload && payload.color) || '#888888').trim();
   if (!name || !url) return { ok: false, error: 'Name and URL are required' };
 
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   var id = 'src_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
   var source = { id: id, name: name, url: url, color: color, builtIn: false };
   cfg.sources.push(source);
@@ -152,7 +170,7 @@ async function add(ctx, _evt, payload) {
 }
 
 async function remove(ctx, _evt, id) {
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   var before = cfg.sources.length;
   cfg.sources = cfg.sources.filter(function (s) { return s.id !== id; });
   if (cfg.sources.length === before) return { ok: false, error: 'Source not found' };
@@ -164,7 +182,7 @@ async function remove(ctx, _evt, id) {
 
 async function update(ctx, _evt, payload) {
   if (!payload || !payload.id) return { ok: false, error: 'Missing id' };
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   var found = null;
   for (var i = 0; i < cfg.sources.length; i++) {
     if (cfg.sources[i].id === payload.id) { found = cfg.sources[i]; break; }
@@ -188,16 +206,16 @@ var VIDEO_EXTS = ['.mp4', '.mkv', '.avi', '.mov', '.m4v', '.webm', '.ts', '.m2ts
 var pickerPendingRequests = new Map(); // requestId -> { resolve, timer }
 var PICKER_TIMEOUT_MS = 5 * 60 * 1000;
 
-function getLibraryRoots(ctx) {
+async function getLibraryRoots(ctx) {
   var books = [];
   var comics = [];
   var videos = [];
   try {
-    var booksConfig = ctx.storage.readJSON(ctx.storage.dataPath('books_library_state.json'), {});
+    var booksConfig = await ctx.storage.readJSONAsync(ctx.storage.dataPath('books_library_state.json'), {});
     books = Array.isArray(booksConfig.bookRootFolders) ? booksConfig.bookRootFolders.filter(Boolean) : [];
   } catch {}
   try {
-    var libConfig = ctx.storage.readJSON(ctx.storage.dataPath('library_state.json'), {});
+    var libConfig = await ctx.storage.readJSONAsync(ctx.storage.dataPath('library_state.json'), {});
     comics = Array.isArray(libConfig.rootFolders) ? libConfig.rootFolders.filter(Boolean) : [];
     videos = Array.isArray(libConfig.videoFolders) ? libConfig.videoFolders.filter(Boolean) : [];
   } catch {}
@@ -214,8 +232,8 @@ function normalizePickerMode(mode) {
   return '';
 }
 
-function getRootsByMode(ctx, mode) {
-  var roots = getLibraryRoots(ctx);
+async function getRootsByMode(ctx, mode) {
+  var roots = await getLibraryRoots(ctx);
   if (mode === 'books') return roots.books || [];
   if (mode === 'comics') return roots.comics || [];
   if (mode === 'videos') return roots.videos || [];
@@ -236,8 +254,8 @@ function isPathWithin(parent, target) {
   }
 }
 
-function detectLibraryByDestination(ctx, destinationPath) {
-  var roots = getLibraryRoots(ctx);
+async function detectLibraryByDestination(ctx, destinationPath) {
+  var roots = await getLibraryRoots(ctx);
   var target = String(destinationPath || '');
   for (var i = 0; i < roots.books.length; i++) {
     if (isPathWithin(roots.books[i], target)) return 'books';
@@ -280,7 +298,7 @@ function clearPendingPickerRequest(requestId) {
 async function requestDestinationFolder(ctx, payload, senderWebContents) {
   var req = (payload && typeof payload === 'object') ? payload : {};
   var modeHint = normalizePickerMode(req.modeHint) || detectModeHintByFilename(req.suggestedFilename || '');
-  var roots = getLibraryRoots(ctx);
+  var roots = await getLibraryRoots(ctx);
   var requestId = 'wdpick_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
 
   var sent = emitPickerRequest(ctx, {
@@ -318,7 +336,7 @@ async function requestDestinationFolder(ctx, payload, senderWebContents) {
   try { folderPath = path.resolve(String(raw.folderPath || '')); } catch {}
   if (!folderPath) return { ok: false, error: 'Invalid destination folder' };
 
-  var allowedRoots = getRootsByMode(ctx, selectedMode);
+  var allowedRoots = await getRootsByMode(ctx, selectedMode);
   var allowed = false;
   if (!selectedMode) {
     // Non-library extension flow: allow explicit external folder picks and keep history tracked.
@@ -335,7 +353,7 @@ async function requestDestinationFolder(ctx, payload, senderWebContents) {
     ok: true,
     folderPath: folderPath,
     mode: selectedMode,
-    library: detectLibraryByDestination(ctx, folderPath),
+    library: await detectLibraryByDestination(ctx, folderPath),
   };
 }
 
@@ -393,7 +411,7 @@ async function listDestinationFolders(ctx, _evt, payload) {
   var mode = normalizePickerMode(req.mode);
   if (!mode) return { ok: false, error: 'Invalid mode' };
 
-  var roots = getRootsByMode(ctx, mode).filter(Boolean);
+  var roots = (await getRootsByMode(ctx, mode)).filter(Boolean);
   if (!roots.length) return { ok: true, mode: mode, folders: [] };
 
   var rawPath = String(req.path || '').trim();
@@ -437,7 +455,7 @@ async function routeDownload(ctx, evt, payload) {
 }
 
 async function getDestinations(ctx) {
-  var roots = getLibraryRoots(ctx);
+  var roots = await getLibraryRoots(ctx);
   return {
     ok: true,
     books: pickFirst(roots.books) || null,
@@ -452,7 +470,7 @@ async function getDestinations(ctx) {
 // ---- Download history (persisted) ----
 
 async function getDownloadHistory(ctx) {
-  var cfg = ensureDownloadsCache(ctx);
+  var cfg = await ensureDownloadsCache(ctx);
   return { ok: true, downloads: cfg.downloads || [] };
 }
 

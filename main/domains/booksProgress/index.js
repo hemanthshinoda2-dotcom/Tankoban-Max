@@ -3,6 +3,7 @@ Tankoban Max - Books Progress Domain
 */
 
 let booksProgressMem = null;
+let booksProgressLoading = null;
 
 function normPath(p) {
   return String(p || '').replace(/\\/g, '/').replace(/\/+$/g, '').toLowerCase();
@@ -33,23 +34,27 @@ function migrateKeyIfNeeded(ctx, all, raw, canon) {
   } catch {}
 }
 
-function getBooksProgressMem(ctx) {
+async function getBooksProgressMem(ctx) {
   if (booksProgressMem) return booksProgressMem;
-  booksProgressMem = ctx.storage.readJSON(ctx.storage.dataPath('books_progress.json'), {});
-  // FIX-BOOK-PROG-NORM: one-time canonicalize keys
-  try {
-    const all = booksProgressMem;
-    for (const k of Object.keys(all)) {
-      const canon = normPath(k);
-      if (canon && canon !== k && !all[canon]) {
-        all[canon] = all[k];
-        delete all[k];
+  if (booksProgressLoading) return booksProgressLoading;
+  booksProgressLoading = (async () => {
+    booksProgressMem = await ctx.storage.readJSONAsync(ctx.storage.dataPath('books_progress.json'), {});
+    // FIX-BOOK-PROG-NORM: one-time canonicalize keys
+    try {
+      const all = booksProgressMem;
+      for (const k of Object.keys(all)) {
+        const canon = normPath(k);
+        if (canon && canon !== k && !all[canon]) {
+          all[canon] = all[k];
+          delete all[k];
+        }
       }
-    }
-  } catch {}
-  // FIX-BOOK-PROG-NORM
-
-  return booksProgressMem;
+    } catch {}
+    // FIX-BOOK-PROG-NORM
+    booksProgressLoading = null;
+    return booksProgressMem;
+  })();
+  return booksProgressLoading;
 }
 
 function mergeProgressRecords(a, b) {
@@ -68,13 +73,13 @@ function mergeProgressRecords(a, b) {
   };
 }
 
-function maybeMigrateByPath(ctx) {
+async function maybeMigrateByPath(ctx) {
   const stampPath = ctx.storage.dataPath('books_progress_migrations.json');
-  const stamp = ctx.storage.readJSON(stampPath, {});
+  const stamp = await ctx.storage.readJSONAsync(stampPath, {});
   if (stamp && stamp.booksProgressByPathV1) return;
 
   const idxPath = ctx.storage.dataPath('books_library_index.json');
-  const idx = ctx.storage.readJSON(idxPath, { books: [] });
+  const idx = await ctx.storage.readJSONAsync(idxPath, { books: [] });
   const books = Array.isArray(idx && idx.books) ? idx.books : [];
   if (!books.length) return;
 
@@ -87,7 +92,7 @@ function maybeMigrateByPath(ctx) {
   }
   if (!pathToId.size) return;
 
-  const all = getBooksProgressMem(ctx);
+  const all = await getBooksProgressMem(ctx);
   let changed = false;
 
   for (const [oldId, rec] of Object.entries({ ...all })) {
@@ -116,14 +121,14 @@ function maybeMigrateByPath(ctx) {
 }
 
 async function getAll(ctx) {
-  maybeMigrateByPath(ctx);
-  const all = getBooksProgressMem(ctx);
+  await maybeMigrateByPath(ctx);
+  const all = await getBooksProgressMem(ctx);
   return { ...all };
 }
 
 async function get(ctx, _evt, bookId) {
-  maybeMigrateByPath(ctx);
-  const all = getBooksProgressMem(ctx);
+  await maybeMigrateByPath(ctx);
+  const all = await getBooksProgressMem(ctx);
   const ids = canonId(bookId);
   migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
   const rec = getRecordByEither(all, ids.raw, ids.canon);
@@ -131,13 +136,13 @@ async function get(ctx, _evt, bookId) {
 }
 
 async function save(ctx, _evt, bookId, progress) {
-  maybeMigrateByPath(ctx);
+  await maybeMigrateByPath(ctx);
   const ids = canonId(bookId);
   const id = ids.canon || ids.raw;
   if (!id) return { ok: false, error: 'invalid_book_id' };
 
   const p = ctx.storage.dataPath('books_progress.json');
-  const all = getBooksProgressMem(ctx);
+  const all = await getBooksProgressMem(ctx);
   migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
   const prev = (all[id] && typeof all[id] === 'object') ? all[id] : {};
   const next = (progress && typeof progress === 'object') ? progress : {};
@@ -147,13 +152,13 @@ async function save(ctx, _evt, bookId, progress) {
 }
 
 async function clear(ctx, _evt, bookId) {
-  maybeMigrateByPath(ctx);
+  await maybeMigrateByPath(ctx);
   const ids = canonId(bookId);
   const id = ids.canon || ids.raw;
   if (!id) return { ok: false, error: 'invalid_book_id' };
 
   const p = ctx.storage.dataPath('books_progress.json');
-  const all = getBooksProgressMem(ctx);
+  const all = await getBooksProgressMem(ctx);
   migrateKeyIfNeeded(ctx, all, ids.raw, ids.canon);
   delete all[id];
   ctx.storage.writeJSONDebounced(p, all);
@@ -161,9 +166,9 @@ async function clear(ctx, _evt, bookId) {
 }
 
 async function clearAll(ctx) {
-  maybeMigrateByPath(ctx);
+  await maybeMigrateByPath(ctx);
   const p = ctx.storage.dataPath('books_progress.json');
-  const all = getBooksProgressMem(ctx);
+  const all = await getBooksProgressMem(ctx);
   for (const k of Object.keys(all)) delete all[k];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };

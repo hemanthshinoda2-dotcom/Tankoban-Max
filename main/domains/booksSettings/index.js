@@ -3,6 +3,7 @@ Tankoban Max - Books Reader Settings Domain
 */
 
 let booksSettingsMem = null;
+let booksSettingsLoading = null;
 
 function normalizeBooksSettings(raw) {
   if (raw && typeof raw === 'object') {
@@ -12,21 +13,26 @@ function normalizeBooksSettings(raw) {
   return { settings: {}, updatedAt: 0 };
 }
 
-function getBooksSettingsMem(ctx) {
+async function getBooksSettingsMem(ctx) {
   if (booksSettingsMem) return booksSettingsMem;
-  const p = ctx.storage.dataPath('books_reader_settings.json');
-  booksSettingsMem = normalizeBooksSettings(ctx.storage.readJSON(p, {}));
-  return booksSettingsMem;
+  if (booksSettingsLoading) return booksSettingsLoading;
+  booksSettingsLoading = (async () => {
+    const p = ctx.storage.dataPath('books_reader_settings.json');
+    booksSettingsMem = normalizeBooksSettings(await ctx.storage.readJSONAsync(p, {}));
+    booksSettingsLoading = null;
+    return booksSettingsMem;
+  })();
+  return booksSettingsLoading;
 }
 
 async function get(ctx) {
-  const v = getBooksSettingsMem(ctx);
+  const v = await getBooksSettingsMem(ctx);
   return { settings: { ...(v.settings || {}) }, updatedAt: v.updatedAt || 0 };
 }
 
 async function save(ctx, _evt, settings) {
   const p = ctx.storage.dataPath('books_reader_settings.json');
-  const v = getBooksSettingsMem(ctx);
+  const v = await getBooksSettingsMem(ctx);
   const next = (settings && typeof settings === 'object') ? settings : {};
   v.settings = { ...(v.settings || {}), ...next };
   v.updatedAt = Date.now();

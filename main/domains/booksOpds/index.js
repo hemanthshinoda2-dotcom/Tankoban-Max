@@ -4,10 +4,11 @@ const path = require('path');
 
 const CONFIG_FILE = 'books_opds_feeds.json';
 var feedsCache = null;
+var feedsCacheLoading = null;
 
-function readConfig(ctx) {
+async function readConfig(ctx) {
   var p = ctx.storage.dataPath(CONFIG_FILE);
-  var data = ctx.storage.readJSON(p, null);
+  var data = await ctx.storage.readJSONAsync(p, null);
   if (data && Array.isArray(data.feeds)) return data;
   return { feeds: [], updatedAt: 0 };
 }
@@ -17,17 +18,27 @@ function writeConfig(ctx, data) {
   ctx.storage.writeJSON(p, data);
 }
 
-function ensureCache(ctx) {
-  if (!feedsCache) feedsCache = readConfig(ctx);
-  if (!Array.isArray(feedsCache.feeds)) feedsCache.feeds = [];
-  return feedsCache;
+async function ensureCache(ctx) {
+  if (feedsCache) {
+    if (!Array.isArray(feedsCache.feeds)) feedsCache.feeds = [];
+    return feedsCache;
+  }
+  if (feedsCacheLoading) return feedsCacheLoading;
+  feedsCacheLoading = (async () => {
+    feedsCache = await readConfig(ctx);
+    if (!Array.isArray(feedsCache.feeds)) feedsCache.feeds = [];
+    feedsCacheLoading = null;
+    return feedsCache;
+  })();
+  return feedsCacheLoading;
 }
 
-function emitUpdated(ctx) {
+async function emitUpdated(ctx) {
   try {
     var ipc = require('../../../shared/ipc');
+    var cfg = await ensureCache(ctx);
     ctx.win && ctx.win.webContents && ctx.win.webContents.send(ipc.EVENT.BOOKS_OPDS_FEEDS_UPDATED, {
-      feeds: ensureCache(ctx).feeds || [],
+      feeds: cfg.feeds || [],
     });
   } catch {}
 }
@@ -45,7 +56,7 @@ function normUrl(u) {
 }
 
 async function getFeeds(ctx) {
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   return { ok: true, feeds: cfg.feeds || [] };
 }
 
@@ -53,7 +64,7 @@ async function addFeed(ctx, _evt, payload) {
   var url = normUrl(payload && payload.url);
   if (!url) return { ok: false, error: 'Invalid feed URL' };
   var name = String((payload && payload.name) || '').trim();
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   for (var i = 0; i < cfg.feeds.length; i++) {
     if (String(cfg.feeds[i].url || '') === url) return { ok: false, error: 'Feed already exists' };
   }
@@ -67,14 +78,14 @@ async function addFeed(ctx, _evt, payload) {
   if (cfg.feeds.length > 100) cfg.feeds.length = 100;
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
   return { ok: true, feed: feed };
 }
 
 async function updateFeed(ctx, _evt, payload) {
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   var found = null;
   for (var i = 0; i < cfg.feeds.length; i++) {
     if (String(cfg.feeds[i].id) === id) { found = cfg.feeds[i]; break; }
@@ -89,20 +100,20 @@ async function updateFeed(ctx, _evt, payload) {
   found.updatedAt = Date.now();
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
   return { ok: true, feed: found };
 }
 
 async function removeFeed(ctx, _evt, payload) {
   var id = payload && payload.id ? String(payload.id) : '';
   if (!id) return { ok: false, error: 'Missing id' };
-  var cfg = ensureCache(ctx);
+  var cfg = await ensureCache(ctx);
   var before = cfg.feeds.length;
   cfg.feeds = cfg.feeds.filter(function (f) { return String(f && f.id || '') !== id; });
   if (cfg.feeds.length === before) return { ok: false, error: 'Feed not found' };
   cfg.updatedAt = Date.now();
   writeConfig(ctx, cfg);
-  emitUpdated(ctx);
+  await emitUpdated(ctx);
   return { ok: true };
 }
 

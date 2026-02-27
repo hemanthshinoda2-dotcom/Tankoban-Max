@@ -95,9 +95,9 @@ function listImmediateSubdirs(rootFolder) {
   return out;
 }
 
-function readBooksConfig(ctx) {
+async function readBooksConfig(ctx) {
   const p = ctx.storage.dataPath('books_library_state.json');
-  const state = ctx.storage.readJSON(p, {
+  const state = await ctx.storage.readJSONAsync(p, {
     bookRootFolders: [],
     bookSeriesFolders: [],
     bookSingleFiles: [],
@@ -122,27 +122,34 @@ async function writeBooksConfig(ctx, state) {
   });
 }
 
-function ensureBooksIndexLoaded(ctx) {
+let booksIdxLoading = null;
+async function ensureBooksIndexLoaded(ctx) {
   if (booksCache.idxLoaded) return;
-  booksCache.idxLoaded = true;
+  if (booksIdxLoading) return booksIdxLoading;
+  booksIdxLoading = (async () => {
+    booksCache.idxLoaded = true;
 
-  const idx = ctx.storage.readJSON(ctx.storage.dataPath('books_library_index.json'), null);
-  if (idx && Array.isArray(idx.series) && Array.isArray(idx.books)) {
-    booksCache.idx = {
-      series: idx.series,
-      books: idx.books,
-      folders: Array.isArray(idx.folders) ? idx.folders : [],
-    };
-    booksCache.needsFolderBackfill = !Array.isArray(idx.folders);
-    return;
-  }
+    const idx = await ctx.storage.readJSONAsync(ctx.storage.dataPath('books_library_index.json'), null);
+    if (idx && Array.isArray(idx.series) && Array.isArray(idx.books)) {
+      booksCache.idx = {
+        series: idx.series,
+        books: idx.books,
+        folders: Array.isArray(idx.folders) ? idx.folders : [],
+      };
+      booksCache.needsFolderBackfill = !Array.isArray(idx.folders);
+      booksIdxLoading = null;
+      return;
+    }
 
-  booksCache.idx = { series: [], books: [], folders: [] };
-  booksCache.needsFolderBackfill = false;
+    booksCache.idx = { series: [], books: [], folders: [] };
+    booksCache.needsFolderBackfill = false;
+    booksIdxLoading = null;
+  })();
+  return booksIdxLoading;
 }
 
-function makeBooksStateSnapshot(ctx, state) {
-  const s = state || readBooksConfig(ctx);
+async function makeBooksStateSnapshot(ctx, state) {
+  const s = state || await readBooksConfig(ctx);
   return {
     bookRootFolders: uniq(s.bookRootFolders),
     bookSeriesFolders: uniq(s.bookSeriesFolders),
@@ -157,17 +164,17 @@ function makeBooksStateSnapshot(ctx, state) {
   };
 }
 
-function emitBooksUpdated(ctx) {
+async function emitBooksUpdated(ctx) {
   try {
-    ctx.win?.webContents?.send(ctx.EVENT.BOOKS_UPDATED, makeBooksStateSnapshot(ctx));
+    ctx.win?.webContents?.send(ctx.EVENT.BOOKS_UPDATED, await makeBooksStateSnapshot(ctx));
   } catch {}
 }
 
-function pruneBooksProgressByRemovedBookIds(ctx, removedIds) {
+async function pruneBooksProgressByRemovedBookIds(ctx, removedIds) {
   try {
     if (!removedIds || !removedIds.length) return;
     const booksProgress = require('../booksProgress');
-    const all = booksProgress._getBooksProgressMem ? booksProgress._getBooksProgressMem(ctx) : {};
+    const all = booksProgress._getBooksProgressMem ? await booksProgress._getBooksProgressMem(ctx) : {};
     let changed = false;
     for (const id of removedIds) {
       const k = String(id || '');
@@ -193,10 +200,10 @@ function scanKeyFromConfig(cfg) {
   });
 }
 
-function startBooksScan(ctx, cfg, opts = null) {
-  ensureBooksIndexLoaded(ctx);
+async function startBooksScan(ctx, cfg, opts = null) {
+  await ensureBooksIndexLoaded(ctx);
 
-  const c = cfg || readBooksConfig(ctx);
+  const c = cfg || await readBooksConfig(ctx);
   const key = scanKeyFromConfig(c);
 
   if (booksCache.scanning) {
@@ -260,7 +267,7 @@ function startBooksScan(ctx, cfg, opts = null) {
     booksCache.scanQueuedCfg = null;
 
     if (queued && scanKeyFromConfig(queued) !== booksCache.lastScanKey) {
-      startBooksScan(ctx, queued, { force: true });
+      startBooksScan(ctx, queued, { force: true }).catch(() => {});
       return;
     }
 
@@ -311,15 +318,16 @@ function startBooksScan(ctx, cfg, opts = null) {
           if (!cur.has(id)) removed.push(id);
         }
 
-        pruneBooksProgressByRemovedBookIds(ctx, removed);
-        // Cascade-clean orphaned metadata for removed books
-        try { require('../booksDisplayNames').pruneByRemovedIds(ctx, removed); } catch {}
-        try { require('../booksBookmarks').pruneByRemovedIds(ctx, removed); } catch {}
-        try { require('../booksAnnotations').pruneByRemovedIds(ctx, removed); } catch {}
-        try { require('../booksTtsProgress').pruneByRemovedIds(ctx, removed); } catch {}
+        (async () => {
+          await pruneBooksProgressByRemovedBookIds(ctx, removed);
+          try { await require('../booksDisplayNames').pruneByRemovedIds(ctx, removed); } catch {}
+          try { await require('../booksBookmarks').pruneByRemovedIds(ctx, removed); } catch {}
+          try { await require('../booksAnnotations').pruneByRemovedIds(ctx, removed); } catch {}
+          try { await require('../booksTtsProgress').pruneByRemovedIds(ctx, removed); } catch {}
+        })().catch(() => {});
       }
 
-      emitBooksUpdated(ctx);
+      emitBooksUpdated(ctx).catch(() => {});
       finish(true);
     }
   });
@@ -327,7 +335,7 @@ function startBooksScan(ctx, cfg, opts = null) {
   w.on('error', (err) => {
     if (myScanId !== booksCache.scanId) return;
     booksCache.error = String(err && err.message ? err.message : err);
-    emitBooksUpdated(ctx);
+    emitBooksUpdated(ctx).catch(() => {});
     finish(false);
   });
 
@@ -335,23 +343,23 @@ function startBooksScan(ctx, cfg, opts = null) {
     if (myScanId !== booksCache.scanId) return;
     if (code !== 0) {
       booksCache.error = `Books scan worker exited ${code}`;
-      emitBooksUpdated(ctx);
+      emitBooksUpdated(ctx).catch(() => {});
       finish(false);
     }
   });
 }
 
 async function getState(ctx) {
-  ensureBooksIndexLoaded(ctx);
-  const state = readBooksConfig(ctx);
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: !!booksCache.needsFolderBackfill }); // FIX-R09
+  await ensureBooksIndexLoaded(ctx);
+  const state = await readBooksConfig(ctx);
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: !!booksCache.needsFolderBackfill }); // FIX-R09
   return snap;
 }
 
 async function scan(ctx, _evt, opts) {
-  const state = readBooksConfig(ctx);
-  startBooksScan(ctx, state, { force: true, opts });
+  const state = await readBooksConfig(ctx);
+  await startBooksScan(ctx, state, { force: true, opts });
   return { ok: true };
 }
 
@@ -374,18 +382,18 @@ async function cancelScan(ctx) {
       canceled: true,
     });
   } catch {}
-  emitBooksUpdated(ctx);
+  await emitBooksUpdated(ctx);
   return { ok: true };
 }
 
 async function setScanIgnore(ctx, _evt, patterns) {
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.scanIgnore = sanitizeIgnore(patterns);
   await writeBooksConfig(ctx, state);
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
-  emitBooksUpdated(ctx);
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
+  await emitBooksUpdated(ctx);
 
   return { ok: true, state: snap };
 }
@@ -413,12 +421,12 @@ async function addRootFolder(ctx, evt) {
   const folder = String(res.filePaths[0] || '');
   if (!folder) return { ok: false };
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.bookRootFolders = uniq([folder, ...(state.bookRootFolders || [])]);
   await writeBooksConfig(ctx, state);
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
   return { ok: true, state: snap, folder };
 }
 
@@ -426,17 +434,17 @@ async function removeRootFolder(ctx, _evt, rootPath) {
   const target = String(rootPath || '');
   if (!target) return { ok: false };
 
-  ensureBooksIndexLoaded(ctx);
+  await ensureBooksIndexLoaded(ctx);
   try { booksCache.pendingPrunePrevBookIds = (booksCache.idx.books || []).map((b) => b && b.id).filter(Boolean); } catch {}
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.bookRootFolders = (state.bookRootFolders || []).filter((p) => pathKey(p) !== pathKey(target));
   await writeBooksConfig(ctx, state);
 
   booksCache.pendingPruneProgress = true;
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 
@@ -451,12 +459,12 @@ async function addSeriesFolder(ctx, evt) {
   const folder = String(res.filePaths[0] || '');
   if (!folder) return { ok: false };
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.bookSeriesFolders = uniq([folder, ...(state.bookSeriesFolders || [])]);
   await writeBooksConfig(ctx, state);
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
   return { ok: true, state: snap, folder };
 }
 
@@ -464,10 +472,10 @@ async function removeSeriesFolder(ctx, _evt, folderPath) {
   const target = String(folderPath || '');
   if (!target) return { ok: false };
 
-  ensureBooksIndexLoaded(ctx);
+  await ensureBooksIndexLoaded(ctx);
   try { booksCache.pendingPrunePrevBookIds = (booksCache.idx.books || []).map((b) => b && b.id).filter(Boolean); } catch {}
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   const wasExplicit = (state.bookSeriesFolders || []).some((p) => pathKey(p) === pathKey(target));
 
   if (wasExplicit) {
@@ -496,14 +504,14 @@ async function removeSeriesFolder(ctx, _evt, folderPath) {
   booksCache.pendingPruneProgress = true;
 
   if (wasExplicit) {
-    const snap = makeBooksStateSnapshot(ctx, state);
-    startBooksScan(ctx, state, { force: true });
+    const snap = await makeBooksStateSnapshot(ctx, state);
+    await startBooksScan(ctx, state, { force: true });
     return { ok: true, state: snap };
   }
 
   // Auto-discovered series: no rescan (it would rediscover immediately)
-  const snap = makeBooksStateSnapshot(ctx, state);
-  emitBooksUpdated(ctx);
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await emitBooksUpdated(ctx);
   return { ok: true, state: snap };
 }
 
@@ -528,12 +536,12 @@ async function addFiles(ctx, evt) {
   }
   if (!picks.length) return { ok: false };
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.bookSingleFiles = uniq([...(state.bookSingleFiles || []), ...picks]);
   await writeBooksConfig(ctx, state);
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 
@@ -541,17 +549,17 @@ async function removeFile(ctx, _evt, filePath) {
   const target = String(filePath || '');
   if (!target) return { ok: false };
 
-  ensureBooksIndexLoaded(ctx);
+  await ensureBooksIndexLoaded(ctx);
   try { booksCache.pendingPrunePrevBookIds = (booksCache.idx.books || []).map((b) => b && b.id).filter(Boolean); } catch {}
 
-  const state = readBooksConfig(ctx);
+  const state = await readBooksConfig(ctx);
   state.bookSingleFiles = (state.bookSingleFiles || []).filter((p) => pathKey(p) !== pathKey(target));
   await writeBooksConfig(ctx, state);
 
   booksCache.pendingPruneProgress = true;
 
-  const snap = makeBooksStateSnapshot(ctx, state);
-  startBooksScan(ctx, state, { force: true });
+  const snap = await makeBooksStateSnapshot(ctx, state);
+  await startBooksScan(ctx, state, { force: true });
   return { ok: true, state: snap };
 }
 
@@ -621,7 +629,7 @@ async function bookFromPath(ctx, _evt, filePath) {
     const st = await fs.promises.stat(fp);
     if (!st || !st.isFile()) return { ok: false };
 
-    const cfg = readBooksConfig(ctx);
+    const cfg = await readBooksConfig(ctx);
     const cls = classifyBookPathFromConfig(cfg, fp);
 
     const ext = path.extname(fp).toLowerCase();

@@ -5,13 +5,19 @@ Shape: { id, bookId, cfi, color, style, note, selectedText, chapter, createdAt, 
 */
 
 let annotationsMem = null;
+let annotationsLoading = null;
 
-function getAnnotationsMem(ctx) {
+async function getAnnotationsMem(ctx) {
   if (annotationsMem) return annotationsMem;
-  const p = ctx.storage.dataPath('books_annotations.json');
-  const raw = ctx.storage.readJSON(p, {});
-  annotationsMem = (raw && typeof raw === 'object') ? raw : {};
-  return annotationsMem;
+  if (annotationsLoading) return annotationsLoading;
+  annotationsLoading = (async () => {
+    const p = ctx.storage.dataPath('books_annotations.json');
+    const raw = await ctx.storage.readJSONAsync(p, {});
+    annotationsMem = (raw && typeof raw === 'object') ? raw : {};
+    annotationsLoading = null;
+    return annotationsMem;
+  })();
+  return annotationsLoading;
 }
 
 function persist(ctx) {
@@ -22,7 +28,7 @@ function persist(ctx) {
 async function get(ctx, _evt, bookId) {
   const id = String(bookId || '');
   if (!id) return [];
-  const mem = getAnnotationsMem(ctx);
+  const mem = await getAnnotationsMem(ctx);
   const arr = Array.isArray(mem[id]) ? mem[id] : [];
   return arr;
 }
@@ -36,7 +42,7 @@ async function save(ctx, _evt, bookId, annotation) {
   ann.updatedAt = Date.now();
   if (!ann.createdAt) ann.createdAt = ann.updatedAt;
 
-  const mem = getAnnotationsMem(ctx);
+  const mem = await getAnnotationsMem(ctx);
   if (!Array.isArray(mem[id])) mem[id] = [];
 
   const idx = mem[id].findIndex(x => x && x.id === ann.id);
@@ -55,7 +61,7 @@ async function del(ctx, _evt, bookId, annotationId) {
   const annId = String(annotationId || '');
   if (!id || !annId) return { ok: false };
 
-  const mem = getAnnotationsMem(ctx);
+  const mem = await getAnnotationsMem(ctx);
   if (!Array.isArray(mem[id])) return { ok: true };
 
   mem[id] = mem[id].filter(x => x && x.id !== annId);
@@ -69,15 +75,15 @@ async function clear(ctx, _evt, bookId) {
   const id = String(bookId || '');
   if (!id) return { ok: false };
 
-  const mem = getAnnotationsMem(ctx);
+  const mem = await getAnnotationsMem(ctx);
   delete mem[id];
   persist(ctx);
   return { ok: true };
 }
 
-function pruneByRemovedIds(ctx, removedIds) {
+async function pruneByRemovedIds(ctx, removedIds) {
   if (!Array.isArray(removedIds) || !removedIds.length) return;
-  const mem = getAnnotationsMem(ctx);
+  const mem = await getAnnotationsMem(ctx);
   let changed = false;
   for (const id of removedIds) {
     const k = String(id || '');

@@ -3,6 +3,7 @@ Tankoban Max - Books UI State Domain
 */
 
 let booksUiStateMem = null;
+let booksUiStateLoading = null;
 
 function normalizeBooksUiState(raw) {
   if (raw && typeof raw === 'object') {
@@ -12,21 +13,26 @@ function normalizeBooksUiState(raw) {
   return { ui: {}, updatedAt: 0 };
 }
 
-function getBooksUiStateMem(ctx) {
+async function getBooksUiStateMem(ctx) {
   if (booksUiStateMem) return booksUiStateMem;
-  const p = ctx.storage.dataPath('books_ui_state.json');
-  booksUiStateMem = normalizeBooksUiState(ctx.storage.readJSON(p, {}));
-  return booksUiStateMem;
+  if (booksUiStateLoading) return booksUiStateLoading;
+  booksUiStateLoading = (async () => {
+    const p = ctx.storage.dataPath('books_ui_state.json');
+    booksUiStateMem = normalizeBooksUiState(await ctx.storage.readJSONAsync(p, {}));
+    booksUiStateLoading = null;
+    return booksUiStateMem;
+  })();
+  return booksUiStateLoading;
 }
 
 async function get(ctx) {
-  const v = getBooksUiStateMem(ctx);
+  const v = await getBooksUiStateMem(ctx);
   return { ui: { ...(v.ui || {}) }, updatedAt: v.updatedAt || 0 };
 }
 
 async function save(ctx, _evt, ui) {
   const p = ctx.storage.dataPath('books_ui_state.json');
-  const v = getBooksUiStateMem(ctx);
+  const v = await getBooksUiStateMem(ctx);
   const next = (ui && typeof ui === 'object') ? ui : {};
   v.ui = { ...(v.ui || {}), ...next };
   v.updatedAt = Date.now();

@@ -12,15 +12,22 @@ Extracted from Build 77 IPC registry lines 2287-2420 with ZERO behavior changes.
  * Lifted from Build 77 index.js line 2287.
  */
 let videoProgressMem = null;
+let videoProgressLoading = null;
 
 /**
  * Get cached video progress data, loading from disk if needed.
  * Lifted from Build 77 index.js lines 2296-2300.
+ * BUILD 88 FIX 2: async to avoid blocking main process.
  */
-function getVideoProgressMem(ctx) {
+async function getVideoProgressMem(ctx) {
   if (videoProgressMem) return videoProgressMem;
-  videoProgressMem = ctx.storage.readJSON(ctx.storage.dataPath('video_progress.json'), {});
-  return videoProgressMem;
+  if (videoProgressLoading) return videoProgressLoading;
+  videoProgressLoading = (async () => {
+    videoProgressMem = await ctx.storage.readJSONAsync(ctx.storage.dataPath('video_progress.json'), {});
+    videoProgressLoading = null;
+    return videoProgressMem;
+  })();
+  return videoProgressLoading;
 }
 
 // ========== DOMAIN HANDLERS ==========
@@ -30,7 +37,7 @@ function getVideoProgressMem(ctx) {
  * Lifted from Build 77 index.js lines 2388-2391.
  */
 async function getAll(ctx) {
-  const all = getVideoProgressMem(ctx);
+  const all = await getVideoProgressMem(ctx);
   return { ...all };
 }
 
@@ -39,7 +46,7 @@ async function getAll(ctx) {
  * Lifted from Build 77 index.js lines 2393-2396.
  */
 async function get(ctx, _evt, videoId) {
-  const all = getVideoProgressMem(ctx);
+  const all = await getVideoProgressMem(ctx);
   return all[videoId] || null;
 }
 
@@ -49,7 +56,7 @@ async function get(ctx, _evt, videoId) {
  */
 async function save(ctx, _evt, videoId, progress) {
   const p = ctx.storage.dataPath('video_progress.json');
-  const all = getVideoProgressMem(ctx);
+  const all = await getVideoProgressMem(ctx);
   const prev = (all && all[videoId] && typeof all[videoId] === 'object') ? all[videoId] : {};
   const next = {};
   if (progress && typeof progress === 'object') {
@@ -68,7 +75,7 @@ async function save(ctx, _evt, videoId, progress) {
  */
 async function clear(ctx, _evt, videoId) {
   const p = ctx.storage.dataPath('video_progress.json');
-  const all = getVideoProgressMem(ctx);
+  const all = await getVideoProgressMem(ctx);
   delete all[videoId];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };
@@ -80,7 +87,7 @@ async function clear(ctx, _evt, videoId) {
  */
 async function clearAll(ctx) {
   const p = ctx.storage.dataPath('video_progress.json');
-  const all = getVideoProgressMem(ctx);
+  const all = await getVideoProgressMem(ctx);
   for (const k of Object.keys(all)) delete all[k];
   ctx.storage.writeJSONDebounced(p, all);
   return { ok: true };
