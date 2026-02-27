@@ -47,6 +47,27 @@ function readJSON(p, fallback) {
 }
 
 /**
+ * Async version of readJSON. Uses fs.promises for non-blocking reads.
+ * Mirrors readJSON semantics: primary file first, then .bak fallback.
+ */
+async function readJSONAsync(p, fallback) {
+  const bakPath = `${p}.bak`;
+  try {
+    const data = await fs.promises.readFile(p, 'utf-8');
+    return JSON.parse(data);
+  } catch {
+    try {
+      const bakData = await fs.promises.readFile(bakPath, 'utf-8');
+      const bak = JSON.parse(bakData);
+      try { await writeJSON(p, bak); } catch {}
+      return bak;
+    } catch {
+      return fallback;
+    }
+  }
+}
+
+/**
  * Write JSON file safely with directory creation.
  * BUILD 88 FIX 2.1: Made async to prevent blocking main process.
  * BUILD 88 FIX 3.1: Added performance timing for slow writes.
@@ -54,7 +75,7 @@ function readJSON(p, fallback) {
  */
 async function writeJSON(p, obj) {
   const startTime = Date.now();
-  fs.mkdirSync(path.dirname(p), { recursive: true });
+  await fs.promises.mkdir(path.dirname(p), { recursive: true });
 
   // Improvement 2 (Build 86): atomic JSON writes + last-known-good backup
   const json = JSON.stringify(obj, null, 2);
@@ -145,6 +166,7 @@ async function flushAllWrites() {
 module.exports = {
   dataPath,
   readJSON,
+  readJSONAsync,
   writeJSON,
   writeJSONDebounced,
   flushAllWrites,
