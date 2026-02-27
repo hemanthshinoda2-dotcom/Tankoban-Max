@@ -38,7 +38,7 @@ body[data-tile-density="compact"] #videoShowsGrid.seriesGrid{
   padding: 6px !important;
   cursor: pointer !important;
   position: relative !important;
-  transition: transform 90ms ease-out, background 90ms ease-out, border-color 90ms ease-out !important;
+  transition: transform 90ms ease-out !important;
 }
 
 #videoShowsGrid .seriesCard:hover {

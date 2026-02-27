@@ -2446,8 +2446,8 @@ body.inBooksReader .br-reader {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(0, 0, 0, 0.18);
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
-  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 [data-reader-theme="light"] .booksReaderTtsBar .iconBtn,
 [data-reader-theme="light"] .booksReaderTtsMega .iconBtn,

@@ -895,7 +895,7 @@ main{ padding: 14px 16px 18px; max-width: 1200px; margin:0 auto; }
   padding: 6px;
   cursor:pointer;
   position:relative;
-  transition: transform 90ms ease-out, background 90ms ease-out, border-color 90ms ease-out;
+  transition: transform 90ms ease-out;
 }
 .seriesCard:hover{
   background: var(--lib-hover);
