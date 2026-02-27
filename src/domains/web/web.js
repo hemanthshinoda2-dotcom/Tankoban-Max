@@ -20,8 +20,6 @@
   }
 
   var el = {
-    // Browser chrome (webBrowserView)
-    browserView:       qs('webBrowserView'),
     tabBar:            qs('web-tab-bar'),
     tabsContainer:     qs('web-tabs-container'),
     btnNewTab:         qs('web-btn-new-tab'),
@@ -280,13 +278,6 @@
   // ── Shared state ──
 
   var MAX_BROWSING_HISTORY_UI = 500;
-  function readLegacyOverlayBrowserFlag() {
-    try {
-      var params = new URLSearchParams((window.location && window.location.search) || '');
-      if (params.get('legacyBrowser') === '1' || params.get('legacyEmbed') === '1') return true;
-    } catch (_e) {}
-    return false;
-  }
 
   var state = {
     sources: [],
@@ -375,7 +366,6 @@
     lastSaveCategory: 'comics',
     hiddenSourceTorrentIds: {},
     destinationRoots: { books: null, comics: null, videos: null, allBooks: [], allComics: [], allVideos: [] },
-    useLegacyOverlayBrowser: readLegacyOverlayBrowserFlag(),
     sourcesBrowserBound: false,
     sourcesBrowserLoading: false,
     sourcesBrowserUrl: '',
@@ -383,9 +373,17 @@
     sourcesBrowserLayoutRaf: 0,
     sourcesBrowserRenderRecovered: false,
     sourcesBrowserRenderWatchdogTimer: 0,
+    sourcesBrowserRenderState: 'ok',
     sourcesBrowserOverlayLocked: false,
     sourcesBrowserLoadSettleTimer: 0,
     sourcesBrowserNavPollTimer: 0,
+    sourcesBrowserLayoutSettleTimer: 0,
+    sourcesBrowserNavToken: 0,
+    sourcesBrowserRecoveryNavToken: -1,
+    sourcesBrowserRecoveryStage: 0,
+    sourcesBrowserRecoveryTimer: 0,
+    sourcesBrowserLastHostWidth: 0,
+    sourcesBrowserLastHostHeight: 0,
     sourcesBrowserResizeObserver: null,
     sourcesBrowserHistoryRows: [],
   };
@@ -474,6 +472,7 @@
     var feat = getFeature('sources');
     return {
       search: feat && typeof feat.search === 'function' ? feat.search : (api.torrentSearch && api.torrentSearch.query ? api.torrentSearch.query : null),
+      health: feat && typeof feat.health === 'function' ? feat.health : (api.torrentSearch && api.torrentSearch.health ? api.torrentSearch.health : null),
       indexers: feat && typeof feat.indexers === 'function' ? feat.indexers : (api.torrentSearch && api.torrentSearch.indexers ? api.torrentSearch.indexers : null),
       resolveMetadata: feat && typeof feat.resolveMetadata === 'function' ? feat.resolveMetadata : (api.webTorrent && api.webTorrent.resolveMetadata ? api.webTorrent.resolveMetadata : null),
       startConfigured: feat && typeof feat.startConfigured === 'function' ? feat.startConfigured : (api.webTorrent && api.webTorrent.startConfigured ? api.webTorrent.startConfigured : null),
@@ -580,6 +579,43 @@
     el.sourcesBrowserStatus.setAttribute('data-loading', loading ? '1' : '0');
   }
 
+  function setSourcesBrowserRenderState(next) {
+    var value = String(next || '').trim().toLowerCase();
+    if (value !== 'recovering' && value !== 'failed') value = 'ok';
+    state.sourcesBrowserRenderState = value;
+  }
+
+  function getSourcesBrowserViewportMetrics() {
+    var wv = getSourcesBrowserWebview();
+    var viewport = wv && wv.parentElement;
+    if (!wv || !viewport || !document.body.contains(viewport)) return null;
+    var rect = null;
+    try { rect = viewport.getBoundingClientRect(); } catch (_e0) { rect = null; }
+    var width = Math.max(0, Math.round(Number(rect && rect.width) || Number(viewport.clientWidth) || 0));
+    var height = Math.max(0, Math.round(Number(rect && rect.height) || Number(viewport.clientHeight) || 0));
+    var visible = !viewport.classList.contains('hidden')
+      && !!(el.webLibraryView && !el.webLibraryView.classList.contains('hidden'));
+    return { wv: wv, viewport: viewport, width: width, height: height, visible: visible };
+  }
+
+  function sourcesBrowserBoundsMismatch(metrics) {
+    if (!metrics || !metrics.wv || !metrics.viewport) return false;
+    var wvRect = null;
+    var vpRect = null;
+    try { wvRect = metrics.wv.getBoundingClientRect(); } catch (_e1) { wvRect = null; }
+    try { vpRect = metrics.viewport.getBoundingClientRect(); } catch (_e2) { vpRect = null; }
+    if (!wvRect || !vpRect) return false;
+    var dw = Math.abs(Math.round((wvRect.width || 0) - (vpRect.width || 0)));
+    var dh = Math.abs(Math.round((wvRect.height || 0) - (vpRect.height || 0)));
+    return dw > 2 || dh > 2;
+  }
+
+  function runSourcesBrowserRecoveryPass() {
+    // Keep this intentionally non-destructive:
+    // do not auto-reload/re-attach webview surfaces from layout watchdog.
+    setSourcesBrowserRenderState('ok');
+  }
+
   function setSourcesBrowserBookmarkUi(isBookmarked) {
     state.sourcesBrowserBookmarked = !!isBookmarked;
     if (!el.sourcesBrowserBookmarkBtn) return;
@@ -630,9 +666,6 @@
   function refreshSourcesBrowserNav() {
     var wv = getSourcesBrowserWebview();
     if (!wv) return;
-    try {
-      if (typeof wv.isLoading === 'function') state.sourcesBrowserLoading = !!wv.isLoading();
-    } catch (_e0) {}
     if (el.sourcesBrowserBackBtn) {
       try { el.sourcesBrowserBackBtn.disabled = !wv.canGoBack(); } catch (_e) { el.sourcesBrowserBackBtn.disabled = true; }
     }
@@ -654,28 +687,25 @@
   }
 
   function applySourcesBrowserViewportLayout() {
-    var wv = getSourcesBrowserWebview();
-    var viewport = wv && wv.parentElement;
-    if (!wv || !viewport || !document.body.contains(viewport)) return;
-    var rect = null;
-    try { rect = viewport.getBoundingClientRect(); } catch (_e0) { rect = null; }
-    var vw = Math.max(0, Math.round(Number(rect && rect.width) || Number(viewport.clientWidth) || 0));
-    var vh = Math.max(0, Math.round(Number(rect && rect.height) || Number(viewport.clientHeight) || 0));
-    var visible = !viewport.classList.contains('hidden')
-      && !!(el.webLibraryView && !el.webLibraryView.classList.contains('hidden'));
+    var metrics = getSourcesBrowserViewportMetrics();
+    if (!metrics) return;
+    var wv = metrics.wv;
+    var vw = metrics.width;
+    var vh = metrics.height;
+    var visible = metrics.visible;
     var interactive = visible && !state.sourcesBrowserOverlayLocked;
     wv.style.visibility = visible ? 'visible' : 'hidden';
     wv.style.pointerEvents = interactive ? 'auto' : 'none';
     wv.style.position = 'absolute';
-    // Use absolute insets so the guest surface always fills parent bounds.
-    // Avoid forcing width/height pixels, which can get stuck stale.
+    // Electron docs: keep webview as flex so internal iframe fills host bounds.
     wv.style.display = 'flex';
     wv.style.left = '0px';
     wv.style.top = '0px';
     wv.style.right = '0px';
     wv.style.bottom = '0px';
-    wv.style.removeProperty('width');
-    wv.style.removeProperty('height');
+    wv.style.width = '100%';
+    wv.style.height = '100%';
+    wv.style.transform = 'translateZ(0)';
     wv.style.borderRadius = '8px';
     wv.style.zIndex = '1';
     try {
@@ -688,6 +718,9 @@
       wv.style.visibility = 'hidden';
       wv.style.pointerEvents = 'none';
     }
+    state.sourcesBrowserLastHostWidth = vw;
+    state.sourcesBrowserLastHostHeight = vh;
+    if (visible && vw >= 8 && vh >= 8) setSourcesBrowserRenderState('ok');
   }
 
   function scheduleSourcesBrowserViewportLayout() {
@@ -695,6 +728,13 @@
     state.sourcesBrowserLayoutRaf = requestAnimationFrame(function () {
       state.sourcesBrowserLayoutRaf = 0;
       applySourcesBrowserViewportLayout();
+      if (state.sourcesBrowserLayoutSettleTimer) {
+        try { clearTimeout(state.sourcesBrowserLayoutSettleTimer); } catch (_e0) {}
+      }
+      state.sourcesBrowserLayoutSettleTimer = setTimeout(function () {
+        state.sourcesBrowserLayoutSettleTimer = 0;
+        applySourcesBrowserViewportLayout();
+      }, 120);
     });
   }
 
@@ -706,8 +746,8 @@
   }
 
   function runSourcesBrowserRenderWatchdog() {
-    // Keep deterministic one-pass sizing only; no timer-based reattach/reflow.
     scheduleSourcesBrowserViewportLayout();
+    runSourcesBrowserRecoveryPass();
   }
 
   function scheduleSourcesBrowserLoadingSettleCheck() {
@@ -726,6 +766,7 @@
         state.sourcesBrowserLoading = false;
         refreshSourcesBrowserNav();
         setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
+        setSourcesBrowserRenderState('ok');
         state.sourcesBrowserLoadSettleTimer = 0;
         return;
       }
@@ -734,6 +775,7 @@
         state.sourcesBrowserLoading = false;
         refreshSourcesBrowserNav();
         setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
+        setSourcesBrowserRenderState('ok');
         state.sourcesBrowserLoadSettleTimer = 0;
         return;
       }
@@ -749,10 +791,20 @@
     var target = normalizeSourcesBrowserInput(raw);
     if (!target) return false;
     if (target === 'about:blank') target = getSourcesBrowserStartUrl();
+    state.sourcesBrowserNavToken += 1;
+    state.sourcesBrowserRecoveryStage = 0;
+    state.sourcesBrowserRecoveryNavToken = -1;
+    if (state.sourcesBrowserRecoveryTimer) {
+      try { clearTimeout(state.sourcesBrowserRecoveryTimer); } catch (_eClear) {}
+      state.sourcesBrowserRecoveryTimer = 0;
+    }
+    setSourcesBrowserRenderState('ok');
     state.sourcesBrowserUrl = target;
     if (el.sourcesBrowserUrlInput && !options.keepInput) el.sourcesBrowserUrlInput.value = target;
     try {
       wv.loadURL(target);
+      state.sourcesBrowserLoading = true;
+      refreshSourcesBrowserNav();
       setSourcesBrowserStatus('Loading...', true);
       scheduleSourcesBrowserViewportLayout();
       if (options.persist !== false) persistSourcesBrowserLastUrl(target);
@@ -827,6 +879,7 @@
     if (el.torrentProvidersOverlay && !el.torrentProvidersOverlay.classList.contains('hidden')) locked = true;
     state.sourcesBrowserOverlayLocked = locked;
     scheduleSourcesBrowserViewportLayout();
+    if (!locked) runSourcesBrowserRenderWatchdog();
   }
 
   function initSourcesBrowser() {
@@ -846,12 +899,6 @@
       } catch (_eObs) {
         state.sourcesBrowserResizeObserver = null;
       }
-    }
-    if (!state.sourcesBrowserNavPollTimer) {
-      state.sourcesBrowserNavPollTimer = setInterval(function () {
-        if (!isWebModeActive()) return;
-        refreshSourcesBrowserNav();
-      }, 450);
     }
 
     if (el.sourcesBrowserGoBtn) {
@@ -971,7 +1018,15 @@
     }
 
     wv.addEventListener('did-start-loading', function () {
+      state.sourcesBrowserNavToken += 1;
+      state.sourcesBrowserRecoveryStage = 0;
+      state.sourcesBrowserRecoveryNavToken = -1;
+      if (state.sourcesBrowserRecoveryTimer) {
+        try { clearTimeout(state.sourcesBrowserRecoveryTimer); } catch (_eClear2) {}
+        state.sourcesBrowserRecoveryTimer = 0;
+      }
       state.sourcesBrowserLoading = true;
+      setSourcesBrowserRenderState('ok');
       refreshSourcesBrowserNav();
       setSourcesBrowserStatus('Loading...', true);
       state.sourcesBrowserRenderRecovered = false;
@@ -998,12 +1053,16 @@
       setSourcesBrowserStatus((url && url !== 'about:blank') ? url : 'Ready', false);
       scheduleSourcesBrowserViewportLayout();
       runSourcesBrowserRenderWatchdog();
+      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
       scheduleSourcesBrowserLoadingSettleCheck();
     });
     wv.addEventListener('did-finish-load', function () {
       state.sourcesBrowserLoading = false;
       refreshSourcesBrowserNav();
+      setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
       scheduleSourcesBrowserViewportLayout();
+      runSourcesBrowserRenderWatchdog();
+      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
       scheduleSourcesBrowserLoadingSettleCheck();
     });
     wv.addEventListener('did-fail-load', function (e) {
@@ -1012,6 +1071,7 @@
       state.sourcesBrowserLoading = false;
       refreshSourcesBrowserNav();
       setSourcesBrowserStatus('Load failed (HTTP/NET error)', false);
+      setSourcesBrowserRenderState('ok');
       scheduleSourcesBrowserViewportLayout();
       scheduleSourcesBrowserLoadingSettleCheck();
     });
@@ -1027,6 +1087,7 @@
       refreshSourcesBrowserBookmarkUi(next);
       refreshSourcesBrowserNav();
       scheduleSourcesBrowserViewportLayout();
+      runSourcesBrowserRenderWatchdog();
     });
     wv.addEventListener('new-window', function (e) {
       var next = String((e && e.url) || '').trim();
@@ -1040,8 +1101,10 @@
     wv.addEventListener('dom-ready', function () {
       state.sourcesBrowserLoading = false;
       refreshSourcesBrowserNav();
+      setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
       scheduleSourcesBrowserViewportLayout();
       runSourcesBrowserRenderWatchdog();
+      setTimeout(scheduleSourcesBrowserViewportLayout, 120);
       scheduleSourcesBrowserLoadingSettleCheck();
     });
 
@@ -1186,6 +1249,7 @@
   bridge.deps.syncReloadStopButton = tabsState.syncLoadingState;
   bridge.deps.updateNavButtons  = tabsState.updateNavButtons;
   bridge.deps.scheduleSessionSave = tabsState.scheduleSessionSave;
+  bridge.deps.addTabListener    = tabsState.addTabListener;
 
   // Allow other modules to clean up torrent tab resources when closed. The
   // torrentTab module exposes a `destroy` method which clears its internal
@@ -1283,155 +1347,51 @@
   bridge.deps.updateUrlDisplay = updateUrlDisplay;
 
   function openBrowser(source) {
-    if (!state.useLegacyOverlayBrowser) {
-      ensureSourcesModeActive().then(function () {
-        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-        initSourcesBrowser();
-        if (source && source.url) {
-          navigateSourcesBrowser(source.url, { focus: true });
-        } else if (el.sourcesBrowserUrlInput) {
-          try { el.sourcesBrowserUrlInput.focus(); } catch (_e) {}
-        }
-      });
-      return;
-    }
-
-    ensureTorrentContainerInBrowser();
-    if (panels.hideAllPanels) panels.hideAllPanels();
-    if (!source) {
-      openHome();
-      return;
-    }
-
-    // Check if a tab for this source already exists
-    var existing = null;
-    for (var j = 0; j < state.tabs.length; j++) {
-      if (state.tabs[j].sourceId === source.id) { existing = state.tabs[j]; break; }
-    }
-    if (existing) {
-      if (tabsState.switchTab) tabsState.switchTab(existing.id);
-    } else {
-      if (tabsState.createTab) tabsState.createTab(source, source.url);
-    }
-
-    state.showBrowserHome = false;
-    state.browserOpen = true;
-    _hideCurrentLibraryView();
-    if (el.browserView) el.browserView.classList.remove('hidden');
-    renderSources();
-    renderBrowserHome();
-    syncContentVisibility();
-    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    if (hub.updateBookmarkButton) hub.updateBookmarkButton();
+    ensureSourcesModeActive().then(function () {
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      initSourcesBrowser();
+      if (source && source.url) {
+        navigateSourcesBrowser(source.url, { focus: true });
+      } else if (el.sourcesBrowserUrlInput) {
+        try { el.sourcesBrowserUrlInput.focus(); } catch (_e) {}
+      }
+    });
   }
 
   function openHome() {
-    if (!state.useLegacyOverlayBrowser) {
-      ensureSourcesModeActive().then(function () {
-        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-        initSourcesBrowser();
-        if (el.sourcesBrowserUrlInput) {
-          try {
-            el.sourcesBrowserUrlInput.focus();
-            if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
-          } catch (_e) {}
-        }
-      });
-      return;
-    }
-
-    ensureTorrentContainerInBrowser();
-    if (panels.hideAllPanels) panels.hideAllPanels();
-    state.showBrowserHome = true;
-    state.browserOpen = true;
-    _hideCurrentLibraryView();
-    if (el.browserView) el.browserView.classList.remove('hidden');
-    syncContentVisibility();
-    updateUrlDisplay();
-    if (tabsState.updateNavButtons) tabsState.updateNavButtons();
-    if (hub.updateBookmarkButton) hub.updateBookmarkButton();
-    renderBrowserHome();
-    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    if (el.homeSearchInput) {
-      setTimeout(function () {
-        if (state.showBrowserHome && el.homeSearchInput) el.homeSearchInput.focus();
-      }, 0);
-    }
+    ensureSourcesModeActive().then(function () {
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      initSourcesBrowser();
+      if (el.sourcesBrowserUrlInput) {
+        try {
+          el.sourcesBrowserUrlInput.focus();
+          if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
+        } catch (_e) {}
+      }
+    });
   }
 
   function openBrowserForTab(tabId) {
-    if (!state.useLegacyOverlayBrowser) {
-      var t = null;
-      for (var x = 0; x < state.tabs.length; x++) {
-        if (state.tabs[x] && state.tabs[x].id === tabId) { t = state.tabs[x]; break; }
-      }
-      if (t && t.url) openBrowser({ url: t.url });
-      else openHome();
-      return;
+    var t = null;
+    for (var x = 0; x < state.tabs.length; x++) {
+      if (state.tabs[x] && state.tabs[x].id === tabId) { t = state.tabs[x]; break; }
     }
-
-    ensureTorrentContainerInBrowser();
-    var tab = null;
-    for (var i = 0; i < state.tabs.length; i++) {
-      if (state.tabs[i].id === tabId) { tab = state.tabs[i]; break; }
-    }
-    if (!tab) return;
-
-    if (panels.hideAllPanels) panels.hideAllPanels();
-    if (tabsState.switchTab) tabsState.switchTab(tabId);
-    state.showBrowserHome = false;
-    state.browserOpen = true;
-    _hideCurrentLibraryView();
-    if (el.browserView) el.browserView.classList.remove('hidden');
-    renderSources();
-    syncContentVisibility();
-    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    if (hub.updateBookmarkButton) hub.updateBookmarkButton();
+    if (t && t.url) openBrowser({ url: t.url });
+    else openHome();
   }
 
   function openNewTab() {
-    if (!state.useLegacyOverlayBrowser) {
-      openHome();
-      return;
-    }
-
-    var behavior = state.browserSettings.home.newTabBehavior || 'tankoban_home';
-    if (behavior === 'tankoban_home' || behavior === 'home') {
-      openHome();
-    } else if (behavior === 'custom' && state.browserSettings.home.homeUrl) {
-      if (tabsState.createTab) tabsState.createTab(null, state.browserSettings.home.homeUrl);
-      state.showBrowserHome = false;
-      state.browserOpen = true;
-      _hideCurrentLibraryView();
-      if (el.browserView) el.browserView.classList.remove('hidden');
-      syncContentVisibility();
-    } else {
-      openHome();
-    }
+    openHome();
   }
 
   function closeBrowser() {
-    if (!state.useLegacyOverlayBrowser) {
-      state.browserOpen = false;
-      state.showBrowserHome = false;
-      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-      return;
-    }
-
     var routerMode = '';
     try {
       var router = window.Tanko && window.Tanko.modeRouter;
       routerMode = router && typeof router.getMode === 'function' ? String(router.getMode() || '').toLowerCase() : '';
-    } catch (_e) {
-      routerMode = '';
-    }
-
+    } catch (_e) {}
     state.browserOpen = false;
     state.showBrowserHome = false;
-    if (el.browserView) el.browserView.classList.add('hidden');
-
-    // Sources mode has had intermittent class-race issues after browser exit.
-    // Use a deterministic restore path + delayed self-heal instead of generic view restore.
     if (routerMode === 'sources' || !routerMode) {
       applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
       requestAnimationFrame(function () {
@@ -1443,18 +1403,6 @@
     } else {
       _showCurrentLibraryView();
     }
-
-    updateUrlDisplay();
-    renderSources();
-    renderSourcesGrid();
-    renderBrowserHome();
-    renderContinue();
-    if (panels.hideAllPanels) panels.hideAllPanels();
-    if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
-    if (find.closeFind) find.closeFind();
-    if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
-    if (el.webviewContainer) el.webviewContainer.classList.remove('wb-pointer-disabled');
-    syncContentVisibility();
   }
 
   // Wire orchestrator functions as deps
@@ -1881,7 +1829,6 @@
       if (booksView) booksView.classList.add('hidden');
       if (videosView) videosView.classList.add('hidden');
       if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
-      if (el.browserView) el.browserView.classList.add('hidden');
       if (homeView) {
         homeView.classList.remove('hidden');
         homeView.style.display = '';
@@ -2753,40 +2700,103 @@
     syncSourcesBrowserOverlayLock();
   }
 
+  function normalizeProviderBaseUrl(raw) {
+    var s = String(raw || '').trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
+    try {
+      var u = new URL(s);
+      var proto = /^https?:$/i.test(u.protocol) ? u.protocol.toLowerCase() : 'http:';
+      var host = String(u.host || '').trim();
+      if (!host) return '';
+      var normalized = proto + '//' + host + String(u.pathname || '');
+      normalized = normalized.replace(/\/+$/, '');
+      return normalized;
+    } catch (_e) {
+      return '';
+    }
+  }
+
+  function classifyProviderHealthMessage(rawMsg) {
+    var msg = String(rawMsg || '').trim();
+    var low = msg.toLowerCase();
+    if (!msg) return 'Unknown provider error';
+    if (/401|403|unauthorized|forbidden|api key|apikey|auth/.test(low)) return 'Authentication failed (check API key)';
+    if (/404|not found/.test(low)) return 'Endpoint not found (check base URL)';
+    if (/timeout|timed out|aborted/.test(low)) return 'Request timed out (provider too slow or unreachable)';
+    if (/econnrefused|enotfound|network|failed to fetch|unreachable|socket hang up|connect/.test(low)) return 'Network error (cannot reach provider host)';
+    if (/http\s*\d+/.test(low)) return msg;
+    return msg;
+  }
+
+  function runActiveProviderHealthCheck(opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var srcOps = getSourcesOps();
+    if (!srcOps || typeof srcOps.health !== 'function') return Promise.resolve(null);
+    return srcOps.health().then(function (res) {
+      var provider = String(res && res.details && res.details.provider || (state.browserSettings && state.browserSettings.torrentSearch && state.browserSettings.torrentSearch.provider) || 'jackett').trim().toLowerCase();
+      if (provider !== 'prowlarr') provider = 'jackett';
+      var pLabel = provider === 'prowlarr' ? 'Prowlarr' : 'Jackett';
+      if (res && res.ready) {
+        if (!options.silent) showToast(pLabel + ' is healthy');
+        return res;
+      }
+      var reason = classifyProviderHealthMessage(res && res.error);
+      if (!options.silent) showToast(pLabel + ': ' + reason);
+      return res;
+    }).catch(function (err) {
+      if (!options.silent) {
+        var active = String(state.browserSettings && state.browserSettings.torrentSearch && state.browserSettings.torrentSearch.provider || 'jackett').toLowerCase();
+        var label = active === 'prowlarr' ? 'Prowlarr' : 'Jackett';
+        showToast(label + ': ' + classifyProviderHealthMessage(err && err.message));
+      }
+      return null;
+    });
+  }
+
   function openProviderWebUi(rawUrl) {
-    var url = String(rawUrl || '').trim();
+    var url = normalizeProviderBaseUrl(rawUrl);
     if (!url) {
-      showToast('Set the provider base URL first');
+      showToast('Set a valid provider base URL first');
       return;
     }
-    if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
-    if (!state.useLegacyOverlayBrowser) {
-      ensureSourcesModeActive().then(function () {
+    // Provider UI must always open in Sources-embedded TankoBrowser.
+    // Legacy browser fallback causes mode/view desync and blank-shell regressions.
+    ensureSourcesModeActive().then(function () {
+      try {
+        forceSourcesViewVisible();
         applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
         initSourcesBrowser();
-        navigateSourcesBrowser(url, { focus: true });
+        var ok = navigateSourcesBrowser(url, { focus: true });
         closeTorrentProvidersDialog();
-        showToast('Opened provider UI in TankoBrowser');
-      });
-      return;
-    }
-    openHome();
-    if (tabsState.createTab) tabsState.createTab(null, url, { switchTo: true });
-    state.showBrowserHome = false;
-    syncContentVisibility();
+        if (ok) {
+          showToast('Opened provider UI in TankoBrowser');
+          return;
+        }
+      } catch (_e) {}
+      // Self-heal: keep Sources visible even if webview navigation fails.
+      forceSourcesViewVisible();
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      closeTorrentProvidersDialog();
+      showToast('Unable to open provider UI');
+    });
   }
 
   function saveTorrentProvidersSettings() {
     var provider = String(el.torrentProviderSelect && el.torrentProviderSelect.value || 'jackett').trim().toLowerCase();
     if (provider !== 'prowlarr') provider = 'jackett';
+    var jackettBaseUrl = normalizeProviderBaseUrl(el.jackettBaseUrl && el.jackettBaseUrl.value);
+    var prowlarrBaseUrl = normalizeProviderBaseUrl(el.prowlarrBaseUrl && el.prowlarrBaseUrl.value);
+    if (el.jackettBaseUrl) el.jackettBaseUrl.value = jackettBaseUrl;
+    if (el.prowlarrBaseUrl) el.prowlarrBaseUrl.value = prowlarrBaseUrl;
     saveBrowserSettings({
       torrentSearch: { provider: provider },
       jackett: {
-        baseUrl: String(el.jackettBaseUrl && el.jackettBaseUrl.value || '').trim(),
+        baseUrl: jackettBaseUrl,
         apiKey: String(el.jackettApiKey && el.jackettApiKey.value || '').trim()
       },
       prowlarr: {
-        baseUrl: String(el.prowlarrBaseUrl && el.prowlarrBaseUrl.value || '').trim(),
+        baseUrl: prowlarrBaseUrl,
         apiKey: String(el.prowlarrApiKey && el.prowlarrApiKey.value || '').trim()
       }
     });
@@ -2795,6 +2805,7 @@
       loadSourcesSearchIndexers();
     }, 150);
     showToast('Torrent provider settings saved');
+    setTimeout(function () { runActiveProviderHealthCheck({ silent: false }); }, 200);
   }
 
   function saveSource() {
@@ -2993,22 +3004,6 @@
   // ── Keyboard shortcuts ──
 
   function handleKeyDown(e) {
-    try {
-      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
-        ? window.Tanko.browserHost.getConfig() : null;
-      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
-        var hostPane = document.getElementById('aspectEmbedMountRoot');
-        if (hostPane && hostPane.isConnected && !document.getElementById('webBrowserView')?.classList?.contains('hidden')) return;
-      }
-    } catch (_embedKeyErr) {}
-    try {
-      var hostCfg = window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.getConfig === 'function'
-        ? window.Tanko.browserHost.getConfig() : null;
-      if (hostCfg && hostCfg.enabled && hostCfg.adapter === 'aspect-embed') {
-        var hostPane = document.getElementById('aspectEmbedMountRoot');
-        if (hostPane && !hostPane.classList.contains('hidden')) return;
-      }
-    } catch (_embedKeyErr) {}
     // Only handle when browser view is visible or web mode is active
     if (!state.browserOpen && !isWebModeActive()) return;
 
@@ -4028,7 +4023,6 @@
   function applySourcesWorkspace(mode) {
     state.browserOpen = false;
     state.showBrowserHome = false;
-    if (el.browserView) el.browserView.classList.add('hidden');
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
     if (find.closeFind) find.closeFind();

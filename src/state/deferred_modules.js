@@ -255,14 +255,6 @@
   }
 
   async function ensureWebModulesLoaded() {
-    // Browser host abstraction: by default this build keeps Tankoban browser-less.
-    // Future Aspect integration can register a browserHost adapter without touching callers.
-    try {
-      var host = window.Tanko && window.Tanko.browserHost;
-      if (host && typeof host.ensureReady === 'function') {
-        return await host.ensureReady();
-      }
-    } catch (_err) {}
     return ensureWebModulesLoadedLegacy();
   }
 

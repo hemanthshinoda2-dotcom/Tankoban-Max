@@ -611,8 +611,6 @@ scheduleToastBottomOffsetSync();
   function isLibrariesOnlyContextActive() {
     try {
       if (document.body.classList.contains('inPlayer') || document.body.classList.contains('inVideoPlayer')) return false;
-      const webBrowserView = document.getElementById('webBrowserView');
-      if (webBrowserView && !webBrowserView.classList.contains('hidden')) return false;
       const router = window.Tanko && window.Tanko.modeRouter;
       const mode = router && typeof router.getMode === 'function' ? String(router.getMode() || '').toLowerCase() : '';
       return mode === 'comics' || mode === 'books' || mode === 'videos' || mode === 'sources';

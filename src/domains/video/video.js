@@ -4312,23 +4312,6 @@ function getContinueVideos() {
     parent.appendChild(tag);
   }
 
-  function isTorrentStreamableShow(show) {
-    return !!(show && (show.torrentStreamable === true || String(show.sourceKind || '') === 'torrent_stream'));
-  }
-
-  function isTorrentStreamableEpisode(ep) {
-    return !!(ep && (ep.torrentStreamable === true || String(ep.sourceKind || '') === 'torrent_stream'));
-  }
-
-  function appendTorrentSourceBadge(parent, labelText) {
-    if (!parent) return;
-    const tag = document.createElement('span');
-    tag.className = 'videoSourceBadge';
-    tag.textContent = labelText || 'Stream';
-    tag.title = 'Torrent-backed streamable item';
-    parent.appendChild(tag);
-  }
-
   // RENAME-VIDEO: custom DOM prompt dialog (Electron has no window.prompt).
   function showRenamePrompt(currentName) {
     return new Promise(function (resolve) {
@@ -5654,7 +5637,6 @@ function getEpisodeById(epId){
 
     thumbWrap.appendChild(img);
     coverWrap.appendChild(thumbWrap);
-    if (isTorrentStreamableShow(show)) appendTorrentSourceBadge(coverWrap, 'Streaming', 'videoSourceBadge--thumb');
     if (isTorrentStreamableShow(show)) appendTorrentSourceBadge(coverWrap, 'Streaming', 'videoSourceBadge--thumb');
 
     const name = document.createElement('div');

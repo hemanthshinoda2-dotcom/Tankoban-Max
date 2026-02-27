@@ -423,121 +423,24 @@
     }
   }
 
-  function getBrowserHostBridge() {
-    try {
-      return (window.Tanko && window.Tanko.browserHost) ? window.Tanko.browserHost : null;
-    } catch (_err) {
-      return null;
-    }
-  }
-
   function applyBrowserlessGroundworkUiState() {
-    var host = getBrowserHostBridge();
-    if (!host) return;
-
-    var hideLaunchButtons = false;
-    try {
-      hideLaunchButtons = !!(typeof host.shouldHideLaunchButtons === 'function' ? host.shouldHideLaunchButtons() : false);
-    } catch (_err) {
-      hideLaunchButtons = false;
-    }
-
     if (webHubToggleBtn) {
-      if (hideLaunchButtons) {
-        webHubToggleBtn.classList.add('hidden');
-        webHubToggleBtn.setAttribute('aria-hidden', 'true');
-      } else {
-        webHubToggleBtn.classList.remove('hidden');
-        webHubToggleBtn.removeAttribute('aria-hidden');
-      }
+      webHubToggleBtn.classList.remove('hidden');
+      webHubToggleBtn.removeAttribute('aria-hidden');
       webHubToggleBtn.title = 'Open Tankoban Browser';
       webHubToggleBtn.setAttribute('aria-label', 'Open Tankoban Browser');
     }
 
     if (webHubAddSourceBtn) {
-      var canAdd = false;
-      try {
-        canAdd = !!(typeof host.canOpenAddSource === 'function' ? host.canOpenAddSource() : false);
-      } catch (_err3) {
-        canAdd = false;
-      }
-      webHubAddSourceBtn.disabled = !canAdd;
-      if (!canAdd) webHubAddSourceBtn.title = 'Browser sources disabled in groundwork build';
-      else webHubAddSourceBtn.removeAttribute('title');
+      webHubAddSourceBtn.disabled = false;
+      webHubAddSourceBtn.removeAttribute('title');
     }
   }
 
   function openBrowserFromTopButton() {
-    console.log('[DBG-WEB] openBrowserFromTopButton called');
-
-    function emergencyRevealWebBrowserView(reason) {
-      try { console.warn('[DBG-WEB] emergency reveal fallback:', reason || 'unknown'); } catch (_e) {}
-      try {
-        var libraryView = document.getElementById('webLibraryView');
-        var browserView = document.getElementById('webBrowserView');
-        if (libraryView) {
-          libraryView.classList.add('hidden');
-          libraryView.style.display = 'none';
-          libraryView.setAttribute('aria-hidden', 'true');
-        }
-        if (browserView) {
-          browserView.classList.remove('hidden');
-          browserView.style.display = '';
-          browserView.removeAttribute('aria-hidden');
-        }
-      } catch (_domErr) {}
-      try {
-        if (window.Tanko && window.Tanko.browserHost && typeof window.Tanko.browserHost.showBrowserPane === 'function') {
-          window.Tanko.browserHost.showBrowserPane();
-        }
-      } catch (_hostErr) {}
-    }
-
-    // Prefer browser-host bridge so a future Aspect embed can plug in cleanly.
-    try {
-      var host = getBrowserHostBridge();
-      if (host && typeof host.openDefault === 'function') {
-        Promise.resolve(host.openDefault()).then(function () {
-          try {
-            var view = document.getElementById('webBrowserView');
-            if (!view || view.classList.contains('hidden') || view.style.display === 'none') {
-              emergencyRevealWebBrowserView('host-openDefault-hidden-view');
-            }
-          } catch (_vErr) {}
-        }).catch(function (err) {
-          console.error('[DBG-WEB] browserHost.openDefault rejected:', err);
-          emergencyRevealWebBrowserView('host-openDefault-rejected');
-        });
-        return;
-      }
-    } catch (_err) {
-      emergencyRevealWebBrowserView('host-bridge-throw');
-    }
-
-    // Direct fallback (Aspect embed mount exposes this) in case shell state guards or adapter wiring drift.
-    try {
-      if (window.Tanko && window.Tanko.aspectEmbed && typeof window.Tanko.aspectEmbed.openDefault === 'function') {
-        Promise.resolve(window.Tanko.aspectEmbed.openDefault()).then(function () {
-          try {
-            var view = document.getElementById('webBrowserView');
-            if (!view || view.classList.contains('hidden') || view.style.display === 'none') {
-              emergencyRevealWebBrowserView('aspect-openDefault-hidden-view');
-            }
-          } catch (_vErr2) {}
-        }).catch(function (err) {
-          console.error('[DBG-WEB] Tanko.aspectEmbed.openDefault rejected:', err);
-          emergencyRevealWebBrowserView('aspect-openDefault-rejected');
-        });
-        return;
-      }
-    } catch (_errAspect) {
-      emergencyRevealWebBrowserView('aspect-bridge-throw');
-    }
-
     var d = window.Tanko && window.Tanko.deferred;
     if (!d || typeof d.ensureWebModulesLoaded !== 'function') {
       console.warn('[DBG-WEB] ensureWebModulesLoaded not available', d);
-      emergencyRevealWebBrowserView('deferred-loader-missing');
       return;
     }
     d.ensureWebModulesLoaded().then(function () {
@@ -554,10 +457,8 @@
       } else {
         console.error('[DBG-WEB] Tanko.web NOT set after module load — web.js IIFE likely failed');
       }
-      emergencyRevealWebBrowserView('web-module-open-missing');
     }).catch(function (err) {
       console.error('[DBG-WEB] ensureWebModulesLoaded REJECTED:', err);
-      emergencyRevealWebBrowserView('ensureWebModulesLoaded-rejected');
     });
   }
 
@@ -581,14 +482,6 @@
     webHubAddSourceBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-
-      try {
-        var host = getBrowserHostBridge();
-        if (host && typeof host.openAddSourceDialog === 'function') {
-          Promise.resolve(host.openAddSourceDialog()).catch(function () {});
-          return;
-        }
-      } catch (_err) {}
 
       var d = window.Tanko && window.Tanko.deferred;
       if (!d || typeof d.ensureWebModulesLoaded !== 'function') return;

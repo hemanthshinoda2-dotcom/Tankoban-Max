@@ -17,6 +17,23 @@
     var MAX_CLOSED_TABS = 25;
     var loadingBarTimer = null;
 
+    // ── Per-tab listener tracking (prevents memory leaks on tab close) ──
+
+    function addTabListener(tab, element, event, handler, opts) {
+      if (!tab._listeners) tab._listeners = [];
+      element.addEventListener(event, handler, opts || false);
+      tab._listeners.push({ el: element, ev: event, fn: handler, opts: opts || false });
+    }
+
+    function cleanupTabListeners(tab) {
+      if (!tab._listeners) return;
+      for (var i = 0; i < tab._listeners.length; i++) {
+        var entry = tab._listeners[i];
+        try { entry.el.removeEventListener(entry.ev, entry.fn, entry.opts); } catch (e) {}
+      }
+      tab._listeners = null;
+    }
+
     // ── Utilities ──
 
     function escapeHtml(str) {
@@ -125,14 +142,14 @@
         }
       }
 
-      // Tab element events
-      tabEl.addEventListener('click', function (e) {
+      // Tab element events (tracked for cleanup on tab close)
+      addTabListener(tab, tabEl, 'click', function (e) {
         if (!e.target.closest('.tab-close')) switchTab(id);
       });
-      tabEl.addEventListener('mousedown', function (e) {
+      addTabListener(tab, tabEl, 'mousedown', function (e) {
         if (e.button === 1) { e.preventDefault(); closeTab(id); }
       });
-      tabEl.querySelector('.tab-close').addEventListener('click', function (e) {
+      addTabListener(tab, tabEl.querySelector('.tab-close'), 'click', function (e) {
         e.stopPropagation();
         closeTab(id);
       });
@@ -144,7 +161,7 @@
       // generic context menu module to render the menu and wire up actions via
       // ctxParams.onAction.  Each menu item calls into helper functions defined
       // below.
-      tabEl.addEventListener('contextmenu', function (e) {
+      addTabListener(tab, tabEl, 'contextmenu', function (e) {
         e.preventDefault();
         if (!dep('showContextMenu')) return;
         var tab = null;
@@ -265,6 +282,9 @@
       // Save to closed-tab history
       pushClosedTab(tab);
 
+      // Clean up tracked event listeners before removing DOM elements
+      cleanupTabListeners(tab);
+
       // Remove DOM elements
       if (tab.element) tab.element.remove();
       if (tab.webview) tab.webview.remove();
@@ -312,6 +332,7 @@
         if (!tab.webview) {
           ensureWebview(tab, tab.url);
         } else if (isWebviewDead(tab.webview)) {
+          cleanupTabListeners(tab);
           tab.webview.remove();
           tab.webview = null;
           ensureWebview(tab, tab.url);
@@ -393,7 +414,7 @@
         return true;
       }
 
-      wv.addEventListener('did-navigate', function (e) {
+      addTabListener(tab, wv, 'did-navigate', function (e) {
         if (handleMagnetUrl(eventUrl(e))) return;
         tab.url = e.url;
         if (tab.id === state.activeTabId) {
@@ -404,7 +425,7 @@
         scheduleSessionSave();
       });
 
-      wv.addEventListener('did-navigate-in-page', function (e) {
+      addTabListener(tab, wv, 'did-navigate-in-page', function (e) {
         if (handleMagnetUrl(eventUrl(e))) return;
         if (e.isMainFrame) {
           tab.url = e.url;
@@ -416,13 +437,13 @@
         }
       });
 
-      wv.addEventListener('page-title-updated', function (e) {
+      addTabListener(tab, wv, 'page-title-updated', function (e) {
         tab.title = e.title;
         var titleSpan = tab.element ? tab.element.querySelector('.tab-title') : null;
         if (titleSpan) titleSpan.textContent = e.title;
       });
 
-      wv.addEventListener('page-favicon-updated', function (e) {
+      addTabListener(tab, wv, 'page-favicon-updated', function (e) {
         if (e.favicons && e.favicons.length > 0) {
           tab.favicon = e.favicons[0];
           if (tab.element) {
@@ -434,7 +455,7 @@
         }
       });
 
-      wv.addEventListener('did-start-loading', function () {
+      addTabListener(tab, wv, 'did-start-loading', function () {
         tab.loading = true;
         if (tab.id === state.activeTabId) {
           setLoadingUI(true);
@@ -449,7 +470,7 @@
         }
       });
 
-      wv.addEventListener('did-stop-loading', function () {
+      addTabListener(tab, wv, 'did-stop-loading', function () {
         tab.loading = false;
         if (tab.id === state.activeTabId) {
           setLoadingUI(false);
@@ -491,21 +512,21 @@
         scheduleSessionSave();
       });
 
-      wv.addEventListener('did-fail-load', function (e) {
+      addTabListener(tab, wv, 'did-fail-load', function (e) {
         if (e.errorCode === -3) return; // aborted — normal for redirects
         var classified = classifyLoadFailure(e.errorCode, e.errorDescription, e.validatedURL);
         if (classified.toast) showToast(classified.toast);
         bridge.emit('tab:loadFailed', { tabId: tab.id, error: classified });
       });
 
-      wv.addEventListener('will-navigate', function (e) {
+      addTabListener(tab, wv, 'will-navigate', function (e) {
         if (handleMagnetUrl(eventUrl(e))) {
           if (e && typeof e.preventDefault === 'function') e.preventDefault();
         }
       });
 
       // Handle new window requests (target=_blank, window.open, etc.)
-      wv.addEventListener('new-window', function (e) {
+      addTabListener(tab, wv, 'new-window', function (e) {
         e.preventDefault();
         var nextUrl = String(eventUrl(e)).trim();
         if (handleMagnetUrl(nextUrl)) return;
@@ -513,7 +534,7 @@
         // for popup->tab routing to avoid duplicate tab creation paths.
       });
 
-      wv.addEventListener('context-menu', function (e) {
+      addTabListener(tab, wv, 'context-menu', function (e) {
         var payload = (e && e.params && typeof e.params === 'object')
           ? e.params
           : (e && typeof e === 'object' ? e : {});
@@ -665,13 +686,13 @@
       };
       state.tabs.push(tab);
 
-      tabEl.addEventListener('click', function (e) {
+      addTabListener(tab, tabEl, 'click', function (e) {
         if (!e.target.closest('.tab-close')) switchTab(id);
       });
-      tabEl.addEventListener('mousedown', function (e) {
+      addTabListener(tab, tabEl, 'mousedown', function (e) {
         if (e.button === 1) { e.preventDefault(); closeTab(id); }
       });
-      tabEl.querySelector('.tab-close').addEventListener('click', function (e) {
+      addTabListener(tab, tabEl.querySelector('.tab-close'), 'click', function (e) {
         e.stopPropagation();
         closeTab(id);
       });
@@ -1056,6 +1077,7 @@
       openTorrentTab: openTorrentTab,
       ensureWebview: ensureWebview,
       bindWebviewEvents: bindWebviewEvents,
+      addTabListener: addTabListener,
       escapeHtml: escapeHtml,
       siteNameFromUrl: siteNameFromUrl,
       setLoadingUI: setLoadingUI,

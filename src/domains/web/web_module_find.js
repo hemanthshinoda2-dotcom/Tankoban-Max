@@ -43,7 +43,7 @@
 
     function bindFindEvents(tab) {
       if (!tab || !tab.webview) return;
-      tab.webview.addEventListener('found-in-page', function (e) {
+      var handler = function (e) {
         if (tab.id !== state.activeTabId) return;
         var r = e.result;
         if (r.matches !== undefined && el.findMatches) {
@@ -51,7 +51,14 @@
             ? r.activeMatchOrdinal + ' of ' + r.matches
             : 'No matches';
         }
-      });
+      };
+      // Use tracked listener (cleaned up on tab close) via tabsState module
+      var fn = dep('addTabListener');
+      if (fn) {
+        fn(tab, tab.webview, 'found-in-page', handler);
+      } else {
+        tab.webview.addEventListener('found-in-page', handler);
+      }
     }
 
     // ── Event wiring ──

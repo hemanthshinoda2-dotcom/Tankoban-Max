@@ -695,8 +695,8 @@ body.videoUiHidden .videoToast{
 
 .videoSourceBadge--thumb {
   position: absolute;
-  left: 8px;
-  bottom: 8px;
+  left: 5px;
+  bottom: 5px;
   margin-left: 0;
   z-index: 3;
   pointer-events: none;

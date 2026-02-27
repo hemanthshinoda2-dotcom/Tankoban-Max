@@ -1,8 +1,9 @@
-﻿# Tankoban Max - Canonical Agent Map
+# Tankoban Max - Canonical Agent Map
 
 ## 1. Purpose
 This is the canonical repo map for AI agents.
-Both `CLAUDE.md` and `chatgpt.md` must remain identical.
+`CLAUDE.md` and `chatgpt.md` must remain identical (structural map).
+`agents.md` contains deep architectural knowledge (patterns, debugging, CSS, bridge APIs).
 
 Goals:
 1. Keep root `npm start` running the integrated app.
@@ -22,16 +23,16 @@ Primary commands:
 9. `npm run start:torrent` - torrent-focused standalone boot.
 
 Validation and diagnostics:
-1. `npm run smoke`
-2. `npm run doctor`
-3. `npm run ipc:check`
-4. `npm run map`
-5. `npm run boundaries:check`
-6. `npm run fixtures:check`
-7. `npm run ipc:contracts`
-8. `npm run smoke:all`
-9. `npm run test:sections`
-10. `npm run docs:verify-sync`
+1. `npm run smoke` — `tools/smoke_check.js`
+2. `npm run doctor` — `tools/doctor.js`
+3. `npm run ipc:check` — `tools/ipc_sync_check.js`
+4. `npm run map` — `tools/repo_map.js`
+5. `npm run boundaries:check` — `tools/enforce_feature_boundaries.js`
+6. `npm run fixtures:check` — `tools/fixture_manifest.js --check`
+7. `npm run ipc:contracts` — `tools/ipc_contract_check.js`
+8. `npm run smoke:all` — runs all section smokes
+9. `npm run test:sections` — `tools/section_test_harness.js --all`
+10. `npm run docs:verify-sync` — `tools/verify_agent_docs.js`
 
 ## 3. Root Folder Map
 Top-level ownership:
@@ -40,14 +41,15 @@ Top-level ownership:
 3. `preload.js` + `preload/` - contextBridge API surface.
 4. `src/` - renderer HTML/CSS/JS domains.
 5. `shared/` - cross-process contracts (`shared/ipc.js`).
-6. `workers/` + root `*_scan_worker.js` files - background scans.
+6. `workers/` + root scan workers (`library_scan_worker.js`, `books_scan_worker.js`, `video_scan_worker.js`, `audiobook_scan_worker.js`).
 7. `apps/` - standalone app entrypoints by section.
 8. `packages/` - logical boundaries and ownership maps.
 9. `resources/` + `player_qt/` - native/media runtime assets.
 10. `tools/` + `qa/` - smoke checks, audits, diagnostics, visual QA.
 11. `contracts/` - IPC payload contracts and schema coverage.
 12. `types/` - critical interface declarations (`.d.ts`) for high-value boundaries.
-13. `docs/` - supporting architecture, ADRs, and canonical agent source.
+13. `docs/` - supporting architecture, ADRs, ownership manifests, and canonical agent source.
+14. `archive/` - archived experiments and legacy docs (read-only reference).
 
 ## 4. Apps Directory
 Each app is a thin launcher around the same runtime.
@@ -134,10 +136,10 @@ Each app is a thin launcher around the same runtime.
 - Video renderer + video/player main domains + preload video/media/player namespaces.
 
 6. `packages/feature-browser`
-- Browser renderer + web main domains + preload web namespace.
+- Browser renderer + web/browser_host main domains + preload web namespace.
 
 7. `packages/feature-torrent`
-- Torrent renderer module + `webTorrent` / `torProxy` main domains.
+- Torrent renderer module + `webTorrent` / `torProxy` / `torrentSearch` main domains.
 
 ## 6. Runtime Layer Map
 
@@ -147,10 +149,14 @@ Each app is a thin launcher around the same runtime.
 - `src/state/mode_router.js` handles comics/books/videos mode switching.
 - `src/state/app_section_boot.js` applies standalone `appSection` startup routing.
 - Web standalone entry helpers split from `src/domains/web/web.js` into `src/domains/web/web_module_standalone.js`.
+- TankoBrowser: Sources panel embeds `<webview id="sourcesBrowserWebview">` which loads the Aspect Browser from `src/domains/browser_host/aspect_embed/index.html`. Host-to-iframe communication uses `window.__ASPECT_TANKO_BRIDGE__`. See `agents.md` for bridge details.
 
 2. Preload (`preload/`)
 - `preload/index.js` composes namespace APIs.
-- `preload/namespaces/*.js` groups domain-safe IPC wrappers.
+- `preload/namespaces/*.js` groups domain-safe IPC wrappers:
+  - Feature: `library.js`, `books.js`, `books_metadata.js`, `audiobooks.js`, `video.js`, `web.js`
+  - Shared: `media.js`, `player.js`, `shell.js`, `window.js`, `progress.js`, `series.js`
+  - Legacy/archived: `_legacy.js`, `holy_grail.js`
 
 3. Main (`main/`)
 - `main/index.js` owns app lifecycle and window boot.
@@ -159,6 +165,8 @@ Each app is a thin launcher around the same runtime.
 
 4. Worker layer (`workers/` + root workers)
 - Scanning and metadata tasks for library/books/video/audiobooks.
+- Root: `library_scan_worker.js`, `books_scan_worker.js`, `video_scan_worker.js`, `audiobook_scan_worker.js`
+- Implementations: `workers/*_scan_worker_impl.js`, `workers/shared/*`
 
 ## 7. Section Ownership Map (File-Level)
 
@@ -175,69 +183,75 @@ Each app is a thin launcher around the same runtime.
 
 ### Book Reader
 1. Renderer: `src/domains/books/library.js`, `src/domains/books/reader/*`, `src/domains/books/books_opds.js`
-2. Main: `main/domains/books*`, `booksProgress`, `booksBookmarks`, `booksAnnotations`, `booksSettings`, `booksTtsEdge`, `booksTtsProgress`, `booksOpds`, `booksUi`
+2. Main: `main/domains/books*` — includes `booksProgress`, `booksBookmarks`, `booksAnnotations`, `booksSettings`, `booksDisplayNames`, `booksTtsEdge`, `booksTtsProgress`, `booksOpds`, `booksUi`
 3. Preload: `preload/namespaces/books.js`, `preload/namespaces/books_metadata.js`
+4. Worker: `books_scan_worker.js`
 
 ### Audiobook
 1. Renderer: `src/domains/books/listening_player.js`, `src/domains/books/audiobook_player_overlay.js`, `src/domains/books/reader/reader_audiobook*.js`
 2. Main: `main/domains/audiobooks/index.js`, `audiobookProgress/index.js`, `audiobookPairing/index.js`
 3. Preload: `preload/namespaces/audiobooks.js`
+4. Worker: `audiobook_scan_worker.js`
 
 ### Video
 1. Renderer: `src/domains/video/*`
-2. Main: `main/domains/video/index.js`, `videoProgress/index.js`, `videoSettings/index.js`, `videoDisplayNames/index.js`, `videoUi/index.js`, `player_core/index.js`
-3. Preload: `preload/namespaces/video.js`, `player.js`, `media.js`
+2. Main: `main/domains/video/index.js`, `videoProgress/index.js`, `videoSettings/index.js`, `videoDisplayNames/index.js`, `videoUi/index.js`, `player_core/index.js`, `holyGrail/index.js` (archived experiment, code still present)
+3. Preload: `preload/namespaces/video.js`, `player.js`, `media.js`, `holy_grail.js`
 4. Native/media resources: `resources/mpv/windows/*`, `player_qt/*`
+5. Worker: `video_scan_worker.js`
 
 ### Browser
-1. Renderer: `src/domains/web/*`
-2. Main: `main/domains/webSources`, `webHistory`, `webBookmarks`, `webBrowserSettings`, `webSession`, `webPermissions`, `webData`, `webAdblock`, `webUserscripts`
+1. Renderer: `src/domains/web/*`, `src/domains/browser_host/aspect_embed/*`
+2. Main: `main/domains/webSources`, `webHistory`, `webBookmarks`, `webBrowserSettings`, `webSession`, `webPermissions`, `webData`, `webAdblock`, `webUserscripts`, `webSearchHistory`
 3. Preload: `preload/namespaces/web.js`
 
 ### Torrent
-1. Renderer: `src/domains/web/web_module_torrent_tab.js`, `src/domains/web/web.js`
-2. Main: `main/domains/webTorrent/index.js`, `main/domains/torProxy/index.js`
+1. Renderer: `src/domains/web/web_module_torrent_tab.js`, `src/domains/web/web.js`, `src/domains/browser_host/aspect_embed/torrent-tab.js`
+2. Main: `main/domains/webTorrent/index.js`, `main/domains/torProxy/index.js`, `main/domains/torrentSearch/index.js`
 3. Preload: `preload/namespaces/web.js`
 4. Tools: `tools/fetch_tor.js`
 
+### Cross-Section (shared main domains)
+These main-process domains serve multiple sections:
+- `main/domains/shell/` — shell UI state
+- `main/domains/clipboard/` — clipboard operations
+- `main/domains/export/` — export functionality
+- `main/domains/files/` — file system operations
+- `main/domains/progress/` — cross-section progress tracking
+- `main/domains/seriesSettings/` — series metadata settings
+- `main/domains/thumbs/` — thumbnail generation
+- `main/domains/window/` — window management
+- `main/domains/folder_thumbs.js` — folder thumbnail logic
+- `main/domains/webPermissionPrompts.js` — permission prompt handling
+
 ## 8. Script-to-Responsibility Map
 
-1. `main.js`
-- Root integrated app entrypoint.
-- Delegates to `main/index.js` with `APP_ROOT`.
+### Entrypoints
+1. `main.js` — root integrated app entrypoint; delegates to `main/index.js` with `APP_ROOT`.
+2. `main/index.js` — window creation, app lifecycle, section query injection; reads `TANKOBAN_APP_SECTION` or `--app-section=`.
+3. `src/state/app_section_boot.js` — reads `?appSection=` and applies startup behavior.
+4. `packages/core-main/launch_section_app.js` — shared launcher for all `apps/*/main.js` entrypoints.
 
-2. `main/index.js`
-- Window creation, app lifecycle, section query injection.
-- Reads `TANKOBAN_APP_SECTION` or `--app-section=` for standalone boot.
+### Diagnostics and validation tools
+5. `tools/smoke_check.js` — main smoke check runner (`npm run smoke`).
+6. `tools/doctor.js` — environment diagnostics (`npm run doctor`).
+7. `tools/ipc_sync_check.js` — IPC channel sync verification (`npm run ipc:check`).
+8. `tools/repo_map.js` — repository structure map (`npm run map`).
+9. `tools/enforce_feature_boundaries.js` — feature package import boundary enforcement (`npm run boundaries:check`).
+10. `tools/fixture_manifest.js` — fixture file validation (`npm run fixtures:check`).
+11. `tools/ipc_contract_check.js` — IPC payload schema coverage (`npm run ipc:contracts`).
+12. `tools/section_smoke.js` — deterministic fast section-level smoke checks.
+13. `tools/section_test_harness.js` — runs section smoke + section-specific stable checks (`npm run test:sections`).
+14. `tools/impact_map.js` + `tools/impact_map.rules.json` — maps changed files to recommended checks; optional `--run` execution.
 
-3. `src/state/app_section_boot.js`
-- Reads `?appSection=` and applies startup behavior:
-  - `library`/`comic` -> comics mode.
-  - `book`/`audiobook` -> books mode.
-  - `video` -> videos mode.
-  - `browser` -> opens browser workspace.
-  - `torrent` -> opens torrent-focused browser workspace.
+### Code quality tools
+15. `tools/css_usage_check.js` — dead CSS detection.
+16. `tools/dead_export_check.js` — dead export detection.
+17. `tools/ipc_scaffold.js` — IPC channel scaffolding (`node tools/ipc_scaffold.js --channel NAME --namespace NS`).
+18. `tools/verify_renderer_load_order.js` — script load order validation.
 
-4. `packages/core-main/launch_section_app.js`
-- Shared launcher for all `apps/*/main.js` entrypoints.
-
-5. `tools/enforce_feature_boundaries.js`
-- Enforces feature package import boundaries.
-
-6. `tools/section_smoke.js`
-- Deterministic fast section-level smoke checks.
-
-7. `tools/section_test_harness.js`
-- Runs section smoke + section-specific stable checks.
-
-8. `tools/ipc_contract_check.js`
-- Verifies IPC payload schema coverage and fixture sample validation.
-
-9. `tools/impact_map.js` + `tools/impact_map.rules.json`
-- Maps changed files to recommended checks; optional `--run` execution.
-
-10. `tools/generate_agent_docs.js` + `tools/verify_agent_docs.js`
-- Keeps `CLAUDE.md` and `chatgpt.md` generated and synchronized from `docs/agent-map.source.md`.
+### Agent doc tools
+19. `tools/generate_agent_docs.js` + `tools/verify_agent_docs.js` — keeps `CLAUDE.md` and `chatgpt.md` generated and synchronized from `docs/agent-map.source.md`.
 
 ## 9. Forbidden Import Rules
 Enforce these rules during future refactors:
@@ -257,12 +271,13 @@ When modifying code:
 4. Run at minimum:
 - `npm run smoke`
 - targeted boot command(s) for touched section(s)
-5. Keep this file and `chatgpt.md` identical after structural changes.
+5. Keep `CLAUDE.md`, `chatgpt.md`, and `docs/agent-map.source.md` identical after structural changes.
 
 ## 11. Docs Policy
 Keep active docs minimal:
-1. `CLAUDE.md` (canonical map)
-2. `chatgpt.md` (must be identical to `CLAUDE.md`)
-3. `ARCHITECTURE.md` only if needed for supporting detail
-4. `docs/adr/*` for accepted architectural decisions
-5. Legal/compliance docs (for example `THIRD_PARTY_NOTICES.md`) must remain when required
+1. `CLAUDE.md` — canonical structural map (this file)
+2. `chatgpt.md` — must be identical to `CLAUDE.md`
+3. `agents.md` — deep architectural knowledge, patterns, debugging
+4. `docs/adr/*` — accepted architectural decisions
+5. `docs/ownership/*` — per-section ownership manifests
+6. Legal/compliance docs (e.g. `THIRD_PARTY_NOTICES.md`) must remain when required

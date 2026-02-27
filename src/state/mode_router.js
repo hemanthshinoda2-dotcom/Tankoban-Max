@@ -54,10 +54,6 @@
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
     if (webLibraryView) webLibraryView.classList.toggle('hidden', !isSources);
-    // Hide browser overlay on mode switch
-    var webBrowserView = qs('webBrowserView');
-    if (webBrowserView && !isSources) webBrowserView.classList.add('hidden');
-
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
