@@ -1538,6 +1538,7 @@ COMMON ANCHORS
               <div class="navItems">
                 <div id="webSourcesList" class="folderTree" role="list" aria-label="Bookmarked sources"></div>
                 <sl-button id="webAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+                <sl-button id="webTorrentProvidersBtn" class="navBtn" title="Configure Jackett/Prowlarr">Torrent Providers...</sl-button>
                 <sl-button id="webTipsBtn" class="navBtn" title="Keyboard shortcuts (K)">Tips</sl-button>
               </div>
             </div>
@@ -1571,6 +1572,7 @@ COMMON ANCHORS
             <div class="navSection navSectionUtility">
               <div class="navItems">
                 <sl-button id="webUtilityBtnSources" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
+                <sl-button id="webUtilityTorrentProvidersBtn" class="navBtn webUtilityBtn" title="Configure Jackett/Prowlarr">Providers</sl-button>
               </div>
             </div>
           </aside>
@@ -1631,11 +1633,91 @@ COMMON ANCHORS
                         <th>Torrent Name</th>
                         <th>Size</th>
                         <th>Download Speed</th>
-                        <th>Download % / Status</th>
+                        <th>Download %</th>
+                        <th>Status</th>
                       </tr>
                     </thead>
                     <tbody id="sourcesTorrentBody">
-                      <tr><td colspan="5" class="muted tiny">No torrents yet.</td></tr>
+                      <tr><td colspan="6" class="muted tiny">No torrents yet.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel sourcesBrowserPanel" id="sourcesBrowserPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">TankoBrowser</div>
+                </div>
+                <div class="sourcesBrowserToolbar">
+                  <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back" aria-label="Back">&#x2039;</button>
+                  <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward" aria-label="Forward">&#x203a;</button>
+                  <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload" aria-label="Reload">&#x21bb;</button>
+                  <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
+                  <button id="sourcesBrowserGoBtn" class="btn btn-sm sourcesBrowserIconBtn" type="button" title="Go" aria-label="Go">&#x27a4;</button>
+                  <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm" type="button">Bookmark</button>
+                  <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm" type="button">History</button>
+                </div>
+                <div id="sourcesBrowserStatus" class="muted tiny"></div>
+                <div class="sourcesBrowserViewport">
+                  <webview id="sourcesBrowserWebview"
+                    src="about:blank"
+                    partition="persist:webmode"
+                    allowpopups
+                    webpreferences="contextIsolation=yes"></webview>
+                </div>
+              </div>
+
+              <div id="sourcesBrowserHistoryOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="TankoBrowser history">
+                <div class="settingsCard">
+                  <div class="settingsTop">
+                    <div class="settingsTitle">TankoBrowser History</div>
+                    <button id="sourcesBrowserHistoryCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
+                  </div>
+                  <div class="settingsGroup">
+                    <input id="sourcesBrowserHistorySearchInput" class="search" type="text" placeholder="Search history..." autocomplete="off" />
+                  </div>
+                  <div class="settingsActions" style="justify-content:flex-start;">
+                    <button id="sourcesBrowserHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
+                  </div>
+                  <div class="sourcesSearchTableWrap">
+                    <table class="sourcesSearchTable">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>URL</th>
+                          <th>Visited</th>
+                        </tr>
+                      </thead>
+                      <tbody id="sourcesBrowserHistoryBody">
+                        <tr><td colspan="3" class="muted tiny">No history yet.</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel sourcesBrowserDownloadsPanel" id="sourcesBrowserDownloadsPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">TankoBrowser Downloads</div>
+                  <div class="panelActions">
+                    <button id="sourcesBrowserDownloadsClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+                  </div>
+                </div>
+                <div class="sourcesSearchTableWrap">
+                  <table id="sourcesBrowserDownloadsTable" class="sourcesSearchTable">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        <th>Download Name</th>
+                        <th>Size</th>
+                        <th>Download Speed</th>
+                        <th>Download %</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sourcesBrowserDownloadsBody">
+                      <tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>
                     </tbody>
                   </table>
                 </div>
@@ -1691,6 +1773,43 @@ COMMON ANCHORS
           </div>
           <div class="settingsActions">
             <button id="webSourceSaveBtn" class="btn">Add Source</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="webTorrentProvidersOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Configure torrent providers">
+        <div class="settingsCard">
+          <div class="settingsTop">
+            <div class="settingsTitle">Torrent Providers</div>
+            <button id="webTorrentProvidersClose" class="btn btn-ghost btn-sm" type="button">Close</button>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webTorrentProviderSelect">Active provider</label>
+            <select id="webTorrentProviderSelect" class="select">
+              <option value="jackett">Jackett</option>
+              <option value="prowlarr">Prowlarr</option>
+            </select>
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webJackettBaseUrl">Jackett base URL</label>
+            <input id="webJackettBaseUrl" class="search" type="url" placeholder="http://127.0.0.1:9117" autocomplete="off" />
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webJackettApiKey">Jackett API key</label>
+            <input id="webJackettApiKey" class="search" type="text" placeholder="Jackett API key" autocomplete="off" />
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webProwlarrBaseUrl">Prowlarr base URL</label>
+            <input id="webProwlarrBaseUrl" class="search" type="url" placeholder="http://127.0.0.1:9696" autocomplete="off" />
+          </div>
+          <div class="settingsGroup">
+            <label class="settingsLabel" for="webProwlarrApiKey">Prowlarr API key</label>
+            <input id="webProwlarrApiKey" class="search" type="text" placeholder="Prowlarr API key" autocomplete="off" />
+          </div>
+          <div class="settingsActions">
+            <button id="webProviderOpenJackettUiBtn" class="btn btn-ghost btn-sm" type="button">Open Jackett Web UI</button>
+            <button id="webProviderOpenProwlarrUiBtn" class="btn btn-ghost btn-sm" type="button">Open Prowlarr Web UI</button>
+            <button id="webTorrentProvidersSave" class="btn" type="button">Save</button>
           </div>
         </div>
       </div>
@@ -1982,7 +2101,7 @@ COMMON ANCHORS
             <div class="web-home-shell">
               <div id="web-home-search-title" class="web-home-title">Yandex Search</div>
               <form id="web-home-search-form" class="web-home-search" autocomplete="off">
-                <input id="web-home-search-input" type="text" placeholder="Search with Yandex or type a URL" spellcheck="false" autocomplete="off" autocapitalize="off" />
+                <input id="web-home-search-input" type="text" placeholder="Search with Google or type a URL" spellcheck="false" autocomplete="off" autocapitalize="off" />
                 <button type="submit" class="nav-btn web-home-search-btn" aria-label="Search">
                   <svg viewBox="0 0 16 16" width="15" height="15"><path d="M6.9 1.8a5.1 5.1 0 1 0 3.1 9.2l2.8 2.8a.7.7 0 0 0 1-1l-2.8-2.8a5.1 5.1 0 0 0-4.1-8.2zm0 1.4a3.7 3.7 0 1 1 0 7.4 3.7 3.7 0 0 1 0-7.4z" fill="currentColor"/></svg>
                 </button>

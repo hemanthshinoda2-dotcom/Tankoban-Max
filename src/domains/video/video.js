@@ -3837,6 +3837,7 @@ function ensureContinueEpisodesLoaded() {
       slabel.className = 'folderLabel';
       slabel.textContent = effectiveShowName(sh);
       if (isTorrentStreamableShow(sh)) appendTorrentSourceBadge(slabel, 'Stream');
+      if (isTorrentStreamableShow(sh)) appendTorrentSourceBadge(slabel, 'Stream');
 
       const epCount = getShowEpisodeCount(sh);
       const scount = document.createElement('span');
@@ -4129,9 +4130,7 @@ function getContinueVideos() {
     // Comics shows ONE concise label under the tile; Video file names are often noisy (fansub tags, codec info).
     // Keep the show title only to avoid congestion. (Do not affect click / resume behavior.)
     titleWrap.appendChild(title);
-    if (isTorrentStreamableShow(show) || isTorrentStreamableEpisode(ep)) {
-      appendTorrentSourceBadge(titleWrap, 'Stream');
-    }
+    if (isTorrentStreamableShow(show) || isTorrentStreamableEpisode(ep)) appendTorrentSourceBadge(cover, 'Streaming', 'videoSourceBadge--thumb');
     tile.appendChild(titleWrap);
 
     tile.onclick = () => safe(() => playViaShell(ep, withOpenReason(buildPlaybackOpts(ep, 'resume'), 'continue_tile')));
@@ -4293,6 +4292,24 @@ function getContinueVideos() {
     const sid = show && show.id ? String(show.id) : '';
     const dn = sid && state.videoDisplayNames[sid];
     return dn || prettyShowName(show);
+  }
+
+  function isTorrentStreamableShow(show) {
+    return !!(show && (show.torrentStreamable === true || String(show.sourceKind || '') === 'torrent_stream'));
+  }
+
+  function isTorrentStreamableEpisode(ep) {
+    return !!(ep && (ep.torrentStreamable === true || String(ep.sourceKind || '') === 'torrent_stream'));
+  }
+
+  function appendTorrentSourceBadge(parent, labelText, className) {
+    if (!parent) return;
+    const tag = document.createElement('span');
+    tag.className = 'videoSourceBadge';
+    if (className) tag.classList.add(className);
+    tag.textContent = labelText || 'Stream';
+    tag.title = 'Torrent-backed streamable item';
+    parent.appendChild(tag);
   }
 
   function isTorrentStreamableShow(show) {
@@ -5637,11 +5654,12 @@ function getEpisodeById(epId){
 
     thumbWrap.appendChild(img);
     coverWrap.appendChild(thumbWrap);
+    if (isTorrentStreamableShow(show)) appendTorrentSourceBadge(coverWrap, 'Streaming', 'videoSourceBadge--thumb');
+    if (isTorrentStreamableShow(show)) appendTorrentSourceBadge(coverWrap, 'Streaming', 'videoSourceBadge--thumb');
 
     const name = document.createElement('div');
     name.className = 'seriesName';
     name.textContent = effectiveShowName(show);
-    if (isTorrentStreamableShow(show)) appendTorrentSourceBadge(name, 'Stream');
     const sid = String(show?.id || '');
     const epCount = Number(state.showEpisodeCount?.get?.(sid) || 0) || (state.episodesByShowId?.get?.(sid) || []).length;
     const pr = showProgressForShowId(sid);

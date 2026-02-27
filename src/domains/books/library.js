@@ -134,6 +134,7 @@ SECTION INDEX (search: ══════ SECTION:)
     // FEAT-AUDIOBOOK: audiobook library state
     audiobookSnap: { audiobooks: [], audiobookRootFolders: [], scanning: false },
     audiobookProgressAll: {},
+    audiobookPairingsByBookId: {},
 
     ui: {
       selectedRootId: null,
@@ -826,6 +827,185 @@ function getBookProgress(bookId) {
     } catch {}
   }
 
+  async function loadAudiobookPairings() {
+    if (!api.audiobooks || typeof api.audiobooks.getPairingAll !== 'function') {
+      state.audiobookPairingsByBookId = {};
+      return;
+    }
+    try {
+      var all = await api.audiobooks.getPairingAll();
+      state.audiobookPairingsByBookId = (all && typeof all === 'object') ? all : {};
+    } catch {
+      state.audiobookPairingsByBookId = {};
+    }
+  }
+
+  function getPairedBookIdsForAudiobook(audiobookId) {
+    var abId = String(audiobookId || '');
+    if (!abId) return [];
+    var all = state.audiobookPairingsByBookId && typeof state.audiobookPairingsByBookId === 'object'
+      ? state.audiobookPairingsByBookId
+      : {};
+    var out = [];
+    var keys = Object.keys(all);
+    for (var i = 0; i < keys.length; i++) {
+      var bookId = String(keys[i] || '');
+      var p = all[bookId] || {};
+      if (String(p.audiobookId || '') === abId) out.push(bookId);
+    }
+    return out;
+  }
+
+  function isEpubBook(book) {
+    if (!book) return false;
+    var p = String(book.path || '').toLowerCase();
+    if (p.endsWith('.epub')) return true;
+    var t = String(book.title || '').toLowerCase();
+    return /\.epub$/.test(t);
+  }
+
+  function ensureAudiobookPairOverlay() {
+    var existing = qs('booksAbPairOverlay');
+    if (existing) return existing;
+
+    var overlay = document.createElement('div');
+    overlay.id = 'booksAbPairOverlay';
+    overlay.className = 'settingsOverlay hidden';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+    overlay.setAttribute('aria-label', 'Pair audiobook with book');
+    overlay.innerHTML = ''
+      + '<div class="settingsCard">'
+      +   '<div class="settingsTop">'
+      +     '<div id="booksAbPairTitle" class="settingsTitle">Pair with a book</div>'
+      +     '<button id="booksAbPairClose" class="btn btn-ghost btn-sm" type="button">Close</button>'
+      +   '</div>'
+      +   '<div class="settingsGroup">'
+      +     '<div class="muted tiny">Choose an .epub from your library. Books are grouped by folder.</div>'
+      +   '</div>'
+      +   '<div id="booksAbPairList" class="folderTree" style="max-height:52vh;overflow:auto;border:1px solid var(--vx-border,#3a3a3a);border-radius:10px;padding:8px;"></div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+
+    var closeBtn = qs('booksAbPairClose');
+    if (closeBtn) closeBtn.addEventListener('click', function () {
+      overlay.classList.add('hidden');
+      overlay.dataset.audiobookId = '';
+    });
+    overlay.addEventListener('click', function (ev) {
+      if (ev.target === overlay) {
+        overlay.classList.add('hidden');
+        overlay.dataset.audiobookId = '';
+      }
+    });
+
+    return overlay;
+  }
+
+  function renderAudiobookPairOverlayRows(audiobook) {
+    var list = qs('booksAbPairList');
+    var titleEl = qs('booksAbPairTitle');
+    if (!list) return;
+    if (titleEl) titleEl.textContent = 'Pair "' + String((audiobook && audiobook.title) || 'Audiobook') + '" with a book';
+
+    var html = '';
+    var shows = (state.derived.shows || []).slice().sort(function (a, b) {
+      return naturalCompare(effectiveShowName(a), effectiveShowName(b));
+    });
+
+    var totalRows = 0;
+    for (var i = 0; i < shows.length; i++) {
+      var show = shows[i];
+      var books = (state.derived.booksByShow.get(String(show && show.id || '')) || []).filter(isEpubBook);
+      if (!books.length) continue;
+      books.sort(function (a, b) { return naturalCompare(effectiveTitle(a), effectiveTitle(b)); });
+      html += '<div class="folderItem" style="font-weight:700;pointer-events:none;opacity:.9;">' + escHtml(effectiveShowName(show)) + '</div>';
+      for (var j = 0; j < books.length; j++) {
+        var b = books[j] || {};
+        html += '<button type="button" class="folderItem folderChild" data-abpair-book-id="' + escHtml(String(b.id || '')) + '">'
+          + '<span class="folderIcon"></span>'
+          + '<span class="folderLabel">' + escHtml(effectiveTitle(b)) + '</span>'
+          + '<span class="folderCount">.epub</span>'
+          + '</button>';
+        totalRows += 1;
+      }
+    }
+
+    if (!totalRows) {
+      html = '<div class="muted tiny" style="padding:8px;">No .epub books found in library.</div>';
+    }
+    list.innerHTML = html;
+  }
+
+  async function pairAudiobookWithBook(audiobook, bookId) {
+    var ab = audiobook || null;
+    var bid = String(bookId || '');
+    if (!ab || !ab.id || !bid || !api.audiobooks || typeof api.audiobooks.savePairing !== 'function') return;
+
+    var book = state.derived.bookById.get(bid) || state.derived.bookById.get(normalizePathKey(bid)) || null;
+    var pairing = {
+      bookId: bid,
+      audiobookId: String(ab.id),
+      mappings: [],
+      updatedAt: Date.now(),
+    };
+    var res = await api.audiobooks.savePairing(bid, pairing);
+    if (!res || res.ok === false) {
+      toast('Failed to pair audiobook');
+      return;
+    }
+    state.audiobookPairingsByBookId[bid] = pairing;
+    var overlay = qs('booksAbPairOverlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+      overlay.dataset.audiobookId = '';
+    }
+    toast('Paired with "' + String((book && effectiveTitle(book)) || 'book') + '"');
+  }
+
+  function openPairAudiobookWithBookOverlay(audiobook) {
+    if (!audiobook || !audiobook.id) return;
+    var overlay = ensureAudiobookPairOverlay();
+    overlay.dataset.audiobookId = String(audiobook.id);
+    renderAudiobookPairOverlayRows(audiobook);
+    overlay.classList.remove('hidden');
+
+    var list = qs('booksAbPairList');
+    if (!list) return;
+    list.onclick = function (ev) {
+      var row = ev.target && ev.target.closest ? ev.target.closest('[data-abpair-book-id]') : null;
+      if (!row) return;
+      var bid = String(row.getAttribute('data-abpair-book-id') || '');
+      if (!bid) return;
+      pairAudiobookWithBook(audiobook, bid).catch(function () {
+        toast('Failed to pair audiobook');
+      });
+    };
+  }
+
+  async function unpairAudiobookFromBooks(audiobook) {
+    var ab = audiobook || null;
+    if (!ab || !ab.id || !api.audiobooks || typeof api.audiobooks.deletePairing !== 'function') return;
+    var ids = getPairedBookIdsForAudiobook(ab.id);
+    if (!ids.length) {
+      toast('No paired book');
+      return;
+    }
+    var ok = window.confirm('Unpair "' + String(ab.title || 'audiobook') + '" from ' + ids.length + ' book(s)?');
+    if (!ok) return;
+    var done = 0;
+    for (var i = 0; i < ids.length; i++) {
+      var bid = ids[i];
+      // eslint-disable-next-line no-await-in-loop
+      var res = await api.audiobooks.deletePairing(bid);
+      if (res && res.ok !== false) {
+        delete state.audiobookPairingsByBookId[bid];
+        done += 1;
+      }
+    }
+    toast(done > 0 ? ('Unpaired from ' + done + ' book(s)') : 'Unpair failed');
+  }
+
   function applyAudiobookSnapshot(snap) {
     var s = snap && typeof snap === 'object' ? snap : {};
     state.audiobookSnap = {
@@ -929,6 +1109,14 @@ function getBookProgress(bookId) {
         bar.appendChild(fill);
         coverWrap.appendChild(bar);
       }
+    }
+
+    if (getPairedBookIdsForAudiobook(ab.id).length > 0) {
+      var pairedBadge = document.createElement('span');
+      pairedBadge.className = 'abPairedBookBadge';
+      pairedBadge.textContent = 'Paired Book';
+      pairedBadge.title = 'This audiobook is paired with one or more books';
+      coverWrap.appendChild(pairedBadge);
     }
 
     var name = document.createElement('div');
@@ -1179,6 +1367,9 @@ function getBookProgress(bookId) {
 
         row.addEventListener('click', function () {
           openAudiobook(ab);
+        });
+        row.addEventListener('contextmenu', function (e) {
+          openAudiobookTileContextMenu(e, ab);
         });
 
         el.audiobookFoldersList.appendChild(row);
@@ -1898,11 +2089,15 @@ function getBookProgress(bookId) {
     if (!ab) return;
     var prog = state.audiobookProgressAll[ab.id] || null;
     var hasProgress = !!(prog && (prog.chapterIndex > 0 || prog.position > 0));
+    var pairedCount = getPairedBookIdsForAudiobook(ab.id).length;
     showCtx({
       x: e.clientX,
       y: e.clientY,
       items: [
         { label: 'Open', onClick: function () { openAudiobook(ab); } },
+        { label: 'Pair with a book', onClick: function () { openPairAudiobookWithBookOverlay(ab); } },
+        { label: 'Unpair with book', disabled: pairedCount <= 0, onClick: function () { unpairAudiobookFromBooks(ab).catch(function () {}); } },
+        { separator: true },
         { label: 'In-reader only', onClick: function () {
           toast('Open the paired book to use the audiobook player while reading');
         }},

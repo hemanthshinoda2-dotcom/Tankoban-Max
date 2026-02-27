@@ -6,7 +6,16 @@
     else fn();
   }
 
+  function legacyEmbedEnabled() {
+    try {
+      var params = new URLSearchParams((window.location && window.location.search) || '');
+      if (params.get('legacyBrowser') === '1' || params.get('legacyEmbed') === '1') return true;
+    } catch (_e) {}
+    return false;
+  }
+
   onReady(function init(){
+    if (!legacyEmbedEnabled()) return;
     var tanko = (window.Tanko = window.Tanko || {});
     if (!tanko.browserHost || typeof tanko.browserHost.registerAdapter !== 'function') return;
 

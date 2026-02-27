@@ -608,6 +608,125 @@ scheduleToastBottomOffsetSync();
     hideContextMenu();
   }, true);
 
+  function isLibrariesOnlyContextActive() {
+    try {
+      if (document.body.classList.contains('inPlayer') || document.body.classList.contains('inVideoPlayer')) return false;
+      const webBrowserView = document.getElementById('webBrowserView');
+      if (webBrowserView && !webBrowserView.classList.contains('hidden')) return false;
+      const router = window.Tanko && window.Tanko.modeRouter;
+      const mode = router && typeof router.getMode === 'function' ? String(router.getMode() || '').toLowerCase() : '';
+      return mode === 'comics' || mode === 'books' || mode === 'videos' || mode === 'sources';
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function getEditableTarget(node) {
+    try {
+      if (!node || !node.closest) return null;
+      return node.closest('input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, [contenteditable="true"]');
+    } catch (_e) {
+      return null;
+    }
+  }
+
+  function getCurrentSelectionText() {
+    try {
+      const sel = window.getSelection ? window.getSelection() : null;
+      const text = sel ? String(sel.toString() || '') : '';
+      return text.trim();
+    } catch (_e) {
+      return '';
+    }
+  }
+
+  function copyTextToClipboard(text) {
+    const s = String(text || '');
+    if (!s) return;
+    try {
+      if (window.Tanko && window.Tanko.api && window.Tanko.api.clipboard && typeof window.Tanko.api.clipboard.copyText === 'function') {
+        window.Tanko.api.clipboard.copyText(s).catch(function () {});
+        return;
+      }
+    } catch (_e) {}
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(s).catch(function () {});
+      }
+    } catch (_e) {}
+  }
+
+  function readTextFromClipboard() {
+    return new Promise(function (resolve) {
+      try {
+        if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+          navigator.clipboard.readText().then(function (txt) {
+            resolve(String(txt || ''));
+          }).catch(function () { resolve(''); });
+          return;
+        }
+      } catch (_e) {}
+      resolve('');
+    });
+  }
+
+  function insertTextIntoEditable(target, text) {
+    const clip = String(text || '');
+    if (!target || !clip) return;
+    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+    if (isInput) {
+      const start = Number.isFinite(target.selectionStart) ? target.selectionStart : target.value.length;
+      const end = Number.isFinite(target.selectionEnd) ? target.selectionEnd : start;
+      const val = String(target.value || '');
+      target.value = val.slice(0, start) + clip + val.slice(end);
+      const next = start + clip.length;
+      try { target.setSelectionRange(next, next); } catch (_e) {}
+      try { target.dispatchEvent(new Event('input', { bubbles: true })); } catch (_e) {}
+      return;
+    }
+    try {
+      target.focus();
+      if (typeof document.execCommand === 'function') {
+        document.execCommand('insertText', false, clip);
+      }
+    } catch (_e) {}
+  }
+
+  // Libraries-only generic text copy/paste context menu.
+  document.addEventListener('contextmenu', function (e) {
+    if (!isLibrariesOnlyContextActive()) return;
+    if (isContextMenuOpen() && el.contextMenu && el.contextMenu.contains(e.target)) return;
+
+    const editable = getEditableTarget(e.target);
+    const selectedText = getCurrentSelectionText();
+    const hasSelection = !!selectedText;
+    if (!editable && !hasSelection) return;
+
+    const items = [];
+    if (hasSelection) {
+      items.push({
+        label: 'Copy',
+        onClick: function () { copyTextToClipboard(selectedText); }
+      });
+    }
+    if (editable) {
+      items.push({
+        label: 'Paste',
+        onClick: function () {
+          readTextFromClipboard().then(function (txt) {
+            if (!txt) return;
+            insertTextIntoEditable(editable, txt);
+          });
+        }
+      });
+    }
+    if (!items.length) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    showContextMenu({ x: e.clientX, y: e.clientY, items: items });
+  }, true);
+
 
 // ══════ SECTION: Image Metrics & Scaling ══════
 

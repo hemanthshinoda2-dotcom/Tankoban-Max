@@ -752,6 +752,9 @@ async function setDestination(ctx, _evt, payload) {
   var entry = rec.entry;
 
   var dest = String(payload && payload.destinationRoot || '').trim();
+  if (!dest) {
+    try { dest = require('electron').app.getPath('downloads'); } catch {}
+  }
   if (!dest) return { ok: false, error: 'Destination folder required' };
   var absRoot = '';
   try { absRoot = path.resolve(dest); } catch {}

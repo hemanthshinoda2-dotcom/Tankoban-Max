@@ -334,6 +334,7 @@
       if (fileSummary) fileSummary.textContent = '';
       if (okBtn) okBtn.disabled = true;
       if (streamBtn) streamBtn.disabled = true;
+      if (streamBtn) streamBtn.disabled = true;
       var seqCb = container.querySelector('#tt-add-sequential');
       if (seqCb) seqCb.checked = true;
 
@@ -364,6 +365,7 @@
       var filesList = container.querySelector('#tt-add-files-list');
       var fileSummary = container.querySelector('#tt-add-file-summary');
       var okBtn = container.querySelector('#tt-add-ok');
+      var streamBtn = container.querySelector('#tt-add-stream-lib');
       var streamBtn = container.querySelector('#tt-add-stream-lib');
 
       if (currentResolveId) {
@@ -541,6 +543,38 @@
         currentResolveId = null;
         resolvedFiles = null;
         overlay.classList.remove('visible');
+      });
+
+      overlay.querySelector('#tt-add-stream-lib').addEventListener('click', function () {
+        if (!currentResolveId) return;
+        var streamBtn = overlay.querySelector('#tt-add-stream-lib');
+        var downloadBtn = overlay.querySelector('#tt-add-ok');
+        if (streamBtn) streamBtn.disabled = true;
+        if (downloadBtn) downloadBtn.disabled = true;
+
+        api.webTorrent.startConfigured({
+          resolveId: currentResolveId,
+          streamableOnly: true
+        }).then(function (started) {
+          if (!started || !started.ok || !started.id) throw new Error((started && started.error) || 'Failed to start torrent');
+          return waitForMetadataReady(started.id, 30000).then(function (ready) {
+            if (!ready) throw new Error('Torrent metadata did not become ready in time');
+            return api.webTorrent.addToVideoLibrary({
+              id: started.id,
+              destinationRoot: savePath || undefined,
+              streamable: true
+            });
+          });
+        }).then(function (res) {
+          if (!res || !res.ok) throw new Error((res && res.error) || 'Failed to add streamable folder');
+          currentResolveId = null;
+          resolvedFiles = null;
+          overlay.classList.remove('visible');
+        }).catch(function (err) {
+          try { console.warn('Add Streamable Folder failed:', err); } catch {}
+          if (streamBtn) streamBtn.disabled = !currentResolveId;
+          if (downloadBtn) downloadBtn.disabled = !currentResolveId;
+        });
       });
 
       overlay.querySelector('#tt-add-stream-lib').addEventListener('click', function () {

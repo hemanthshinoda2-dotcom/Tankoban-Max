@@ -116,6 +116,8 @@
     homeDlEmpty:    qs('webHomeDownloadsEmpty'),
     homeDlClearBtn: qs('webHomeDownloadsClear'),
     addSourceBtn:   qs('webAddSourceBtn'),
+    torrentProvidersBtn: qs('webTorrentProvidersBtn'),
+    utilityTorrentProvidersBtn: qs('webUtilityTorrentProvidersBtn'),
     downloadStatus: qs('webDownloadStatus'),
     sidebarDlRow:   qs('webDownloadProgressRow'),
     sidebarDlFill:  qs('webDownloadProgressFill'),
@@ -131,6 +133,16 @@
     sourceName:       qs('webSourceName'),
     sourceUrl:        qs('webSourceUrl'),
     sourceSaveBtn:    qs('webSourceSaveBtn'),
+    torrentProvidersOverlay: qs('webTorrentProvidersOverlay'),
+    torrentProvidersClose: qs('webTorrentProvidersClose'),
+    torrentProvidersSave: qs('webTorrentProvidersSave'),
+    torrentProviderSelect: qs('webTorrentProviderSelect'),
+    jackettBaseUrl: qs('webJackettBaseUrl'),
+    jackettApiKey: qs('webJackettApiKey'),
+    prowlarrBaseUrl: qs('webProwlarrBaseUrl'),
+    prowlarrApiKey: qs('webProwlarrApiKey'),
+    providerOpenJackettUiBtn: qs('webProviderOpenJackettUiBtn'),
+    providerOpenProwlarrUiBtn: qs('webProviderOpenProwlarrUiBtn'),
 
     // Settings hub elements
     hubSourcesList:  qs('webHubSourcesList'),
@@ -227,6 +239,23 @@
     sourcesSearchView: qs('sourcesSearchView'),
     sourcesDownloadsView: qs('sourcesDownloadsView'),
     sourcesTorrentBody: qs('sourcesTorrentBody'),
+    sourcesBrowserPanel: qs('sourcesBrowserPanel'),
+    sourcesBrowserBackBtn: qs('sourcesBrowserBackBtn'),
+    sourcesBrowserForwardBtn: qs('sourcesBrowserForwardBtn'),
+    sourcesBrowserReloadBtn: qs('sourcesBrowserReloadBtn'),
+    sourcesBrowserUrlInput: qs('sourcesBrowserUrlInput'),
+    sourcesBrowserGoBtn: qs('sourcesBrowserGoBtn'),
+    sourcesBrowserBookmarkBtn: qs('sourcesBrowserBookmarkBtn'),
+    sourcesBrowserHistoryBtn: qs('sourcesBrowserHistoryBtn'),
+    sourcesBrowserStatus: qs('sourcesBrowserStatus'),
+    sourcesBrowserWebview: qs('sourcesBrowserWebview'),
+    sourcesBrowserHistoryOverlay: qs('sourcesBrowserHistoryOverlay'),
+    sourcesBrowserHistoryCloseBtn: qs('sourcesBrowserHistoryCloseBtn'),
+    sourcesBrowserHistoryClearBtn: qs('sourcesBrowserHistoryClearBtn'),
+    sourcesBrowserHistorySearchInput: qs('sourcesBrowserHistorySearchInput'),
+    sourcesBrowserHistoryBody: qs('sourcesBrowserHistoryBody'),
+    sourcesBrowserDownloadsBody: qs('sourcesBrowserDownloadsBody'),
+    sourcesBrowserDownloadsClearBtn: qs('sourcesBrowserDownloadsClearBtn'),
 
     // Save-to-library flow
     sourcesSaveOverlay: qs('sourcesSaveFlowOverlay'),
@@ -251,6 +280,13 @@
   // ── Shared state ──
 
   var MAX_BROWSING_HISTORY_UI = 500;
+  function readLegacyOverlayBrowserFlag() {
+    try {
+      var params = new URLSearchParams((window.location && window.location.search) || '');
+      if (params.get('legacyBrowser') === '1' || params.get('legacyEmbed') === '1') return true;
+    } catch (_e) {}
+    return false;
+  }
 
   var state = {
     sources: [],
@@ -271,7 +307,7 @@
     ctxOpen: false,
     showBrowserHome: false,
     browserSettings: {
-      defaultSearchEngine: 'yandex',
+      defaultSearchEngine: 'google',
       parityV1Enabled: true,
       adblockEnabled: true,
       restoreLastSession: true,
@@ -280,7 +316,12 @@
       downloads: { behavior: 'ask', folderModeHint: true },
       sourcesMinimalTorrentV1: false,
       sourcesLastDestinationByCategory: { comics: '', books: '', videos: '' },
+      sourcesBrowser: { expandedByDefault: true, lastUrl: '' },
       privacy: { doNotTrack: false, clearOnExit: { history: false, downloads: false, cookies: false, cache: false } }
+      ,
+      jackett: { baseUrl: '', apiKey: '', indexer: 'all', timeoutMs: 30000, indexersByCategory: { all: 'all', comics: 'all', books: 'all', tv: 'all' } },
+      prowlarr: { baseUrl: '', apiKey: '', indexer: 'all', timeoutMs: 30000, indexersByCategory: { all: 'all', comics: 'all', books: 'all', tv: 'all' } },
+      torrentSearch: { provider: 'jackett' }
     },
     torActive: false,
     torConnecting: false,
@@ -334,6 +375,19 @@
     lastSaveCategory: 'comics',
     hiddenSourceTorrentIds: {},
     destinationRoots: { books: null, comics: null, videos: null, allBooks: [], allComics: [], allVideos: [] },
+    useLegacyOverlayBrowser: readLegacyOverlayBrowserFlag(),
+    sourcesBrowserBound: false,
+    sourcesBrowserLoading: false,
+    sourcesBrowserUrl: '',
+    sourcesBrowserBookmarked: false,
+    sourcesBrowserLayoutRaf: 0,
+    sourcesBrowserRenderRecovered: false,
+    sourcesBrowserRenderWatchdogTimer: 0,
+    sourcesBrowserOverlayLocked: false,
+    sourcesBrowserLoadSettleTimer: 0,
+    sourcesBrowserNavPollTimer: 0,
+    sourcesBrowserResizeObserver: null,
+    sourcesBrowserHistoryRows: [],
   };
 
   // ── Event bus ──
@@ -490,6 +544,551 @@
     if (!router || typeof router.getMode !== 'function') return false;
     var mode = String(router.getMode() || '').toLowerCase();
     return mode === 'sources' || mode === 'web';
+  }
+
+  function getSourcesBrowserWebview() {
+    return el.sourcesBrowserWebview || null;
+  }
+
+  function getSourcesBrowserDownloadsList() {
+    if (Array.isArray(state.downloads)) {
+      return state.downloads.filter(function (d) { return !!d; });
+    }
+    if (!state.downloads || typeof state.downloads !== 'object') return [];
+    var out = [];
+    var keys = Object.keys(state.downloads);
+    for (var i = 0; i < keys.length; i++) {
+      var d = state.downloads[keys[i]];
+      if (d) out.push(d);
+    }
+    return out;
+  }
+
+  function formatSpeedForSources(bytesPerSec) {
+    var n = Number(bytesPerSec || 0);
+    if (!isFinite(n) || n <= 0) return '-';
+    return formatBytesForSources(n) + '/s';
+  }
+
+  function getSourcesBrowserStartUrl() {
+    return 'https://www.google.com/';
+  }
+
+  function setSourcesBrowserStatus(text, loading) {
+    if (!el.sourcesBrowserStatus) return;
+    el.sourcesBrowserStatus.textContent = String(text || '');
+    el.sourcesBrowserStatus.setAttribute('data-loading', loading ? '1' : '0');
+  }
+
+  function setSourcesBrowserBookmarkUi(isBookmarked) {
+    state.sourcesBrowserBookmarked = !!isBookmarked;
+    if (!el.sourcesBrowserBookmarkBtn) return;
+    el.sourcesBrowserBookmarkBtn.textContent = isBookmarked ? 'Bookmarked' : 'Bookmark';
+    el.sourcesBrowserBookmarkBtn.classList.toggle('btn', true);
+    el.sourcesBrowserBookmarkBtn.classList.toggle('btn-ghost', !isBookmarked);
+  }
+
+  function refreshSourcesBrowserBookmarkUi(url) {
+    var target = String(url || state.sourcesBrowserUrl || '').trim();
+    if (!target) {
+      setSourcesBrowserBookmarkUi(false);
+      return;
+    }
+    if (api.webBookmarks && typeof api.webBookmarks.list === 'function') {
+      api.webBookmarks.list().then(function (res) {
+        var rows = (res && res.ok && Array.isArray(res.bookmarks)) ? res.bookmarks : [];
+        state.bookmarks = rows;
+        var found = false;
+        for (var i = 0; i < rows.length; i++) {
+          if (String(rows[i] && rows[i].url || '').trim() === target) { found = true; break; }
+        }
+        setSourcesBrowserBookmarkUi(found);
+      }).catch(function () {
+        setSourcesBrowserBookmarkUi(false);
+      });
+      return;
+    }
+    setSourcesBrowserBookmarkUi(false);
+  }
+
+  function normalizeSourcesBrowserInput(raw) {
+    var input = String(raw || '').trim();
+    if (!input) return '';
+    if (/^about:?blank$/i.test(input)) return getSourcesBrowserStartUrl();
+    if (/^about:/i.test(input)) return input;
+    if (/^(https?:\/\/|magnet:)/i.test(input)) return input;
+    if (/^[a-z0-9-]+\.[a-z0-9.-]+(\/.*)?$/i.test(input)) return 'https://' + input;
+    return 'https://www.google.com/search?q=' + encodeURIComponent(input);
+  }
+
+  function persistSourcesBrowserLastUrl(url) {
+    var target = String(url || '').trim();
+    if (!target) return;
+    saveBrowserSettings({ sourcesBrowser: { lastUrl: target } });
+  }
+
+  function refreshSourcesBrowserNav() {
+    var wv = getSourcesBrowserWebview();
+    if (!wv) return;
+    try {
+      if (typeof wv.isLoading === 'function') state.sourcesBrowserLoading = !!wv.isLoading();
+    } catch (_e0) {}
+    if (el.sourcesBrowserBackBtn) {
+      try { el.sourcesBrowserBackBtn.disabled = !wv.canGoBack(); } catch (_e) { el.sourcesBrowserBackBtn.disabled = true; }
+    }
+    if (el.sourcesBrowserForwardBtn) {
+      try { el.sourcesBrowserForwardBtn.disabled = !wv.canGoForward(); } catch (_e2) { el.sourcesBrowserForwardBtn.disabled = true; }
+    }
+    if (el.sourcesBrowserReloadBtn) {
+      el.sourcesBrowserReloadBtn.classList.toggle('isLoading', !!state.sourcesBrowserLoading);
+      if (state.sourcesBrowserLoading) {
+        el.sourcesBrowserReloadBtn.innerHTML = '';
+        el.sourcesBrowserReloadBtn.title = 'Stop loading';
+        el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Stop loading');
+      } else {
+        el.sourcesBrowserReloadBtn.innerHTML = '&#x21bb;';
+        el.sourcesBrowserReloadBtn.title = 'Reload';
+        el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Reload');
+      }
+    }
+  }
+
+  function applySourcesBrowserViewportLayout() {
+    var wv = getSourcesBrowserWebview();
+    var viewport = wv && wv.parentElement;
+    if (!wv || !viewport || !document.body.contains(viewport)) return;
+    var rect = null;
+    try { rect = viewport.getBoundingClientRect(); } catch (_e0) { rect = null; }
+    var vw = Math.max(0, Math.round(Number(rect && rect.width) || Number(viewport.clientWidth) || 0));
+    var vh = Math.max(0, Math.round(Number(rect && rect.height) || Number(viewport.clientHeight) || 0));
+    var visible = !viewport.classList.contains('hidden')
+      && !!(el.webLibraryView && !el.webLibraryView.classList.contains('hidden'));
+    var interactive = visible && !state.sourcesBrowserOverlayLocked;
+    wv.style.visibility = visible ? 'visible' : 'hidden';
+    wv.style.pointerEvents = interactive ? 'auto' : 'none';
+    wv.style.position = 'absolute';
+    // Use absolute insets so the guest surface always fills parent bounds.
+    // Avoid forcing width/height pixels, which can get stuck stale.
+    wv.style.display = 'flex';
+    wv.style.left = '0px';
+    wv.style.top = '0px';
+    wv.style.right = '0px';
+    wv.style.bottom = '0px';
+    wv.style.removeProperty('width');
+    wv.style.removeProperty('height');
+    wv.style.borderRadius = '8px';
+    wv.style.zIndex = '1';
+    try {
+      wv.removeAttribute('minwidth');
+      wv.removeAttribute('maxwidth');
+      wv.removeAttribute('minheight');
+      wv.removeAttribute('maxheight');
+    } catch (_eAttr) {}
+    if (vw < 8 || vh < 8) {
+      wv.style.visibility = 'hidden';
+      wv.style.pointerEvents = 'none';
+    }
+  }
+
+  function scheduleSourcesBrowserViewportLayout() {
+    if (state.sourcesBrowserLayoutRaf) return;
+    state.sourcesBrowserLayoutRaf = requestAnimationFrame(function () {
+      state.sourcesBrowserLayoutRaf = 0;
+      applySourcesBrowserViewportLayout();
+    });
+  }
+
+  function scheduleSourcesBrowserRepaintKick() {
+    var wv = getSourcesBrowserWebview();
+    var viewport = wv && wv.parentElement;
+    if (!wv || !viewport) return;
+    scheduleSourcesBrowserViewportLayout();
+  }
+
+  function runSourcesBrowserRenderWatchdog() {
+    // Keep deterministic one-pass sizing only; no timer-based reattach/reflow.
+    scheduleSourcesBrowserViewportLayout();
+  }
+
+  function scheduleSourcesBrowserLoadingSettleCheck() {
+    var wv = getSourcesBrowserWebview();
+    if (!wv) return;
+    if (state.sourcesBrowserLoadSettleTimer) {
+      try { clearTimeout(state.sourcesBrowserLoadSettleTimer); } catch (_e) {}
+      state.sourcesBrowserLoadSettleTimer = 0;
+    }
+    var attempts = 0;
+    function tick() {
+      attempts++;
+      var loading = false;
+      try { loading = !!(typeof wv.isLoading === 'function' && wv.isLoading()); } catch (_e2) { loading = false; }
+      if (!loading) {
+        state.sourcesBrowserLoading = false;
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
+        state.sourcesBrowserLoadSettleTimer = 0;
+        return;
+      }
+      if (attempts >= 8) {
+        // Safety stop to avoid indefinite spinner when engine events are missed.
+        state.sourcesBrowserLoading = false;
+        refreshSourcesBrowserNav();
+        setSourcesBrowserStatus(String(state.sourcesBrowserUrl || 'Ready'), false);
+        state.sourcesBrowserLoadSettleTimer = 0;
+        return;
+      }
+      state.sourcesBrowserLoadSettleTimer = setTimeout(tick, 450);
+    }
+    state.sourcesBrowserLoadSettleTimer = setTimeout(tick, 500);
+  }
+
+  function navigateSourcesBrowser(raw, opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var wv = getSourcesBrowserWebview();
+    if (!wv) return false;
+    var target = normalizeSourcesBrowserInput(raw);
+    if (!target) return false;
+    if (target === 'about:blank') target = getSourcesBrowserStartUrl();
+    state.sourcesBrowserUrl = target;
+    if (el.sourcesBrowserUrlInput && !options.keepInput) el.sourcesBrowserUrlInput.value = target;
+    try {
+      wv.loadURL(target);
+      setSourcesBrowserStatus('Loading...', true);
+      scheduleSourcesBrowserViewportLayout();
+      if (options.persist !== false) persistSourcesBrowserLastUrl(target);
+      if (options.focus && typeof wv.focus === 'function') {
+        setTimeout(function () {
+          try { wv.focus(); } catch (_focusErr) {}
+        }, 0);
+      }
+      return true;
+    } catch (_e) {
+      setSourcesBrowserStatus('Failed to load URL', false);
+      return false;
+    }
+  }
+
+  function renderSourcesBrowserHistoryRows(query) {
+    if (!el.sourcesBrowserHistoryBody) return;
+    var q = String(query || '').trim().toLowerCase();
+    var rows = Array.isArray(state.sourcesBrowserHistoryRows) ? state.sourcesBrowserHistoryRows.slice() : [];
+    if (q) {
+      rows = rows.filter(function (r) {
+        var t = String(r && r.title || '').toLowerCase();
+        var u = String(r && r.url || '').toLowerCase();
+        return t.indexOf(q) !== -1 || u.indexOf(q) !== -1;
+      });
+    }
+    rows.sort(function (a, b) { return Number(b && b.visitedAt || 0) - Number(a && a.visitedAt || 0); });
+    var html = '';
+    for (var i = 0; i < Math.min(rows.length, 200); i++) {
+      var r = rows[i] || {};
+      var when = '';
+      try { when = new Date(Number(r.visitedAt || Date.now())).toLocaleString(); } catch (_e) { when = ''; }
+      var url = String(r.url || '').trim();
+      html += '<tr data-history-url="' + escapeHtml(url) + '">'
+        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(String(r.title || url || '-')) + '">' + escapeHtml(String(r.title || url || '-')) + '</td>'
+        + '<td title="' + escapeHtml(url) + '">' + escapeHtml(url || '-') + '</td>'
+        + '<td>' + escapeHtml(when || '-') + '</td>'
+      + '</tr>';
+    }
+    if (!html) html = '<tr><td colspan="3" class="muted tiny">No history yet.</td></tr>';
+    el.sourcesBrowserHistoryBody.innerHTML = html;
+  }
+
+  function openSourcesBrowserHistoryOverlay() {
+    if (!api.webHistory || typeof api.webHistory.list !== 'function') {
+      showToast('History service unavailable');
+      return;
+    }
+    api.webHistory.list().then(function (res) {
+      state.sourcesBrowserHistoryRows = (res && res.ok && Array.isArray(res.entries)) ? res.entries : [];
+      renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput && el.sourcesBrowserHistorySearchInput.value);
+      if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.remove('hidden');
+      syncSourcesBrowserOverlayLock();
+      if (el.sourcesBrowserHistorySearchInput) {
+        setTimeout(function () {
+          try { el.sourcesBrowserHistorySearchInput.focus(); } catch (_e) {}
+        }, 0);
+      }
+    }).catch(function () {
+      showToast('Failed to load history');
+    });
+  }
+
+  function closeSourcesBrowserHistoryOverlay() {
+    if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.add('hidden');
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function syncSourcesBrowserOverlayLock() {
+    var locked = false;
+    if (el.sourcesBrowserHistoryOverlay && !el.sourcesBrowserHistoryOverlay.classList.contains('hidden')) locked = true;
+    if (el.torrentProvidersOverlay && !el.torrentProvidersOverlay.classList.contains('hidden')) locked = true;
+    state.sourcesBrowserOverlayLocked = locked;
+    scheduleSourcesBrowserViewportLayout();
+  }
+
+  function initSourcesBrowser() {
+    if (state.sourcesBrowserBound) return;
+    state.sourcesBrowserBound = true;
+
+    var wv = getSourcesBrowserWebview();
+    if (!wv) return;
+    try { wv.removeAttribute('autosize'); } catch (_e0) {}
+    var viewport = wv.parentElement;
+    if (viewport && !state.sourcesBrowserResizeObserver && typeof ResizeObserver === 'function') {
+      try {
+        state.sourcesBrowserResizeObserver = new ResizeObserver(function () {
+          scheduleSourcesBrowserViewportLayout();
+        });
+        state.sourcesBrowserResizeObserver.observe(viewport);
+      } catch (_eObs) {
+        state.sourcesBrowserResizeObserver = null;
+      }
+    }
+    if (!state.sourcesBrowserNavPollTimer) {
+      state.sourcesBrowserNavPollTimer = setInterval(function () {
+        if (!isWebModeActive()) return;
+        refreshSourcesBrowserNav();
+      }, 450);
+    }
+
+    if (el.sourcesBrowserGoBtn) {
+      el.sourcesBrowserGoBtn.innerHTML = '&#x27a4;';
+      el.sourcesBrowserGoBtn.title = 'Go';
+      el.sourcesBrowserGoBtn.setAttribute('aria-label', 'Go');
+    }
+    if (el.sourcesBrowserUrlInput) {
+      el.sourcesBrowserUrlInput.placeholder = 'Search with Google or enter URL';
+    }
+
+    if (el.sourcesBrowserGoBtn) {
+      el.sourcesBrowserGoBtn.addEventListener('click', function () {
+        navigateSourcesBrowser(el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value, { focus: true });
+      });
+    }
+    if (el.sourcesBrowserUrlInput) {
+      el.sourcesBrowserUrlInput.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        navigateSourcesBrowser(el.sourcesBrowserUrlInput.value, { focus: true });
+      });
+    }
+    if (el.sourcesBrowserBackBtn) {
+      el.sourcesBrowserBackBtn.addEventListener('click', function () {
+        try { if (wv.canGoBack()) wv.goBack(); } catch (_e) {}
+      });
+    }
+    if (el.sourcesBrowserForwardBtn) {
+      el.sourcesBrowserForwardBtn.addEventListener('click', function () {
+        try { if (wv.canGoForward()) wv.goForward(); } catch (_e) {}
+      });
+    }
+    if (el.sourcesBrowserReloadBtn) {
+      el.sourcesBrowserReloadBtn.addEventListener('click', function () {
+        try {
+          if (state.sourcesBrowserLoading && typeof wv.stop === 'function') wv.stop();
+          else if (typeof wv.reload === 'function') wv.reload();
+        } catch (_e) {}
+      });
+    }
+    if (el.sourcesBrowserBookmarkBtn) {
+      el.sourcesBrowserBookmarkBtn.addEventListener('click', function () {
+        if (!api.webBookmarks || typeof api.webBookmarks.toggle !== 'function') return;
+        var target = String(state.sourcesBrowserUrl || (el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value) || '').trim();
+        if (!target) return;
+        var title = '';
+        try { title = String(wv.getTitle() || '').trim(); } catch (_e) {}
+        api.webBookmarks.toggle({ url: target, title: title, favicon: getFaviconUrl(target) }).then(function () {
+          refreshSourcesBrowserBookmarkUi(target);
+          if (panels.renderBookmarkBar) panels.renderBookmarkBar();
+          if (hub.renderHubBookmarks) hub.renderHubBookmarks();
+        }).catch(function () {});
+      });
+    }
+    if (el.sourcesBrowserHistoryBtn) {
+      el.sourcesBrowserHistoryBtn.addEventListener('click', function () {
+        openSourcesBrowserHistoryOverlay();
+      });
+    }
+    if (el.sourcesBrowserHistoryCloseBtn) {
+      el.sourcesBrowserHistoryCloseBtn.addEventListener('click', closeSourcesBrowserHistoryOverlay);
+    }
+    if (el.sourcesBrowserHistoryOverlay) {
+      el.sourcesBrowserHistoryOverlay.addEventListener('click', function (e) {
+        if (e.target === el.sourcesBrowserHistoryOverlay) closeSourcesBrowserHistoryOverlay();
+      });
+    }
+    if (el.sourcesBrowserHistorySearchInput) {
+      el.sourcesBrowserHistorySearchInput.addEventListener('input', function () {
+        renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput.value);
+      });
+    }
+    if (el.sourcesBrowserHistoryClearBtn) {
+      el.sourcesBrowserHistoryClearBtn.addEventListener('click', function () {
+        if (!api.webHistory || typeof api.webHistory.clear !== 'function') return;
+        api.webHistory.clear().then(function () {
+          state.sourcesBrowserHistoryRows = [];
+          renderSourcesBrowserHistoryRows('');
+          if (el.sourcesBrowserHistorySearchInput) el.sourcesBrowserHistorySearchInput.value = '';
+        }).catch(function () {
+          showToast('Failed to clear history');
+        });
+      });
+    }
+    if (el.sourcesBrowserHistoryBody) {
+      el.sourcesBrowserHistoryBody.addEventListener('click', function (e) {
+        var row = e.target && e.target.closest ? e.target.closest('tr[data-history-url]') : null;
+        if (!row) return;
+        var url = String(row.getAttribute('data-history-url') || '').trim();
+        if (!url) return;
+        closeSourcesBrowserHistoryOverlay();
+        navigateSourcesBrowser(url, { focus: true });
+      });
+    }
+    if (el.sourcesBrowserDownloadsClearBtn) {
+      el.sourcesBrowserDownloadsClearBtn.addEventListener('click', function () {
+        var src = state.downloads;
+        if (Array.isArray(src)) {
+          state.downloads = src.filter(function (d) {
+            var st = String(d && d.state || '').toLowerCase();
+            return st !== 'completed' && st !== 'cancelled' && st !== 'failed' && st !== 'interrupted';
+          });
+        } else if (src && typeof src === 'object') {
+          var next = {};
+          var keys = Object.keys(src);
+          for (var i = 0; i < keys.length; i++) {
+            var item = src[keys[i]];
+            var s = String(item && item.state || '').toLowerCase();
+            if (s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted') continue;
+            next[keys[i]] = item;
+          }
+          state.downloads = next;
+        }
+        renderHomeDownloads();
+      });
+    }
+
+    wv.addEventListener('did-start-loading', function () {
+      state.sourcesBrowserLoading = true;
+      refreshSourcesBrowserNav();
+      setSourcesBrowserStatus('Loading...', true);
+      state.sourcesBrowserRenderRecovered = false;
+      scheduleSourcesBrowserViewportLayout();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-stop-loading', function () {
+      state.sourcesBrowserLoading = false;
+      var url = '';
+      try { url = String(wv.getURL() || '').trim(); } catch (_e) {}
+      if (url && url !== 'about:blank') {
+        state.sourcesBrowserUrl = url;
+        if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = url;
+        persistSourcesBrowserLastUrl(url);
+        refreshSourcesBrowserBookmarkUi(url);
+        if (api.webHistory && typeof api.webHistory.add === 'function' && url !== 'about:blank') {
+          var title = '';
+          try { title = String(wv.getTitle() || '').trim(); } catch (_titleErr) {}
+          api.webHistory.add({ url: url, title: title || url, favicon: getFaviconUrl(url), timestamp: Date.now() });
+        }
+        scheduleSourcesBrowserRepaintKick();
+      }
+      refreshSourcesBrowserNav();
+      setSourcesBrowserStatus((url && url !== 'about:blank') ? url : 'Ready', false);
+      scheduleSourcesBrowserViewportLayout();
+      runSourcesBrowserRenderWatchdog();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-finish-load', function () {
+      state.sourcesBrowserLoading = false;
+      refreshSourcesBrowserNav();
+      scheduleSourcesBrowserViewportLayout();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-fail-load', function (e) {
+      var code = Number(e && e.errorCode || 0);
+      if (code === -3) return;
+      state.sourcesBrowserLoading = false;
+      refreshSourcesBrowserNav();
+      setSourcesBrowserStatus('Load failed (HTTP/NET error)', false);
+      scheduleSourcesBrowserViewportLayout();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+    wv.addEventListener('did-navigate', function (e) {
+      var next = String(e && e.url || '').trim();
+      if (/^magnet:/i.test(next)) {
+        emit('openMagnet', next);
+        return;
+      }
+      if (!next) return;
+      state.sourcesBrowserUrl = next;
+      if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = next;
+      refreshSourcesBrowserBookmarkUi(next);
+      refreshSourcesBrowserNav();
+      scheduleSourcesBrowserViewportLayout();
+    });
+    wv.addEventListener('new-window', function (e) {
+      var next = String((e && e.url) || '').trim();
+      if (!next) return;
+      if (/^magnet:/i.test(next)) {
+        emit('openMagnet', next);
+        return;
+      }
+      navigateSourcesBrowser(next, { focus: true });
+    });
+    wv.addEventListener('dom-ready', function () {
+      state.sourcesBrowserLoading = false;
+      refreshSourcesBrowserNav();
+      scheduleSourcesBrowserViewportLayout();
+      runSourcesBrowserRenderWatchdog();
+      scheduleSourcesBrowserLoadingSettleCheck();
+    });
+
+    refreshSourcesBrowserNav();
+    setSourcesBrowserStatus('Ready', false);
+    window.addEventListener('resize', scheduleSourcesBrowserViewportLayout);
+    scheduleSourcesBrowserViewportLayout();
+  }
+
+  function renderSourcesBrowserDownloadsRows() {
+    if (!el.sourcesBrowserDownloadsBody) return;
+    var rows = getSourcesBrowserDownloadsList();
+    rows.sort(function (a, b) {
+      return Number(b && b.startedAt || b && b.updatedAt || 0) - Number(a && a.startedAt || a && a.updatedAt || 0);
+    });
+    if (!rows.length) {
+      el.sourcesBrowserDownloadsBody.innerHTML = '<tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var d = rows[i] || {};
+      var id = String(d.id || '');
+      var size = Number(d.totalBytes || d.received || 0);
+      var received = Number(d.received || 0);
+      var pct = '-';
+      if (size > 0) pct = String(Math.max(0, Math.min(100, Math.round((received / size) * 100)))) + '%';
+      var speed = formatSpeedForSources(d.speed || 0);
+      var status = String(d.state || 'downloading');
+      var action = '';
+      if (status === 'completed') {
+        action = '<button class="btn btn-ghost btn-sm" data-dl-open="' + escapeHtml(id) + '">Open</button>'
+          + ' <button class="btn btn-ghost btn-sm" data-dl-show="' + escapeHtml(id) + '">Folder</button>';
+      } else if (id) {
+        action = '<button class="btn btn-ghost btn-sm" data-dl-cancel="' + escapeHtml(id) + '">Cancel</button>';
+      }
+      html += '<tr>'
+        + '<td>' + (i + 1) + '</td>'
+        + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(String(d.filename || d.name || 'Download')) + '">' + escapeHtml(String(d.filename || d.name || 'Download')) + '</td>'
+        + '<td>' + escapeHtml(formatBytesForSources(size)) + '</td>'
+        + '<td>' + escapeHtml(speed) + '</td>'
+        + '<td>' + escapeHtml(pct) + '</td>'
+        + '<td>' + escapeHtml(status) + '</td>'
+        + '<td>' + action + '</td>'
+      + '</tr>';
+    }
+    el.sourcesBrowserDownloadsBody.innerHTML = html;
   }
 
   // ── webTabs shim (replaces old WCV IPC) ──
@@ -684,6 +1283,19 @@
   bridge.deps.updateUrlDisplay = updateUrlDisplay;
 
   function openBrowser(source) {
+    if (!state.useLegacyOverlayBrowser) {
+      ensureSourcesModeActive().then(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+        initSourcesBrowser();
+        if (source && source.url) {
+          navigateSourcesBrowser(source.url, { focus: true });
+        } else if (el.sourcesBrowserUrlInput) {
+          try { el.sourcesBrowserUrlInput.focus(); } catch (_e) {}
+        }
+      });
+      return;
+    }
+
     ensureTorrentContainerInBrowser();
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (!source) {
@@ -714,6 +1326,20 @@
   }
 
   function openHome() {
+    if (!state.useLegacyOverlayBrowser) {
+      ensureSourcesModeActive().then(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+        initSourcesBrowser();
+        if (el.sourcesBrowserUrlInput) {
+          try {
+            el.sourcesBrowserUrlInput.focus();
+            if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
+          } catch (_e) {}
+        }
+      });
+      return;
+    }
+
     ensureTorrentContainerInBrowser();
     if (panels.hideAllPanels) panels.hideAllPanels();
     state.showBrowserHome = true;
@@ -734,6 +1360,16 @@
   }
 
   function openBrowserForTab(tabId) {
+    if (!state.useLegacyOverlayBrowser) {
+      var t = null;
+      for (var x = 0; x < state.tabs.length; x++) {
+        if (state.tabs[x] && state.tabs[x].id === tabId) { t = state.tabs[x]; break; }
+      }
+      if (t && t.url) openBrowser({ url: t.url });
+      else openHome();
+      return;
+    }
+
     ensureTorrentContainerInBrowser();
     var tab = null;
     for (var i = 0; i < state.tabs.length; i++) {
@@ -754,6 +1390,11 @@
   }
 
   function openNewTab() {
+    if (!state.useLegacyOverlayBrowser) {
+      openHome();
+      return;
+    }
+
     var behavior = state.browserSettings.home.newTabBehavior || 'tankoban_home';
     if (behavior === 'tankoban_home' || behavior === 'home') {
       openHome();
@@ -770,10 +1411,39 @@
   }
 
   function closeBrowser() {
+    if (!state.useLegacyOverlayBrowser) {
+      state.browserOpen = false;
+      state.showBrowserHome = false;
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      return;
+    }
+
+    var routerMode = '';
+    try {
+      var router = window.Tanko && window.Tanko.modeRouter;
+      routerMode = router && typeof router.getMode === 'function' ? String(router.getMode() || '').toLowerCase() : '';
+    } catch (_e) {
+      routerMode = '';
+    }
+
     state.browserOpen = false;
     state.showBrowserHome = false;
     if (el.browserView) el.browserView.classList.add('hidden');
-    _showCurrentLibraryView();
+
+    // Sources mode has had intermittent class-race issues after browser exit.
+    // Use a deterministic restore path + delayed self-heal instead of generic view restore.
+    if (routerMode === 'sources' || !routerMode) {
+      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      requestAnimationFrame(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      });
+      setTimeout(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+      }, 120);
+    } else {
+      _showCurrentLibraryView();
+    }
+
     updateUrlDisplay();
     renderSources();
     renderSourcesGrid();
@@ -859,7 +1529,7 @@
 
   function getSearchEngineMetaForHome() {
     var engines = navOmnibox.SEARCH_ENGINES || {};
-    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'yandex').trim().toLowerCase();
+    var key = String(state.browserSettings && state.browserSettings.defaultSearchEngine || 'google').trim().toLowerCase();
     if (!engines[key]) key = 'yandex';
     return engines[key] || { label: 'Yandex' };
   }
@@ -1154,7 +1824,8 @@
   }
 
   function setSourcesSubMode(mode) {
-    var key = 'search';
+    var key = String(mode || '').toLowerCase() === 'downloads' ? 'downloads' : 'search';
+    if (key === 'downloads' && !el.sourcesDownloadsView) key = 'search';
     state.sourcesSubMode = key;
     if (el.sourcesSearchTabBtn) el.sourcesSearchTabBtn.classList.toggle('active', key === 'search');
     if (el.sourcesDownloadsTabBtn) el.sourcesDownloadsTabBtn.classList.toggle('active', key === 'downloads');
@@ -1164,11 +1835,40 @@
     if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement === el.sourcesDownloadsView && el.contentArea) {
       el.contentArea.appendChild(el.torrentContainer);
     }
-    if (el.sourcesSearchInput) {
+    if (key === 'search' && el.sourcesSearchInput) {
       setTimeout(function () {
         try { el.sourcesSearchInput.focus(); } catch (_e) {}
       }, 0);
     }
+  }
+
+  function enforceProvidersOnlySidebar() {
+    if (!el.webLibraryView || !el.webLibraryView.querySelectorAll) return;
+    var sections = el.webLibraryView.querySelectorAll('.libSidebar .navSection');
+    var seps = el.webLibraryView.querySelectorAll('.libSidebar .navSep');
+    var i;
+    for (i = 0; i < sections.length; i++) {
+      if (sections[i] && sections[i].style && sections[i].style.setProperty) {
+        var isUtility = sections[i].classList && sections[i].classList.contains('navSectionUtility');
+        sections[i].style.setProperty('display', isUtility ? 'block' : 'none', 'important');
+      }
+    }
+    for (i = 0; i < seps.length; i++) {
+      if (seps[i] && seps[i].style && seps[i].style.setProperty) {
+        seps[i].style.setProperty('display', 'none', 'important');
+      }
+    }
+    try {
+      var utilityItems = el.webLibraryView.querySelectorAll('.libSidebar .navSection.navSectionUtility .navItems > *');
+      for (i = 0; i < utilityItems.length; i++) {
+        if (!utilityItems[i] || !utilityItems[i].style || !utilityItems[i].style.setProperty) continue;
+        utilityItems[i].style.setProperty('display', 'none', 'important');
+      }
+      var providersBtn = document.getElementById('webUtilityTorrentProvidersBtn');
+      if (providersBtn && providersBtn.style && providersBtn.style.setProperty) {
+        providersBtn.style.setProperty('display', 'inline-flex', 'important');
+      }
+    } catch (_e2) {}
   }
 
   function forceSourcesViewVisible() {
@@ -1176,12 +1876,20 @@
       var comicsView = document.getElementById('libraryView');
       var booksView = document.getElementById('booksLibraryView');
       var videosView = document.getElementById('videoLibraryView');
+      var homeView = document.getElementById('webHomeView');
       if (comicsView) comicsView.classList.add('hidden');
       if (booksView) booksView.classList.add('hidden');
       if (videosView) videosView.classList.add('hidden');
       if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
+      if (el.browserView) el.browserView.classList.add('hidden');
+      if (homeView) {
+        homeView.classList.remove('hidden');
+        homeView.style.display = '';
+      }
       document.body.classList.add('inSourcesMode');
       document.body.classList.remove('inComicsMode', 'inBooksMode', 'inVideoMode');
+      enforceProvidersOnlySidebar();
+      scheduleSourcesBrowserViewportLayout();
     } catch (_e) {}
   }
 
@@ -1353,18 +2061,22 @@
       return !!id && !state.hiddenSourceTorrentIds[id];
     }) : [];
     if (!rows.length) {
-      el.sourcesTorrentBody.innerHTML = '<tr><td colspan="5" class="muted tiny">No torrents yet.</td></tr>';
+      el.sourcesTorrentBody.innerHTML = '<tr><td colspan="6" class="muted tiny">No torrents yet.</td></tr>';
       return;
     }
     var html = '';
     for (var i = 0; i < rows.length; i++) {
       var t = rows[i] || {};
+      var isStreamable = !!(t && t.videoLibraryStreamable === true);
+      var pctText = isStreamable ? '-' : asPct01(t.progress);
+      var statusText = isStreamable ? 'Streaming' : String(t.state || 'unknown');
       html += '<tr data-source-torrent-id="' + escapeHtml(String(t.id || '')) + '">'
         + '<td>' + (i + 1) + '</td>'
         + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(String(t.name || t.infoHash || 'Torrent')) + '">' + escapeHtml(String(t.name || t.infoHash || 'Torrent')) + '</td>'
         + '<td>' + escapeHtml(formatBytesForSources(t.totalSize || 0)) + '</td>'
         + '<td>' + escapeHtml(formatBytesForSources(t.downloadRate || 0)) + '/s</td>'
-        + '<td>' + escapeHtml(asPct01(t.progress)) + ' / ' + escapeHtml(String(t.state || 'unknown')) + '</td>'
+        + '<td>' + escapeHtml(pctText) + '</td>'
+        + '<td>' + escapeHtml(statusText) + '</td>'
       + '</tr>';
     }
     el.sourcesTorrentBody.innerHTML = html;
@@ -2030,6 +2742,61 @@
     if (el.sourceUrl) el.sourceUrl.value = '';
   }
 
+  function openTorrentProvidersDialog() {
+    syncBrowserSettingsControls();
+    if (el.torrentProvidersOverlay) el.torrentProvidersOverlay.classList.remove('hidden');
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function closeTorrentProvidersDialog() {
+    if (el.torrentProvidersOverlay) el.torrentProvidersOverlay.classList.add('hidden');
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function openProviderWebUi(rawUrl) {
+    var url = String(rawUrl || '').trim();
+    if (!url) {
+      showToast('Set the provider base URL first');
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
+    if (!state.useLegacyOverlayBrowser) {
+      ensureSourcesModeActive().then(function () {
+        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+        initSourcesBrowser();
+        navigateSourcesBrowser(url, { focus: true });
+        closeTorrentProvidersDialog();
+        showToast('Opened provider UI in TankoBrowser');
+      });
+      return;
+    }
+    openHome();
+    if (tabsState.createTab) tabsState.createTab(null, url, { switchTo: true });
+    state.showBrowserHome = false;
+    syncContentVisibility();
+  }
+
+  function saveTorrentProvidersSettings() {
+    var provider = String(el.torrentProviderSelect && el.torrentProviderSelect.value || 'jackett').trim().toLowerCase();
+    if (provider !== 'prowlarr') provider = 'jackett';
+    saveBrowserSettings({
+      torrentSearch: { provider: provider },
+      jackett: {
+        baseUrl: String(el.jackettBaseUrl && el.jackettBaseUrl.value || '').trim(),
+        apiKey: String(el.jackettApiKey && el.jackettApiKey.value || '').trim()
+      },
+      prowlarr: {
+        baseUrl: String(el.prowlarrBaseUrl && el.prowlarrBaseUrl.value || '').trim(),
+        apiKey: String(el.prowlarrApiKey && el.prowlarrApiKey.value || '').trim()
+      }
+    });
+    closeTorrentProvidersDialog();
+    setTimeout(function () {
+      loadSourcesSearchIndexers();
+    }, 150);
+    showToast('Torrent provider settings saved');
+  }
+
   function saveSource() {
     var name = (el.sourceName ? el.sourceName.value : '').trim();
     var url = (el.sourceUrl ? el.sourceUrl.value : '').trim();
@@ -2070,8 +2837,14 @@
     var dls = (src.downloads && typeof src.downloads === 'object') ? src.downloads : {};
     var privacy = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
     var clearOnExit = (privacy.clearOnExit && typeof privacy.clearOnExit === 'object') ? privacy.clearOnExit : {};
+    var jackett = (src.jackett && typeof src.jackett === 'object') ? src.jackett : {};
+    var prowlarr = (src.prowlarr && typeof src.prowlarr === 'object') ? src.prowlarr : {};
+    var torrentSearch = (src.torrentSearch && typeof src.torrentSearch === 'object') ? src.torrentSearch : {};
+    var sourcesBrowser = (src.sourcesBrowser && typeof src.sourcesBrowser === 'object') ? src.sourcesBrowser : {};
+    var provider = String(torrentSearch.provider || src.torrentSearchProvider || 'jackett').trim().toLowerCase();
+    if (provider !== 'prowlarr') provider = 'jackett';
     return {
-      defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
+      defaultSearchEngine: String(src.defaultSearchEngine || 'google').trim().toLowerCase() || 'google',
       parityV1Enabled: src.parityV1Enabled !== false,
       adblockEnabled: src.adblockEnabled !== false,
       restoreLastSession: src.restoreLastSession !== false,
@@ -2084,7 +2857,26 @@
         books: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.books || '').trim(),
         videos: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.videos || '').trim()
       },
-      privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } }
+      sourcesBrowser: {
+        expandedByDefault: sourcesBrowser.expandedByDefault !== false,
+        lastUrl: String(sourcesBrowser.lastUrl || src.sourcesBrowserLastUrl || '').trim()
+      },
+      privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } },
+      jackett: {
+        baseUrl: String(jackett.baseUrl || src.jackettBaseUrl || '').trim(),
+        apiKey: String(jackett.apiKey || src.jackettApiKey || '').trim(),
+        indexer: String(jackett.indexer || src.jackettIndexer || 'all').trim() || 'all',
+        timeoutMs: Number(jackett.timeoutMs || src.jackettTimeoutMs || 30000) || 30000,
+        indexersByCategory: jackett.indexersByCategory && typeof jackett.indexersByCategory === 'object' ? jackett.indexersByCategory : { all: 'all', comics: 'all', books: 'all', tv: 'all' }
+      },
+      prowlarr: {
+        baseUrl: String(prowlarr.baseUrl || src.prowlarrBaseUrl || '').trim(),
+        apiKey: String(prowlarr.apiKey || src.prowlarrApiKey || '').trim(),
+        indexer: String(prowlarr.indexer || src.prowlarrIndexer || 'all').trim() || 'all',
+        timeoutMs: Number(prowlarr.timeoutMs || src.prowlarrTimeoutMs || 30000) || 30000,
+        indexersByCategory: prowlarr.indexersByCategory && typeof prowlarr.indexersByCategory === 'object' ? prowlarr.indexersByCategory : { all: 'all', comics: 'all', books: 'all', tv: 'all' }
+      },
+      torrentSearch: { provider: provider }
     };
   }
 
@@ -2105,6 +2897,11 @@
     if (el.hubClearOnExitDownloads) el.hubClearOnExitDownloads.checked = s.privacy.clearOnExit.downloads;
     if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = s.privacy.clearOnExit.cookies;
     if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = s.privacy.clearOnExit.cache;
+    if (el.torrentProviderSelect) el.torrentProviderSelect.value = String(s.torrentSearch && s.torrentSearch.provider || 'jackett');
+    if (el.jackettBaseUrl) el.jackettBaseUrl.value = String(s.jackett && s.jackett.baseUrl || '');
+    if (el.jackettApiKey) el.jackettApiKey.value = String(s.jackett && s.jackett.apiKey || '');
+    if (el.prowlarrBaseUrl) el.prowlarrBaseUrl.value = String(s.prowlarr && s.prowlarr.baseUrl || '');
+    if (el.prowlarrApiKey) el.prowlarrApiKey.value = String(s.prowlarr && s.prowlarr.apiKey || '');
     applySourcesMinimalFlag();
   }
 
@@ -2161,30 +2958,33 @@
   // ── Home downloads rendering ──
 
   function renderHomeDownloads() {
-    if (!el.homeDlList || !el.homeDlEmpty) return;
-    var active = [];
-    for (var i = 0; i < state.downloads.length; i++) {
-      var d = state.downloads[i];
-      if (!d) continue;
-      active.push(d);
+    var active = getSourcesBrowserDownloadsList();
+    active.sort(function (a, b) { return Number(b && b.startedAt || b && b.updatedAt || 0) - Number(a && a.startedAt || a && a.updatedAt || 0); });
+
+    if (el.homeDlList && el.homeDlEmpty) {
+      if (!active.length) {
+        el.homeDlList.innerHTML = '';
+        el.homeDlEmpty.classList.remove('hidden');
+      } else {
+        el.homeDlEmpty.classList.add('hidden');
+        var html = '';
+        for (var j = 0; j < Math.min(active.length, 20); j++) {
+          var x = active[j] || {};
+          var total = Number(x.totalBytes || 0);
+          var recv = Number(x.received || 0);
+          var pctNum = total > 0 ? Math.round((recv / total) * 100) : null;
+          var pct = pctNum != null && isFinite(pctNum) ? (pctNum + '%') : '';
+          html += '<div class="webHomeDlItem">'
+            + '<div class="webHomeDlName">' + escapeHtml(String(x.filename || x.name || 'Download')) + '</div>'
+            + '<div class="webHomeDlSub">' + escapeHtml(String(x.state || 'downloading')) + (pct ? ' &bull; ' + pct : '') + '</div>'
+            + '</div>';
+        }
+        el.homeDlList.innerHTML = html;
+      }
     }
-    active.sort(function (a, b) { return Number(b.startedAt || 0) - Number(a.startedAt || 0); });
-    if (!active.length) {
-      el.homeDlList.innerHTML = '';
-      el.homeDlEmpty.classList.remove('hidden');
-      return;
-    }
-    el.homeDlEmpty.classList.add('hidden');
-    var html = '';
-    for (var j = 0; j < Math.min(active.length, 20); j++) {
-      var x = active[j];
-      var pct = x.progress != null ? Math.round((Number(x.progress) || 0) * 100) + '%' : '';
-      html += '<div class="webHomeDlItem">'
-        + '<div class="webHomeDlName">' + escapeHtml(x.filename || 'Download') + '</div>'
-        + '<div class="webHomeDlSub">' + escapeHtml(x.state || '') + (pct ? ' &bull; ' + pct : '') + '</div>'
-        + '</div>';
-    }
-    el.homeDlList.innerHTML = html;
+
+    renderSourcesBrowserDownloadsRows();
+    syncDownloadIndicator();
   }
 
   // Update the stub to point to real function
@@ -2575,6 +3375,25 @@
     if (el.addSourceBtn) el.addSourceBtn.addEventListener('click', function () { openAddSourceDialog(null); });
     if (el.addSourceClose) el.addSourceClose.addEventListener('click', closeAddSourceDialog);
     if (el.sourceSaveBtn) el.sourceSaveBtn.addEventListener('click', saveSource);
+    if (el.torrentProvidersBtn) el.torrentProvidersBtn.addEventListener('click', openTorrentProvidersDialog);
+    if (el.utilityTorrentProvidersBtn) el.utilityTorrentProvidersBtn.addEventListener('click', openTorrentProvidersDialog);
+    if (el.torrentProvidersClose) el.torrentProvidersClose.addEventListener('click', closeTorrentProvidersDialog);
+    if (el.torrentProvidersSave) el.torrentProvidersSave.addEventListener('click', saveTorrentProvidersSettings);
+    if (el.torrentProvidersOverlay) {
+      el.torrentProvidersOverlay.addEventListener('click', function (e) {
+        if (e.target === el.torrentProvidersOverlay) closeTorrentProvidersDialog();
+      });
+    }
+    if (el.providerOpenJackettUiBtn) {
+      el.providerOpenJackettUiBtn.addEventListener('click', function () {
+        openProviderWebUi((el.jackettBaseUrl && el.jackettBaseUrl.value) || (state.browserSettings && state.browserSettings.jackett && state.browserSettings.jackett.baseUrl));
+      });
+    }
+    if (el.providerOpenProwlarrUiBtn) {
+      el.providerOpenProwlarrUiBtn.addEventListener('click', function () {
+        openProviderWebUi((el.prowlarrBaseUrl && el.prowlarrBaseUrl.value) || (state.browserSettings && state.browserSettings.prowlarr && state.browserSettings.prowlarr.baseUrl));
+      });
+    }
 
     // Settings hub source actions (delegation)
     if (el.hubSourcesList) {
@@ -2621,7 +3440,7 @@
       saveBrowserSettings({ privacy: { doNotTrack: el.hubPrivacyDoNotTrack.checked } });
     });
     if (el.searchEngineSelect) el.searchEngineSelect.addEventListener('change', function () {
-      var key = String(el.searchEngineSelect.value || 'yandex').trim().toLowerCase() || 'yandex';
+      var key = String(el.searchEngineSelect.value || 'google').trim().toLowerCase() || 'google';
       saveBrowserSettings({ defaultSearchEngine: key });
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       renderBrowserHome();
@@ -2653,10 +3472,62 @@
     // Home downloads clear
     if (el.homeDlClearBtn) {
       el.homeDlClearBtn.addEventListener('click', function () {
-        state.downloads = state.downloads.filter(function (d) {
-          return d && d.state !== 'completed' && d.state !== 'cancelled' && d.state !== 'failed';
-        });
+        if (Array.isArray(state.downloads)) {
+          state.downloads = state.downloads.filter(function (d) {
+            var st = String(d && d.state || '').toLowerCase();
+            return st !== 'completed' && st !== 'cancelled' && st !== 'failed' && st !== 'interrupted';
+          });
+        } else if (state.downloads && typeof state.downloads === 'object') {
+          var keep = {};
+          var keys = Object.keys(state.downloads);
+          for (var i = 0; i < keys.length; i++) {
+            var item = state.downloads[keys[i]];
+            var s = String(item && item.state || '').toLowerCase();
+            if (s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted') continue;
+            keep[keys[i]] = item;
+          }
+          state.downloads = keep;
+        }
         renderHomeDownloads();
+      });
+    }
+    if (el.sourcesBrowserDownloadsBody) {
+      el.sourcesBrowserDownloadsBody.addEventListener('click', function (e) {
+        var cancelBtn = e.target && e.target.closest ? e.target.closest('[data-dl-cancel]') : null;
+        if (cancelBtn) {
+          var id = String(cancelBtn.getAttribute('data-dl-cancel') || '').trim();
+          if (id && api.webSources && typeof api.webSources.cancelDownload === 'function') {
+            api.webSources.cancelDownload({ id: id }).catch(function () {});
+          }
+          return;
+        }
+        var openBtn = e.target && e.target.closest ? e.target.closest('[data-dl-open]') : null;
+        if (openBtn) {
+          var openId = String(openBtn.getAttribute('data-dl-open') || '').trim();
+          var list = getSourcesBrowserDownloadsList();
+          for (var i = 0; i < list.length; i++) {
+            var item = list[i];
+            if (String(item && item.id || '') !== openId) continue;
+            if (item.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadOpenFile === 'function') {
+              api.webBrowserActions.downloadOpenFile({ path: item.savePath });
+            }
+            break;
+          }
+          return;
+        }
+        var showBtn = e.target && e.target.closest ? e.target.closest('[data-dl-show]') : null;
+        if (showBtn) {
+          var showId = String(showBtn.getAttribute('data-dl-show') || '').trim();
+          var list2 = getSourcesBrowserDownloadsList();
+          for (var j = 0; j < list2.length; j++) {
+            var it = list2[j];
+            if (String(it && it.id || '') !== showId) continue;
+            if (it.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadShowInFolder === 'function') {
+              api.webBrowserActions.downloadShowInFolder({ path: it.savePath });
+            }
+            break;
+          }
+        }
       });
     }
 
@@ -2731,6 +3602,16 @@
     // IPC: sources updated
     if (srcOps.onUpdated) {
       srcOps.onUpdated(function () { loadSources(); });
+    }
+
+    if (api.webSources && api.webSources.onDownloadStarted) {
+      api.webSources.onDownloadStarted(function () { renderHomeDownloads(); });
+    }
+    if (api.webSources && api.webSources.onDownloadProgress) {
+      api.webSources.onDownloadProgress(function () { renderHomeDownloads(); });
+    }
+    if (api.webSources && api.webSources.onDownloadCompleted) {
+      api.webSources.onDownloadCompleted(function () { renderHomeDownloads(); });
     }
 
     // IPC: torrent events
@@ -3049,8 +3930,9 @@
 
   function syncDownloadIndicator() {
     var activeCount = 0;
-    for (var i = 0; i < state.downloads.length; i++) {
-      var d = state.downloads[i];
+    var all = getSourcesBrowserDownloadsList();
+    for (var i = 0; i < all.length; i++) {
+      var d = all[i];
       if (d && (d.state === 'started' || d.state === 'progressing')) activeCount++;
     }
     if (el.downloadStatus) {
@@ -3153,23 +4035,70 @@
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
     forceSourcesViewVisible();
     setSourcesSubMode(mode === 'downloads' ? 'downloads' : 'search');
+    scheduleSourcesBrowserViewportLayout();
   }
 
   function openSources() {
     ensureSourcesModeActive().then(function () {
-      applySourcesWorkspace('search');
+      var mode = state.sourcesSubMode === 'downloads' ? 'downloads' : 'search';
+      applySourcesWorkspace(mode);
+      initSourcesBrowser();
+      var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
+      var shouldRestore = !cfg || cfg.expandedByDefault !== false;
+      var lastUrl = String(cfg && cfg.lastUrl || '').trim();
+      if (lastUrl === 'about:blank') lastUrl = '';
+      if (shouldRestore && lastUrl) {
+        var wv = getSourcesBrowserWebview();
+        var currentUrl = String(state.sourcesBrowserUrl || '').trim();
+        if (currentUrl === 'about:blank') currentUrl = '';
+        var liveUrl = '';
+        try {
+          liveUrl = String((wv && (typeof wv.getURL === 'function' ? wv.getURL() : wv.src)) || '').trim();
+        } catch (_e) {
+          liveUrl = '';
+        }
+        if (liveUrl === 'about:blank') liveUrl = '';
+        if (!currentUrl && (!liveUrl || liveUrl === 'about:blank')) {
+          navigateSourcesBrowser(lastUrl, { focus: false });
+        }
+      } else {
+        var startUrl = getSourcesBrowserStartUrl();
+        var wv2 = getSourcesBrowserWebview();
+        var activeUrl = String(state.sourcesBrowserUrl || '').trim();
+        if (activeUrl === 'about:blank') activeUrl = '';
+        var live = '';
+        try {
+          live = String((wv2 && (typeof wv2.getURL === 'function' ? wv2.getURL() : wv2.src)) || '').trim();
+        } catch (_e2) {
+          live = '';
+        }
+        if (live === 'about:blank') live = '';
+        if (!activeUrl && (!live || live === 'about:blank')) {
+          navigateSourcesBrowser(startUrl, { focus: false, persist: false });
+        }
+      }
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();
+      scheduleSourcesBrowserViewportLayout();
     });
   }
 
   function openSourcesSearch() {
+    state.sourcesSubMode = 'search';
     openSources();
-    setSourcesSubMode('search');
   }
 
   function openSourcesDownloads() {
-    openSourcesSearch();
+    state.sourcesSubMode = 'downloads';
+    openSources();
+    if (!el.sourcesDownloadsView) {
+      var torrentPanel = document.querySelector('#webHomeView .sourcesTorrentPanel');
+      if (torrentPanel && typeof torrentPanel.scrollIntoView === 'function') {
+        setTimeout(function () {
+          try { torrentPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { torrentPanel.scrollIntoView(); }
+        }, 0);
+      }
+    }
   }
 
   function openSaveFlowForResult(result) {
@@ -3182,7 +4111,7 @@
     if (window.Tanko.modeRouter && typeof window.Tanko.modeRouter.registerModeHandler === 'function') {
       window.Tanko.modeRouter.registerModeHandler('sources', {
         setMode: function () {
-          if (el.webLibraryView) el.webLibraryView.classList.remove('hidden');
+          applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
           return Promise.resolve();
         },
         refresh: function () {

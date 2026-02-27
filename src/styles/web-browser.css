@@ -192,16 +192,157 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: block;
 }
 
-/* Sources mode should only show torrent UI; keep sidebar minimal (Web utility only). */
-#webLibraryView .libSidebar .navSection:not(.navSectionUtility),
+/* Sources mode sidebar: keep only Providers action visible. */
+#webLibraryView .libSidebar .navSection,
 #webLibraryView .libSidebar .navSep {
   display: none !important;
+}
+
+#webLibraryView .libSidebar .navSection.navSectionUtility {
+  display: block !important;
+}
+
+#webLibraryView .libSidebar .navSection.navSectionUtility .navItems > * {
+  display: none !important;
+}
+
+#webUtilityTorrentProvidersBtn {
+  display: inline-flex !important;
 }
 
 #webLibraryView #webHomeView > .continuePanel,
 #webLibraryView #webHomeDownloadsPanel,
 #webLibraryView #webHomeView > .panel.seriesPanel {
   display: none !important;
+}
+
+/* Sources panel order: Browser -> Downloads -> Search -> Torrents */
+#webHomeView .sourcesBrowserPanel {
+  order: 1;
+}
+
+#webHomeView .sourcesBrowserDownloadsPanel {
+  order: 2;
+}
+
+#webHomeView .sourcesSearchPanel {
+  order: 3;
+}
+
+#webHomeView .sourcesTorrentPanel {
+  order: 4;
+}
+
+.sourcesBrowserPanel,
+.sourcesBrowserDownloadsPanel {
+  margin-bottom: 10px;
+}
+
+.sourcesBrowserToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  margin-bottom: 8px;
+}
+
+#sourcesBrowserStatus {
+  display: none !important;
+}
+
+.sourcesBrowserIconBtn {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+#sourcesBrowserBackBtn,
+#sourcesBrowserForwardBtn,
+#sourcesBrowserReloadBtn,
+#sourcesBrowserGoBtn,
+#sourcesBrowserBookmarkBtn,
+#sourcesBrowserHistoryBtn {
+  flex: 0 0 auto;
+}
+
+#sourcesBrowserUrlInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sourcesBrowserViewport {
+  position: relative;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(10, 16, 24, 0.92);
+  /* Desktop-first: make the embedded browser feel near-maximized. */
+  height: clamp(480px, calc(100vh - 210px), 980px);
+}
+
+#sourcesBrowserWebview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  background: #ffffff;
+}
+
+@media (max-height: 820px) {
+  .sourcesBrowserViewport {
+    height: clamp(360px, calc(100vh - 180px), 760px);
+  }
+}
+
+#sourcesBrowserReloadBtn.isLoading {
+  pointer-events: auto;
+}
+
+#sourcesBrowserReloadBtn.isLoading::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sourcesBrowserSpin 0.9s linear infinite;
+}
+
+#sourcesBrowserReloadBtn.isLoading {
+  color: transparent !important;
+}
+
+#sourcesBrowserReloadBtn.isLoading > * {
+  display: none !important;
+}
+
+#sourcesBrowserStatus[data-loading="1"]::before {
+  content: '';
+  display: inline-block;
+  vertical-align: -2px;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sourcesBrowserSpin 0.9s linear infinite;
+}
+
+#sourcesBrowserHistoryBody tr[data-history-url] {
+  cursor: pointer;
+}
+
+#sourcesBrowserHistoryBody tr[data-history-url]:hover td {
+  background: rgba(var(--accent-rgb), 0.08);
+}
+
+@keyframes sourcesBrowserSpin {
+  to { transform: rotate(360deg); }
 }
 
 /* Hide app chrome when browser is the active surface */

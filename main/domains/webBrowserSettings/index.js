@@ -5,8 +5,9 @@ const ALLOWED_SEARCH_ENGINES = new Set(['yandex', 'google', 'duckduckgo', 'bing'
 const ALLOWED_STARTUP_MODES = new Set(['continue', 'new_tab', 'custom_url']);
 const ALLOWED_NEW_TAB_BEHAVIORS = new Set(['tankoban_home', 'browser_home', 'blank']);
 const ALLOWED_DOWNLOAD_BEHAVIORS = new Set(['ask', 'auto']);
+const ALLOWED_TORRENT_PROVIDERS = new Set(['jackett', 'prowlarr']);
 const DEFAULT_SETTINGS = {
-  defaultSearchEngine: 'yandex',
+  defaultSearchEngine: 'google',
   parityV1Enabled: true,
   adblockEnabled: true,
   restoreLastSession: true,
@@ -28,6 +29,10 @@ const DEFAULT_SETTINGS = {
     books: '',
     videos: ''
   },
+  sourcesBrowser: {
+    expandedByDefault: true,
+    lastUrl: ''
+  },
   privacy: {
     doNotTrack: false,
     clearOnExit: {
@@ -48,6 +53,21 @@ const DEFAULT_SETTINGS = {
       books: 'all',
       tv: 'all'
     }
+  },
+  prowlarr: {
+    baseUrl: '',
+    apiKey: '',
+    indexer: 'all',
+    timeoutMs: 30000,
+    indexersByCategory: {
+      all: 'all',
+      comics: 'all',
+      books: 'all',
+      tv: 'all'
+    }
+  },
+  torrentSearch: {
+    provider: 'jackett'
   }
 };
 
@@ -74,6 +94,12 @@ function normalizeNewTabBehavior(value) {
 function normalizeDownloadBehavior(value) {
   var key = String(value || '').trim().toLowerCase();
   if (!ALLOWED_DOWNLOAD_BEHAVIORS.has(key)) return DEFAULT_SETTINGS.downloads.behavior;
+  return key;
+}
+
+function normalizeTorrentProvider(value) {
+  var key = String(value || '').trim().toLowerCase();
+  if (!ALLOWED_TORRENT_PROVIDERS.has(key)) return DEFAULT_SETTINGS.torrentSearch.provider;
   return key;
 }
 
@@ -107,6 +133,8 @@ function normalizeSettings(input) {
   var privacyInput = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
   var clearOnExitInput = (privacyInput.clearOnExit && typeof privacyInput.clearOnExit === 'object') ? privacyInput.clearOnExit : {};
   var jackettInput = (src.jackett && typeof src.jackett === 'object') ? src.jackett : {};
+  var prowlarrInput = (src.prowlarr && typeof src.prowlarr === 'object') ? src.prowlarr : {};
+  var torrentSearchInput = (src.torrentSearch && typeof src.torrentSearch === 'object') ? src.torrentSearch : {};
 
   var startupMode = normalizeStartupMode(startupInput.mode || src.startupMode);
   if (src.restoreLastSession === false && !startupInput.mode && !src.startupMode) {
@@ -136,6 +164,10 @@ function normalizeSettings(input) {
       books: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.books || '').trim(),
       videos: String(src.sourcesLastDestinationByCategory && src.sourcesLastDestinationByCategory.videos || '').trim()
     },
+    sourcesBrowser: {
+      expandedByDefault: !(src.sourcesBrowser && src.sourcesBrowser.expandedByDefault === false),
+      lastUrl: String(src.sourcesBrowser && src.sourcesBrowser.lastUrl || src.sourcesBrowserLastUrl || '').trim()
+    },
     privacy: {
       doNotTrack: !!(privacyInput.doNotTrack || src.doNotTrack),
       clearOnExit: {
@@ -151,6 +183,16 @@ function normalizeSettings(input) {
       indexer: String(jackettInput.indexer || src.jackettIndexer || 'all').trim() || 'all',
       timeoutMs: normalizeTimeout(jackettInput.timeoutMs || src.jackettTimeoutMs, DEFAULT_SETTINGS.jackett.timeoutMs),
       indexersByCategory: normalizeIndexerMap(jackettInput.indexersByCategory || src.jackettIndexersByCategory)
+    },
+    prowlarr: {
+      baseUrl: normalizeUrl(prowlarrInput.baseUrl || src.prowlarrBaseUrl),
+      apiKey: String(prowlarrInput.apiKey || src.prowlarrApiKey || '').trim(),
+      indexer: String(prowlarrInput.indexer || src.prowlarrIndexer || 'all').trim() || 'all',
+      timeoutMs: normalizeTimeout(prowlarrInput.timeoutMs || src.prowlarrTimeoutMs, DEFAULT_SETTINGS.prowlarr.timeoutMs),
+      indexersByCategory: normalizeIndexerMap(prowlarrInput.indexersByCategory || src.prowlarrIndexersByCategory)
+    },
+    torrentSearch: {
+      provider: normalizeTorrentProvider(torrentSearchInput.provider || src.torrentSearchProvider)
     }
   };
   return out;
