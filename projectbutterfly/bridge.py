@@ -2657,7 +2657,7 @@ class VideoBridge(QObject):
         cfg["videoShowFolders"] = sf
         _write_library_config(cfg)
         self._start_scan(force=True)
-        return {**_ok(self._make_snapshot(cfg)), "folder": folder}
+        return {"ok": True, "state": self._make_snapshot(cfg), "folder": folder}
 
     # --- @Slot methods ---
 
@@ -2738,7 +2738,7 @@ class VideoBridge(QObject):
             cfg["videoFolders"] = vf
             _write_library_config(cfg)
         self._start_scan(force=True)
-        return json.dumps({**_ok(self._make_snapshot(cfg)), "folder": folder})
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg), "folder": folder})
 
     @Slot(result=str)
     def addShowFolder(self):
@@ -2766,7 +2766,7 @@ class VideoBridge(QObject):
         cfg["videoShowFolders"] = [f for f in cfg.get("videoShowFolders", []) if _path_key(f) != pk]
         _write_library_config(cfg)
         self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(str, result=str)
     def removeStreamableFolder(self, p):
@@ -2812,7 +2812,7 @@ class VideoBridge(QObject):
             cfg["videoHiddenShowIds"] = hidden
             _write_library_config(cfg)
         self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(result=str)
     def openFileDialog(self):
@@ -2859,7 +2859,7 @@ class VideoBridge(QObject):
         cfg["videoFiles"] = vfiles
         _write_library_config(cfg)
         self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(str, result=str)
     def removeFile(self, p):
@@ -2871,7 +2871,7 @@ class VideoBridge(QObject):
         cfg["videoFiles"] = [f for f in cfg.get("videoFiles", []) if _path_key(f) != pk]
         _write_library_config(cfg)
         self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(result=str)
     def restoreAllHiddenShows(self):
@@ -2879,7 +2879,7 @@ class VideoBridge(QObject):
         cfg["videoHiddenShowIds"] = []
         _write_library_config(cfg)
         self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(str, result=str)
     def restoreHiddenShowsForRoot(self, root_id):
@@ -2893,7 +2893,7 @@ class VideoBridge(QObject):
         cfg["videoHiddenShowIds"] = [h for h in hidden if h not in root_show_ids]
         _write_library_config(cfg)
         self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
 
     @Slot(str, result=str)
     def getEpisodesForShow(self, show_id):

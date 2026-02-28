@@ -3011,7 +3011,9 @@ function closeTracksPanel(){
               }
 
               // Warn only if no in-app backend is available.
-              if (!state.holyGrailAvailable && !state.mpvAvailable) {
+              // Butterfly has an inline Qt player via player.start() — skip toast if present.
+              var hasInlineQtPlayer = !!(Tanko.api && Tanko.api.player && typeof Tanko.api.player.start === 'function');
+              if (!state.holyGrailAvailable && !state.mpvAvailable && !hasInlineQtPlayer) {
                 const msg = state.holyGrailAvailError
                   ? `Holy Grail not available: ${state.holyGrailAvailError}`
                   : `mpv not available${state.mpvAvailError ? ': ' + state.mpvAvailError : ''}`;
@@ -6642,7 +6644,10 @@ function getEpisodeById(epId){
     if (!canHolyGrail) {
       state._lastEnsurePlayerError = state.holyGrailAvailError ? String(state.holyGrailAvailError) : 'probe_failed';
       setEngineUi(false, false);
-      toast(state.holyGrailAvailError ? `Holy Grail not available: ${state.holyGrailAvailError}` : 'Holy Grail not available');
+      // Butterfly has an inline Qt player — don't toast about HG unavailability.
+      if (!(Tanko.api && Tanko.api.player && typeof Tanko.api.player.start === 'function')) {
+        toast(state.holyGrailAvailError ? `Holy Grail not available: ${state.holyGrailAvailError}` : 'Holy Grail not available');
+      }
       return null;
     }
 

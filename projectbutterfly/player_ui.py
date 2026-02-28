@@ -1011,7 +1011,20 @@ class MpvContainer(QWidget):
         MpvContainer, positioned absolutely and raised above render_host.
         There is NO full-covering overlay widget — that would create an HWND
         on Windows that occludes the mpv render surface (audio-only bug).
-        Mouse/keyboard events are handled by MpvContainer itself.
+
+    Mouse behavior (exact match with run_player.py MpvRenderHost):
+        - Left click: dismiss open overlays (if any), keep focus.  Does NOT
+          toggle play/pause (prevents double-click causing accidental toggle).
+        - Double-click: toggle fullscreen.
+        - Right-click: show context menu.
+        - Wheel: volume adjust.
+        - Mouse move: show cursor; HUD reveals only in bottom activation zone
+          (bottom ~110px), not on any mouse movement.
+
+    Cursor auto-hide (matches run_player.py):
+        - Separate from HUD auto-hide.
+        - Cursor hides after 2s idle in fullscreen only.
+        - Cursor always visible when controls or overlays are open.
     """
 
     # Signals to app.py
@@ -1019,12 +1032,15 @@ class MpvContainer(QWidget):
     request_minimize = Signal()
     request_back = Signal()
 
-    _AUTOHIDE_MS = 2000
+    _BOTTOM_ZONE_HEIGHT = 110  # px — matches run_player.py BOTTOM_ZONE_HEIGHT
+    _CONTROLS_AUTOHIDE_MS = 3000  # matches run_player.py
+    _CURSOR_AUTOHIDE_MS = 2000  # matches run_player.py
 
     def __init__(self, player_bridge, parent=None):
         super().__init__(parent)
         self._bridge = player_bridge
-        self._controls_visible = True
+        self._controls_visible = False
+        self._was_in_bottom_zone = False
         self._last_state = {}
         self.setStyleSheet("background: black;")
         self.setMouseTracking(True)
@@ -1048,6 +1064,10 @@ class MpvContainer(QWidget):
         self.toast = ToastHUD(self)
         self.tracks_drawer = TracksDrawer(self)
         self.playlist_drawer = PlaylistDrawer(self)
+
+        # Start with controls hidden (they reveal on bottom-zone mouse entry)
+        self.top_strip.hide()
+        self.bottom_hud.hide()
 
         # Wire top strip
         self.top_strip.minimize_clicked.connect(self.request_minimize)
@@ -1082,13 +1102,15 @@ class MpvContainer(QWidget):
             lambda v: self._bridge.setAutoAdvance(v)
         )
 
-        # Autohide timer
-        self._autohide_timer = QTimer(self)
-        self._autohide_timer.setSingleShot(True)
-        self._autohide_timer.timeout.connect(lambda: self._set_controls_visible(False))
+        # HUD auto-hide timer (3s, matches run_player.py)
+        self._hide_controls_timer = QTimer(self)
+        self._hide_controls_timer.setSingleShot(True)
+        self._hide_controls_timer.timeout.connect(lambda: self._set_controls_visible(False))
 
-        # Double-click tracking
-        self._left_click_last_t = None
+        # Cursor auto-hide timer (2s, fullscreen only, matches run_player.py)
+        self._hide_cursor_timer = QTimer(self)
+        self._hide_cursor_timer.setSingleShot(True)
+        self._hide_cursor_timer.timeout.connect(self._maybe_hide_cursor)
 
         # Aspect ratio cycling
         self._aspect_presets = ["", "16:9", "4:3", "21:9", "2.35:1", "1:1"]
@@ -1123,28 +1145,138 @@ class MpvContainer(QWidget):
         self.playlist_drawer.setGeometry(w - 320, 40, 320, h - 130)
         self.playlist_drawer.raise_()
 
-    # ── controls visibility ─────────────────────────────────────────────
+    # ── overlay / drawer helpers (matches run_player.py) ────────────────
+
+    def _any_overlay_open(self):
+        """Check if any overlay drawer is currently open."""
+        try:
+            if self.tracks_drawer.is_open():
+                return True
+            if self.playlist_drawer.is_open():
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _dismiss_overlays_on_click(self):
+        """If any overlay drawer is open, close it and return True."""
+        try:
+            dismissed = False
+            if self.tracks_drawer.is_open():
+                self.tracks_drawer.hide()
+                dismissed = True
+            if self.playlist_drawer.is_open():
+                self.playlist_drawer.hide()
+                dismissed = True
+            if dismissed:
+                self._set_controls_visible(True)
+                self._arm_controls_autohide()
+            return dismissed
+        except Exception:
+            return False
+
+    # ── controls visibility (matches run_player.py _set_controls_visible) ─
 
     def _set_controls_visible(self, visible):
-        self._controls_visible = visible
-        self.top_strip.setVisible(visible)
-        self.bottom_hud.setVisible(visible)
-        if not visible:
-            self.tracks_drawer.hide()
-            self.playlist_drawer.hide()
-            self.setCursor(Qt.CursorShape.BlankCursor)
+        self._controls_visible = bool(visible)
+        if visible:
+            self.top_strip.show()
+            self.top_strip.raise_()
+            self.bottom_hud.show()
+            self.bottom_hud.raise_()
+            self._show_cursor()
+            self._hide_cursor_timer.stop()
+            self._arm_controls_autohide()
         else:
-            self.setCursor(Qt.CursorShape.ArrowCursor)
-            self._arm_autohide()
+            self.top_strip.hide()
+            self.bottom_hud.hide()
+            self._hide_controls_timer.stop()
+            # Don't brick the cursor — use a timer so movement brings it back.
+            self._show_cursor()
+            self._arm_cursor_autohide()
 
-    def _arm_autohide(self):
-        self._autohide_timer.stop()
-        self._autohide_timer.start(self._AUTOHIDE_MS)
+    def _arm_controls_autohide(self):
+        """Start/refresh the HUD auto-hide timer unless an overlay is open."""
+        try:
+            if self._controls_visible and not self._any_overlay_open():
+                self._hide_controls_timer.stop()
+                self._hide_controls_timer.start(self._CONTROLS_AUTOHIDE_MS)
+            else:
+                self._hide_controls_timer.stop()
+        except Exception:
+            pass
 
     def _show_controls(self):
+        """Show controls and arm auto-hide."""
         if not self._controls_visible:
             self._set_controls_visible(True)
-        self._arm_autohide()
+        else:
+            self._arm_controls_autohide()
+
+    # ── cursor auto-hide (matches run_player.py — fullscreen only) ──────
+
+    def _show_cursor(self):
+        try:
+            if self.cursor().shape() == Qt.CursorShape.BlankCursor:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+        except Exception:
+            try:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            except Exception:
+                pass
+
+    def _arm_cursor_autohide(self):
+        """Hide cursor after 2s idle in fullscreen; always show on movement."""
+        try:
+            if not self._is_fullscreen():
+                self._hide_cursor_timer.stop()
+                return
+            # Keep cursor visible when controls or overlays are open
+            if self._controls_visible or self._any_overlay_open():
+                self._hide_cursor_timer.stop()
+                self._show_cursor()
+                return
+            self._hide_cursor_timer.stop()
+            self._hide_cursor_timer.start(self._CURSOR_AUTOHIDE_MS)
+        except Exception:
+            pass
+
+    def _maybe_hide_cursor(self):
+        try:
+            if self._is_fullscreen() and not self._controls_visible and not self._any_overlay_open():
+                self.setCursor(Qt.CursorShape.BlankCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+        except Exception:
+            pass
+
+    # ── mouse activity (matches run_player.py _on_mouse_activity) ───────
+
+    def _on_mouse_activity(self, pos):
+        """Any movement reveals cursor; HUD only reveals in bottom zone."""
+        try:
+            self._show_cursor()
+            self._arm_cursor_autohide()
+        except Exception:
+            pass
+        try:
+            self._handle_mouse_move_for_hud(pos)
+        except Exception:
+            pass
+
+    def _handle_mouse_move_for_hud(self, pos):
+        """HUD reveals only when mouse is in the bottom activation zone."""
+        try:
+            bottom_threshold = max(0, self.height() - self._BOTTOM_ZONE_HEIGHT)
+            is_in_bottom_zone = (int(pos.y()) >= bottom_threshold)
+            if is_in_bottom_zone:
+                if not self._controls_visible:
+                    self._set_controls_visible(True)
+                else:
+                    self._arm_controls_autohide()
+            self._was_in_bottom_zone = bool(is_in_bottom_zone)
+        except Exception:
+            pass
 
     # ── state updates from PlayerBridge ──────────────────────────────────
 
@@ -1184,53 +1316,71 @@ class MpvContainer(QWidget):
     # ── event filter for render_host mouse events ───────────────────────
 
     def eventFilter(self, obj, event):
-        """Forward mouse events from render_host up to MpvContainer."""
+        """Forward mouse events from render_host (matches run_player.py MpvRenderHost)."""
         if obj is self.render_host:
             etype = event.type()
             if etype == QEvent.Type.MouseMove:
-                self._show_controls()
+                self._on_mouse_activity(event.position().toPoint())
                 return False
             if etype == QEvent.Type.MouseButtonPress:
-                self._handle_mouse_press(event)
+                self._handle_render_host_click(event)
+                return True
+            if etype == QEvent.Type.MouseButtonDblClick:
+                self._handle_render_host_dblclick(event)
                 return True
             if etype == QEvent.Type.Wheel:
                 self._handle_wheel(event)
                 return True
         return super().eventFilter(obj, event)
 
-    # ── mouse events ────────────────────────────────────────────────────
+    # ── mouse events (matches run_player.py MpvRenderHost exactly) ──────
 
     def mouseMoveEvent(self, event):
-        self._show_controls()
+        self._on_mouse_activity(event.position().toPoint())
         super().mouseMoveEvent(event)
 
-    def mousePressEvent(self, event):
-        self._handle_mouse_press(event)
-
-    def _handle_mouse_press(self, event):
+    def _handle_render_host_click(self, event):
+        """Left click: dismiss overlays, keep focus.  NO play/pause on click.
+        Right click: context menu.  (Matches run_player.py MpvRenderHost.)"""
+        if event.button() == Qt.MouseButton.RightButton:
+            global_pos = self.render_host.mapToGlobal(event.position().toPoint())
+            self._show_context_menu(global_pos)
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton:
-            now = time.monotonic()
-            if self._left_click_last_t and (now - self._left_click_last_t) < 0.35:
-                self.request_fullscreen.emit()
-                self._left_click_last_t = None
+            # Dismiss overlays if any are open (matches _dismiss_overlays_on_click)
+            if self._dismiss_overlays_on_click():
                 event.accept()
                 return
-            self._left_click_last_t = now
-            # Single click: toggle play/pause
-            QTimer.singleShot(350, self._check_single_click)
-            event.accept()
-            return
-        if event.button() == Qt.MouseButton.RightButton:
-            self._show_controls()
-            self._show_context_menu(event.globalPosition().toPoint())
+            # Keep focus for hotkeys
+            try:
+                w = self.window()
+                if w:
+                    w.activateWindow()
+                    w.raise_()
+                    w.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+            except Exception:
+                pass
+            self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
             event.accept()
             return
 
-    def _check_single_click(self):
-        """If no double-click happened within 350ms, treat as single click → play/pause."""
-        if self._left_click_last_t is not None:
-            self._toggle_play_pause()
-            self._left_click_last_t = None
+    def _handle_render_host_dblclick(self, event):
+        """Double-click: toggle fullscreen (left button only).
+        Matches run_player.py MpvRenderHost.mouseDoubleClickEvent."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.request_fullscreen.emit()
+            # Keep focus reliable after toggling
+            try:
+                w = self.window()
+                if w:
+                    w.activateWindow()
+                    w.raise_()
+                    w.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+            except Exception:
+                pass
+            self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+            event.accept()
 
     def wheelEvent(self, event):
         self._handle_wheel(event)
@@ -1244,86 +1394,153 @@ class MpvContainer(QWidget):
         self.volume_hud.show_volume(self._bridge._volume)
         event.accept()
 
-    # ── context menu ────────────────────────────────────────────────────
+    # ── context menu (ported from run_player.py _show_context_menu) ─────
 
     def _show_context_menu(self, global_pos):
-        menu = self._QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background: rgba(28, 28, 28, 0.96);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 6px; padding: 4px 0;
-                color: rgba(255, 255, 255, 0.92); font-size: 12px;
-            }
-            QMenu::item { padding: 6px 24px; }
-            QMenu::item:selected { background: rgba(255, 255, 255, 0.12); }
-            QMenu::separator { height: 1px; background: rgba(255,255,255,0.10); margin: 4px 8px; }
-        """)
-
-        # Playback
-        is_playing = self._bridge._is_playing
-        menu.addAction("\u23f8 Pause" if is_playing else "\u25b6 Play", self._toggle_play_pause)
-        menu.addAction("\u23f9 Stop && Return", self._on_back)
-        menu.addSeparator()
-
-        # Seek
-        menu.addAction("\u23ea Seek -10s", lambda: self._seek_relative(-10))
-        menu.addAction("\u23e9 Seek +10s", lambda: self._seek_relative(10))
-        menu.addAction("\u23ea Seek -30s", lambda: self._seek_relative(-30))
-        menu.addAction("\u23e9 Seek +30s", lambda: self._seek_relative(30))
-        menu.addSeparator()
-
-        # Speed submenu
-        speed_menu = menu.addMenu(f"Speed ({self._bridge._speed:.2f}\u00d7)")
-        for s in [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]:
-            act = speed_menu.addAction(f"{s:.2f}\u00d7", lambda spd=s: self._set_speed(spd))
-            if abs(self._bridge._speed - s) < 0.01:
-                act.setEnabled(False)
-
-        menu.addSeparator()
-
-        # Audio tracks submenu
+        """Show context menu at position (text labels; matches run_player.py)."""
         try:
-            tracks = self._bridge.get_track_list()
-            audio_tracks = [t for t in tracks if t.get("type") == "audio"]
-            if audio_tracks:
-                audio_menu = menu.addMenu("Audio Track")
-                for t in audio_tracks:
-                    tid = t.get("id", 0)
-                    label = f"#{tid}"
-                    if t.get("title"):
-                        label += f" {t['title']}"
-                    if t.get("lang"):
-                        label += f" [{t['lang']}]"
-                    audio_menu.addAction(label, lambda i=tid: self._set_audio_track(i))
+            menu = self._QMenu(self)
+            menu.setStyleSheet("""
+                QMenu {
+                    background: rgba(12, 12, 12, 0.88);
+                    color: rgba(255, 255, 255, 0.92);
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    padding: 6px;
+                }
+                QMenu::item {
+                    padding: 8px 18px;
+                    border-radius: 8px;
+                }
+                QMenu::item:selected {
+                    background: rgba(255, 255, 255, 0.12);
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: rgba(255, 255, 255, 0.08);
+                    margin: 6px 6px;
+                }
+            """)
 
-            # Subtitle tracks submenu
-            sub_tracks = [t for t in tracks if t.get("type") == "sub"]
-            sub_menu = menu.addMenu("Subtitle Track")
-            sub_menu.addAction("Off", lambda: self._on_subtitle_selected(0))
-            for t in sub_tracks:
-                tid = t.get("id", 0)
-                label = f"#{tid}"
-                if t.get("title"):
-                    label += f" {t['title']}"
-                if t.get("lang"):
-                    label += f" [{t['lang']}]"
-                sub_menu.addAction(label, lambda i=tid: self._on_subtitle_selected(i))
-        except Exception:
-            pass
+            menu.addSeparator()
 
-        menu.addSeparator()
+            # Playback submenu
+            playback_m = menu.addMenu("Playback")
+            paused = not self._bridge._is_playing
+            playback_m.addAction("Play" if paused else "Pause").triggered.connect(self._toggle_play_pause)
+            playback_m.addAction("Stop").triggered.connect(self._on_back)
+            playback_m.addAction("Restart from Beginning").triggered.connect(
+                lambda: self._bridge.seek("0")
+            )
 
-        # Navigation
-        menu.addAction("\u23ed Next Episode", self._next_episode)
-        menu.addAction("\u23ee Previous Episode", self._prev_episode)
-        menu.addSeparator()
+            # Seek submenu
+            seek_m = playback_m.addMenu("Seek")
+            seek_m.addAction("Back 10 seconds").triggered.connect(lambda: self._seek_relative(-10))
+            seek_m.addAction("Back 30 seconds").triggered.connect(lambda: self._seek_relative(-30))
+            seek_m.addAction("Forward 10 seconds").triggered.connect(lambda: self._seek_relative(10))
+            seek_m.addAction("Forward 30 seconds").triggered.connect(lambda: self._seek_relative(30))
 
-        # Fullscreen
-        menu.addAction("\u25a2 Toggle Fullscreen", lambda: self.request_fullscreen.emit())
+            # Speed submenu
+            sp_m = playback_m.addMenu("Speed")
+            speed_presets = self._bridge._SPEED_PRESETS if hasattr(self._bridge, '_SPEED_PRESETS') else [
+                0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0
+            ]
+            for sp in speed_presets:
+                a = sp_m.addAction(f"{sp}\u00d7")
+                a.setCheckable(True)
+                a.setChecked(abs(float(sp) - float(self._bridge._speed)) < 1e-6)
+                a.triggered.connect(lambda checked=False, s=sp: self._set_speed(s))
+            sp_m.addSeparator()
+            sp_m.addAction("Reset to 1.0\u00d7").triggered.connect(lambda: self._set_speed(1.0))
 
-        menu.exec(global_pos)
-        menu.deleteLater()
+            # Video submenu
+            video_m = menu.addMenu("Video")
+            ar_m = video_m.addMenu("Aspect Ratio")
+            ar_presets = [
+                ("Default", "-1"), ("16:9", "16:9"), ("4:3", "4:3"),
+                ("21:9", "2.33:1"), ("2.35:1", "2.35:1"), ("1:1", "1:1"),
+                ("9:16", "9:16"), ("3:2", "3:2"),
+            ]
+            for label, val in ar_presets:
+                ar_m.addAction(label).triggered.connect(
+                    lambda checked=False, v=val: self._bridge.set_aspect_ratio(v)
+                )
+            video_m.addAction("Fullscreen").triggered.connect(
+                lambda: self.request_fullscreen.emit()
+            )
+
+            # Audio submenu
+            try:
+                tracks = self._bridge.get_track_list()
+                cur_aid = self._bridge._last_aid
+                cur_sid = self._bridge._last_sid
+
+                audio_m = menu.addMenu("Audio")
+                aud_m = audio_m.addMenu("Audio Track")
+                audio_tracks = [t for t in tracks if t.get("type") == "audio"]
+                if not audio_tracks:
+                    na = aud_m.addAction("(No audio tracks)")
+                    na.setEnabled(False)
+                else:
+                    for t in audio_tracks:
+                        tid = int(t.get("id", 0))
+                        lang = (t.get("lang") or "").strip()
+                        title = (t.get("title") or "").strip()
+                        parts = []
+                        if lang:
+                            parts.append(lang.upper())
+                        if title and (not lang or title.lower() != lang.lower()):
+                            parts.append(title)
+                        txt = " \u00b7 ".join(parts) if parts else f"Track #{tid}"
+                        a = aud_m.addAction(txt)
+                        a.setCheckable(True)
+                        a.setChecked(str(tid) == str(cur_aid))
+                        a.triggered.connect(lambda checked=False, x=tid: self._on_audio_selected(x))
+
+                # Subtitles submenu
+                subtitle_m = menu.addMenu("Subtitles")
+                sub_m = subtitle_m.addMenu("Subtitle Track")
+                off = sub_m.addAction("Off")
+                off.setCheckable(True)
+                off.setChecked(cur_sid in (None, "no", 0, "0", False))
+                off.triggered.connect(lambda: self._on_subtitle_selected(0))
+
+                sub_tracks = [t for t in tracks if t.get("type") == "sub"]
+                if not sub_tracks:
+                    ns = sub_m.addAction("(No subtitles)")
+                    ns.setEnabled(False)
+                else:
+                    for t in sub_tracks:
+                        tid = int(t.get("id", 0))
+                        lang = (t.get("lang") or "").strip()
+                        title = (t.get("title") or "").strip()
+                        parts = []
+                        if lang:
+                            parts.append(lang.upper())
+                        if title and (not lang or title.lower() != lang.lower()):
+                            parts.append(title)
+                        txt = " \u00b7 ".join(parts) if parts else f"Sub #{tid}"
+                        a = sub_m.addAction(txt)
+                        a.setCheckable(True)
+                        a.setChecked(str(tid) == str(cur_sid))
+                        a.triggered.connect(lambda checked=False, x=tid: self._on_subtitle_selected(x))
+            except Exception:
+                pass
+
+            # Filters / Advanced
+            adv_m = menu.addMenu("Filters / Advanced")
+            adv_m.addAction("Show Info").triggered.connect(self._show_info_toast)
+
+            # Playlist submenu
+            playlist_m = menu.addMenu("Playlist")
+            prev_a = playlist_m.addAction("Previous Episode")
+            prev_a.triggered.connect(self._prev_episode)
+            next_a = playlist_m.addAction("Next Episode")
+            next_a.triggered.connect(self._next_episode)
+            playlist_m.addAction("Playlist\u2026").triggered.connect(self._toggle_playlist)
+
+            menu.exec(global_pos)
+        except Exception as e:
+            print(f"Context menu error: {e}")
 
     # ── keyboard shortcuts (exact match with run_player.py) ─────────────
 
@@ -1454,16 +1671,9 @@ class MpvContainer(QWidget):
             self._prompt_goto_time()
             return True
 
-        # Diagnostics (I) — just show a toast with stats
+        # Diagnostics (I)
         if key == Qt.Key.Key_I:
-            st = self._last_state
-            info = (
-                f"Pos: {_fmt_time(st.get('positionSec'))} / {_fmt_time(st.get('durationSec'))}\n"
-                f"Watched: {_fmt_time(st.get('watchedTime'))}\n"
-                f"Speed: {st.get('speed', 1.0):.2f}\u00d7\n"
-                f"Playlist: {st.get('playlistIndex', 0)+1}/{st.get('playlistLength', 0)}"
-            )
-            self.toast.show_toast(info, 3000)
+            self._show_info_toast()
             return True
 
         return False
@@ -1556,15 +1766,48 @@ class MpvContainer(QWidget):
             pass
 
     def _show_speed_menu(self):
-        # Simple cycle on click
-        self._bridge.cycle_speed(+1)
-        self.toast.show_toast(f"Speed {self._bridge._speed:.2f}\u00d7")
-        self.bottom_hud.set_speed_label(self._bridge._speed)
+        """Show speed preset menu anchored to the speed chip (matches run_player.py)."""
+        try:
+            m = self._QMenu(self)
+            m.setStyleSheet("""
+                QMenu { background: rgba(12, 12, 12, 0.88); color: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.12); padding: 6px; }
+                QMenu::item { padding: 8px 18px; border-radius: 8px; }
+                QMenu::item:selected { background: rgba(255, 255, 255, 0.12); }
+            """)
+            speed_presets = self._bridge._SPEED_PRESETS if hasattr(self._bridge, '_SPEED_PRESETS') else [
+                0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0
+            ]
+            for sp in speed_presets:
+                a = m.addAction(f"{sp}\u00d7")
+                a.setCheckable(True)
+                a.setChecked(abs(float(sp) - float(self._bridge._speed)) < 1e-6)
+                a.triggered.connect(lambda checked=False, s=sp: self._set_speed(s))
+            m.addSeparator()
+            m.addAction("Reset to 1.0\u00d7").triggered.connect(lambda: self._set_speed(1.0))
+            # Anchor to speed button
+            btn = self.bottom_hud.speed_btn
+            m.exec(btn.mapToGlobal(QPoint(0, -m.sizeHint().height())))
+        except Exception:
+            # Fallback: cycle speed
+            self._bridge.cycle_speed(+1)
+            self.toast.show_toast(f"Speed {self._bridge._speed:.2f}\u00d7")
+            self.bottom_hud.set_speed_label(self._bridge._speed)
 
     def _set_speed(self, speed):
         self._bridge.set_speed(speed)
         self.toast.show_toast(f"Speed {speed:.2f}\u00d7")
         self.bottom_hud.set_speed_label(speed)
+
+    def _show_info_toast(self):
+        """Show diagnostics info toast (matches run_player.py 'I' key)."""
+        st = self._last_state
+        info = (
+            f"Pos: {_fmt_time(st.get('positionSec'))} / {_fmt_time(st.get('durationSec'))}\n"
+            f"Watched: {_fmt_time(st.get('watchedTime'))}\n"
+            f"Speed: {st.get('speed', 1.0):.2f}\u00d7\n"
+            f"Playlist: {st.get('playlistIndex', 0)+1}/{st.get('playlistLength', 0)}"
+        )
+        self.toast.show_toast(info, 3000)
 
     def _cycle_aspect(self):
         self._aspect_index = (self._aspect_index + 1) % len(self._aspect_presets)
