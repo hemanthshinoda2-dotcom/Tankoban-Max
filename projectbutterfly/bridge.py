@@ -9498,12 +9498,27 @@ class WebTabManagerBridge(QObject):
 
     @Slot(result=str)
     def openBrowser(self):
-        """Switch the app stack to the native BrowserWidget. Called from JS openSourcesTab()."""
+        """Switch the app stack to the native BrowserWidget. Called from JS openSources()."""
         try:
-            root = self.parent()
-            if root and hasattr(root, "show_browser"):
+            # self.parent() is BridgeRoot; the window ref is on BridgeRoot.window._win
+            bridge_root = self.parent()
+            win = getattr(getattr(bridge_root, "window", None), "_win", None)
+            if win and hasattr(win, "show_browser"):
                 from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, root.show_browser)
+                QTimer.singleShot(0, win.show_browser)
+        except Exception:
+            pass
+        return json.dumps({"ok": True})
+
+    @Slot(result=str)
+    def closeBrowser(self):
+        """Switch the app stack back to the renderer (index 0). Called when leaving sources mode."""
+        try:
+            bridge_root = self.parent()
+            win = getattr(getattr(bridge_root, "window", None), "_win", None)
+            if win and hasattr(win, "show_web_view"):
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, win.show_web_view)
         except Exception:
             pass
         return json.dumps({"ok": True})
@@ -10476,6 +10491,7 @@ BRIDGE_SHIM_JS = r"""
         setZoomFactor:    wrap(b.webTabManager.setZoomFactor, b.webTabManager),
         getTabs:          wrap(b.webTabManager.getTabs, b.webTabManager),
         openBrowser:      wrap(b.webTabManager.openBrowser, b.webTabManager),
+        closeBrowser:     wrap(b.webTabManager.closeBrowser, b.webTabManager),
         onTabCreated:     onEvent(b.webTabManager.tabCreated),
         onTabClosed:      onEvent(b.webTabManager.tabClosed),
         onTabUpdated:     onEvent(b.webTabManager.tabUpdated),

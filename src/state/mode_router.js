@@ -61,6 +61,16 @@
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
 
+    // In Butterfly, switch Qt stacked widget back to renderer when leaving browser
+    if (!isSources && window.__tankoButterfly) {
+      try {
+        var api = window.electronAPI || (window.Tanko && window.Tanko.api);
+        if (api && api.webTabManager && typeof api.webTabManager.closeBrowser === 'function') {
+          api.webTabManager.closeBrowser();
+        }
+      } catch (_eCB) {}
+    }
+
     try {
       if (window.Tanko && window.Tanko.ui && typeof window.Tanko.ui.setModeTheme === 'function') {
         window.Tanko.ui.setModeTheme(m);
