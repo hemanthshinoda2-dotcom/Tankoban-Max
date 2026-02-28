@@ -144,6 +144,22 @@ def _series_id_for_folder(folder_path):
     return _b64url(str(folder_path or "").encode("utf-8"))
 
 
+def _book_id_for_path(file_path, size, mtime_ms):
+    """Book/comic ID = base64url('path::size::mtimeMs') — matches JS bookIdForPath."""
+    return _b64url("{}::{}::{}".format(
+        str(file_path or ""), int(size or 0), int(mtime_ms or 0)
+    ).encode("utf-8"))
+
+
+def _safe_b64_decode(s):
+    """Decode base64url string, return empty string on failure."""
+    try:
+        padded = s + "=" * (4 - len(s) % 4) if len(s) % 4 else s
+        return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
 def _sha1_b64url(raw_str):
     """SHA1 hash of string → base64url (matches JS crypto.createHash('sha1')...base64url)."""
     h = hashlib.sha1(raw_str.encode("utf-8")).digest()
@@ -809,8 +825,15 @@ class LibraryBridge(QObject):
         self._idx_loaded = True
         raw = storage.read_json(storage.data_path(_LIBRARY_INDEX_FILE), {})
         self._idx = {"series": raw.get("series", []), "books": raw.get("books", [])}
-        # Suppress auto-scan if disk cache has data
-        if self._idx["series"] and self._last_scan_at == 0:
+        # Invalidate old-format cache (IDs without ::size::mtime)
+        needs_rescan = False
+        for b in self._idx["books"][:5]:
+            bid = b.get("id", "") if isinstance(b, dict) else ""
+            if bid and "::" not in _safe_b64_decode(bid):
+                needs_rescan = True
+                break
+        # Suppress auto-scan if disk cache has data AND IDs are correct format
+        if self._idx["series"] and self._last_scan_at == 0 and not needs_rescan:
             self._last_scan_at = 1
 
     def _compute_auto_series(self, cfg):
@@ -894,7 +917,7 @@ class LibraryBridge(QObject):
                     except OSError:
                         continue
                     book = {
-                        "id": _series_id_for_folder(fp),
+                        "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
                         "seriesId": sid,
                         "title": os.path.splitext(f)[0],
                         "path": fp,
@@ -1107,7 +1130,7 @@ class LibraryBridge(QObject):
             st = os.stat(fp)
         except OSError:
             return json.dumps({"ok": False, "error": "file_not_found"})
-        bid = _series_id_for_folder(fp)
+        bid = _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000))
         parent_dir = os.path.dirname(fp)
         sid = _series_id_for_folder(parent_dir)
         book = {
@@ -1165,8 +1188,15 @@ class BooksBridge(QObject):
             "books": raw.get("books", []),
             "folders": raw.get("folders", []),
         }
-        # Suppress auto-scan if disk cache has data
-        if self._idx["series"] and self._last_scan_at == 0:
+        # Invalidate old-format cache (IDs without ::size::mtime) so rescan generates correct IDs
+        needs_rescan = False
+        for b in self._idx["books"][:5]:
+            bid = b.get("id", "") if isinstance(b, dict) else ""
+            if bid and "::" not in _safe_b64_decode(bid):
+                needs_rescan = True
+                break
+        # Suppress auto-scan if disk cache has data AND IDs are correct format
+        if self._idx["series"] and self._last_scan_at == 0 and not needs_rescan:
             self._last_scan_at = 1
 
     def _compute_auto_series(self, cfg):
@@ -1299,7 +1329,8 @@ class BooksBridge(QObject):
                     except OSError:
                         continue
                     book = {
-                        "id": _series_id_for_folder(fp), "seriesId": sid,
+                        "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
+                        "seriesId": sid,
                         "title": os.path.splitext(f)[0], "path": fp,
                         "size": st.st_size, "mtimeMs": int(st.st_mtime * 1000),
                         "format": ext.lstrip(".").lower(),
@@ -1348,7 +1379,8 @@ class BooksBridge(QObject):
                 except OSError:
                     continue
                 book = {
-                    "id": _series_id_for_folder(fp), "seriesId": singles_sid,
+                    "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
+                    "seriesId": singles_sid,
                     "title": os.path.splitext(os.path.basename(fp))[0], "path": fp,
                     "size": st.st_size, "mtimeMs": int(st.st_mtime * 1000),
                     "format": ext.lstrip(".").lower(),
@@ -1586,7 +1618,7 @@ class BooksBridge(QObject):
         cfg = self._read_config()
         cls = self._classify_book(cfg, fp)
         book = {
-            "id": _series_id_for_folder(fp),
+            "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
             "seriesId": cls["seriesId"], "seriesName": cls.get("seriesName", ""),
             "title": os.path.splitext(os.path.basename(fp))[0],
             "path": fp, "size": st.st_size,
@@ -1797,7 +1829,8 @@ class BooksTtsEdgeBridge(QObject):
                     "reason": "edge-tts not available",
                     "boundaries": [], "audioBase64": ""}
         try:
-            comm = et.Communicate(text, voice, rate=rate_str, pitch=pitch_str)
+            comm = et.Communicate(text, voice, rate=rate_str, pitch=pitch_str,
+                                  boundary="WordBoundary")
             audio_chunks = []
             boundaries = []
             async for chunk in comm.stream():
@@ -2418,6 +2451,8 @@ class VideoBridge(QObject):
             for sf in show_folders:
                 all_tasks.append(("show_folder", sf, sf_root_id))
 
+        seen_show_paths = set()   # dedup: prevent show_folder duplicating a root subdir
+
         total = len(all_tasks)
         for ti, (kind, folder, root_id) in enumerate(all_tasks):
             if self._cancel_event.is_set() or scan_id != self._scan_id:
@@ -2435,6 +2470,7 @@ class VideoBridge(QObject):
                     if _should_ignore_dir(sub_name, DEFAULT_SCAN_IGNORE_DIRNAMES, ignore_subs):
                         continue
                     show_id = _video_root_id(sub)
+                    seen_show_paths.add(os.path.normcase(os.path.normpath(sub)))
                     show_eps = self._scan_show_folder(sub, show_id, root_id, sub_name, ignore_subs)
                     if show_eps:
                         thumb = self._find_folder_poster(sub, show_id)
@@ -2476,6 +2512,14 @@ class VideoBridge(QObject):
                     episodes.extend(loose_episodes)
 
             elif kind == "show_folder":
+                norm_sf = os.path.normcase(os.path.normpath(folder))
+                if norm_sf in seen_show_paths:
+                    continue   # already found as subdir of a root folder
+                # Also skip if this is a nested subfolder of an already-scanned show
+                is_nested = any(norm_sf.startswith(other + os.sep) for other in seen_show_paths)
+                if is_nested:
+                    continue
+                seen_show_paths.add(norm_sf)
                 show_id = _video_root_id(folder)
                 show_eps = self._scan_show_folder(folder, show_id, root_id,
                                                    os.path.basename(folder), ignore_subs)
@@ -8815,7 +8859,7 @@ BRIDGE_SHIM_JS = r"""
 
       // booksProgress
       booksProgress: {
-        getAll:  wrap(b.booksProgress.getAll, b.booksProgress),
+        getAll:  wrap(b.booksProgress.getAll, b.booksProgress, 'booksProgress.getAll'),
         get:     wrap(b.booksProgress.get, b.booksProgress),
         save:    wrap(b.booksProgress.save, b.booksProgress),
         clear:   wrap(b.booksProgress.clear, b.booksProgress),
@@ -8896,7 +8940,7 @@ BRIDGE_SHIM_JS = r"""
 
       // videoProgress
       videoProgress: {
-        getAll:   wrap(b.videoProgress.getAll, b.videoProgress),
+        getAll:   wrap(b.videoProgress.getAll, b.videoProgress, 'videoProgress.getAll'),
         get:      wrap(b.videoProgress.get, b.videoProgress),
         save:     wrap(b.videoProgress.save, b.videoProgress),
         clear:    wrap(b.videoProgress.clear, b.videoProgress),
