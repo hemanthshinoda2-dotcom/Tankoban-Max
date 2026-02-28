@@ -2275,23 +2275,31 @@ class VideoBridge(QObject):
             "shows": raw.get("shows", []),
             "episodes": raw.get("episodes", []),
         }
-        # Check for duplicate shows in cached index (stale cache from before dedup fix)
-        has_dupes = False
+        # Dedup shows in memory (cached index may contain duplicates from
+        # Electron scanner when root folders and show folders overlap).
+        # Important: do NOT clear + rescan — that destroys Electron-generated
+        # properties (torrentStreamable, sourceKind, episodeCount, etc.)
+        # that butterfly's scanner doesn't produce.
         if self._idx["shows"]:
             seen_paths = set()
+            deduped = []
+            removed_ids = set()
             for s in self._idx["shows"]:
                 sp = os.path.normcase(os.path.normpath(s.get("path", "") or ""))
                 if sp and sp in seen_paths:
-                    has_dupes = True
-                    break
+                    removed_ids.add(s.get("id"))
+                    continue
                 if sp:
                     seen_paths.add(sp)
-        if has_dupes:
-            print("[video] Duplicate shows detected in cache — clearing and forcing rescan")
-            self._idx = {"roots": [], "shows": [], "episodes": []}
-            self._last_scan_at = 0
-            self._start_scan(force=True)
-        elif self._idx["shows"] and self._last_scan_at == 0:
+                deduped.append(s)
+            if removed_ids:
+                print(f"[video] Deduped {len(removed_ids)} duplicate show(s) in memory")
+                self._idx["shows"] = deduped
+                self._idx["episodes"] = [
+                    e for e in self._idx["episodes"]
+                    if e.get("showId") not in removed_ids
+                ]
+        if self._idx["shows"] and self._last_scan_at == 0:
             self._last_scan_at = 1
 
     def _filter_hidden(self, idx, hidden_ids):
@@ -2503,6 +2511,23 @@ class VideoBridge(QObject):
         ignore_subs = [s.lower() for s in cfg.get("scanIgnore", []) if s]
         hidden_set = set(cfg.get("videoHiddenShowIds", []))
 
+        # Build lookup of previous show properties so we can carry forward
+        # Electron-generated metadata (torrentStreamable, sourceKind, etc.)
+        _prev_shows_by_path = {}
+        _prev_episodes_by_id = {}
+        _CARRY_FORWARD_KEYS = (
+            "torrentStreamable", "sourceKind", "torrentId",
+            "torrentInfoHash", "torrentMagnetUri", "torrentFileIndex",
+        )
+        for ps in self._idx.get("shows", []):
+            pp = os.path.normcase(os.path.normpath(ps.get("path", "") or ""))
+            if pp:
+                _prev_shows_by_path[pp] = ps
+        for pe in self._idx.get("episodes", []):
+            pid = pe.get("id")
+            if pid:
+                _prev_episodes_by_id[pid] = pe
+
         all_tasks = []
         for vf in video_folders:
             root_id = _video_root_id(vf)
@@ -2539,11 +2564,22 @@ class VideoBridge(QObject):
                     show_eps = self._scan_show_folder(sub, show_id, root_id, sub_name, ignore_subs)
                     if show_eps:
                         thumb = self._find_folder_poster(sub, show_id)
-                        shows.append({
+                        is_streamable = self._has_stream_manifest(sub)
+                        show_obj = {
                             "id": show_id, "rootId": root_id, "name": sub_name,
                             "path": sub, "displayPath": sub, "isLoose": False,
                             "thumbPath": thumb, "folders": [],
-                        })
+                            "episodeCount": len(show_eps),
+                            "torrentStreamable": is_streamable,
+                            "sourceKind": "torrent_stream" if is_streamable else "local",
+                        }
+                        # Carry forward additional Electron-generated metadata
+                        prev = _prev_shows_by_path.get(os.path.normcase(os.path.normpath(sub)))
+                        if prev:
+                            for k in _CARRY_FORWARD_KEYS:
+                                if k in prev and k not in show_obj:
+                                    show_obj[k] = prev[k]
+                        shows.append(show_obj)
                         episodes.extend(show_eps)
                 # Loose files at root level
                 try:
@@ -2590,12 +2626,22 @@ class VideoBridge(QObject):
                                                    os.path.basename(folder), ignore_subs)
                 if show_eps:
                     thumb = self._find_folder_poster(folder, show_id)
-                    shows.append({
+                    is_streamable = self._has_stream_manifest(folder)
+                    show_obj = {
                         "id": show_id, "rootId": root_id,
                         "name": os.path.basename(folder),
                         "path": folder, "displayPath": folder, "isLoose": False,
                         "thumbPath": thumb, "folders": [],
-                    })
+                        "episodeCount": len(show_eps),
+                        "torrentStreamable": is_streamable,
+                        "sourceKind": "torrent_stream" if is_streamable else "local",
+                    }
+                    prev = _prev_shows_by_path.get(os.path.normcase(os.path.normpath(folder)))
+                    if prev:
+                        for k in _CARRY_FORWARD_KEYS:
+                            if k in prev and k not in show_obj:
+                                show_obj[k] = prev[k]
+                    shows.append(show_obj)
                     episodes.extend(show_eps)
 
         # Pseudo entries for added files
@@ -2613,6 +2659,16 @@ class VideoBridge(QObject):
             self._scan_thread = None
             self._emit_scan_status(False)
             return
+
+        # Carry forward Electron-generated episode metadata (torrent info)
+        if _prev_episodes_by_id:
+            for ep in episodes:
+                prev_ep = _prev_episodes_by_id.get(ep.get("id"))
+                if prev_ep:
+                    for k in _CARRY_FORWARD_KEYS:
+                        if k in prev_ep and k not in ep:
+                            ep[k] = prev_ep[k]
+
         self._idx = {"roots": roots, "shows": shows, "episodes": episodes}
         storage.write_json_sync(storage.data_path(_VIDEO_INDEX_FILE), self._idx)
         self._last_scan_at = int(time.time() * 1000)
