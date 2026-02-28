@@ -259,6 +259,25 @@ def _write_library_config(cfg):
 # This mixin generates the @Slot implementations from a filename.
 # ---------------------------------------------------------------------------
 
+def _backfill_updated_at(data, write_fn):
+    """Backfill missing updatedAt on progress entries (one-time migration).
+    Electron's save handlers always add updatedAt; Butterfly didn't until this fix."""
+    if not data or not isinstance(data, dict):
+        return data
+    dirty = False
+    now = int(time.time() * 1000)
+    for k, v in data.items():
+        if isinstance(v, dict) and "updatedAt" not in v:
+            v["updatedAt"] = now
+            dirty = True
+    if dirty:
+        try:
+            write_fn(data)
+        except Exception:
+            pass
+    return data
+
+
 class JsonCrudMixin:
     """
     Provides getAll/get/save/clear/clearAll for a single JSON file.
@@ -470,7 +489,7 @@ class ProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(self.crud_get_all())
+        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
 
     @Slot(str, result=str)
     def get(self, book_id):
@@ -478,7 +497,12 @@ class ProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, str, result=str)
     def save(self, book_id, progress_json):
-        return json.dumps(self.crud_save(book_id, json.loads(progress_json)))
+        data = self._crud_read()
+        prev = data.get(book_id, {}) if isinstance(data.get(book_id), dict) else {}
+        nxt = json.loads(progress_json)
+        data[book_id] = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
+        self._crud_write(data)
+        return json.dumps(_ok())
 
     @Slot(str, result=str)
     def clear(self, book_id):
@@ -518,7 +542,7 @@ class BooksProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(self.crud_get_all())
+        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
 
     @Slot(str, result=str)
     def get(self, book_id):
@@ -526,7 +550,12 @@ class BooksProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, str, result=str)
     def save(self, book_id, progress_json):
-        return json.dumps(self.crud_save(book_id, json.loads(progress_json)))
+        data = self._crud_read()
+        prev = data.get(book_id, {}) if isinstance(data.get(book_id), dict) else {}
+        nxt = json.loads(progress_json)
+        data[book_id] = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
+        self._crud_write(data)
+        return json.dumps(_ok())
 
     @Slot(str, result=str)
     def clear(self, book_id):
@@ -698,7 +727,7 @@ class VideoProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(self.crud_get_all())
+        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
 
     @Slot(str, result=str)
     def get(self, video_id):
@@ -706,9 +735,13 @@ class VideoProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, str, result=str)
     def save(self, video_id, progress_json):
-        result = self.crud_save(video_id, json.loads(progress_json))
+        data = self._crud_read()
+        prev = data.get(video_id, {}) if isinstance(data.get(video_id), dict) else {}
+        nxt = json.loads(progress_json)
+        data[video_id] = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
+        self._crud_write(data)
         self.progressUpdated.emit(json.dumps({"videoId": video_id}))
-        return json.dumps(result)
+        return json.dumps(_ok())
 
     @Slot(str, result=str)
     def clear(self, video_id):
