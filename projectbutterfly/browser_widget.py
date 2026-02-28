@@ -29,10 +29,11 @@ import json
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabBar,
     QStackedWidget, QLineEdit, QToolButton, QSizePolicy,
-    QMenu, QAction, QLabel, QFrame, QScrollArea, QProgressBar,
+    QMenu, QLabel, QFrame, QScrollArea, QProgressBar,
     QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QApplication,
 )
+from PySide6.QtGui import QAction
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtCore import Qt, QUrl, QTimer, Signal, QPoint, QObject, QThread

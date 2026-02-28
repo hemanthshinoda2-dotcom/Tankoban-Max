@@ -302,7 +302,7 @@ class TankobanWindow(QMainWindow):
         # --- Native Qt browser chrome (layer 2) ---
         # Replaces the HTML-overlay approach. Each web tab is a proper QStackedWidget
         # child — no HWND z-ordering conflicts, no setGeometry juggling.
-        from projectbutterfly.browser_widget import BrowserWidget
+        from browser_widget import BrowserWidget
         self._browser_widget = BrowserWidget(self._browser_profile, self)
         self._stack.addWidget(self._browser_widget)  # index 2
 

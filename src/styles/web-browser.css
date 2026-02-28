@@ -1,7 +1,8 @@
 /* Tankoban Web Browser — scoped design tokens
    Inherit from global ui-tokens.css; override in --wb-* namespace */
 
-.webBrowserView {
+.webBrowserView,
+#webLibraryView {
   /* Map browser palette to the app's global design tokens for a cohesive look */
   --wb-bg: var(--bg);
   --wb-text: var(--text);
