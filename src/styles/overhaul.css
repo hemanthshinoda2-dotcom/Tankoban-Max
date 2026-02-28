@@ -584,14 +584,14 @@ body[data-tile-density="compact"] #continueRow .contCover{
 /* Series cards */
 /* Build 8 (UI): Larger thumbnails + density toggle (Large/Medium). */
 :root{
-  --tile-min: 200px;
-  --tile-gap: 16px;
+  --tile-min: 210px;
+  --tile-gap: 12px;
   --tile-title-size: 13px;
   --tile-meta-size: 12px;
 }
 body[data-tile-density="compact"]{
   --tile-min: 170px;
-  --tile-gap: 12px;
+  --tile-gap: 10px;
   --tile-title-size: 12px;
   --tile-meta-size: 11px;
 }
@@ -607,14 +607,14 @@ body[data-tile-density="compact"]{
 */
 #libraryView{
   /* Build 10 (UI): Comics tile sizing matches Videos (bigger covers). */
-  --tile-min: 200px;
-  --tile-gap: 16px;
+  --tile-min: 210px;
+  --tile-gap: 12px;
   --tile-title-size: 13px;
   --tile-meta-size: 12px;
 }
 body[data-tile-density="compact"] #libraryView{
   --tile-min: 170px;
-  --tile-gap: 12px;
+  --tile-gap: 10px;
   --tile-title-size: 12px;
   --tile-meta-size: 11px;
 }

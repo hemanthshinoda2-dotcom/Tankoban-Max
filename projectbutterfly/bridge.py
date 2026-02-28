@@ -825,15 +825,19 @@ class LibraryBridge(QObject):
         self._idx_loaded = True
         raw = storage.read_json(storage.data_path(_LIBRARY_INDEX_FILE), {})
         self._idx = {"series": raw.get("series", []), "books": raw.get("books", [])}
-        # Invalidate old-format cache (IDs without ::size::mtime)
+        # Invalidate old-format cache (IDs without ::size::mtime) and force rescan
         needs_rescan = False
         for b in self._idx["books"][:5]:
             bid = b.get("id", "") if isinstance(b, dict) else ""
             if bid and "::" not in _safe_b64_decode(bid):
                 needs_rescan = True
                 break
-        # Suppress auto-scan if disk cache has data AND IDs are correct format
-        if self._idx["series"] and self._last_scan_at == 0 and not needs_rescan:
+        if needs_rescan:
+            print("[comics] Old-format IDs detected in cache — clearing and forcing rescan")
+            self._idx = {"series": [], "books": []}
+            self._last_scan_at = 0
+            self._start_scan(force=True)
+        elif self._idx["series"] and self._last_scan_at == 0:
             self._last_scan_at = 1
 
     def _compute_auto_series(self, cfg):
@@ -1188,15 +1192,19 @@ class BooksBridge(QObject):
             "books": raw.get("books", []),
             "folders": raw.get("folders", []),
         }
-        # Invalidate old-format cache (IDs without ::size::mtime) so rescan generates correct IDs
+        # Invalidate old-format cache (IDs without ::size::mtime) and force rescan
         needs_rescan = False
         for b in self._idx["books"][:5]:
             bid = b.get("id", "") if isinstance(b, dict) else ""
             if bid and "::" not in _safe_b64_decode(bid):
                 needs_rescan = True
                 break
-        # Suppress auto-scan if disk cache has data AND IDs are correct format
-        if self._idx["series"] and self._last_scan_at == 0 and not needs_rescan:
+        if needs_rescan:
+            print("[books] Old-format IDs detected in cache — clearing and forcing rescan")
+            self._idx = {"series": [], "books": [], "folders": []}
+            self._last_scan_at = 0
+            self._start_scan(force=True)
+        elif self._idx["series"] and self._last_scan_at == 0:
             self._last_scan_at = 1
 
     def _compute_auto_series(self, cfg):
@@ -1762,18 +1770,27 @@ class BooksTtsEdgeBridge(QObject):
     # ── async runner (edge_tts is asyncio-based) ────────────────────────
 
     def _run_async(self, coro):
-        """Run an asyncio coroutine from a sync context (Qt slot)."""
+        """Run an asyncio coroutine from a sync context (Qt slot).
+        Uses processEvents() polling to keep UI responsive while waiting."""
         import asyncio
+        import concurrent.futures
+        from PySide6.QtWidgets import QApplication
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We're inside Qt's event loop — run in a new thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                    future = pool.submit(asyncio.run, coro)
-                    return future.result(timeout=self._SYNTH_TIMEOUT_S + 5)
-            else:
-                return loop.run_until_complete(coro)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, coro)
+                deadline = time.monotonic() + self._SYNTH_TIMEOUT_S + 5
+                while not future.done():
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        future.cancel()
+                        raise TimeoutError("TTS synthesis timed out")
+                    app = QApplication.instance()
+                    if app:
+                        app.processEvents()
+                    time.sleep(0.02)  # 20ms poll interval
+                return future.result(timeout=0)
+        except (TimeoutError, concurrent.futures.TimeoutError) as e:
+            raise e
         except Exception:
             return asyncio.run(coro)
 
@@ -2225,8 +2242,23 @@ class VideoBridge(QObject):
             "shows": raw.get("shows", []),
             "episodes": raw.get("episodes", []),
         }
-        # Suppress auto-scan if disk cache has data
-        if self._idx["shows"] and self._last_scan_at == 0:
+        # Check for duplicate shows in cached index (stale cache from before dedup fix)
+        has_dupes = False
+        if self._idx["shows"]:
+            seen_paths = set()
+            for s in self._idx["shows"]:
+                sp = os.path.normcase(os.path.normpath(s.get("path", "") or ""))
+                if sp and sp in seen_paths:
+                    has_dupes = True
+                    break
+                if sp:
+                    seen_paths.add(sp)
+        if has_dupes:
+            print("[video] Duplicate shows detected in cache — clearing and forcing rescan")
+            self._idx = {"roots": [], "shows": [], "episodes": []}
+            self._last_scan_at = 0
+            self._start_scan(force=True)
+        elif self._idx["shows"] and self._last_scan_at == 0:
             self._last_scan_at = 1
 
     def _filter_hidden(self, idx, hidden_ids):
