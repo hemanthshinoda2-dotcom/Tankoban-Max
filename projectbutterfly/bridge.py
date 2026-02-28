@@ -3635,16 +3635,47 @@ class PlayerBridge(QObject):
         Uses Build 13 quality settings from run_player.py."""
         if self._mpv is not None:
             return True
-        mpv_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "resources", "mpv", "windows")
-        if os.path.isdir(mpv_dir) and mpv_dir not in os.environ.get("PATH", ""):
-            os.environ["PATH"] = mpv_dir + os.pathsep + os.environ.get("PATH", "")
+
+        # Search for libmpv DLL in multiple candidate directories.
+        # resources/mpv/windows/ is gitignored, so it may not exist in the
+        # butterfly working tree but does exist in the master repo or a
+        # sibling checkout.
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidates = [
+            os.path.join(project_root, "resources", "mpv", "windows"),
+        ]
+        # Also check sibling repos (e.g. Tankoban-Max-master alongside Tankoban-Max-butterfly)
+        parent_of_root = os.path.dirname(project_root)
+        for sibling in ("Tankoban-Max-master", "Tankoban-Max", "Tankoban Max"):
+            candidates.append(os.path.join(parent_of_root, sibling, "resources", "mpv", "windows"))
+        # Also check player_qt directory (run_player.py ships alongside mpv)
+        candidates.append(os.path.join(project_root, "player_qt"))
+
+        mpv_dir = None
+        for d in candidates:
+            if os.path.isdir(d):
+                # Check if the directory actually contains a libmpv DLL
+                has_dll = any(
+                    f.startswith(("libmpv", "mpv-")) and f.endswith(".dll")
+                    for f in os.listdir(d)
+                )
+                if has_dll:
+                    mpv_dir = d
+                    break
+
+        if mpv_dir:
+            print(f"[player] Found libmpv in: {mpv_dir}")
+            if mpv_dir not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = mpv_dir + os.pathsep + os.environ.get("PATH", "")
+        else:
+            print(f"[player] libmpv DLL not found in candidates: {candidates}")
+
         try:
             import mpv as _mpv_mod
         except (ImportError, OSError) as e:
             print(f"[player] python-mpv not available: {e}")
             print("[player] Install with: pip install python-mpv")
-            print(f"[player] libmpv search dir: {mpv_dir}")
+            print(f"[player] Ensure libmpv-2.dll is in resources/mpv/windows/ or on PATH")
             return False
         if self._mpv_widget is None:
             print("[player] mpv widget not set — call setMpvWidget() first")
