@@ -171,9 +171,21 @@ def _video_root_id(path):
     return _b64url(str(path or "").encode("utf-8"))
 
 
+def _js_num_str(val):
+    """Format a float the way JavaScript's Number.toString() does:
+    integer-valued floats drop the decimal (1234.0 -> '1234'),
+    others keep it (1234.5 -> '1234.5')."""
+    if val == int(val):
+        return str(int(val))
+    return repr(val)
+
+
 def _video_episode_id(file_path, size, mtime_ms):
-    """Episode ID = SHA1('path::size::mtimeMs') in base64url."""
-    return _sha1_b64url("{}::{}::{}".format(str(file_path or ""), int(size or 0), int(mtime_ms or 0)))
+    """Episode ID = SHA1('path::size::mtimeMs') in base64url.
+    IMPORTANT: mtime_ms must be passed as a float (st.st_mtime * 1000)
+    and formatted like JavaScript's Number.toString() to match Electron IDs."""
+    return _sha1_b64url("{}::{}::{}".format(
+        str(file_path or ""), int(size or 0), _js_num_str(float(mtime_ms or 0))))
 
 
 def _video_folder_key(show_id, folder_rel_path):
@@ -2299,6 +2311,33 @@ class VideoBridge(QObject):
                     e for e in self._idx["episodes"]
                     if e.get("showId") not in removed_ids
                 ]
+        # Detect stale episode IDs from old butterfly scanner (used int mtimeMs
+        # instead of float, producing IDs that don't match Electron's progress keys).
+        # Sample a few accessible episodes and check if their IDs match what
+        # the current _video_episode_id() would produce. If not, force rescan.
+        if self._idx["episodes"]:
+            needs_id_fix = False
+            checked = 0
+            for ep in self._idx["episodes"][:20]:
+                fp = ep.get("path", "")
+                if not fp:
+                    continue
+                try:
+                    st = os.stat(fp)
+                except OSError:
+                    continue
+                checked += 1
+                expected = _video_episode_id(fp, st.st_size, st.st_mtime * 1000)
+                if expected != ep.get("id"):
+                    needs_id_fix = True
+                    break
+                if checked >= 5:
+                    break
+            if needs_id_fix:
+                print("[video] Stale episode IDs detected (int mtimeMs) — forcing rescan")
+                self._last_scan_at = 0
+                self._start_scan(force=True)
+                return
         if self._idx["shows"] and self._last_scan_at == 0:
             self._last_scan_at = 1
 
@@ -2369,7 +2408,7 @@ class VideoBridge(QObject):
                     st = os.stat(fp)
                 except OSError:
                     continue
-                eid = _video_episode_id(fp, st.st_size, int(st.st_mtime * 1000))
+                eid = _video_episode_id(fp, st.st_size, st.st_mtime * 1000)
                 episodes.append({
                     "id": eid, "title": os.path.splitext(os.path.basename(fp))[0],
                     "rootId": _ADDED_FILES_ROOT_ID, "rootName": "Added Files",
@@ -2378,7 +2417,7 @@ class VideoBridge(QObject):
                     "folderKey": _video_folder_key(_ADDED_FILES_SHOW_ID, ""),
                     "folderId": None, "folderName": None,
                     "path": fp, "size": st.st_size,
-                    "mtimeMs": int(st.st_mtime * 1000),
+                    "mtimeMs": st.st_mtime * 1000,
                     "ext": ext.lstrip(".").upper(), "aliasIds": [],
                 })
         return roots, shows, episodes
@@ -2403,7 +2442,7 @@ class VideoBridge(QObject):
                     st = os.stat(fp)
                 except OSError:
                     continue
-                eid = _video_episode_id(fp, st.st_size, int(st.st_mtime * 1000))
+                eid = _video_episode_id(fp, st.st_size, st.st_mtime * 1000)
                 fk = _video_folder_key(show_id, rel_path)
                 episodes.append({
                     "id": eid, "title": os.path.splitext(f)[0],
@@ -2414,7 +2453,7 @@ class VideoBridge(QObject):
                     "folderId": fk if rel_path else None,
                     "folderName": os.path.basename(root) if rel_path else None,
                     "path": fp, "size": st.st_size,
-                    "mtimeMs": int(st.st_mtime * 1000),
+                    "mtimeMs": st.st_mtime * 1000,
                     "ext": ext.lstrip(".").upper(), "aliasIds": [],
                 })
         return episodes
@@ -2588,7 +2627,7 @@ class VideoBridge(QObject):
                             ext = os.path.splitext(entry.name)[1].lower()
                             if ext in VIDEO_EXTENSIONS:
                                 st = entry.stat()
-                                eid = _video_episode_id(entry.path, st.st_size, int(st.st_mtime * 1000))
+                                eid = _video_episode_id(entry.path, st.st_size, st.st_mtime * 1000)
                                 loose_episodes.append({
                                     "id": eid, "title": os.path.splitext(entry.name)[0],
                                     "rootId": root_id, "rootName": os.path.basename(folder),
@@ -2596,7 +2635,7 @@ class VideoBridge(QObject):
                                     "showRootPath": folder, "folderRelPath": "",
                                     "folderKey": "", "folderId": None, "folderName": None,
                                     "path": entry.path, "size": st.st_size,
-                                    "mtimeMs": int(st.st_mtime * 1000),
+                                    "mtimeMs": st.st_mtime * 1000,
                                     "ext": ext.lstrip(".").upper(), "aliasIds": [],
                                 })
                 except OSError:
