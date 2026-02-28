@@ -31,6 +31,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngin
 
 import storage
 import bridge as bridge_module
+from player_ui import MpvContainer
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -271,22 +272,28 @@ class TankobanWindow(QMainWindow):
 
         self._stack.addWidget(self._web_view)  # index 0
 
-        # --- MpvRenderHost (layer 1) ---
-        # Plain QWidget whose winId() is passed to mpv for native rendering.
-        self._mpv_host = QWidget()
-        self._mpv_host.setStyleSheet("background-color: #000000;")
-        self._stack.addWidget(self._mpv_host)  # index 1
-
         # --- QWebChannel bridge (replaces Electron preload + ipcMain) ---
+        # Must be created before MpvContainer so player bridge exists.
         self._bridge = bridge_module.setup_bridge(self._web_view, self)
+
+        # --- MpvContainer (layer 1) ---
+        # Hosts the mpv render surface + transparent overlay with full player controls.
+        self._mpv_container = MpvContainer(self._bridge.player, self)
+        self._stack.addWidget(self._mpv_container)  # index 1
 
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
-            self._mpv_host,
+            self._mpv_container.get_render_widget(),
             self.show_player,
             self.show_web_view,
         )
         self._bridge.player.setProgressDomain(self._bridge.videoProgress)
+
+        # Wire overlay signals
+        self._mpv_container.overlay.request_fullscreen.connect(self.toggle_fullscreen)
+        self._mpv_container.overlay.request_minimize.connect(self.showMinimized)
+        self._mpv_container.overlay.request_back.connect(self.show_web_view)
+
         self._bridge.webFind.setPage(self._web_page)
         self._bridge.webBrowserActions.setPage(self._web_page)
         self._bridge.webData.setProfile(self._profile)
@@ -335,8 +342,13 @@ class TankobanWindow(QMainWindow):
         self._stack.setCurrentIndex(0)
 
     def show_player(self):
-        """Switch to the mpv player layer."""
+        """Switch to the mpv player layer and give keyboard focus to overlay."""
         self._stack.setCurrentIndex(1)
+        try:
+            self._mpv_container.overlay.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._mpv_container.overlay._show_controls()
+        except Exception:
+            pass
 
     # --- DevTools ---
 

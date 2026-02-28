@@ -260,7 +260,10 @@ Enforce these rules during future refactors:
 3. Renderer domain code must not call Electron primitives directly; use preload APIs.
 4. Main domains must not depend on renderer code.
 
-## 10. AI Change Procedure
+## 10. AI Conduct
+1. Disagree with the user when it's valid. Push back on requests that would introduce bugs, break architecture, or waste effort.
+
+## 11. AI Change Procedure
 When modifying code:
 1. Locate the section package in `packages/feature-*`.
 2. Update renderer/main/preload layers consistently.
@@ -273,7 +276,7 @@ When modifying code:
 - targeted boot command(s) for touched section(s)
 5. Keep `CLAUDE.md`, `chatgpt.md`, and `docs/agent-map.source.md` identical after structural changes.
 
-## 11. Docs Policy
+## 12. Docs Policy
 Keep active docs minimal:
 1. `CLAUDE.md` — canonical structural map (this file)
 2. `chatgpt.md` — must be identical to `CLAUDE.md`

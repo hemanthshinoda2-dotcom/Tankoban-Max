@@ -3453,6 +3453,45 @@ class FilesBridge(QObject):
             return json.dumps([])
 
 
+_VIDEO_EXTS = frozenset({
+    "mp4", "mkv", "avi", "mov", "m4v", "webm", "ts", "m2ts",
+    "wmv", "flv", "mpeg", "mpg", "3gp",
+})
+
+
+def _is_video_file(path):
+    ext = os.path.splitext(path)[1].lower().lstrip(".")
+    return ext in _VIDEO_EXTS
+
+
+def _finished(pos, dur, max_pos, watched, ended):
+    """5-point heuristic matching run_player.py."""
+    if ended:
+        return True
+    try:
+        if not dur or dur <= 0:
+            return False
+        p = pos if (pos is not None and pos >= 0) else 0.0
+        mp = max_pos if (max_pos is not None and max_pos >= 0) else 0.0
+        near_end = (p / dur) >= 0.98 or (mp / dur) >= 0.98
+        watched_ok = (watched / dur) >= 0.80 if watched >= 0 else False
+        return bool(near_end and watched_ok)
+    except Exception:
+        return False
+
+
+def _natural_sort_key(filename):
+    import re
+    parts = re.split(r'(\d+)', str(filename))
+    result = []
+    for p in parts:
+        try:
+            result.append(int(p))
+        except ValueError:
+            result.append(p.lower())
+    return result
+
+
 class PlayerBridge(QObject):
     """Video player powered by python-mpv, rendered in a native QWidget.
 
@@ -3463,6 +3502,16 @@ class PlayerBridge(QObject):
 
     app.py calls ``setMpvWidget(widget)`` once the stacked widget is ready
     so that PlayerBridge can control mpv from here.
+
+    Full feature set ported from player_qt/run_player.py:
+    - Playlist management (prev/next, auto-advance on EOF)
+    - Watched time tracking (delta-based, speed-aware, seek-ignoring)
+    - Finished detection (5-point heuristic)
+    - Initial seek retry (up to 4 attempts)
+    - Track preference persistence (aid, sid, subVisibility)
+    - Speed control with presets
+    - mpv property observers (replaces polling for core state)
+    - Extended progress format (maxPosition, watchedTime, phase, tracks)
     """
 
     # Signals the renderer listens to
@@ -3470,49 +3519,122 @@ class PlayerBridge(QObject):
     playerExited       = Signal(str)   # BUILD14_PLAYER_EXITED
     playerEnded        = Signal(str)   # natural end-of-file
 
-    # ── internal state ──────────────────────────────────────────────────
-    _POLL_MS = 500
+    # ── constants ────────────────────────────────────────────────────────
+    _POLL_MS = 200            # UI update interval (faster than old 500ms)
+    _PROGRESS_WRITE_MS = 5000 # periodic progress persistence interval
+    _SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0]
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._mpv = None          # mpv.MPV instance (set by app.py)
-        self._mpv_widget = None   # QWidget surface (set by app.py)
-        self._show_player = None  # callable: switch QStackedWidget to mpv
-        self._show_web     = None # callable: switch back to QWebEngineView
+        self._mpv = None
+        self._mpv_widget = None
+        self._show_player = None
+        self._show_web     = None
         self._media_ref = {}
         self._is_playing = False
         self._position_sec = 0.0
         self._duration_sec = 0.0
         self._ended = False
+        self._eof_signaled = False
         self._stopped = True
         self._poll_timer = None
-        self._progress_domain = None  # ref to VideoProgressBridge
+        self._progress_timer = None
+        self._progress_domain = None
+
+        # Playlist state
+        self._playlist = []
+        self._playlist_ids = []
+        self._playlist_index = -1
+        self._auto_advance = True
+
+        # Watched time tracking (delta-based, speed-aware)
+        self._max_position = 0.0
+        self._watched_time = 0.0
+        self._watch_last_pos = None
+        self._watch_last_wall = None
+
+        # Speed
+        self._speed = 1.0
+
+        # Volume (persisted in player_settings.json)
+        self._volume = 100
+        self._muted = False
+
+        # Track preferences (persisted per show in progress data)
+        self._last_aid = None
+        self._last_sid = None
+        self._last_sub_visibility = None
+        self._cached_paused = False
+
+        # Initial seek retry
+        self._pending_initial_seek = None
+        self._initial_seek_attempts = 0
+
+        # Chapter list
+        self._chapter_list = []
+
+        # Session
+        self._session_id = ""
+
+        # Player overlay reference (set by app.py)
+        self._overlay = None
+
+        # Player settings persistence path
+        self._settings_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "player_settings.json"
+        )
+        self._load_player_settings()
 
     # ── app.py wiring ───────────────────────────────────────────────────
 
     def setMpvWidget(self, widget, show_player_fn, show_web_fn):
-        """Called by app.py after QStackedWidget is built.
-
-        *widget* — the QWidget whose ``winId()`` is passed to mpv.
-        *show_player_fn* — callable that switches the stack to the mpv page.
-        *show_web_fn*    — callable that switches back to the web page.
-        """
+        """Called by app.py after QStackedWidget is built."""
         self._mpv_widget = widget
         self._show_player = show_player_fn
         self._show_web    = show_web_fn
 
+    def setOverlay(self, overlay):
+        """Called by app.py to connect the PlayerOverlay widget."""
+        self._overlay = overlay
+
     def setProgressDomain(self, bridge):
-        """Optional: give PlayerBridge a ref to VideoProgressBridge so it
-        can persist progress on pause / stop / end."""
+        """Give PlayerBridge a ref to VideoProgressBridge for progress persistence."""
         self._progress_domain = bridge
+
+    # ── player settings persistence ─────────────────────────────────────
+
+    def _load_player_settings(self):
+        try:
+            if os.path.isfile(self._settings_path):
+                with open(self._settings_path, "r", encoding="utf-8") as f:
+                    s = json.load(f)
+                self._volume = int(s.get("volume", 100))
+                self._muted = bool(s.get("muted", False))
+                self._auto_advance = bool(s.get("autoAdvance", True))
+        except Exception:
+            pass
+
+    def _save_player_settings(self):
+        try:
+            d = os.path.dirname(self._settings_path)
+            if d and not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+            with open(self._settings_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "volume": self._volume,
+                    "muted": self._muted,
+                    "autoAdvance": self._auto_advance,
+                }, f)
+        except Exception:
+            pass
 
     # ── mpv lifecycle ───────────────────────────────────────────────────
 
     def _ensure_mpv(self):
-        """Create the mpv.MPV instance on first use (lazy)."""
+        """Create the mpv.MPV instance on first use (lazy).
+        Uses Build 13 quality settings from run_player.py."""
         if self._mpv is not None:
             return True
-        # Ensure libmpv DLL is findable
         mpv_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                "resources", "mpv", "windows")
         if os.path.isdir(mpv_dir) and mpv_dir not in os.environ.get("PATH", ""):
@@ -3528,27 +3650,182 @@ class PlayerBridge(QObject):
             print("[player] mpv widget not set — call setMpvWidget() first")
             return False
         wid = str(int(self._mpv_widget.winId()))
-        self._mpv = _mpv_mod.MPV(
-            wid=wid,
-            input_default_bindings=False,
-            input_vo_keyboard=False,
-            osc=False,
-            keep_open="yes",
-            idle="yes",
-        )
-        # observe end-of-file
+        try:
+            self._mpv = _mpv_mod.MPV(
+                wid=wid,
+                input_default_bindings=False,
+                input_vo_keyboard=False,
+                osc=False,
+                keep_open="yes",
+                idle="yes",
+                # Build 13 quality
+                vo="gpu-next",
+                hwdec="auto",
+                gpu_api="vulkan",
+                # Volume
+                volume=self._volume,
+                # OSD
+                osd_level=1,
+                osd_duration=2000,
+            )
+        except Exception:
+            # Fallback without gpu-next/vulkan if not supported
+            try:
+                self._mpv = _mpv_mod.MPV(
+                    wid=wid,
+                    input_default_bindings=False,
+                    input_vo_keyboard=False,
+                    osc=False,
+                    keep_open="yes",
+                    idle="yes",
+                    hwdec="auto",
+                    volume=self._volume,
+                    osd_level=1,
+                    osd_duration=2000,
+                )
+            except Exception as e2:
+                print(f"[player] mpv init failed: {e2}")
+                return False
+
+        # Apply mute state
+        try:
+            self._mpv.mute = self._muted
+        except Exception:
+            pass
+
+        # Property observers (replace polling for core state)
+        self._mpv.observe_property('time-pos', self._on_time_pos)
+        self._mpv.observe_property('duration', self._on_duration)
+        self._mpv.observe_property('pause', self._on_pause_change)
+        self._mpv.observe_property('eof-reached', self._on_eof)
+        try:
+            self._mpv.observe_property('chapter-list', self._on_chapter_list)
+        except Exception:
+            pass
+        try:
+            self._mpv.observe_property('aid', self._on_aid_change)
+            self._mpv.observe_property('sid', self._on_sid_change)
+            self._mpv.observe_property('sub-visibility', self._on_sub_visibility_change)
+        except Exception:
+            pass
+
+        # Subtitle style defaults (respect embedded ASS/SSA)
+        try:
+            self._mpv.sub_ass_override = 'no'
+        except Exception:
+            try:
+                self._mpv.command('set', 'sub-ass-override', 'no')
+            except Exception:
+                pass
+        try:
+            self._mpv.sub_ass_force_margins = 'yes'
+        except Exception:
+            try:
+                self._mpv.command('set', 'sub-ass-force-margins', 'yes')
+            except Exception:
+                pass
+        try:
+            self._mpv.sub_use_margins = 'yes'
+        except Exception:
+            try:
+                self._mpv.command('set', 'sub-use-margins', 'yes')
+            except Exception:
+                pass
+
+        # End-of-file event callback for auto-advance
         @self._mpv.event_callback("end-file")
         def _on_end(evt):
             reason = getattr(evt, "reason", None)
             if str(reason) == "eof":
+                self._eof_signaled = True
                 self._ended = True
                 self._is_playing = False
-                self._persist_progress()
+                self._persist_progress("eof")
                 try:
                     self.playerEnded.emit(json.dumps(self._state_snapshot()))
                 except RuntimeError:
                     pass
+                # Auto-advance to next episode
+                if self._auto_advance:
+                    try:
+                        from PySide6.QtCore import QTimer
+                        QTimer.singleShot(300, self._auto_advance_next)
+                    except Exception:
+                        pass
+
         return True
+
+    # ── mpv property observers ──────────────────────────────────────────
+
+    def _on_time_pos(self, _name, value):
+        try:
+            if value is not None:
+                v = float(value)
+                self._position_sec = v
+                self._max_position = max(self._max_position, v)
+
+                # Initial seek retry (up to 4 attempts)
+                if self._pending_initial_seek is not None and self._initial_seek_attempts < 4:
+                    target = float(self._pending_initial_seek)
+                    if v >= (target - 0.5):
+                        self._pending_initial_seek = None
+                    else:
+                        if v <= 1.0 or v < (target - 1.0):
+                            try:
+                                self._mpv.command('seek', str(target), 'absolute')
+                            except Exception:
+                                pass
+                        self._initial_seek_attempts += 1
+        except Exception:
+            pass
+
+    def _on_duration(self, _name, value):
+        try:
+            if value is not None:
+                self._duration_sec = float(value)
+        except Exception:
+            pass
+
+    def _on_pause_change(self, _name, value):
+        try:
+            if value is not None:
+                self._cached_paused = bool(value)
+                self._is_playing = not bool(value)
+        except Exception:
+            pass
+
+    def _on_eof(self, _name, value):
+        try:
+            if value is True:
+                self._eof_signaled = True
+        except Exception:
+            pass
+
+    def _on_chapter_list(self, _name, value):
+        try:
+            self._chapter_list = list(value) if value else []
+        except Exception:
+            self._chapter_list = []
+
+    def _on_aid_change(self, _name, value):
+        try:
+            self._last_aid = value
+        except Exception:
+            pass
+
+    def _on_sid_change(self, _name, value):
+        try:
+            self._last_sid = value
+        except Exception:
+            pass
+
+    def _on_sub_visibility_change(self, _name, value):
+        try:
+            self._last_sub_visibility = value
+        except Exception:
+            pass
+
+    # ── timers ──────────────────────────────────────────────────────────
 
     def _start_poll(self):
         if self._poll_timer is not None:
@@ -3558,29 +3835,56 @@ class PlayerBridge(QObject):
         self._poll_timer.setInterval(self._POLL_MS)
         self._poll_timer.timeout.connect(self._poll_tick)
         self._poll_timer.start()
+        # Progress persistence timer
+        if self._progress_timer is None:
+            self._progress_timer = QTimer(self)
+            self._progress_timer.setInterval(self._PROGRESS_WRITE_MS)
+            self._progress_timer.timeout.connect(lambda: self._persist_progress("periodic"))
+            self._progress_timer.start()
 
     def _stop_poll(self):
         if self._poll_timer is not None:
             self._poll_timer.stop()
             self._poll_timer.deleteLater()
             self._poll_timer = None
+        if self._progress_timer is not None:
+            self._progress_timer.stop()
+            self._progress_timer.deleteLater()
+            self._progress_timer = None
 
     def _poll_tick(self):
+        """UI update tick — uses observer-cached values (never polls mpv)."""
         if self._mpv is None:
             return
+
+        # Watched time tracking (delta-based, speed-aware)
         try:
-            pos = self._mpv.time_pos
-            dur = self._mpv.duration
-            paused = self._mpv.pause
-            if pos is not None:
-                self._position_sec = float(pos)
-            if dur is not None:
-                self._duration_sec = float(dur)
-            self._is_playing = not paused if paused is not None else self._is_playing
+            pos = self._position_sec
+            now_m = time.monotonic()
+            last_wall = self._watch_last_wall
+            last_pos = self._watch_last_pos
+
+            if pos is not None and now_m is not None:
+                pos_f = float(pos)
+                if not self._cached_paused and last_pos is not None and last_wall is not None:
+                    dt = now_m - last_wall
+                    dpos = pos_f - last_pos
+                    if dt > 0 and dpos > 0:
+                        sp = self._speed if self._speed > 0 else 1.0
+                        max_count = max(3.0, (dt * sp * 1.75) + 1.0)
+                        if dpos <= max_count:
+                            self._watched_time += dpos
+                self._watch_last_wall = now_m
+                self._watch_last_pos = pos_f
         except Exception:
             pass
+
+        # Emit state to renderer and overlay
         try:
-            self.playerStateChanged.emit(json.dumps(self._state_snapshot()))
+            snapshot = self._state_snapshot()
+            self.playerStateChanged.emit(json.dumps(snapshot))
+            if self._overlay:
+                self._overlay.update_state(snapshot)
         except RuntimeError:
             pass
 
@@ -3593,29 +3897,348 @@ class PlayerBridge(QObject):
             "durationSec": self._duration_sec,
             "ended": self._ended,
             "stopped": self._stopped,
+            "speed": self._speed,
+            "volume": self._volume,
+            "muted": self._muted,
+            "maxPosition": self._max_position,
+            "watchedTime": self._watched_time,
+            "playlistIndex": self._playlist_index,
+            "playlistLength": len(self._playlist),
+            "autoAdvance": self._auto_advance,
+            "chapters": self._chapter_list,
         }
 
-    def _persist_progress(self):
-        """Write current position into VideoProgressBridge if available."""
+    # ── progress persistence ────────────────────────────────────────────
+
+    def _persist_progress(self, phase="pause"):
+        """Write progress into VideoProgressBridge, matching run_player.py format."""
         if self._progress_domain is None:
             return
         vid = self._media_ref.get("videoId", "")
         if not vid:
             return
-        dur = self._duration_sec or 1
-        finished = (self._position_sec / dur >= 0.80) if dur > 0 else False
+        now = int(time.time() * 1000)
+        pos = self._position_sec
+        dur = self._duration_sec
+        # For eof/close, prefer last observed position if mpv reports 0
+        if phase in ("close", "eof") and pos <= 0.1 and self._max_position > 0.1:
+            pos = self._max_position
+
         prog = {
-            "position": self._position_sec,
-            "duration": self._duration_sec,
-            "finished": finished,
-            "timestamp": int(time.time() * 1000),
+            "position": pos,
+            "duration": dur,
+            "maxPosition": self._max_position,
+            "watchedTime": self._watched_time,
+            "finished": _finished(pos, dur, self._max_position, self._watched_time, self._eof_signaled),
+            "timestamp": now,
+            "phase": phase,
         }
+        # Persist track preferences
+        if self._last_aid is not None:
+            prog["aid"] = self._last_aid
+        if self._last_sid is not None:
+            prog["sid"] = self._last_sid
+        if self._last_sub_visibility is not None:
+            prog["subVisibility"] = bool(self._last_sub_visibility)
+
         try:
-            self._progress_domain.save(json.dumps({"key": vid, "value": prog}))
+            self._progress_domain.save(vid, json.dumps(prog))
         except Exception:
             pass
 
-    # ── Slots ───────────────────────────────────────────────────────────
+    # ── playlist management ─────────────────────────────────────────────
+
+    def _setup_playlist(self, args):
+        """Initialize playlist from launchQt args or build from folder."""
+        paths = args.get("playlistPaths")
+        ids = args.get("playlistIds")
+        index = args.get("playlistIndex", -1)
+
+        if isinstance(paths, list) and paths:
+            self._playlist = [str(p) for p in paths]
+            self._playlist_ids = [str(i) for i in ids] if isinstance(ids, list) else []
+            if isinstance(index, int) and 0 <= index < len(self._playlist):
+                self._playlist_index = index
+            else:
+                file_path = args.get("filePath", "")
+                self._playlist_index = self._find_in_playlist(file_path)
+        else:
+            self._build_folder_playlist(args.get("filePath", ""))
+
+    def _build_folder_playlist(self, file_path):
+        """Build playlist from video files in the same folder."""
+        try:
+            folder = os.path.dirname(file_path)
+            if not folder or not os.path.isdir(folder):
+                self._playlist = [file_path] if file_path else []
+                self._playlist_index = 0
+                return
+            files = sorted(
+                [os.path.join(folder, f) for f in os.listdir(folder)
+                 if os.path.isfile(os.path.join(folder, f)) and _is_video_file(f)],
+                key=lambda x: _natural_sort_key(os.path.basename(x))
+            )
+            self._playlist = files if files else [file_path]
+            self._playlist_ids = []
+            self._playlist_index = self._find_in_playlist(file_path)
+        except Exception:
+            self._playlist = [file_path] if file_path else []
+            self._playlist_index = 0
+
+    def _find_in_playlist(self, file_path):
+        """Find index of file_path in playlist (case-insensitive on Windows)."""
+        if not file_path:
+            return 0
+        norm = os.path.normcase(os.path.normpath(file_path))
+        for i, p in enumerate(self._playlist):
+            if os.path.normcase(os.path.normpath(p)) == norm:
+                return i
+        return 0
+
+    def _navigate_playlist(self, direction):
+        """Navigate playlist by direction (+1 for next, -1 for prev).
+        Returns True if navigation happened."""
+        new_idx = self._playlist_index + direction
+        if new_idx < 0 or new_idx >= len(self._playlist):
+            return False
+        return self._jump_to_playlist_index(new_idx)
+
+    def _jump_to_playlist_index(self, index):
+        """Jump to a specific playlist index. Returns True if successful."""
+        if index < 0 or index >= len(self._playlist):
+            return False
+        self._playlist_index = index
+        new_path = self._playlist[index]
+        # Update video ID if aligned IDs exist
+        new_vid = ""
+        if self._playlist_ids and index < len(self._playlist_ids):
+            new_vid = self._playlist_ids[index]
+        # Persist progress for current video before switching
+        self._persist_progress("navigate")
+        # Reset tracking state for new episode
+        self._position_sec = 0.0
+        self._duration_sec = 0.0
+        self._max_position = 0.0
+        self._watched_time = 0.0
+        self._watch_last_pos = None
+        self._watch_last_wall = time.monotonic()
+        self._ended = False
+        self._eof_signaled = False
+        self._pending_initial_seek = None
+        self._initial_seek_attempts = 0
+        # Update media ref
+        self._media_ref["path"] = new_path
+        if new_vid:
+            self._media_ref["videoId"] = new_vid
+        # Look up saved progress for the new episode to resume
+        start_sec = 0.0
+        if new_vid and self._progress_domain:
+            try:
+                saved = json.loads(self._progress_domain.get(new_vid))
+                if isinstance(saved, dict) and not saved.get("finished", False):
+                    start_sec = float(saved.get("position", 0) or 0)
+            except Exception:
+                pass
+        # Load file
+        try:
+            self._mpv.play(new_path)
+            if start_sec > 2:
+                self._pending_initial_seek = start_sec
+                self._initial_seek_attempts = 0
+                try:
+                    self._mpv.command('seek', str(start_sec), 'absolute')
+                except Exception:
+                    pass
+            self._is_playing = True
+            self._stopped = False
+            # Restore track preferences
+            self._restore_track_prefs()
+        except Exception:
+            return False
+        return True
+
+    def _auto_advance_next(self):
+        """Called from end-file callback to advance to next episode."""
+        if not self._auto_advance:
+            return
+        if self._playlist_index + 1 < len(self._playlist):
+            self._navigate_playlist(1)
+        else:
+            # End of playlist — return to library
+            self.stop("playlist_ended")
+
+    def _restore_track_prefs(self):
+        """Restore saved track preferences for current video (best-effort)."""
+        vid = self._media_ref.get("videoId", "")
+        if not vid or not self._progress_domain:
+            return
+        try:
+            saved = json.loads(self._progress_domain.get(vid))
+            if not isinstance(saved, dict):
+                return
+            aid = saved.get("aid")
+            sid = saved.get("sid")
+            sub_vis = saved.get("subVisibility")
+            if aid is not None:
+                try:
+                    self._mpv.aid = aid
+                except Exception:
+                    pass
+            if sid is not None:
+                try:
+                    self._mpv.sid = sid
+                except Exception:
+                    pass
+            if sub_vis is not None:
+                try:
+                    self._mpv.sub_visibility = bool(sub_vis)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    # ── speed control ───────────────────────────────────────────────────
+
+    def set_speed(self, speed):
+        """Set playback speed."""
+        try:
+            self._speed = float(speed)
+            self._mpv.speed = self._speed
+        except Exception:
+            pass
+
+    def cycle_speed(self, direction=1):
+        """Cycle speed preset by direction (+1 next, -1 prev)."""
+        try:
+            presets = self._SPEED_PRESETS
+            idx = presets.index(self._speed) if self._speed in presets else 3
+            new_idx = max(0, min(len(presets) - 1, idx + direction))
+            self.set_speed(presets[new_idx])
+        except Exception:
+            pass
+
+    def reset_speed(self):
+        """Reset speed to 1.0x."""
+        self.set_speed(1.0)
+
+    # ── volume control ──────────────────────────────────────────────────
+
+    def set_volume(self, vol):
+        """Set volume (0-100)."""
+        try:
+            self._volume = max(0, min(100, int(vol)))
+            if self._mpv:
+                self._mpv.volume = self._volume
+            self._save_player_settings()
+        except Exception:
+            pass
+
+    def adjust_volume(self, delta):
+        """Adjust volume by delta (e.g. +5 or -5)."""
+        self.set_volume(self._volume + delta)
+
+    def toggle_mute(self):
+        """Toggle mute state."""
+        self._muted = not self._muted
+        try:
+            if self._mpv:
+                self._mpv.mute = self._muted
+            self._save_player_settings()
+        except Exception:
+            pass
+
+    # ── track control ───────────────────────────────────────────────────
+
+    def cycle_audio_track(self):
+        try:
+            if self._mpv:
+                self._mpv.command('cycle', 'aid')
+        except Exception:
+            pass
+
+    def cycle_subtitle_track(self):
+        try:
+            if self._mpv:
+                self._mpv.command('cycle', 'sid')
+        except Exception:
+            pass
+
+    def toggle_subtitle_visibility(self):
+        try:
+            if self._mpv:
+                cur = self._mpv.sub_visibility
+                self._mpv.sub_visibility = not cur
+        except Exception:
+            pass
+
+    def set_audio_delay(self, delay_sec):
+        try:
+            if self._mpv:
+                self._mpv.audio_delay = float(delay_sec)
+        except Exception:
+            pass
+
+    def set_subtitle_delay(self, delay_sec):
+        try:
+            if self._mpv:
+                self._mpv.sub_delay = float(delay_sec)
+        except Exception:
+            pass
+
+    def get_track_list(self):
+        """Return list of audio/subtitle tracks."""
+        try:
+            if self._mpv:
+                tl = self._mpv.track_list
+                return tl if tl else []
+        except Exception:
+            pass
+        return []
+
+    # ── chapter control ─────────────────────────────────────────────────
+
+    def next_chapter(self):
+        try:
+            if self._mpv:
+                self._mpv.command('add', 'chapter', '1')
+        except Exception:
+            pass
+
+    def prev_chapter(self):
+        try:
+            if self._mpv:
+                self._mpv.command('add', 'chapter', '-1')
+        except Exception:
+            pass
+
+    # ── aspect ratio ────────────────────────────────────────────────────
+
+    def set_aspect_ratio(self, ratio):
+        """Set video aspect ratio. Pass '' or 'default' for auto."""
+        try:
+            if self._mpv:
+                if not ratio or ratio == 'default':
+                    self._mpv.video_aspect_override = '-1'
+                else:
+                    self._mpv.video_aspect_override = str(ratio)
+        except Exception:
+            pass
+
+    # ── subtitle margin ─────────────────────────────────────────────────
+
+    def set_subtitle_margin(self, px):
+        """Push subtitles up by px pixels from bottom."""
+        try:
+            if self._mpv:
+                self._mpv.sub_margin_y = int(px)
+        except Exception:
+            try:
+                if self._mpv:
+                    self._mpv.command('set', 'sub-margin-y', str(int(px)))
+            except Exception:
+                pass
+
+    # ── Slots (called from JS) ──────────────────────────────────────────
 
     @Slot(str, str, result=str)
     def start(self, media_ref_json, opts_json=""):
@@ -3628,9 +4251,17 @@ class PlayerBridge(QObject):
             return json.dumps(_err("invalid_media_ref"))
         self._media_ref = p
         self._ended = False
+        self._eof_signaled = False
         self._stopped = False
         self._position_sec = 0.0
         self._duration_sec = 0.0
+        self._max_position = 0.0
+        self._watched_time = 0.0
+        self._watch_last_pos = None
+        self._watch_last_wall = time.monotonic()
+        self._pending_initial_seek = None
+        self._initial_seek_attempts = 0
+        self._session_id = str(int(time.time() * 1000))
 
         file_path = p.get("path", "")
         if not file_path:
@@ -3639,12 +4270,23 @@ class PlayerBridge(QObject):
         try:
             self._mpv.play(file_path)
             start_sec = float(opts.get("startSeconds", 0) or 0)
-            if start_sec > 0:
+            if start_sec > 2:
+                self._pending_initial_seek = start_sec
+                self._initial_seek_attempts = 0
+                try:
+                    self._mpv.command('seek', str(start_sec), 'absolute')
+                except Exception:
+                    pass
+                self._position_sec = start_sec
+            elif start_sec > 0:
                 self._mpv.seek(start_sec, "absolute")
                 self._position_sec = start_sec
             self._is_playing = True
         except Exception as exc:
             return json.dumps(_err(str(exc)))
+
+        # Restore track preferences
+        self._restore_track_prefs()
 
         if self._show_player:
             self._show_player()
@@ -3670,10 +4312,19 @@ class PlayerBridge(QObject):
         try:
             self._mpv.pause = True
             self._is_playing = False
-            self._persist_progress()
+            self._persist_progress("pause")
         except Exception as exc:
             return json.dumps(_err(str(exc)))
         return json.dumps(_ok({"state": self._state_snapshot()}))
+
+    @Slot(result=str)
+    def togglePlayPause(self):
+        if self._mpv is None:
+            return json.dumps(_err("mpv_not_available"))
+        if self._is_playing:
+            return self.pause()
+        else:
+            return self.play()
 
     @Slot(str, result=str)
     def seek(self, seconds_json):
@@ -3683,7 +4334,6 @@ class PlayerBridge(QObject):
             sec = float(seconds_json)
         except (ValueError, TypeError):
             return json.dumps(_err("invalid_seconds"))
-        # Heuristic from Electron: if > 10 000 treat as milliseconds
         if sec > 10000:
             sec = sec / 1000.0
         try:
@@ -3694,16 +4344,31 @@ class PlayerBridge(QObject):
         return json.dumps(_ok({"state": self._state_snapshot()}))
 
     @Slot(str, result=str)
+    def seekRelative(self, delta_json):
+        """Seek by a relative number of seconds (+/-)."""
+        if self._mpv is None:
+            return json.dumps(_err("mpv_not_available"))
+        try:
+            delta = float(delta_json)
+        except (ValueError, TypeError):
+            return json.dumps(_err("invalid_delta"))
+        try:
+            self._mpv.seek(delta, "relative")
+        except Exception as exc:
+            return json.dumps(_err(str(exc)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
     def stop(self, reason=""):
         if self._mpv is None:
             return json.dumps(_err("mpv_not_available"))
+        self._persist_progress("close")
         try:
             self._mpv.stop()
         except Exception:
             pass
         self._is_playing = False
         self._stopped = True
-        self._persist_progress()
         self._stop_poll()
         if self._show_web:
             self._show_web()
@@ -3716,6 +4381,43 @@ class PlayerBridge(QObject):
             pass
         return json.dumps(_ok({"state": self._state_snapshot()}))
 
+    @Slot(result=str)
+    def nextEpisode(self):
+        if self._navigate_playlist(1):
+            return json.dumps(_ok({"navigated": True, "index": self._playlist_index}))
+        return json.dumps(_ok({"navigated": False}))
+
+    @Slot(result=str)
+    def prevEpisode(self):
+        if self._navigate_playlist(-1):
+            return json.dumps(_ok({"navigated": True, "index": self._playlist_index}))
+        return json.dumps(_ok({"navigated": False}))
+
+    @Slot(int, result=str)
+    def jumpToEpisode(self, index):
+        if self._jump_to_playlist_index(index):
+            return json.dumps(_ok({"navigated": True, "index": self._playlist_index}))
+        return json.dumps(_ok({"navigated": False}))
+
+    @Slot(result=str)
+    def getPlaylist(self):
+        """Return playlist with paths, ids, current index, and names."""
+        items = []
+        for i, p in enumerate(self._playlist):
+            items.append({
+                "path": p,
+                "id": self._playlist_ids[i] if i < len(self._playlist_ids) else "",
+                "name": os.path.splitext(os.path.basename(p))[0],
+                "current": i == self._playlist_index,
+            })
+        return json.dumps({"items": items, "index": self._playlist_index, "autoAdvance": self._auto_advance})
+
+    @Slot(bool, result=str)
+    def setAutoAdvance(self, enabled):
+        self._auto_advance = bool(enabled)
+        self._save_player_settings()
+        return json.dumps(_ok())
+
     @Slot(str, result=str)
     def launchQt(self, args_json):
         """In Butterfly there is no external Qt player — playback is inline.
@@ -3727,6 +4429,10 @@ class PlayerBridge(QObject):
         file_path = p.get("filePath", "")
         if not file_path:
             return json.dumps(_err("no_filePath"))
+
+        # Setup playlist from args
+        self._setup_playlist(p)
+
         media_ref = {
             "path": file_path,
             "videoId": p.get("videoId", ""),
@@ -3734,8 +4440,6 @@ class PlayerBridge(QObject):
         }
         opts = {"startSeconds": p.get("startSeconds", 0)}
         result = json.loads(self.start(json.dumps(media_ref), json.dumps(opts)))
-        # Tell video.js NOT to hide the window — in Butterfly the player
-        # is inline (QStackedWidget page), not an external process.
         result["keepLibraryVisible"] = True
         return json.dumps(result)
 
@@ -3748,7 +4452,8 @@ class PlayerBridge(QObject):
     def shutdown(self):
         """Called by app.py on quit."""
         self._stop_poll()
-        self._persist_progress()
+        self._persist_progress("close")
+        self._save_player_settings()
         if self._mpv is not None:
             try:
                 self._mpv.terminate()
