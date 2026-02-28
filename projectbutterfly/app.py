@@ -299,16 +299,27 @@ class TankobanWindow(QMainWindow):
         self._bridge.webBrowserActions.setPage(self._web_page)
         self._bridge.webData.setProfile(self._profile)
 
-        # Wire browser tab manager with isolated profile
-        self._bridge.webTabManager.setup(
-            self._browser_profile,
-            self._web_view,    # parent for overlay QWebEngineViews
-            self._web_view,    # coordinate reference
+        # --- Native Qt browser chrome (layer 2) ---
+        # Replaces the HTML-overlay approach. Each web tab is a proper QStackedWidget
+        # child — no HWND z-ordering conflicts, no setGeometry juggling.
+        from projectbutterfly.browser_widget import BrowserWidget
+        self._browser_widget = BrowserWidget(self._browser_profile, self)
+        self._stack.addWidget(self._browser_widget)  # index 2
+
+        # Wire browser tab manager to BrowserWidget (replaces overlay setup).
+        self._bridge.webTabManager.setup(self._browser_widget)
+
+        # Wire browser download handler through BrowserWidget's profile
+        self._browser_widget.profile.downloadRequested.connect(
+            self._bridge.webSources.handleDownloadRequested
         )
 
-        # Wire browser download handler
-        self._browser_profile.downloadRequested.connect(
-            self._bridge.webSources.handleDownloadRequested
+        # Wire Phase 2/3 bridge references into BrowserWidget (torrent search + downloads panel)
+        self._browser_widget.set_bridges(
+            torrent_search=self._bridge.torrentSearch,
+            torrent=self._bridge.webTorrent,
+            sources=self._bridge.webSources,
+            history=getattr(self._bridge, "webHistory", None),
         )
 
         # --- DevTools ---
@@ -341,6 +352,10 @@ class TankobanWindow(QMainWindow):
     def show_web_view(self):
         """Switch to the web UI layer."""
         self._stack.setCurrentIndex(0)
+
+    def show_browser(self):
+        """Switch to the native Qt browser layer."""
+        self._stack.setCurrentIndex(2)
 
     def show_player(self):
         """Switch to the mpv player layer and give keyboard focus to container."""
@@ -375,17 +390,37 @@ class TankobanWindow(QMainWindow):
     def toggle_fullscreen(self):
         self.set_fullscreen(not self.isFullScreen())
 
-    # Restore to maximized when leaving fullscreen (matches Electron behavior)
+    # Handle window state transitions:
+    # 1. Restore to maximized when leaving fullscreen (matches Electron behavior)
+    # 2. Nudge QWebEngineView after restore from minimized (Chromium compositor
+    #    stops submitting frames while occluded — QTBUG-56016 / QTBUG-50818)
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() == event.Type.WindowStateChange:
-            if not (self.windowState() & Qt.WindowState.WindowFullScreen):
-                # Left fullscreen — restore to maximized
-                if not (self.windowState() & Qt.WindowState.WindowMaximized):
+            old = event.oldState()
+            cur = self.windowState()
+
+            # Left fullscreen → restore to maximized
+            if (old & Qt.WindowState.WindowFullScreen) and not (cur & Qt.WindowState.WindowFullScreen):
+                if not (cur & Qt.WindowState.WindowMaximized):
                     QTimer.singleShot(0, self.showMaximized)
+
+            # Restored from minimized → nudge web view to unfreeze Chromium
+            if (old & Qt.WindowState.WindowMinimized) and not (cur & Qt.WindowState.WindowMinimized):
+                QTimer.singleShot(0, self._nudge_web_view)
+
+    def _nudge_web_view(self):
+        """Force Chromium compositor to resume rendering after minimize/restore."""
+        v = self._web_view
+        v.resize(v.width() + 1, v.height())
+        v.resize(v.width() - 1, v.height())
 
     def closeEvent(self, event):
         """Shutdown player/tor/tabs and flush pending writes before quitting."""
+        try:
+            self._browser_widget.shutdown()
+        except Exception:
+            pass
         try:
             self._bridge.webTabManager.shutdown()
         except Exception:

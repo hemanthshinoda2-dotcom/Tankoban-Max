@@ -341,7 +341,7 @@
     downloadingHasProgress: false,
     lastDownloadName: '',
     lastDownloadProgress: null,
-    downloads: [],
+    downloads: {},
     dlPanelOpen: false,
     dlBarDismissed: false,
     dlBarTimer: null,
@@ -460,6 +460,7 @@
     sourcesTabSearchSelectedIdx: -1,
     sourcesTabSearchMatches: [],
     sourcesBrowserDrawerKind: '',
+    sourcesBridgeContextMenuBound: false,
   };
 
   // ── Event bus ──
@@ -530,6 +531,60 @@
     _toastTimer = setTimeout(function () {
       el.toast.classList.add('hidden');
     }, 2500);
+  }
+
+  function permissionPromptLabel(permissionName) {
+    var key = String(permissionName || '').trim().toLowerCase();
+    if (key === 'geolocation') return 'location';
+    if (key === 'media') return 'camera/microphone';
+    if (key === 'notifications') return 'notifications';
+    if (key === 'clipboard-read') return 'clipboard';
+    if (key === 'display-capture') return 'screen capture';
+    return key || 'this capability';
+  }
+
+  function runPermissionPromptQueue() {
+    if (!api.webPermissions || typeof api.webPermissions.resolvePrompt !== 'function') return;
+    if (state.permissionPromptActive) return;
+    if (!Array.isArray(state.permissionPromptQueue) || !state.permissionPromptQueue.length) return;
+    var prompt = state.permissionPromptQueue.shift();
+    if (!prompt || !prompt.promptId) {
+      runPermissionPromptQueue();
+      return;
+    }
+    state.permissionPromptActive = prompt;
+    setTimeout(function () {
+      var origin = String(prompt.origin || '').trim();
+      var permission = permissionPromptLabel(prompt.permission);
+      var host = origin;
+      try { host = new URL(origin).host || origin; } catch (_eHost) {}
+      var allow = false;
+      var remember = false;
+      try {
+        allow = !!window.confirm(host + ' wants access to ' + permission + '. Allow?');
+        remember = !!window.confirm('Remember this decision for ' + host + '?');
+      } catch (_ePrompt) {
+        allow = false;
+        remember = false;
+      }
+      api.webPermissions.resolvePrompt({
+        promptId: String(prompt.promptId),
+        decision: allow ? 'allow' : 'deny',
+        remember: remember,
+      }).catch(function () {
+        showToast('Failed to resolve permission prompt');
+      }).finally(function () {
+        state.permissionPromptActive = null;
+        runPermissionPromptQueue();
+      });
+    }, 0);
+  }
+
+  function enqueuePermissionPrompt(prompt) {
+    if (!prompt || !prompt.promptId) return;
+    if (!Array.isArray(state.permissionPromptQueue)) state.permissionPromptQueue = [];
+    state.permissionPromptQueue.push(prompt);
+    runPermissionPromptQueue();
   }
 
   function getFeature(name) {
@@ -779,6 +834,7 @@
   }
 
   function renderSourcesBrowserTabStrip() {
+    if (isButterfly) return; // QTabBar in BrowserWidget manages tabs natively
     if (!el.sourcesBrowserTabList) return;
     var html = '';
     for (var i = 0; i < state.sourcesTabs.length; i++) {
@@ -1423,6 +1479,10 @@
       case 'openLinkExternal': if (ctx.linkURL) sendCtx('openLinkExternal', String(ctx.linkURL)); break;
       case 'openImageNewTab': if (ctx.srcURL) openSourcesTab(String(ctx.srcURL), { switchTo: true }); break;
       case 'saveImage': if (ctx.srcURL) sendCtx('saveImage', String(ctx.srcURL)); break;
+      case 'copyImage':
+        if (ctx.srcURL) sendCtx('copyImage', { url: String(ctx.srcURL), x: Number(ctx.x) || 0, y: Number(ctx.y) || 0 });
+        else sendCtx('copyImage');
+        break;
       case 'inspect':
         if (ctx.x != null && ctx.y != null) sendCtx('inspect', { x: Number(ctx.x) || 0, y: Number(ctx.y) || 0 });
         break;
@@ -1446,10 +1506,15 @@
     var items = [];
     var p = (params && typeof params === 'object') ? params : {};
     var wv = tab && tab.webview ? tab.webview : getSourcesBrowserWebview();
-    var canGoBack = false;
-    var canGoForward = false;
-    try { canGoBack = !!(wv && typeof wv.canGoBack === 'function' && wv.canGoBack()); } catch (_eA) {}
-    try { canGoForward = !!(wv && typeof wv.canGoForward === 'function' && wv.canGoForward()); } catch (_eB) {}
+    var canGoBack = !!p.canGoBack;
+    var canGoForward = !!p.canGoForward;
+    if (!isButterfly) {
+      try { canGoBack = !!(wv && typeof wv.canGoBack === 'function' && wv.canGoBack()); } catch (_eA) {}
+      try { canGoForward = !!(wv && typeof wv.canGoForward === 'function' && wv.canGoForward()); } catch (_eB) {}
+    } else if (tab) {
+      if (!canGoBack) canGoBack = !!tab._canGoBack;
+      if (!canGoForward) canGoForward = !!tab._canGoForward;
+    }
     items.push({ label: 'Back', action: 'back', disabled: !canGoBack, shortcut: 'Alt+Left' });
     items.push({ label: 'Forward', action: 'forward', disabled: !canGoForward, shortcut: 'Alt+Right' });
     items.push({ label: 'Reload', action: 'reload', shortcut: 'Ctrl+R' });
@@ -1465,6 +1530,7 @@
     if (String(p.mediaType || '').toLowerCase() === 'image' && p.srcURL) {
       items.push({ label: 'Open Image in New Tab', action: 'openImageNewTab' });
       items.push({ label: 'Save Image As...', action: 'saveImage' });
+      items.push({ label: 'Copy Image', action: 'copyImage' });
       items.push({ separator: true });
     }
     if (p.isEditable) {
@@ -1485,7 +1551,9 @@
     }
     items.push({ label: 'View Page Source', action: 'viewSource' });
     items.push({ label: 'Inspect', action: 'inspect', shortcut: 'Ctrl+Shift+I' });
-    showSourcesBrowserContextMenu(items, Number(p.x || p.screenX || 0), Number(p.y || p.screenY || 0), {
+    var menuX = (p.x != null) ? Number(p.x) : Number((p.screenX != null) ? p.screenX : 0);
+    var menuY = (p.y != null) ? Number(p.y) : Number((p.screenY != null) ? p.screenY : 0);
+    showSourcesBrowserContextMenu(items, menuX, menuY, {
       type: 'page',
       tabId: tab && tab.id,
       params: p,
@@ -1655,6 +1723,7 @@
         id: id,
         webview: null,
         _bridgeTabId: null,
+        _creationPending: true,
         url: '',
         title: homeMode ? 'Home' : 'New Tab',
         pinned: !!options.pinned,
@@ -1679,8 +1748,19 @@
         tab.url = target;
         tab.loading = true;
       }
+      // Butterfly: for home tabs, show content immediately — don't wait for the bridge
+      // round-trip. The createTab Promise can take 5-60s on first call (Chromium
+      // browser-profile init), leaving the panel blank the whole time. Showing the
+      // home div now gives instant feedback; switchSourcesTab() re-runs on resolve.
+      if (homeMode && options.switchTo !== false) {
+        state.sourcesActiveTabId = tab.id;
+        renderSourcesBrowserTabStrip();
+        renderSourcesBrowserHome();
+        refreshSourcesBrowserNav();
+      }
       var createResult = api.webTabManager.createTab({ url: target || '', home: homeMode });
       var _bfFinishTab = function () {
+        if (!tab._bridgeTabId) tab._creationPending = false;
         renderSourcesBrowserTabStrip();
         if (!homeMode && String(tab.id) === String(state.sourcesActiveTabId)) {
           state.sourcesBrowserLoading = true;
@@ -1695,9 +1775,13 @@
           refreshSourcesBrowserNav();
         }
         if (options.switchTo !== false) switchSourcesTab(tab.id, { focus: !!options.focus });
+        // Force immediate viewport bounds update (not just debounced) so the Qt
+        // overlay is positioned as soon as the bridge tab is wired.
+        try { applySourcesBrowserViewportLayout(); } catch (_eImmLayout) {}
       };
       var _bfApplyBridgeId = function (tabId) {
         tab._bridgeTabId = tabId;
+        tab._creationPending = false;
         // Execute any navigation queued while createTab was pending
         if (tab._pendingNav && tab._pendingNav.url) {
           var nav = tab._pendingNav;
@@ -1708,12 +1792,14 @@
       };
       if (createResult && typeof createResult.then === 'function') {
         createResult.then(function (r) {
-          var parsed = (typeof r === 'string') ? JSON.parse(r) : r;
+          var parsed = null;
+          try { parsed = (typeof r === 'string') ? JSON.parse(r) : r; } catch (_eParse) { parsed = null; }
           if (parsed && parsed.tabId) _bfApplyBridgeId(parsed.tabId);
           _bfFinishTab();
         });
       } else if (createResult) {
-        var parsed = (typeof createResult === 'string') ? JSON.parse(createResult) : createResult;
+        var parsed = null;
+        try { parsed = (typeof createResult === 'string') ? JSON.parse(createResult) : createResult; } catch (_eParseSync) { parsed = null; }
         if (parsed && parsed.tabId) _bfApplyBridgeId(parsed.tabId);
         _bfFinishTab();
       }
@@ -1783,6 +1869,95 @@
       if (d) out.push(d);
     }
     return out;
+  }
+
+  function normalizeSourcesDownloadState(rawState) {
+    var s = String(rawState || '').trim().toLowerCase();
+    if (s === 'downloading' || s === 'started' || s === 'in_progress') return 'progressing';
+    if (s === 'canceled') return 'cancelled';
+    return s || 'progressing';
+  }
+
+  function normalizeSourcesDownloadInfo(info) {
+    var src = (info && typeof info === 'object') ? info : {};
+    var id = String(src.id || '').trim();
+    if (!id) return null;
+    var received = Number(src.received);
+    if (!isFinite(received)) received = Number(src.receivedBytes || 0);
+    if (!isFinite(received) || received < 0) received = 0;
+    var totalBytes = Number(src.totalBytes || 0);
+    if (!isFinite(totalBytes) || totalBytes < 0) totalBytes = 0;
+    var speed = Number(src.speed);
+    if (!isFinite(speed)) speed = Number(src.bytesPerSec || 0);
+    if (!isFinite(speed) || speed < 0) speed = 0;
+    var stateName = normalizeSourcesDownloadState(src.state || src.status || src.rawState || '');
+    var savePath = String(src.savePath || src.path || src.destination || '').trim();
+    var destination = String(src.destination || '').trim();
+    var progress = Number(src.progress);
+    if (!isFinite(progress) || progress < 0) {
+      progress = totalBytes > 0 ? Math.max(0, Math.min(1, received / totalBytes)) : 0;
+    }
+    if (progress > 1) progress = 1;
+    return {
+      id: id,
+      filename: String(src.filename || src.name || 'download'),
+      totalBytes: totalBytes,
+      received: received,
+      speed: speed,
+      state: stateName,
+      savePath: savePath,
+      destination: destination,
+      startedAt: Number(src.startedAt || 0) || 0,
+      finishedAt: Number(src.finishedAt || 0) || 0,
+      progress: progress,
+      error: String(src.error || ''),
+      transport: String(src.transport || ''),
+      canPause: !!src.canPause,
+      canResume: !!src.canResume,
+      canCancel: !!src.canCancel,
+    };
+  }
+
+  function upsertSourcesDownload(info) {
+    var normalized = normalizeSourcesDownloadInfo(info);
+    if (!normalized) return null;
+    if (!state.downloads || typeof state.downloads !== 'object' || Array.isArray(state.downloads)) {
+      state.downloads = {};
+    }
+    var existing = state.downloads[normalized.id] || null;
+    if (existing && typeof existing === 'object') {
+      var next = {};
+      var keys = Object.keys(existing);
+      for (var i = 0; i < keys.length; i++) next[keys[i]] = existing[keys[i]];
+      var nkeys = Object.keys(normalized);
+      for (var j = 0; j < nkeys.length; j++) next[nkeys[j]] = normalized[nkeys[j]];
+      if (!next.savePath && next.destination) next.savePath = String(next.destination || '');
+      state.downloads[normalized.id] = next;
+      return next;
+    }
+    state.downloads[normalized.id] = normalized;
+    return normalized;
+  }
+
+  function loadSourcesDownloadHistory() {
+    if (!api.webSources || typeof api.webSources.getDownloadHistory !== 'function') return Promise.resolve();
+    return api.webSources.getDownloadHistory().then(function (res) {
+      var rows = (res && res.ok && Array.isArray(res.downloads)) ? res.downloads : [];
+      var next = {};
+      for (var i = 0; i < rows.length; i++) {
+        var item = normalizeSourcesDownloadInfo(rows[i]);
+        if (!item) continue;
+        next[item.id] = item;
+      }
+      state.downloads = next;
+      renderHomeDownloads();
+      renderSourcesBrowserDownloadsRows();
+      syncDownloadIndicator();
+      if (hub && hub.renderHubDirectActive) hub.renderHubDirectActive();
+      if (hub && hub.renderHubDownloadHistory) hub.renderHubDownloadHistory();
+    }).catch(function () {
+      // Keep existing in-memory state on history read failure.
+    });
   }
 
   function formatSpeedForSources(bytesPerSec) {
@@ -1970,19 +2145,7 @@
 
   function applySourcesBrowserViewportLayout() {
     if (isButterfly) {
-      // Butterfly: report viewport rect to Qt so it can position QWebEngineView overlays
-      var viewport = el.sourcesBrowserViewport || document.querySelector('.sourcesBrowserViewport');
-      if (!viewport) return;
-      var rect = viewport.getBoundingClientRect();
-      // QWidget.setGeometry uses logical pixels — same as getBoundingClientRect CSS pixels
-      var x = Math.round(rect.left);
-      var y = Math.round(rect.top);
-      var w = Math.round(rect.width);
-      var h = Math.round(rect.height);
-      try { api.webTabManager.setViewportBounds({ x: x, y: y, w: w, h: h }); } catch (_eBounds) {}
-      state.sourcesBrowserLastHostWidth = Math.round(rect.width);
-      state.sourcesBrowserLastHostHeight = Math.round(rect.height);
-      if (w >= 8 && h >= 8) setSourcesBrowserRenderState('ok');
+      // Native Qt browser — BrowserWidget QStackedWidget manages its own geometry.
       return;
     }
     // Electron: position <webview> via CSS
@@ -2392,7 +2555,16 @@
           api.webTabManager.onTabCreated(function (raw) {
             var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
             if (!data || !data.tabId) return;
-            // Popup or new-window from Qt — check if we already have a tab waiting
+            var source = String(data.source || '').trim().toLowerCase();
+            // Only host-initiated creations should come through this path.
+            if (source && source !== 'popup') return;
+            if (!source) {
+              // Legacy fallback: ignore ambiguous events while renderer createTab is pending.
+              for (var p = 0; p < state.sourcesTabs.length; p++) {
+                var pt = state.sourcesTabs[p];
+                if (pt && pt._creationPending && !pt._bridgeTabId) return;
+              }
+            }
             var existing = getTabByBridgeId(data.tabId);
             if (existing) return; // Already tracked from openSourcesTab
             // Qt created a tab (e.g. from createWindow) — create matching JS tab
@@ -2401,6 +2573,7 @@
               id: id,
               webview: null,
               _bridgeTabId: data.tabId,
+              _creationPending: false,
               url: String(data.url || ''),
               title: String(data.title || 'New Tab'),
               pinned: false,
@@ -2441,6 +2614,17 @@
             if (data && data.url) emit('openMagnet', data.url);
           });
         }
+      }
+      if (!state.sourcesBridgeContextMenuBound && api.webBrowserActions && typeof api.webBrowserActions.onContextMenu === 'function') {
+        state.sourcesBridgeContextMenuBound = true;
+        api.webBrowserActions.onContextMenu(function (raw) {
+          var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+          if (!data || typeof data !== 'object') return;
+          var bridgeTabId = String(data.tabId || '').trim();
+          var tab = bridgeTabId ? getTabByBridgeId(bridgeTabId) : null;
+          if (!tab) tab = getSourcesActiveTab();
+          showSourcesWebviewContextMenu(data, tab);
+        });
       }
       // Butterfly: observe viewport for resize bounds reporting
       var viewport = el.sourcesBrowserViewport || document.querySelector('.sourcesBrowserViewport');
@@ -4940,21 +5124,35 @@
       }
       if (ctrl && !shift && key === 'r') {
         e.preventDefault();
-        var rwv = getSourcesBrowserWebview();
-        if (rwv && typeof rwv.reload === 'function') rwv.reload();
+        if (isButterfly) {
+          var activeReload = getSourcesActiveTab();
+          if (activeReload && activeReload._bridgeTabId) {
+            try { api.webTabManager.reload({ tabId: activeReload._bridgeTabId }); } catch (_eReloadKey) {}
+          }
+        } else {
+          var rwv = getSourcesBrowserWebview();
+          if (rwv && typeof rwv.reload === 'function') rwv.reload();
+        }
         return;
       }
       if (e.altKey && key === 'ArrowLeft') {
         e.preventDefault();
         var activeBack = getSourcesActiveTab();
-        var bwv0 = getSourcesBrowserWebview();
         var moved = false;
-        try {
-          if (bwv0 && typeof bwv0.canGoBack === 'function' && bwv0.canGoBack()) {
-            bwv0.goBack();
+        if (isButterfly) {
+          if (activeBack && activeBack._bridgeTabId && activeBack._canGoBack) {
+            try { api.webTabManager.goBack({ tabId: activeBack._bridgeTabId }); } catch (_eAltBackQt) {}
             moved = true;
           }
-        } catch (_eAltBack) {}
+        } else {
+          var bwv0 = getSourcesBrowserWebview();
+          try {
+            if (bwv0 && typeof bwv0.canGoBack === 'function' && bwv0.canGoBack()) {
+              bwv0.goBack();
+              moved = true;
+            }
+          } catch (_eAltBack) {}
+        }
         if (!moved && activeBack && !activeBack.home) {
           activeBack.home = true;
           state.sourcesBrowserUrl = '';
@@ -4964,8 +5162,15 @@
       }
       if (e.altKey && key === 'ArrowRight') {
         e.preventDefault();
-        var fwv0 = getSourcesBrowserWebview();
-        if (fwv0 && typeof fwv0.goForward === 'function') fwv0.goForward();
+        if (isButterfly) {
+          var activeForward = getSourcesActiveTab();
+          if (activeForward && activeForward._bridgeTabId && activeForward._canGoForward) {
+            try { api.webTabManager.goForward({ tabId: activeForward._bridgeTabId }); } catch (_eAltFwdQt) {}
+          }
+        } else {
+          var fwv0 = getSourcesBrowserWebview();
+          if (fwv0 && typeof fwv0.goForward === 'function') fwv0.goForward();
+        }
         return;
       }
       if (key === 'Escape') {
@@ -5596,13 +5801,44 @@
     }
 
     if (api.webSources && api.webSources.onDownloadStarted) {
-      api.webSources.onDownloadStarted(function () { renderHomeDownloads(); });
+      api.webSources.onDownloadStarted(function (info) {
+        upsertSourcesDownload(info);
+        renderHomeDownloads();
+        renderSourcesBrowserDownloadsRows();
+        syncDownloadIndicator();
+        if (hub && hub.renderHubDirectActive) hub.renderHubDirectActive();
+        if (hub && hub.renderHubDownloadHistory) hub.renderHubDownloadHistory();
+      });
     }
     if (api.webSources && api.webSources.onDownloadProgress) {
-      api.webSources.onDownloadProgress(function () { renderHomeDownloads(); });
+      api.webSources.onDownloadProgress(function (info) {
+        upsertSourcesDownload(info);
+        renderHomeDownloads();
+        renderSourcesBrowserDownloadsRows();
+        syncDownloadIndicator();
+        if (hub && hub.renderHubDirectActive) hub.renderHubDirectActive();
+      });
     }
     if (api.webSources && api.webSources.onDownloadCompleted) {
-      api.webSources.onDownloadCompleted(function () { renderHomeDownloads(); });
+      api.webSources.onDownloadCompleted(function (info) {
+        upsertSourcesDownload(info);
+        renderHomeDownloads();
+        renderSourcesBrowserDownloadsRows();
+        syncDownloadIndicator();
+        if (hub && hub.renderHubDirectActive) hub.renderHubDirectActive();
+        if (hub && hub.renderHubDownloadHistory) hub.renderHubDownloadHistory();
+      });
+    }
+    if (api.webSources && api.webSources.onDownloadsUpdated) {
+      api.webSources.onDownloadsUpdated(function () {
+        loadSourcesDownloadHistory();
+      });
+    }
+
+    if (api.webPermissions && typeof api.webPermissions.onPrompt === 'function') {
+      api.webPermissions.onPrompt(function (data) {
+        enqueuePermissionPrompt(data);
+      });
     }
 
     // IPC: torrent events
@@ -5924,7 +6160,8 @@
     var all = getSourcesBrowserDownloadsList();
     for (var i = 0; i < all.length; i++) {
       var d = all[i];
-      if (d && (d.state === 'started' || d.state === 'progressing')) activeCount++;
+      var s = String(d && d.state || '').toLowerCase();
+      if (s === 'started' || s === 'progressing' || s === 'downloading' || s === 'paused' || s === 'queued') activeCount++;
     }
     if (el.downloadStatus) {
       el.downloadStatus.textContent = activeCount ? (activeCount + ' active download' + (activeCount > 1 ? 's' : '')) : 'No active downloads';
@@ -5961,6 +6198,7 @@
   if (hub.loadDataUsage) hub.loadDataUsage();
   if (hub.refreshTorrentState) hub.refreshTorrentState();
   loadUserscripts();
+  loadSourcesDownloadHistory();
 
   // Query initial Tor status
   if (api.torProxy && api.torProxy.getStatus) {
@@ -6042,9 +6280,10 @@
       if (!state.sourcesTabs.length) {
         var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
         var lastUrl = String(cfg && cfg.lastUrl || '').trim();
-        if (!lastUrl || lastUrl === 'about:blank') {
-          openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
-        } else {
+        if (lastUrl === 'about:blank') lastUrl = '';
+        // Home is always the first tab — never skip it even when restoring a session URL
+        openSourcesTab('', { switchTo: !lastUrl, focus: false, persist: false, home: true });
+        if (lastUrl) {
           openSourcesTab(lastUrl, { switchTo: true, focus: false, persist: false });
         }
       } else {
@@ -6053,6 +6292,11 @@
       }
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();
+      if (isButterfly) {
+        // Native Qt browser — hand off to BrowserWidget via bridge; no HTML chrome needed.
+        try { api.webTabManager.openBrowser(); } catch (_eBrowser) {}
+        return;
+      }
       scheduleSourcesBrowserViewportLayout();
       if (el.homeView) {
         try { el.homeView.scrollTop = 0; } catch (_eScrollTop) {}

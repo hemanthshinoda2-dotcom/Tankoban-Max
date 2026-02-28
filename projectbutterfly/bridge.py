@@ -737,35 +737,56 @@ class VideoProgressBridge(QObject, JsonCrudMixin):
     # Push event: VIDEO_PROGRESS_UPDATED
     progressUpdated = Signal(str)
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._cache = None  # in-memory cache like Electron's videoProgressMem
+
+    def _ensure_cache(self):
+        if self._cache is None:
+            self._cache = _backfill_updated_at(self._crud_read(), self._crud_write)
+        return self._cache
+
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
+        # Electron returns raw dict { videoId: progressObj, ... }
+        return json.dumps(self._ensure_cache())
 
     @Slot(str, result=str)
     def get(self, video_id):
-        return json.dumps(self.crud_get(video_id))
+        # Electron returns raw progress object or null
+        data = self._ensure_cache()
+        return json.dumps(data.get(video_id))
 
     @Slot(str, str, result=str)
     def save(self, video_id, progress_json):
-        data = self._crud_read()
-        prev = data.get(video_id, {}) if isinstance(data.get(video_id), dict) else {}
         nxt = json.loads(progress_json)
-        data[video_id] = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
+        # Merge like Electron: { ...prev, ...next, updatedAt: Date.now() }
+        data = self._ensure_cache()
+        prev = data.get(video_id, {}) if isinstance(data.get(video_id), dict) else {}
+        merged = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
+        data[video_id] = merged
         self._crud_write(data)
-        self.progressUpdated.emit(json.dumps({"videoId": video_id}))
-        return json.dumps(_ok())
+        # Emit with progress included — JS handler uses payload.progress to update state
+        self.progressUpdated.emit(json.dumps({"videoId": video_id, "progress": merged}))
+        return json.dumps({"ok": True, "value": merged})
 
     @Slot(str, result=str)
     def clear(self, video_id):
-        result = self.crud_clear(video_id)
-        self.progressUpdated.emit(json.dumps({"videoId": video_id, "cleared": True}))
-        return json.dumps(result)
+        data = self._ensure_cache()
+        data.pop(video_id, None)
+        self._crud_write(data)
+        # Match Electron: { videoId, progress: null }
+        self.progressUpdated.emit(json.dumps({"videoId": video_id, "progress": None}))
+        return json.dumps({"ok": True})
 
     @Slot(result=str)
     def clearAll(self):
-        result = self.crud_clear_all()
-        self.progressUpdated.emit(json.dumps({"clearedAll": True}))
-        return json.dumps(result)
+        data = self._ensure_cache()
+        data.clear()
+        self._crud_write(data)
+        # JS checks payload.allCleared (not clearedAll)
+        self.progressUpdated.emit(json.dumps({"allCleared": True}))
+        return json.dumps({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -818,19 +839,46 @@ class VideoDisplayNamesBridge(QObject, JsonCrudMixin):
 class VideoUiBridge(QObject, JsonCrudMixin):
     _crud_file = "video_ui_state.json"
 
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._cache = None
+
+    def _ensure_cache(self):
+        if self._cache is None:
+            raw = self._crud_read()
+            # Normalize: Electron stores { ui: {...}, updatedAt } on disk
+            if raw and isinstance(raw, dict) and "ui" in raw:
+                self._cache = raw
+            elif raw and isinstance(raw, dict):
+                self._cache = {"ui": {**raw}, "updatedAt": 0}
+            else:
+                self._cache = {"ui": {}, "updatedAt": 0}
+        return self._cache
+
     @Slot(result=str)
     def getState(self):
-        data = self._crud_read()
-        return json.dumps(_ok({"state": data}))
+        # Match Electron: returns { ui: {...}, updatedAt }
+        v = self._ensure_cache()
+        return json.dumps({"ui": {**(v.get("ui") or {})}, "updatedAt": v.get("updatedAt", 0)})
 
     @Slot(str, result=str)
     def saveState(self, ui_json):
-        storage.write_json_debounced(self._crud_path(), json.loads(ui_json))
-        return json.dumps(_ok())
+        incoming = json.loads(ui_json)
+        # Merge like Electron: v.ui = { ...v.ui, ...next }
+        v = self._ensure_cache()
+        ui = v.get("ui") or {}
+        if incoming and isinstance(incoming, dict):
+            ui.update(incoming)
+        v["ui"] = ui
+        v["updatedAt"] = int(time.time() * 1000)
+        storage.write_json_debounced(self._crud_path(), v)
+        return json.dumps({"ok": True})
 
     @Slot(result=str)
     def clearState(self):
-        return json.dumps(self.crud_clear_all())
+        self._cache = {"ui": {}, "updatedAt": int(time.time() * 1000)}
+        storage.write_json_debounced(self._crud_path(), self._cache)
+        return json.dumps({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -4050,13 +4098,15 @@ class PlayerBridge(QObject):
         if phase in ("close", "eof") and pos <= 0.1 and self._max_position > 0.1:
             pos = self._max_position
 
+        finished = _finished(pos, dur, self._max_position, self._watched_time, self._eof_signaled)
         prog = {
-            "position": pos,
-            "duration": dur,
-            "maxPosition": self._max_position,
-            "watchedTime": self._watched_time,
-            "finished": _finished(pos, dur, self._max_position, self._watched_time, self._eof_signaled),
-            "timestamp": now,
+            "positionSec": pos,
+            "durationSec": dur,
+            "maxPositionSec": self._max_position,
+            "watchedSecApprox": self._watched_time,
+            "finished": finished,
+            "lastWatchedAtMs": now,
+            "completedAtMs": now if finished else None,
             "phase": phase,
         }
         # Persist track preferences
@@ -4498,13 +4548,30 @@ class PlayerBridge(QObject):
         self._stop_poll()
         if self._show_web:
             self._show_web()
+        # Build synced progress for JS build14:playerExited handler
+        vid = self._media_ref.get("videoId", "") if self._media_ref else ""
+        synced = None
+        if vid and self._progress_domain:
+            try:
+                cached = self._progress_domain._ensure_cache()
+                synced = {"videoId": vid, "progress": cached.get(vid)}
+            except Exception:
+                pass
         try:
             self.playerExited.emit(json.dumps({
                 "reason": reason or "user_stopped",
                 "returnState": None,
+                "synced": synced,
             }))
         except RuntimeError:
             pass
+        # Also emit progressUpdated so Continue Watching refreshes immediately
+        if vid and synced and synced.get("progress"):
+            try:
+                self._progress_domain.progressUpdated.emit(
+                    json.dumps({"videoId": vid, "progress": synced["progress"]}))
+            except Exception:
+                pass
         return json.dumps(_ok({"state": self._state_snapshot()}))
 
     @Slot(result=str)
@@ -5094,6 +5161,7 @@ class WebSourcesBridge(QObject):
         self._sources_cache = None
         self._downloads_cache = None
         self._active_downloads = {}      # id -> download handle (set by app.py)
+        self._download_stats = {}        # id -> {received, ts}
         self._picker_pending = {}        # requestId -> callback (future use)
 
     # ── helpers ──────────────────────────────────────────────────────────
@@ -5139,9 +5207,93 @@ class WebSourcesBridge(QObject):
 
     def _emit_downloads_updated(self):
         c = self._ensure_downloads()
+        rows = []
+        for d in c.get("downloads", []):
+            if not isinstance(d, dict):
+                continue
+            rows.append(self._to_renderer_download(d))
         self.downloadsUpdated.emit(json.dumps({
-            "downloads": c.get("downloads", []),
+            "downloads": rows,
         }))
+
+    @staticmethod
+    def _normalize_download_state(raw_state):
+        s = str(raw_state or "").strip().lower()
+        if s in ("started", "downloading", "in_progress", "progressing"):
+            return "progressing"
+        if s in ("cancelled", "canceled"):
+            return "cancelled"
+        if s in ("queued", "pending"):
+            return "queued"
+        if not s:
+            return "progressing"
+        return s
+
+    @classmethod
+    def _is_active_download_state(cls, raw_state):
+        s = cls._normalize_download_state(raw_state)
+        return s in ("queued", "progressing", "paused", "downloading", "started")
+
+    @staticmethod
+    def _download_save_path(entry):
+        if not isinstance(entry, dict):
+            return ""
+        explicit = str(entry.get("savePath", "") or "").strip()
+        if explicit:
+            return explicit
+        destination = str(entry.get("destination", "") or "").strip()
+        filename = str(entry.get("filename", "") or "").strip()
+        if not destination:
+            return ""
+        if filename and os.path.isdir(destination):
+            return os.path.join(destination, filename)
+        return destination
+
+    def _to_renderer_download(self, entry, speed_override=None):
+        """Return Electron-like download payload with compatibility keys."""
+        if not isinstance(entry, dict):
+            entry = {}
+        received = int(entry.get("receivedBytes", entry.get("received", 0)) or 0)
+        total = int(entry.get("totalBytes", 0) or 0)
+        speed_val = speed_override
+        if speed_val is None:
+            speed_val = entry.get("speed", entry.get("bytesPerSec", 0))
+        speed = int(speed_val or 0)
+        state_raw = str(entry.get("state", "") or "").strip().lower()
+        state = self._normalize_download_state(state_raw)
+        save_path = self._download_save_path(entry)
+        progress = 0.0
+        if total > 0:
+            try:
+                progress = max(0.0, min(1.0, float(received) / float(total)))
+            except Exception:
+                progress = 0.0
+        return {
+            "id": str(entry.get("id", "") or ""),
+            "filename": str(entry.get("filename", "") or "download"),
+            "name": str(entry.get("filename", "") or "download"),
+            "destination": str(entry.get("destination", "") or ""),
+            "savePath": save_path,
+            "path": save_path,
+            "library": str(entry.get("library", "") or ""),
+            "state": state,
+            "rawState": state_raw,
+            "progress": progress,
+            "startedAt": int(entry.get("startedAt", 0) or 0),
+            "finishedAt": int(entry.get("finishedAt", 0) or 0) if entry.get("finishedAt") is not None else None,
+            "error": str(entry.get("error", "") or ""),
+            "pageUrl": str(entry.get("pageUrl", "") or ""),
+            "downloadUrl": str(entry.get("downloadUrl", "") or ""),
+            "totalBytes": total,
+            "received": received,
+            "receivedBytes": received,
+            "speed": speed,
+            "bytesPerSec": speed,
+            "transport": str(entry.get("transport", "") or "browser"),
+            "canPause": bool(entry.get("canPause", False)),
+            "canResume": bool(entry.get("canResume", False)),
+            "canCancel": bool(entry.get("canCancel", False)),
+        }
 
     def _detect_mode_by_ext(self, filename):
         ext = os.path.splitext(str(filename or ""))[1].lower()
@@ -5271,14 +5423,19 @@ class WebSourcesBridge(QObject):
     @Slot(result=str)
     def getDownloadHistory(self):
         c = self._ensure_downloads()
-        return json.dumps(_ok({"downloads": c.get("downloads", [])}))
+        rows = []
+        for d in c.get("downloads", []):
+            if not isinstance(d, dict):
+                continue
+            rows.append(self._to_renderer_download(d))
+        return json.dumps(_ok({"downloads": rows}))
 
     @Slot(result=str)
     def clearDownloadHistory(self):
         c = self._ensure_downloads()
         # Keep active downloads
         c["downloads"] = [d for d in c.get("downloads", [])
-                          if d and d.get("state") in ("downloading", "paused")]
+                          if d and self._is_active_download_state(d.get("state"))]
         c["updatedAt"] = int(time.time() * 1000)
         self._write_downloads()
         self._emit_downloads_updated()
@@ -5294,7 +5451,7 @@ class WebSourcesBridge(QObject):
         before = len(c.get("downloads", []))
         c["downloads"] = [d for d in c.get("downloads", [])
                           if not d or str(d.get("id", "")) != did
-                          or d.get("state") in ("downloading", "paused")]
+                          or self._is_active_download_state(d.get("state"))]
         if len(c["downloads"]) == before:
             return json.dumps(_err("Not found"))
         c["updatedAt"] = int(time.time() * 1000)
@@ -5516,8 +5673,9 @@ class WebSourcesBridge(QObject):
             "id": did,
             "filename": filename,
             "destination": dest_dir or "",
+            "savePath": os.path.join(dest_dir, filename) if dest_dir else "",
             "library": "",
-            "state": "started",
+            "state": "downloading",
             "startedAt": int(time.time() * 1000),
             "finishedAt": None,
             "error": "",
@@ -5535,11 +5693,15 @@ class WebSourcesBridge(QObject):
         c["downloads"].insert(0, entry)
         c["updatedAt"] = int(time.time() * 1000)
         self._write_downloads()
-        self.downloadStarted.emit(json.dumps(entry))
+        self.downloadStarted.emit(json.dumps(self._to_renderer_download(entry)))
         self._emit_downloads_updated()
 
         # Store handle for pause/resume/cancel
         self._active_downloads[did] = download
+        self._download_stats[did] = {
+            "received": 0,
+            "ts": int(time.time() * 1000),
+        }
 
         # Connect progress signal
         def on_received_bytes_changed():
@@ -5551,13 +5713,18 @@ class WebSourcesBridge(QObject):
             entry["receivedBytes"] = received
             if total_now > 0:
                 entry["totalBytes"] = total_now
-            self.downloadProgress.emit(json.dumps({
-                "id": did, "receivedBytes": received,
-                "totalBytes": total_now,
-            }))
+            entry["state"] = "downloading"
+            now_ms = int(time.time() * 1000)
+            prev = self._download_stats.get(did) or {"received": 0, "ts": now_ms}
+            dt = max(1, now_ms - int(prev.get("ts", now_ms)))
+            delta = max(0, int(received) - int(prev.get("received", 0)))
+            speed = int((delta * 1000) / dt)
+            self._download_stats[did] = {"received": int(received), "ts": now_ms}
+            self.downloadProgress.emit(json.dumps(self._to_renderer_download(entry, speed_override=speed)))
 
         def on_finished():
             self._active_downloads.pop(did, None)
+            self._download_stats.pop(did, None)
             try:
                 is_complete = download.isFinished()
                 state_val = download.state()
@@ -5581,9 +5748,18 @@ class WebSourcesBridge(QObject):
                 entry["receivedBytes"] = download.receivedBytes()
             except Exception:
                 pass
+            try:
+                ddir = str(download.downloadDirectory() or "").strip()
+                dname = str(download.downloadFileName() or "").strip()
+                if ddir and dname:
+                    entry["savePath"] = os.path.join(ddir, dname)
+                    entry["destination"] = ddir
+                    entry["filename"] = dname
+            except Exception:
+                pass
             c["updatedAt"] = int(time.time() * 1000)
             self._write_downloads()
-            self.downloadCompleted.emit(json.dumps(entry))
+            self.downloadCompleted.emit(json.dumps(self._to_renderer_download(entry)))
             self._emit_downloads_updated()
 
         try:
@@ -8729,6 +8905,11 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
             """Handle window.open / target=_blank — create a new tab."""
             new_id = self._tab_manager._create_tab_internal("", home=False)
             if new_id and new_id in self._tab_manager._tabs:
+                try:
+                    # Host-initiated tab creation path (popup/new-window).
+                    self._tab_manager._emit_tab_created(new_id, source="popup")
+                except Exception:
+                    pass
                 return self._tab_manager._tabs[new_id]["page"]
             return None
 
@@ -8751,46 +8932,73 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
 
 class WebTabManagerBridge(QObject):
     """
-    Manages multiple QWebEngineView instances as browser tabs.
+    Manages browser tabs via BrowserWidget (native Qt chrome).
 
-    Each tab is a native QWebEngineView overlaid on top of the main renderer
-    (the QWebEngineView that hosts src/index.html).  The JS renderer sends
-    viewport bounds via ``setViewportBounds()`` and the overlay views are
-    positioned at those exact coordinates so they cover the browser content
-    area while the tab strip / URL bar / chrome remain visible underneath.
+    The QWebEngineView instances are owned by BrowserWidget and live in
+    its QStackedWidget — no overlays, no HWND z-ordering tricks needed.
 
     Lifecycle:
-      1. app.py calls ``setup(profile, container, main_view)``
-      2. JS calls ``createTab({url, home})`` → Python creates QWebEngineView
-      3. JS calls ``switchTab({tabId})`` → Python shows/hides views
-      4. JS calls ``setViewportBounds({x, y, w, h})`` → Python positions overlay
-      5. JS calls ``closeTab({tabId})`` → Python destroys the view
+      1. app.py calls ``setup(browser_widget)``
+      2. JS calls ``createTab({url, home})``   → Python creates page+view, BrowserWidget registers it
+      3. JS calls ``switchTab({tabId})``        → BrowserWidget switches QStackedWidget
+      4. JS calls ``closeTab({tabId})``         → BrowserWidget removes view
+      5. User interacts with BrowserWidget toolbar → signals → bridge slots → JS events
     """
 
-    # Signals pushed to JS
-    tabCreated = Signal(str)      # {tabId, url, title, home}
-    tabClosed = Signal(str)       # {tabId}
-    tabUpdated = Signal(str)      # {tabId, url?, title?, icon?, loading?, canGoBack?, canGoForward?}
-    magnetRequested = Signal(str) # {url, tabId}
+    # Signals pushed to JS renderer
+    tabCreated      = Signal(str)   # {tabId, url, title, home, source}
+    tabClosed       = Signal(str)   # {tabId}
+    tabUpdated      = Signal(str)   # {tabId, url?, title?, icon?, loading?, canGoBack?, canGoForward?}
+    magnetRequested = Signal(str)   # {url, tabId}
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._tabs = {}           # tabId → {"view", "page", "home"}
+        self._tabs = {}           # tabId → {"view", "page", "home", "url", "title", ...}
         self._tab_order = []      # ordered tabId list
         self._active_tab_id = ""
         self._tab_seq = 0
-        self._profile = None      # QWebEngineProfile — set by app.py
-        self._container = None    # parent QWidget for overlay views
-        self._main_view = None    # main QWebEngineView (coordinate ref)
-        self._viewport_rect = (0, 0, 0, 0)  # (x, y, w, h) from JS
+        self._profile = None      # QWebEngineProfile — from BrowserWidget
+        self._bw = None           # BrowserWidget reference — set by setup()
+        # Legacy fields kept to avoid AttributeError in any code that still reads them
+        self._container = None
+        self._main_view = None
+        self._viewport_rect = (0, 0, 0, 0)
 
-    # -- Setup (called by app.py after bridge construction) --
+    # ── Setup (called by app.py after bridge construction) ───────────────────
 
-    def setup(self, profile, container, main_view):
-        """Wire Qt objects from app.py."""
-        self._profile = profile
-        self._container = container
-        self._main_view = main_view
+    def setup(self, browser_widget):
+        """Wire BrowserWidget and connect its user-action signals back to bridge slots."""
+        self._bw = browser_widget
+        self._profile = browser_widget.profile
+
+        bw = browser_widget
+
+        # User navigates in address bar → tell the page to load
+        bw.userNavigated.connect(
+            lambda tid, url: self.navigateTo(json.dumps({"tabId": tid, "url": url}))
+        )
+        # User clicks + or Ctrl+T → create a new non-home tab
+        bw.userOpenNewTab.connect(
+            lambda: self.createTab(json.dumps({"home": False}))
+        )
+        # User clicks × on a tab
+        bw.userCloseTab.connect(
+            lambda tid: self.closeTab(json.dumps({"tabId": tid}))
+        )
+        # User clicks a different tab pill
+        bw.userSwitchTab.connect(
+            lambda tid: self.switchTab(json.dumps({"tabId": tid}))
+        )
+        # Nav buttons
+        bw.userGoBack.connect(
+            lambda tid: self.goBack(json.dumps({"tabId": tid}))
+        )
+        bw.userGoForward.connect(
+            lambda tid: self.goForward(json.dumps({"tabId": tid}))
+        )
+        bw.userReload.connect(
+            lambda tid: self.reload(json.dumps({"tabId": tid}))
+        )
 
     # -- Internal helpers --
 
@@ -8807,6 +9015,15 @@ class WebTabManagerBridge(QObject):
                 return
             u = url.toString() if hasattr(url, "toString") else str(url)
             self._tabs[tab_id]["url"] = u
+            # If this was a home tab that has now navigated to an external URL,
+            # transition it to a URL tab (clear home flag, show the view's content).
+            if self._tabs[tab_id].get("home") and u and not u.startswith("file://") and u not in ("about:blank", ""):
+                self._tabs[tab_id]["home"] = False
+                if self._bw:
+                    try:
+                        self._bw.navigate_tab(tab_id, u)
+                    except Exception:
+                        pass
             self._emit_tab_update(tab_id, url=u)
 
         def on_title_changed(title):
@@ -8908,54 +9125,58 @@ class WebTabManagerBridge(QObject):
             pass
 
     def _emit_tab_update(self, tab_id, **fields):
-        """Emit tabUpdated with only the changed fields."""
+        """Emit tabUpdated to JS and sync BrowserWidget UI."""
         payload = {"tabId": tab_id}
         payload.update(fields)
         self.tabUpdated.emit(json.dumps(payload))
+        # Sync native browser chrome
+        if self._bw:
+            try:
+                self._bw.update_tab(tab_id, **fields)
+            except Exception:
+                pass
+
+    def _emit_tab_created(self, tab_id, source="host"):
+        """Emit tabCreated with canonical metadata for host-initiated tabs."""
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            return
+        payload = {
+            "tabId": tab_id,
+            "url": str(tab.get("url", "") or ""),
+            "title": str(tab.get("title", "") or ""),
+            "home": bool(tab.get("home", False)),
+            "source": str(source or "host"),
+        }
+        self.tabCreated.emit(json.dumps(payload))
 
     def _apply_viewport_bounds(self):
-        """Position the active tab's QWebEngineView at the viewport rect."""
-        if not self._active_tab_id:
-            return
-        tab = self._tabs.get(self._active_tab_id)
-        if not tab or not tab.get("view"):
-            return
-        x, y, w, h = self._viewport_rect
-        view = tab["view"]
-        if w < 8 or h < 8 or tab.get("home"):
-            view.hide()
-            return
-        view.setGeometry(int(x), int(y), int(w), int(h))
-        view.show()
-        view.raise_()
+        """No-op: BrowserWidget QStackedWidget manages geometry."""
+        pass
 
     def _hide_all_views(self):
-        """Hide every tab's QWebEngineView overlay."""
-        for t in self._tabs.values():
-            v = t.get("view")
-            if v:
-                v.hide()
+        """No-op: BrowserWidget manages visibility."""
+        pass
 
     def _create_tab_internal(self, url, home=False):
         """
-        Internal: creates a QWebEngineView + page, connects signals.
+        Internal: creates QWebEnginePage + QWebEngineView, registers with BrowserWidget.
         Returns the tabId or "" on failure.
         """
-        if not self._profile or not self._container:
+        if not self._profile or not self._bw:
             return ""
         if len(self._tabs) >= 20:
             return ""
 
         tab_id = self._next_tab_id()
-        page = create_browser_tab_page(self._profile, self, tab_id)
+        page   = create_browser_tab_page(self._profile, self, tab_id)
         self._connect_page_signals(tab_id, page)
 
-        view = QWebEngineView(self._container)
+        view = QWebEngineView()
         view.setPage(page)
-        view.setStyleSheet("background-color: #1a1a2e;")
-        view.hide()  # hidden until switchTab
+        view.setStyleSheet("background-color: #0d1117;")
 
-        # Connect context menu on the view (not the page)
+        # Suppress Qt native context menu; route through BrowserWidget.show_context_menu()
         try:
             from PySide6.QtCore import Qt
             view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -8965,20 +9186,28 @@ class WebTabManagerBridge(QObject):
         except Exception:
             pass
 
+        title = "Home" if home else "New Tab"
         self._tabs[tab_id] = {
-            "view": view,
-            "page": page,
-            "home": home,
-            "url": url or "",
-            "title": "Home" if home else "New Tab",
-            "icon": "",
+            "view":    view,
+            "page":    page,
+            "home":    home,
+            "url":     url or "",
+            "title":   title,
+            "icon":    "",
             "loading": False,
         }
         self._tab_order.append(tab_id)
 
-        # Navigate if URL provided and not home
-        if url and not home:
-            from PySide6.QtCore import QUrl
+        # Register with BrowserWidget (adds to QTabBar + QStackedWidget)
+        self._bw.add_tab_view(tab_id, view, title=title, home=home)
+
+        # Load URL or home page
+        from PySide6.QtCore import QUrl
+        import os as _os
+        if home:
+            home_path = _os.path.join(_os.path.dirname(__file__), "data", "home.html")
+            page.load(QUrl.fromLocalFile(home_path))
+        elif url:
             page.load(QUrl(url))
 
         return tab_id
@@ -9012,26 +9241,36 @@ class WebTabManagerBridge(QObject):
             pass
 
     def _on_context_menu(self, tab_id, pos):
-        """Gather context menu data and emit to JS."""
+        """Show a native Qt context menu via BrowserWidget (Qt 6 API)."""
         tab = self._tabs.get(tab_id)
-        if not tab or not tab.get("page"):
+        if not tab or not self._bw:
             return
-        page = tab["page"]
+        view = tab.get("view")
+
+        # Get Qt 6 context menu request object
+        req = None
         try:
-            ctx = page.contextMenuData()
-            params = {
-                "tabId": tab_id,
-                "linkURL": ctx.linkUrl().toString() if ctx.linkUrl().isValid() else "",
-                "srcURL": ctx.mediaUrl().toString() if ctx.mediaUrl().isValid() else "",
-                "pageURL": page.url().toString(),
-                "isEditable": ctx.isContentEditable(),
-                "selectionText": ctx.selectedText(),
-                "x": pos.x(),
-                "y": pos.y(),
-            }
-            root = self.parent()
-            if root and hasattr(root, "webBrowserActions"):
-                root.webBrowserActions.contextMenu.emit(json.dumps(params))
+            if view and hasattr(view, "lastContextMenuRequest"):
+                req = view.lastContextMenuRequest()
+                if req:
+                    req.setAccepted(True)  # suppress Chromium's native menu
+        except Exception:
+            pass
+
+        # Convert to screen coordinates for QMenu.exec()
+        screen_pos = None
+        try:
+            from PySide6.QtCore import QPoint
+            if view and hasattr(view, "mapToGlobal"):
+                screen_pos = view.mapToGlobal(pos)
+        except Exception:
+            pass
+        if screen_pos is None:
+            from PySide6.QtGui import QCursor
+            screen_pos = QCursor.pos()
+
+        try:
+            self._bw.show_context_menu(tab_id, req, screen_pos)
         except Exception:
             pass
 
@@ -9044,7 +9283,7 @@ class WebTabManagerBridge(QObject):
             opts = json.loads(p) if p else {}
         except Exception:
             opts = {}
-        url = str(opts.get("url", "") or "").strip()
+        url  = str(opts.get("url",  "") or "").strip()
         home = bool(opts.get("home", False))
 
         tab_id = self._create_tab_internal(url, home=home)
@@ -9052,18 +9291,18 @@ class WebTabManagerBridge(QObject):
             return json.dumps({"ok": False, "error": "tab_create_failed"})
 
         result = {
-            "ok": True,
-            "tabId": tab_id,
-            "url": url,
-            "title": self._tabs[tab_id]["title"],
-            "home": home,
+            "ok":     True,
+            "tabId":  tab_id,
+            "url":    url,
+            "title":  self._tabs[tab_id]["title"],
+            "home":   home,
+            "source": "renderer",
         }
-        self.tabCreated.emit(json.dumps(result))
         return json.dumps(result)
 
     @Slot(str, result=str)
     def closeTab(self, p="{}"):
-        """Close a browser tab and destroy its QWebEngineView."""
+        """Close a browser tab and remove its view from BrowserWidget."""
         try:
             opts = json.loads(p) if p else {}
         except Exception:
@@ -9073,34 +9312,42 @@ class WebTabManagerBridge(QObject):
         if not tab:
             return json.dumps({"ok": False, "error": "tab_not_found"})
 
-        # Hide and schedule deletion
-        view = tab.get("view")
-        if view:
-            view.hide()
-            view.deleteLater()
+        # Remove from BrowserWidget UI (handles view.deleteLater() internally)
+        if self._bw:
+            try:
+                self._bw.remove_tab_view(tab_id)
+            except Exception:
+                pass
 
         del self._tabs[tab_id]
         if tab_id in self._tab_order:
             self._tab_order.remove(tab_id)
 
-        # If the closed tab was active, clear active (JS handles switching)
+        # If the closed tab was active, reset to main page for find/actions
         if self._active_tab_id == tab_id:
             self._active_tab_id = ""
-            # Restore main page for find/actions
             root = self.parent()
-            if root and self._main_view:
-                main_page = self._main_view.page()
-                if hasattr(root, "webFind"):
-                    root.webFind.setPage(main_page)
-                if hasattr(root, "webBrowserActions"):
-                    root.webBrowserActions.setPage(main_page)
+            if root:
+                main_page = None
+                try:
+                    mw = root._web_view
+                    main_page = mw.page() if mw else None
+                except Exception:
+                    pass
+                if main_page:
+                    if hasattr(root, "webFind"):
+                        try: root.webFind.setPage(main_page)
+                        except Exception: pass
+                    if hasattr(root, "webBrowserActions"):
+                        try: root.webBrowserActions.setPage(main_page)
+                        except Exception: pass
 
         self.tabClosed.emit(json.dumps({"tabId": tab_id}))
         return json.dumps({"ok": True})
 
     @Slot(str, result=str)
     def switchTab(self, p="{}"):
-        """Activate a browser tab — show its overlay, hide the previous."""
+        """Activate a browser tab — switches BrowserWidget content stack."""
         try:
             opts = json.loads(p) if p else {}
         except Exception:
@@ -9110,24 +9357,24 @@ class WebTabManagerBridge(QObject):
         if not tab:
             return json.dumps({"ok": False, "error": "tab_not_found"})
 
-        # Hide previous
-        if self._active_tab_id and self._active_tab_id != tab_id:
-            prev = self._tabs.get(self._active_tab_id)
-            if prev and prev.get("view"):
-                prev["view"].hide()
-
         self._active_tab_id = tab_id
 
-        # Show new (unless home mode)
-        self._apply_viewport_bounds()
+        # Tell BrowserWidget to switch the QStackedWidget and QTabBar
+        if self._bw:
+            try:
+                self._bw.set_active_tab_id(tab_id)
+            except Exception:
+                pass
 
         # Update webFind and webBrowserActions to use this tab's page
         root = self.parent()
         if root and tab.get("page"):
             if hasattr(root, "webFind"):
-                root.webFind.setPage(tab["page"])
+                try: root.webFind.setPage(tab["page"])
+                except Exception: pass
             if hasattr(root, "webBrowserActions"):
-                root.webBrowserActions.setPage(tab["page"])
+                try: root.webBrowserActions.setPage(tab["page"])
+                except Exception: pass
 
         return json.dumps({"ok": True})
 
@@ -9139,14 +9386,27 @@ class WebTabManagerBridge(QObject):
         except Exception:
             opts = {}
         tab_id = str(opts.get("tabId", ""))
-        url = str(opts.get("url", "")).strip()
-        tab = self._tabs.get(tab_id)
+        url    = str(opts.get("url",   "")).strip()
+        tab    = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
             return json.dumps({"ok": False, "error": "tab_not_found"})
         if not url:
             return json.dumps({"ok": False, "error": "no_url"})
+
+        was_home = tab.get("home", False)
+        tab["home"] = False
+        tab["url"]  = url
+
         from PySide6.QtCore import QUrl
         tab["page"].load(QUrl(url))
+
+        # If this was a home tab, tell BrowserWidget to switch its content view
+        if was_home and self._bw:
+            try:
+                self._bw.navigate_tab(tab_id, url)
+            except Exception:
+                pass
+
         return json.dumps({"ok": True})
 
     @Slot(str, result=str)
@@ -9233,22 +9493,19 @@ class WebTabManagerBridge(QObject):
 
     @Slot(str, result=str)
     def setViewportBounds(self, p="{}"):
-        """
-        Set the viewport rectangle where browser tab views are positioned.
+        """No-op: BrowserWidget QStackedWidget handles its own geometry."""
+        return json.dumps({"ok": True})
 
-        JS sends getBoundingClientRect() of .sourcesBrowserViewport.
-        Python positions the active tab's QWebEngineView at those coords.
-        """
+    @Slot(result=str)
+    def openBrowser(self):
+        """Switch the app stack to the native BrowserWidget. Called from JS openSourcesTab()."""
         try:
-            opts = json.loads(p) if p else {}
+            root = self.parent()
+            if root and hasattr(root, "show_browser"):
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, root.show_browser)
         except Exception:
-            opts = {}
-        x = float(opts.get("x", 0))
-        y = float(opts.get("y", 0))
-        w = float(opts.get("width", 0))
-        h = float(opts.get("height", 0))
-        self._viewport_rect = (x, y, w, h)
-        self._apply_viewport_bounds()
+            pass
         return json.dumps({"ok": True})
 
     @Slot(str, result=str)
@@ -9318,15 +9575,7 @@ class WebTabManagerBridge(QObject):
         })
 
     def shutdown(self):
-        """Destroy all tab views — called on app quit."""
-        for t in self._tabs.values():
-            v = t.get("view")
-            if v:
-                try:
-                    v.hide()
-                    v.deleteLater()
-                except Exception:
-                    pass
+        """Clean up all tab state on app quit (views are owned by BrowserWidget)."""
         self._tabs.clear()
         self._tab_order.clear()
         self._active_tab_id = ""
@@ -9351,6 +9600,49 @@ class WebBrowserActionsBridge(QObject):
     def setPage(self, page):
         self._page = page
 
+    @staticmethod
+    def _coerce_url(value):
+        """Accept string or object payloads and extract a target URL."""
+        if isinstance(value, dict):
+            for key in ("url", "href", "srcURL", "linkURL", "targetURL"):
+                s = str(value.get(key, "") or "").strip()
+                if s:
+                    return s
+            return ""
+        return str(value or "").strip()
+
+    @staticmethod
+    def _extract_local_path(raw_payload):
+        """
+        Accept payload forms:
+        - {"path": "..."}
+        - {"savePath": "..."}
+        - {"destination": "..."}
+        - "C:\\path\\file.ext"
+        """
+        payload = _p(raw_payload)
+        if isinstance(payload, dict):
+            for key in ("path", "savePath", "destination", "filePath"):
+                s = str(payload.get(key, "") or "").strip()
+                if s:
+                    return s
+        raw = str(raw_payload or "").strip()
+        if not raw or raw == "{}":
+            return ""
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, str):
+                return str(parsed or "").strip()
+            if isinstance(parsed, dict):
+                for key in ("path", "savePath", "destination", "filePath"):
+                    s = str(parsed.get(key, "") or "").strip()
+                    if s:
+                        return s
+        except Exception:
+            # Plain string payload path.
+            return raw
+        return ""
+
     @Slot(str, result=str)
     def ctxAction(self, p):
         """Dispatch a context-menu action on the current page."""
@@ -9364,15 +9656,21 @@ class WebBrowserActionsBridge(QObject):
         if not page:
             # Actions that don't need a page
             if action == "copyLink" and data:
+                target = self._coerce_url(data)
+                if not target:
+                    return json.dumps(_err("No URL"))
                 from PySide6.QtWidgets import QApplication
                 cb = QApplication.clipboard()
                 if cb:
-                    cb.setText(str(data))
+                    cb.setText(target)
                 return json.dumps(_ok())
             if action == "openLinkExternal" and data:
+                target = self._coerce_url(data)
+                if not target:
+                    return json.dumps(_err("No URL"))
                 from PySide6.QtGui import QDesktopServices
                 from PySide6.QtCore import QUrl
-                QDesktopServices.openUrl(QUrl(str(data)))
+                QDesktopServices.openUrl(QUrl(target))
                 return json.dumps(_ok())
             return json.dumps(_err("No page attached"))
 
@@ -9400,20 +9698,45 @@ class WebBrowserActionsBridge(QObject):
             page.triggerAction(page.WebAction.SelectAll)
         # Save / copy media
         elif action == "saveImage" and data:
-            page.download(page.url(), str(data))
+            from PySide6.QtCore import QUrl
+            target = self._coerce_url(data)
+            if not target:
+                return json.dumps(_err("No image URL"))
+            page.download(QUrl(target))
         elif action == "saveLinkAs" and data:
-            page.download(page.url(), str(data))
+            from PySide6.QtCore import QUrl
+            target = self._coerce_url(data)
+            if not target:
+                return json.dumps(_err("No link URL"))
+            page.download(QUrl(target))
+        elif action == "copyImage":
+            try:
+                from PySide6.QtWebEngineCore import QWebEnginePage
+                copy_image_action = getattr(QWebEnginePage.WebAction, "CopyImageToClipboard", None)
+                if copy_image_action is not None:
+                    page.triggerAction(copy_image_action)
+                else:
+                    page.triggerAction(page.WebAction.Copy)
+            except Exception:
+                page.triggerAction(page.WebAction.Copy)
         elif action == "copyLink" and data:
+            target = self._coerce_url(data)
+            if not target:
+                return json.dumps(_err("No URL"))
             from PySide6.QtWidgets import QApplication
             cb = QApplication.clipboard()
             if cb:
-                cb.setText(str(data))
+                cb.setText(target)
         elif action == "openLinkExternal" and data:
+            target = self._coerce_url(data)
+            if not target:
+                return json.dumps(_err("No URL"))
             from PySide6.QtGui import QDesktopServices
             from PySide6.QtCore import QUrl
-            QDesktopServices.openUrl(QUrl(str(data)))
+            QDesktopServices.openUrl(QUrl(target))
         # DevTools
         elif action == "inspect" or action == "devtools":
+            # Qt uses the page's current context for element inspection.
             page.triggerAction(page.WebAction.InspectElement)
         else:
             return json.dumps(_err("Unknown action: " + action))
@@ -9450,8 +9773,7 @@ class WebBrowserActionsBridge(QObject):
     @Slot(str, result=str)
     def downloadOpenFile(self, p):
         """Open a downloaded file with the OS default app."""
-        payload = _p(p)
-        save_path = str(payload.get("savePath", "") or "").strip()
+        save_path = self._extract_local_path(p)
         if not save_path:
             return json.dumps(_err("No path"))
         from PySide6.QtGui import QDesktopServices
@@ -9462,8 +9784,7 @@ class WebBrowserActionsBridge(QObject):
     @Slot(str, result=str)
     def downloadShowInFolder(self, p):
         """Reveal a downloaded file in the OS file manager."""
-        payload = _p(p)
-        save_path = str(payload.get("savePath", "") or "").strip()
+        save_path = self._extract_local_path(p)
         if not save_path:
             return json.dumps(_err("No path"))
         import subprocess, sys
@@ -10154,6 +10475,7 @@ BRIDGE_SHIM_JS = r"""
         getZoomFactor:    wrap(b.webTabManager.getZoomFactor, b.webTabManager),
         setZoomFactor:    wrap(b.webTabManager.setZoomFactor, b.webTabManager),
         getTabs:          wrap(b.webTabManager.getTabs, b.webTabManager),
+        openBrowser:      wrap(b.webTabManager.openBrowser, b.webTabManager),
         onTabCreated:     onEvent(b.webTabManager.tabCreated),
         onTabClosed:      onEvent(b.webTabManager.tabClosed),
         onTabUpdated:     onEvent(b.webTabManager.tabUpdated),

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tankoban — New Tab</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #1a2030;
+    --accent: #5865f2;
+    --accent-hover: #6b78f5;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: rgba(255,255,255,0.08);
+    --card: rgba(255,255,255,0.04);
+    --card-hover: rgba(255,255,255,0.08);
+    --radius: 12px;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 60px 24px 40px;
+    min-height: 100%;
+  }
+
+  /* ── Logo / greeting ── */
+  .greeting {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 36px;
+    background: linear-gradient(135deg, #5865f2 0%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Search bar ── */
+  .search-wrap {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 640px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    padding: 0 16px;
+    gap: 10px;
+    transition: border-color 0.15s;
+    margin-bottom: 48px;
+  }
+  .search-wrap:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(88,101,242,0.15);
+  }
+
+  .engine-select {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .engine-select option { background: var(--bg2); color: var(--text); }
+
+  .search-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  .search-input {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-size: 16px;
+    outline: none;
+    padding: 14px 0;
+  }
+  .search-input::placeholder { color: var(--muted); }
+
+  .search-btn {
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .search-btn:hover { background: var(--accent-hover); }
+
+  /* ── Shortcuts grid ── */
+  .section-label {
+    width: 100%;
+    max-width: 640px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .shortcuts {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+    width: 100%;
+    max-width: 640px;
+    margin-bottom: 48px;
+  }
+
+  .shortcut {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--text);
+    transition: background 0.12s, transform 0.1s;
+    user-select: none;
+  }
+  .shortcut:hover {
+    background: var(--card-hover);
+    transform: translateY(-1px);
+  }
+
+  .shortcut-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    overflow: hidden;
+  }
+  .shortcut-icon img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+  }
+
+  .shortcut-label {
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+
+  /* ── Tips footer ── */
+  .tips {
+    margin-top: auto;
+    padding-top: 24px;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.8;
+  }
+  .tips kbd {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+<div class="greeting">Tankoban</div>
+
+<div class="search-wrap">
+  <select class="engine-select" id="engineSelect">
+    <option value="https://www.google.com/search?q=">Google</option>
+    <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+    <option value="https://search.brave.com/search?q=">Brave</option>
+    <option value="https://www.bing.com/search?q=">Bing</option>
+  </select>
+  <div class="search-divider"></div>
+  <input class="search-input" id="searchInput" type="text" placeholder="Search or enter address" autofocus>
+  <button class="search-btn" id="searchBtn">Go</button>
+</div>
+
+<div class="section-label">Quick Access</div>
+<div class="shortcuts" id="shortcuts">
+  <a class="shortcut" data-url="https://getcomics.org">
+    <div class="shortcut-icon">📚</div>
+    <span class="shortcut-label">GetComics</span>
+  </a>
+  <a class="shortcut" data-url="https://readcomiconline.li">
+    <div class="shortcut-icon">🦸</div>
+    <span class="shortcut-label">ReadComicOnline</span>
+  </a>
+  <a class="shortcut" data-url="https://www.reddit.com">
+    <div class="shortcut-icon">🟠</div>
+    <span class="shortcut-label">Reddit</span>
+  </a>
+  <a class="shortcut" data-url="https://github.com">
+    <div class="shortcut-icon">🐙</div>
+    <span class="shortcut-label">GitHub</span>
+  </a>
+  <a class="shortcut" data-url="https://www.youtube.com">
+    <div class="shortcut-icon">▶️</div>
+    <span class="shortcut-label">YouTube</span>
+  </a>
+  <a class="shortcut" data-url="https://1337x.to">
+    <div class="shortcut-icon">🧲</div>
+    <span class="shortcut-label">1337x</span>
+  </a>
+</div>
+
+<div class="tips">
+  <kbd>Ctrl+T</kbd> New tab &nbsp;·&nbsp;
+  <kbd>Ctrl+W</kbd> Close tab &nbsp;·&nbsp;
+  <kbd>Ctrl+L</kbd> Focus address bar &nbsp;·&nbsp;
+  <kbd>Alt+←</kbd> Back
+</div>
+
+<script>
+(function () {
+  // Navigate within the browser — post a message to the parent BrowserWidget
+  function navigate(url) {
+    if (!url) return;
+    // Normalize: if no protocol and not a search, treat as URL
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      // Looks like a domain?
+      if (/^[\w\-]+\.[\w\-]+/.test(url) && !url.includes(' ')) {
+        url = 'https://' + url;
+      } else {
+        var engine = document.getElementById('engineSelect').value;
+        url = engine + encodeURIComponent(url);
+      }
+    }
+    // Tell Qt to navigate the current tab to this URL
+    if (window.__tankoNavigateHome) {
+      window.__tankoNavigateHome(url);
+    } else {
+      // Fallback: just navigate this view (Qt will intercept)
+      window.location.href = url;
+    }
+  }
+
+  // Search / go button
+  document.getElementById('searchBtn').addEventListener('click', function () {
+    navigate(document.getElementById('searchInput').value.trim());
+  });
+
+  document.getElementById('searchInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') navigate(this.value.trim());
+  });
+
+  // Shortcut tiles
+  document.querySelectorAll('.shortcut[data-url]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.preventDefault();
+      navigate(el.getAttribute('data-url'));
+    });
+  });
+})();
+</script>
+</body>
+</html>
