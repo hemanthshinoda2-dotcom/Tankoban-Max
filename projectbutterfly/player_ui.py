@@ -5,17 +5,16 @@ Ported from player_qt/run_player.py (PySide6 → PySide6, same process).
 All controls are native Qt widgets rendered as a transparent overlay on top
 of the mpv render surface inside the QStackedWidget.
 
-Architecture:
-    MpvContainer (QWidget)
-    ├── _render_host (QWidget — mpv renders here via wid, routes events)
-    └── PlayerOverlay (transparent QWidget on top)
-         ├── TopStrip (title + minimize/fullscreen/close)
-         ├── BottomHUD (transport, scrubber, chips)
-         ├── VolumeHUD (floating volume indicator)
-         ├── CenterFlash (play/pause/seek icon flash)
-         ├── ToastHUD (stacking notifications)
-         ├── TracksDrawer (audio/subtitle selection + delays)
-         └── PlaylistDrawer (episode list)
+Architecture (matches run_player.py — NO full-covering overlay widget):
+    MpvContainer (QWidget — handles mouse/keyboard, owns all controls)
+    ├── render_host (QWidget — native HWND, mpv renders here via wid)
+    ├── TopStrip (title + minimize/fullscreen/close, raised above render_host)
+    ├── BottomHUD (transport, scrubber, chips, raised above render_host)
+    ├── VolumeHUD (floating volume indicator)
+    ├── CenterFlash (play/pause/seek icon flash)
+    ├── ToastHUD (stacking notifications)
+    ├── TracksDrawer (audio/subtitle selection + delays)
+    └── PlaylistDrawer (episode list)
 """
 
 import os
@@ -998,18 +997,21 @@ class PlaylistDrawer(QFrame):
 
 
 # ════════════════════════════════════════════════════════════════════════
-# PlayerOverlay — master overlay widget with keyboard handling
+# MpvContainer — top-level widget that goes in the QStackedWidget
 # ════════════════════════════════════════════════════════════════════════
 
-class PlayerOverlay(QWidget):
-    """Transparent overlay that manages all player controls and keyboard shortcuts.
+class MpvContainer(QWidget):
+    """Hosts the mpv render surface + player controls as direct siblings.
 
-    Sits on top of the mpv render surface. Handles:
-    - Show/hide of control sub-widgets on mouse movement
-    - Cursor auto-hide (2s timeout)
-    - Full keyboard shortcut set (exact match with run_player.py)
-    - Wheel-for-volume
-    - Double-click-for-fullscreen
+    Goes into app.py's QStackedWidget at index 1.
+
+    Architecture (matches run_player.py):
+        mpv renders into render_host's native HWND via wid.
+        Controls (TopStrip, BottomHUD, drawers, etc.) are direct children of
+        MpvContainer, positioned absolutely and raised above render_host.
+        There is NO full-covering overlay widget — that would create an HWND
+        on Windows that occludes the mpv render surface (audio-only bug).
+        Mouse/keyboard events are handled by MpvContainer itself.
     """
 
     # Signals to app.py
@@ -1024,12 +1026,21 @@ class PlayerOverlay(QWidget):
         self._bridge = player_bridge
         self._controls_visible = True
         self._last_state = {}
-
+        self.setStyleSheet("background: black;")
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-        # Sub-widgets
+        # ── Render surface ──────────────────────────────────────────────
+        # mpv renders here via wid.  Must be a native window so mpv can
+        # attach to its HWND.
+        self.render_host = QWidget(self)
+        self.render_host.setStyleSheet("background: black;")
+        self.render_host.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+        self.render_host.setMouseTracking(True)
+        # Forward mouse events from render_host to MpvContainer
+        self.render_host.installEventFilter(self)
+
+        # ── Control widgets (direct children, positioned absolutely) ────
         self.top_strip = TopStrip(self)
         self.bottom_hud = BottomHUD(self)
         self.volume_hud = VolumeHUD(self)
@@ -1083,19 +1094,34 @@ class PlayerOverlay(QWidget):
         self._aspect_presets = ["", "16:9", "4:3", "21:9", "2.35:1", "1:1"]
         self._aspect_index = 0
 
+        # Context menu
+        from PySide6.QtWidgets import QMenu
+        self._QMenu = QMenu
+
+        # Tell bridge about us (we handle update_state)
+        player_bridge.setOverlay(self)
+
+    def get_render_widget(self):
+        """Return the widget whose winId() should be passed to mpv."""
+        return self.render_host
+
     # ── layout on resize ────────────────────────────────────────────────
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._layout_controls()
-
-    def _layout_controls(self):
         w, h = self.width(), self.height()
+        # render_host fills the entire area
+        self.render_host.setGeometry(0, 0, w, h)
+        # Controls positioned on top, raised above render_host
         self.top_strip.setGeometry(0, 0, w, 40)
+        self.top_strip.raise_()
         self.bottom_hud.setGeometry(0, h - 90, w, 90)
+        self.bottom_hud.raise_()
         # Drawers on the right side
         self.tracks_drawer.setGeometry(w - 340, 40, 340, h - 130)
+        self.tracks_drawer.raise_()
         self.playlist_drawer.setGeometry(w - 320, 40, 320, h - 130)
+        self.playlist_drawer.raise_()
 
     # ── controls visibility ─────────────────────────────────────────────
 
@@ -1155,6 +1181,23 @@ class PlayerOverlay(QWidget):
                     pass
             self.bottom_hud.set_chapters(times)
 
+    # ── event filter for render_host mouse events ───────────────────────
+
+    def eventFilter(self, obj, event):
+        """Forward mouse events from render_host up to MpvContainer."""
+        if obj is self.render_host:
+            etype = event.type()
+            if etype == QEvent.Type.MouseMove:
+                self._show_controls()
+                return False
+            if etype == QEvent.Type.MouseButtonPress:
+                self._handle_mouse_press(event)
+                return True
+            if etype == QEvent.Type.Wheel:
+                self._handle_wheel(event)
+                return True
+        return super().eventFilter(obj, event)
+
     # ── mouse events ────────────────────────────────────────────────────
 
     def mouseMoveEvent(self, event):
@@ -1162,6 +1205,9 @@ class PlayerOverlay(QWidget):
         super().mouseMoveEvent(event)
 
     def mousePressEvent(self, event):
+        self._handle_mouse_press(event)
+
+    def _handle_mouse_press(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             now = time.monotonic()
             if self._left_click_last_t and (now - self._left_click_last_t) < 0.35:
@@ -1176,9 +1222,9 @@ class PlayerOverlay(QWidget):
             return
         if event.button() == Qt.MouseButton.RightButton:
             self._show_controls()
+            self._show_context_menu(event.globalPosition().toPoint())
             event.accept()
             return
-        super().mousePressEvent(event)
 
     def _check_single_click(self):
         """If no double-click happened within 350ms, treat as single click → play/pause."""
@@ -1187,6 +1233,9 @@ class PlayerOverlay(QWidget):
             self._left_click_last_t = None
 
     def wheelEvent(self, event):
+        self._handle_wheel(event)
+
+    def _handle_wheel(self, event):
         delta = event.angleDelta().y()
         if delta > 0:
             self._bridge.adjust_volume(5)
@@ -1194,6 +1243,87 @@ class PlayerOverlay(QWidget):
             self._bridge.adjust_volume(-5)
         self.volume_hud.show_volume(self._bridge._volume)
         event.accept()
+
+    # ── context menu ────────────────────────────────────────────────────
+
+    def _show_context_menu(self, global_pos):
+        menu = self._QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background: rgba(28, 28, 28, 0.96);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                border-radius: 6px; padding: 4px 0;
+                color: rgba(255, 255, 255, 0.92); font-size: 12px;
+            }
+            QMenu::item { padding: 6px 24px; }
+            QMenu::item:selected { background: rgba(255, 255, 255, 0.12); }
+            QMenu::separator { height: 1px; background: rgba(255,255,255,0.10); margin: 4px 8px; }
+        """)
+
+        # Playback
+        is_playing = self._bridge._is_playing
+        menu.addAction("\u23f8 Pause" if is_playing else "\u25b6 Play", self._toggle_play_pause)
+        menu.addAction("\u23f9 Stop && Return", self._on_back)
+        menu.addSeparator()
+
+        # Seek
+        menu.addAction("\u23ea Seek -10s", lambda: self._seek_relative(-10))
+        menu.addAction("\u23e9 Seek +10s", lambda: self._seek_relative(10))
+        menu.addAction("\u23ea Seek -30s", lambda: self._seek_relative(-30))
+        menu.addAction("\u23e9 Seek +30s", lambda: self._seek_relative(30))
+        menu.addSeparator()
+
+        # Speed submenu
+        speed_menu = menu.addMenu(f"Speed ({self._bridge._speed:.2f}\u00d7)")
+        for s in [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]:
+            act = speed_menu.addAction(f"{s:.2f}\u00d7", lambda spd=s: self._set_speed(spd))
+            if abs(self._bridge._speed - s) < 0.01:
+                act.setEnabled(False)
+
+        menu.addSeparator()
+
+        # Audio tracks submenu
+        try:
+            tracks = self._bridge.get_track_list()
+            audio_tracks = [t for t in tracks if t.get("type") == "audio"]
+            if audio_tracks:
+                audio_menu = menu.addMenu("Audio Track")
+                for t in audio_tracks:
+                    tid = t.get("id", 0)
+                    label = f"#{tid}"
+                    if t.get("title"):
+                        label += f" {t['title']}"
+                    if t.get("lang"):
+                        label += f" [{t['lang']}]"
+                    audio_menu.addAction(label, lambda i=tid: self._set_audio_track(i))
+
+            # Subtitle tracks submenu
+            sub_tracks = [t for t in tracks if t.get("type") == "sub"]
+            sub_menu = menu.addMenu("Subtitle Track")
+            sub_menu.addAction("Off", lambda: self._on_subtitle_selected(0))
+            for t in sub_tracks:
+                tid = t.get("id", 0)
+                label = f"#{tid}"
+                if t.get("title"):
+                    label += f" {t['title']}"
+                if t.get("lang"):
+                    label += f" [{t['lang']}]"
+                sub_menu.addAction(label, lambda i=tid: self._on_subtitle_selected(i))
+        except Exception:
+            pass
+
+        menu.addSeparator()
+
+        # Navigation
+        menu.addAction("\u23ed Next Episode", self._next_episode)
+        menu.addAction("\u23ee Previous Episode", self._prev_episode)
+        menu.addSeparator()
+
+        # Fullscreen
+        menu.addAction("\u25a2 Toggle Fullscreen", lambda: self.request_fullscreen.emit())
+
+        menu.exec(global_pos)
+        menu.deleteLater()
 
     # ── keyboard shortcuts (exact match with run_player.py) ─────────────
 
@@ -1411,6 +1541,9 @@ class PlayerOverlay(QWidget):
         except Exception:
             pass
 
+    def _set_audio_track(self, tid):
+        self._on_audio_selected(tid)
+
     def _on_subtitle_selected(self, tid):
         try:
             if self._bridge._mpv:
@@ -1427,6 +1560,11 @@ class PlayerOverlay(QWidget):
         self._bridge.cycle_speed(+1)
         self.toast.show_toast(f"Speed {self._bridge._speed:.2f}\u00d7")
         self.bottom_hud.set_speed_label(self._bridge._speed)
+
+    def _set_speed(self, speed):
+        self._bridge.set_speed(speed)
+        self.toast.show_toast(f"Speed {speed:.2f}\u00d7")
+        self.bottom_hud.set_speed_label(speed)
 
     def _cycle_aspect(self):
         self._aspect_index = (self._aspect_index + 1) % len(self._aspect_presets)
@@ -1474,39 +1612,3 @@ class PlayerOverlay(QWidget):
             return w.isFullScreen() if w else False
         except Exception:
             return False
-
-
-# ════════════════════════════════════════════════════════════════════════
-# MpvContainer — top-level widget that goes in the QStackedWidget
-# ════════════════════════════════════════════════════════════════════════
-
-class MpvContainer(QWidget):
-    """Hosts the mpv render surface + player overlay.
-
-    Goes into app.py's QStackedWidget at index 1.
-    """
-
-    def __init__(self, player_bridge, parent=None):
-        super().__init__(parent)
-        self._bridge = player_bridge
-        self.setStyleSheet("background: black;")
-
-        # Render surface — mpv renders here via wid
-        self.render_host = QWidget(self)
-        self.render_host.setStyleSheet("background: black;")
-
-        # Overlay sits on top
-        self.overlay = PlayerOverlay(player_bridge, self)
-
-        # Tell bridge about the overlay
-        player_bridge.setOverlay(self.overlay)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        w, h = self.width(), self.height()
-        self.render_host.setGeometry(0, 0, w, h)
-        self.overlay.setGeometry(0, 0, w, h)
-
-    def get_render_widget(self):
-        """Return the widget whose winId() should be passed to mpv."""
-        return self.render_host

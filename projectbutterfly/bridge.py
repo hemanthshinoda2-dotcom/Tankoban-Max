@@ -3594,7 +3594,7 @@ class PlayerBridge(QObject):
         self._show_web    = show_web_fn
 
     def setOverlay(self, overlay):
-        """Called by app.py to connect the PlayerOverlay widget."""
+        """Called by MpvContainer to connect itself for state updates."""
         self._overlay = overlay
 
     def setProgressDomain(self, bridge):
@@ -8271,6 +8271,10 @@ class TorProxyBridge(QObject):
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidates.append(os.path.join(project_root, "resources", "tor", "windows", "tor.exe"))
         candidates.append(os.path.join(os.getcwd(), "resources", "tor", "windows", "tor.exe"))
+        # Sibling repos (resources/tor/ is gitignored)
+        parent_of_root = os.path.dirname(project_root)
+        for sibling in ("Tankoban-Max-master", "Tankoban-Max", "Tankoban Max"):
+            candidates.append(os.path.join(parent_of_root, sibling, "resources", "tor", "windows", "tor.exe"))
         for c in candidates:
             if os.path.isfile(c):
                 return c
