@@ -3,21 +3,17 @@ Project Butterfly — App Shell
 
 PySide6 replacement for main.js + main/index.js.
 Creates QMainWindow with QStackedWidget hosting:
-  - QWebEngineView (existing renderer UI from src/index.html)
-  - MpvRenderHost (native mpv widget, absorbed from player_qt/run_player.py)
+  - Index 0: QWebEngineView (existing renderer UI from src/index.html)
+  - Index 1: MpvRenderHost (native mpv widget for inline video playback)
 
 Handles:
   - App lifecycle, single-instance lock (QLocalServer)
   - Window creation (frameless, maximized, dark background)
   - Section-based boot routing (?appSection= query parameter)
-  - "Open With" file association (video → mpv widget, comic → renderer)
+  - QWebChannel bridge wiring (bridge.py — all 46 namespaces)
+  - Bridge Qt object injection (PlayerBridge, WebFindBridge, etc.)
   - DevTools policy
-  - Quit cleanup (flush writes, clear-on-exit privacy)
-
-Does NOT yet handle:
-  - QWebChannel bridge (see bridge.py — Phase 1 next step)
-  - Domain modules (see domains/ — Phase 2)
-  - Web browser session/permissions/adblock (Phase 3)
+  - Quit cleanup (player shutdown, tor kill, flush writes)
 """
 
 import argparse
@@ -29,7 +25,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QUrl, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget
+from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
 
@@ -224,7 +220,7 @@ class TankobanWindow(QMainWindow):
 
     QStackedWidget with two layers:
       index 0 = QWebEngineView  (existing renderer UI)
-      index 1 = (placeholder for MpvRenderHost — Phase 1 next step)
+      index 1 = QWidget          (mpv native render surface)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
@@ -256,6 +252,12 @@ class TankobanWindow(QMainWindow):
             os.path.join(storage.data_path(""), "WebEngine")
         )
 
+        # Browser tab profile — isolated session (replaces Electron partition="persist:webmode")
+        self._browser_profile = QWebEngineProfile("webmode", self)
+        self._browser_profile.setPersistentStoragePath(
+            os.path.join(storage.data_path(""), "WebEngine_browser")
+        )
+
         self._web_page = TankobanWebPage(self._profile, self)
         self._web_view = QWebEngineView()
         self._web_view.setPage(self._web_page)
@@ -269,12 +271,37 @@ class TankobanWindow(QMainWindow):
 
         self._stack.addWidget(self._web_view)  # index 0
 
+        # --- MpvRenderHost (layer 1) ---
+        # Plain QWidget whose winId() is passed to mpv for native rendering.
+        self._mpv_host = QWidget()
+        self._mpv_host.setStyleSheet("background-color: #000000;")
+        self._stack.addWidget(self._mpv_host)  # index 1
+
         # --- QWebChannel bridge (replaces Electron preload + ipcMain) ---
         self._bridge = bridge_module.setup_bridge(self._web_view, self)
 
-        # --- MpvRenderHost placeholder (layer 1) ---
-        # Will be added in Phase 1 when player.py integrates the mpv widget
-        # from player_qt/run_player.py. For now, just the web view.
+        # --- Wire bridge instances with live Qt objects ---
+        self._bridge.player.setMpvWidget(
+            self._mpv_host,
+            self.show_player,
+            self.show_web_view,
+        )
+        self._bridge.player.setProgressDomain(self._bridge.videoProgress)
+        self._bridge.webFind.setPage(self._web_page)
+        self._bridge.webBrowserActions.setPage(self._web_page)
+        self._bridge.webData.setProfile(self._profile)
+
+        # Wire browser tab manager with isolated profile
+        self._bridge.webTabManager.setup(
+            self._browser_profile,
+            self._web_view,    # parent for overlay QWebEngineViews
+            self._web_view,    # coordinate reference
+        )
+
+        # Wire browser download handler
+        self._browser_profile.downloadRequested.connect(
+            self._bridge.webSources.handleDownloadRequested
+        )
 
         # --- DevTools ---
         self._dev_tools = dev_tools
@@ -301,16 +328,15 @@ class TankobanWindow(QMainWindow):
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
 
-    # --- Player widget switching (stub for Phase 1 mpv integration) ---
+    # --- Player widget switching ---
 
     def show_web_view(self):
         """Switch to the web UI layer."""
         self._stack.setCurrentIndex(0)
 
     def show_player(self):
-        """Switch to the mpv player layer (not yet implemented)."""
-        if self._stack.count() > 1:
-            self._stack.setCurrentIndex(1)
+        """Switch to the mpv player layer."""
+        self._stack.setCurrentIndex(1)
 
     # --- DevTools ---
 
@@ -346,9 +372,20 @@ class TankobanWindow(QMainWindow):
                     QTimer.singleShot(0, self.showMaximized)
 
     def closeEvent(self, event):
-        """Flush all pending writes before quitting."""
+        """Shutdown player/tor/tabs and flush pending writes before quitting."""
+        try:
+            self._bridge.webTabManager.shutdown()
+        except Exception:
+            pass
+        try:
+            self._bridge.player.shutdown()
+        except Exception:
+            pass
+        try:
+            self._bridge.torProxy.forceKill()
+        except Exception:
+            pass
         storage.flush_all_writes()
-        # TODO Phase 3: honor web privacy clear-on-exit settings
         super().closeEvent(event)
 
 
@@ -481,7 +518,22 @@ def main():
         QShortcut(QKeySequence("F12"), win, win.toggle_dev_tools)
 
     # --- App quit cleanup ---
-    app.aboutToQuit.connect(storage.flush_all_writes)
+    def _on_about_to_quit():
+        try:
+            win._bridge.webTabManager.shutdown()
+        except Exception:
+            pass
+        try:
+            win._bridge.player.shutdown()
+        except Exception:
+            pass
+        try:
+            win._bridge.torProxy.forceKill()
+        except Exception:
+            pass
+        storage.flush_all_writes()
+
+    app.aboutToQuit.connect(_on_about_to_quit)
 
     sys.exit(app.exec())
 

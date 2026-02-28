@@ -2942,7 +2942,9 @@ function closeTracksPanel(){
                 (Tanko.api.holyGrail && typeof Tanko.api.holyGrail.probe === 'function')
                   ? Tanko.api.holyGrail.probe().catch((e) => ({ ok: false, error: String((e && e.message) || e || 'probe_failed') }))
                   : Promise.resolve({ ok: false, error: 'holy_grail_api_unavailable' }),
-                Promise.resolve({ available: false, error: 'embedded_disabled' }),
+                (Tanko.api.mpv && typeof Tanko.api.mpv.probe === 'function')
+                  ? Tanko.api.mpv.probe().catch(() => ({ available: false, error: 'mpv_probe_failed' }))
+                  : Promise.resolve({ available: false, error: 'mpv_api_unavailable' }),
                 Tanko.api.videoDisplayNames?.getAll?.().catch(() => ({})),
               ]);
 

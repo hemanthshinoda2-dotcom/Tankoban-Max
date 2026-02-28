@@ -1580,7 +1580,7 @@ COMMON ANCHORS
           <!-- BUILD_WEB_HOME: library home view (grid + continue row) -->
           <div class="libContent">
             <div id="webHomeView" class="homeView">
-              <div class="panel sourcesSearchPanel">
+              <div id="sourcesSearchPanel" class="panel sourcesSearchPanel">
                 <div class="panelTitleRow">
                   <div class="panelTitle">Tankoban Search</div>
                 </div>
@@ -1618,7 +1618,7 @@ COMMON ANCHORS
                 </div>
               </div>
 
-              <div class="panel sourcesTorrentPanel">
+              <div id="sourcesTorrentPanel" class="panel sourcesTorrentPanel">
                 <div class="panelTitleRow">
                   <div class="panelTitle">Tankoban Torrents</div>
                   <div class="panelActions">
@@ -1645,24 +1645,45 @@ COMMON ANCHORS
               </div>
 
               <div class="panel sourcesBrowserPanel" id="sourcesBrowserPanel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">TankoBrowser</div>
-                </div>
-                <div id="sourcesBrowserTabStrip" class="sourcesBrowserTabStrip">
+                <div id="sourcesBrowserTopBar" class="sourcesBrowserTopBar">
+                  <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back" aria-label="Back">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 5.3a1 1 0 0 1 0 1.4L10.41 11H20a1 1 0 1 1 0 2h-9.59l4.3 4.3a1 1 0 0 1-1.42 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.41 0z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward" aria-label="Forward">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.3 18.7a1 1 0 0 1 0-1.4L13.59 13H4a1 1 0 1 1 0-2h9.59l-4.3-4.3a1 1 0 1 1 1.42-1.4l6 6a1 1 0 0 1 0 1.4l-6 6a1 1 0 0 1-1.41 0z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload" aria-label="Reload">
+                    <svg class="sourcesBrowserBtnIcon sourcesBrowserReloadIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.95 7.95 0 0 0 12 4V1L7 6l5 5V7a5 5 0 1 1-5 5 1 1 0 1 0-2 0 7 7 0 1 0 12.65-5.65z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserHomeBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Home" aria-label="Home">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.2 3.5 11a1 1 0 0 0 1.25 1.56L6 11.56V19a1 1 0 0 0 1 1h4v-5h2v5h4a1 1 0 0 0 1-1v-7.44l1.25 1a1 1 0 0 0 1.25-1.56L12 4.2z"/></svg>
+                  </button>
                   <div id="sourcesBrowserTabList" class="sourcesBrowserTabList"></div>
-                  <button id="sourcesBrowserNewTabBtn" class="btn btn-ghost btn-sm sourcesBrowserNewTabBtn" type="button" title="New tab" aria-label="New tab">+</button>
-                </div>
-                <div class="sourcesBrowserToolbar">
-                  <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back" aria-label="Back">&#x2039;</button>
-                  <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward" aria-label="Forward">&#x203a;</button>
-                  <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload" aria-label="Reload">&#x21bb;</button>
-                  <div class="sourcesBrowserOmniWrap">
-                    <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
-                    <div id="sourcesBrowserOmniDropdown" class="sourcesBrowserOmniDropdown hidden" role="listbox" aria-label="Address bar suggestions"></div>
+                  <button id="sourcesBrowserNewTabBtn" class="btn btn-ghost btn-sm sourcesBrowserNewTabBtn" type="button" title="New tab" aria-label="New tab">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5a1 1 0 1 1 2 0v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5z"/></svg>
+                  </button>
+                  <div id="sourcesBrowserOmniHost" class="sourcesBrowserOmniHost">
+                    <button id="sourcesBrowserOmniChip" class="btn btn-ghost btn-sm sourcesBrowserOmniChip" type="button" title="Address bar (Ctrl+L)" aria-label="Address bar">Search or enter URL</button>
+                    <div id="sourcesBrowserOmniWrap" class="sourcesBrowserOmniWrap hidden">
+                      <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
+                      <button id="sourcesBrowserGoBtn" class="btn btn-sm sourcesBrowserIconBtn" type="button" title="Go" aria-label="Go">
+                        <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5.5 19.5 13-7.5-13-7.5v6l8 1.5-8 1.5z"/></svg>
+                      </button>
+                      <div id="sourcesBrowserOmniDropdown" class="sourcesBrowserOmniDropdown hidden" role="listbox" aria-label="Address bar suggestions"></div>
+                    </div>
                   </div>
-                  <button id="sourcesBrowserGoBtn" class="btn btn-sm sourcesBrowserIconBtn" type="button" title="Go" aria-label="Go">&#x27a4;</button>
-                  <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm" type="button">Bookmark</button>
-                  <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm" type="button">History</button>
+                  <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Bookmark page" aria-label="Bookmark page">
+                    <svg class="sourcesBrowserBtnIcon sourcesBrowserBookmarkIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserBookmarksBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Bookmarks" aria-label="Bookmarks">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h7a1 1 0 0 1 1 1v17l-4.5-2.7L5 21V4a1 1 0 0 1 1-1zm10 0h2a1 1 0 0 1 1 1v17l-4-2.4V4a1 1 0 0 1 1-1z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="History" aria-label="History">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5a7 7 0 1 1-6.93 8H3.5a1 1 0 1 1 0-2H7a1 1 0 0 1 1 1v3.5a1 1 0 1 1-2 0v-.93A9 9 0 1 0 12 3a1 1 0 1 1 0 2zm-.5 3a1 1 0 0 1 1 1v3.38l2.3 1.33a1 1 0 1 1-1 1.74l-2.8-1.62a1 1 0 0 1-.5-.87V9a1 1 0 0 1 1-1z"/></svg>
+                  </button>
+                  <button id="sourcesBrowserDownloadsBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Downloads" aria-label="Downloads">
+                    <svg class="sourcesBrowserBtnIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4a1 1 0 1 1 2 0v8.59l2.3-2.3a1 1 0 1 1 1.4 1.42l-4 4a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.42l2.3 2.3V4zM5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1z"/></svg>
+                  </button>
                 </div>
                 <div id="sourcesBrowserStatus" class="muted tiny"></div>
                 <div class="sourcesBrowserViewport">
@@ -1684,35 +1705,89 @@ COMMON ANCHORS
                       <div id="sourcesBrowserHomeRecentTabs" class="sourcesBrowserHomeRecentTabs"></div>
                       <div id="sourcesBrowserHomeRecentTabsEmpty" class="muted tiny hidden">No recent tabs.</div>
                     </div>
+                    <div id="sourcesBrowserHomeEmbeddedRoot" class="sourcesBrowserHomeEmbeddedRoot"></div>
+                    <div class="sourcesBrowserHomeSection sourcesBrowserHomeDownloadsSection">
+                      <div class="sourcesBrowserHomeSectionHead">
+                        <div class="sourcesBrowserHomeSectionTitle">TankoBrowser Downloads</div>
+                        <button id="sourcesBrowserHomeDownloadsClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+                      </div>
+                      <div class="sourcesSearchTableWrap sourcesBrowserHomeDownloadsWrap">
+                        <table id="sourcesBrowserHomeDownloadsTable" class="sourcesSearchTable">
+                          <thead>
+                            <tr>
+                              <th>Index</th>
+                              <th>Download Name</th>
+                              <th>Size</th>
+                              <th>Download Speed</th>
+                              <th>Download %</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="sourcesBrowserHomeDownloadsBody">
+                            <tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                   <webview id="sourcesBrowserWebview"
                     src="about:blank"
                     partition="persist:webmode"
                     allowpopups
                     webpreferences="contextIsolation=yes"></webview>
+                  <div id="sourcesBrowserDrawerOverlay" class="sourcesBrowserDrawerOverlay hidden" aria-hidden="true"></div>
+                  <aside id="sourcesBrowserDrawer" class="sourcesBrowserDrawer hidden" aria-hidden="true">
+                    <div class="sourcesBrowserDrawerHead">
+                      <div id="sourcesBrowserDrawerTitle" class="sourcesBrowserDrawerTitle">Panel</div>
+                      <button id="sourcesBrowserDrawerCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
+                    </div>
+                    <div id="sourcesBrowserHistoryOverlay" class="sourcesBrowserDrawerPanel hidden" role="dialog" aria-label="TankoBrowser history">
+                      <div class="settingsGroup">
+                        <input id="sourcesBrowserHistorySearchInput" class="search" type="text" placeholder="Search history..." autocomplete="off" />
+                      </div>
+                      <div class="settingsActions" style="justify-content:flex-start;">
+                        <button id="sourcesBrowserHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
+                      </div>
+                      <div class="sourcesBrowserHistoryListWrap">
+                        <div id="sourcesBrowserHistoryList" class="sourcesBrowserHistoryList"></div>
+                        <div id="sourcesBrowserHistoryEmpty" class="muted tiny sourcesBrowserHistoryEmpty">No history yet.</div>
+                      </div>
+                    </div>
+                    <div id="sourcesBrowserBookmarksPanel" class="sourcesBrowserDrawerPanel hidden" role="dialog" aria-label="TankoBrowser bookmarks">
+                      <div class="sourcesBrowserHistoryListWrap">
+                        <div id="sourcesBrowserBookmarksList" class="sourcesBrowserHistoryList"></div>
+                        <div id="sourcesBrowserBookmarksEmpty" class="muted tiny sourcesBrowserHistoryEmpty">No bookmarks yet.</div>
+                      </div>
+                    </div>
+                    <div id="sourcesBrowserDownloadsPanel" class="sourcesBrowserDrawerPanel hidden" role="dialog" aria-label="TankoBrowser downloads">
+                      <div class="settingsActions" style="justify-content:flex-start;">
+                        <button id="sourcesBrowserDownloadsClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+                      </div>
+                      <div class="sourcesSearchTableWrap">
+                        <table id="sourcesBrowserDownloadsTable" class="sourcesSearchTable">
+                          <thead>
+                            <tr>
+                              <th>Index</th>
+                              <th>Download Name</th>
+                              <th>Size</th>
+                              <th>Download Speed</th>
+                              <th>Download %</th>
+                              <th>Status</th>
+                              <th>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody id="sourcesBrowserDownloadsBody">
+                            <tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </aside>
                 </div>
               </div>
               <div id="sourcesBrowserCtxOverlay" class="sourcesBrowserCtxOverlay hidden" aria-hidden="true"></div>
               <div id="sourcesBrowserCtxMenu" class="sourcesBrowserCtxMenu hidden" role="menu" aria-label="TankoBrowser context menu"></div>
-
-              <div id="sourcesBrowserHistoryOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="TankoBrowser history">
-                <div class="settingsCard">
-                  <div class="settingsTop">
-                    <div class="settingsTitle">TankoBrowser History</div>
-                    <button id="sourcesBrowserHistoryCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
-                  </div>
-                  <div class="settingsGroup">
-                    <input id="sourcesBrowserHistorySearchInput" class="search" type="text" placeholder="Search history..." autocomplete="off" />
-                  </div>
-                  <div class="settingsActions" style="justify-content:flex-start;">
-                    <button id="sourcesBrowserHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
-                  </div>
-                  <div class="sourcesBrowserHistoryListWrap">
-                    <div id="sourcesBrowserHistoryList" class="sourcesBrowserHistoryList"></div>
-                    <div id="sourcesBrowserHistoryEmpty" class="muted tiny sourcesBrowserHistoryEmpty">No history yet.</div>
-                  </div>
-                </div>
-              </div>
 
               <div id="sourcesBrowserTabSearchOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Search tabs">
                 <div class="settingsCard sourcesBrowserTabSearchCard">
@@ -1725,33 +1800,6 @@ COMMON ANCHORS
                   </div>
                   <div id="sourcesBrowserTabSearchList" class="sourcesBrowserTabSearchList"></div>
                   <div id="sourcesBrowserTabSearchEmpty" class="muted tiny hidden">No tabs match your search.</div>
-                </div>
-              </div>
-
-              <div class="panel sourcesBrowserDownloadsPanel" id="sourcesBrowserDownloadsPanel">
-                <div class="panelTitleRow">
-                  <div class="panelTitle">TankoBrowser Downloads</div>
-                  <div class="panelActions">
-                    <button id="sourcesBrowserDownloadsClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
-                  </div>
-                </div>
-                <div class="sourcesSearchTableWrap">
-                  <table id="sourcesBrowserDownloadsTable" class="sourcesSearchTable">
-                    <thead>
-                      <tr>
-                        <th>Index</th>
-                        <th>Download Name</th>
-                        <th>Size</th>
-                        <th>Download Speed</th>
-                        <th>Download %</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody id="sourcesBrowserDownloadsBody">
-                      <tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>
-                    </tbody>
-                  </table>
                 </div>
               </div>
 
@@ -2298,22 +2346,54 @@ COMMON ANCHORS
   <script type="module" src="./ui/shoelace_boot.js"></script>
   <script src="./ui/icons.js"></script>
   <script src="./ui/control_adapters.js"></script>
-  <!-- Phase 6: Renderer API gateway (MUST load before all other scripts) -->
-  <script src="./services/api_gateway.js"></script>
-<script src="./services/health/monitor.js"></script>
-  <!-- BUILD 88 FIX 3.2: Health check monitoring -->
 
-  <!-- Phase 7: State + minimal bootstrap runtime -->
-  <script src="./state/bootstrap.js"></script>
-  <script src="./state/mode_router.js"></script>
-  <script src="./state/deferred_modules.js"></script>
+  <!--
+    Butterfly / Electron dual-boot loader.
+    In Electron, window.electronAPI is set synchronously by the preload script,
+    so app scripts can load immediately.
+    In Butterfly (PySide6 + QWebChannel), the bridge populates window.electronAPI
+    asynchronously, so we must wait for the 'electronAPI:ready' event before
+    loading API-dependent scripts.  Non-API scripts (Shoelace, icons,
+    control_adapters) load above unconditionally.
+  -->
+  <script>
+  (function() {
+    var APP_SCRIPTS = [
+      './services/api_gateway.js',
+      './services/health/monitor.js',
+      './state/bootstrap.js',
+      './state/mode_router.js',
+      './state/deferred_modules.js',
+      './domains/shell/core.js',
+      './domains/library/library.js',
+      './state/reader.js',
+      './domains/shell/shell_bindings.js',
+      './ui/command_palette.js',
+      './state/app_section_boot.js'
+    ];
 
-  <script src="./domains/shell/core.js"></script>
-  <script src="./domains/library/library.js"></script>
-  <script src="./state/reader.js"></script>
-  <script src="./domains/shell/shell_bindings.js"></script>
-  <script src="./ui/command_palette.js"></script>
-  <script src="./state/app_section_boot.js"></script>
+    // Chain-load scripts in order (each waits for the previous to finish).
+    function loadInOrder(idx) {
+      if (idx >= APP_SCRIPTS.length) return;
+      var s = document.createElement('script');
+      s.src = APP_SCRIPTS[idx];
+      s.onload = function() { loadInOrder(idx + 1); };
+      s.onerror = function() { console.error('[boot] Failed to load ' + APP_SCRIPTS[idx]); loadInOrder(idx + 1); };
+      document.body.appendChild(s);
+    }
+
+    if (window.electronAPI) {
+      // Electron mode: preload already set up electronAPI — load immediately.
+      loadInOrder(0);
+    } else if (typeof qt !== 'undefined') {
+      // Butterfly mode: QWebChannel bridge will dispatch this event once ready.
+      document.addEventListener('electronAPI:ready', function() { loadInOrder(0); }, { once: true });
+    } else {
+      // Unknown environment: load anyway (graceful degradation).
+      loadInOrder(0);
+    }
+  })();
+  </script>
 </body>
 </html>
 

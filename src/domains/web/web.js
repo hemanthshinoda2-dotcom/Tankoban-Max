@@ -13,6 +13,17 @@
 
   window.__tankoWebBrowserBound = true;
 
+  // ── Butterfly (Qt) detection ──
+  var isButterfly = !!(window.__tankoButterfly);
+
+  function getTabByBridgeId(bridgeId) {
+    if (!bridgeId) return null;
+    for (var i = 0; i < state.sourcesTabs.length; i++) {
+      if (state.sourcesTabs[i] && state.sourcesTabs[i]._bridgeTabId === bridgeId) return state.sourcesTabs[i];
+    }
+    return null;
+  }
+
   // ── DOM element cache ──
 
   function qs(id) {
@@ -224,6 +235,8 @@
     destPickerEmpty:    qs('downloadDestPickerEmpty'),
 
     // Sources search UI
+    sourcesSearchPanel: qs('sourcesSearchPanel'),
+    sourcesTorrentPanel: qs('sourcesTorrentPanel'),
     sourcesSearchInput: qs('sourcesSearchInput'),
     sourcesSearchSource: qs('sourcesSearchSource'),
     sourcesSearchType: qs('sourcesSearchType'),
@@ -238,27 +251,40 @@
     sourcesDownloadsView: qs('sourcesDownloadsView'),
     sourcesTorrentBody: qs('sourcesTorrentBody'),
     sourcesBrowserPanel: qs('sourcesBrowserPanel'),
+    sourcesBrowserTopBar: qs('sourcesBrowserTopBar'),
     sourcesBrowserBackBtn: qs('sourcesBrowserBackBtn'),
     sourcesBrowserForwardBtn: qs('sourcesBrowserForwardBtn'),
     sourcesBrowserReloadBtn: qs('sourcesBrowserReloadBtn'),
+    sourcesBrowserHomeBtn: qs('sourcesBrowserHomeBtn'),
+    sourcesBrowserOmniHost: qs('sourcesBrowserOmniHost'),
+    sourcesBrowserOmniChip: qs('sourcesBrowserOmniChip'),
     sourcesBrowserUrlInput: qs('sourcesBrowserUrlInput'),
+    sourcesBrowserOmniWrap: qs('sourcesBrowserOmniWrap'),
     sourcesBrowserOmniDropdown: qs('sourcesBrowserOmniDropdown'),
     sourcesBrowserGoBtn: qs('sourcesBrowserGoBtn'),
     sourcesBrowserBookmarkBtn: qs('sourcesBrowserBookmarkBtn'),
+    sourcesBrowserBookmarksBtn: qs('sourcesBrowserBookmarksBtn'),
     sourcesBrowserHistoryBtn: qs('sourcesBrowserHistoryBtn'),
+    sourcesBrowserDownloadsBtn: qs('sourcesBrowserDownloadsBtn'),
     sourcesBrowserStatus: qs('sourcesBrowserStatus'),
-    sourcesBrowserTabStrip: qs('sourcesBrowserTabStrip'),
     sourcesBrowserTabList: qs('sourcesBrowserTabList'),
     sourcesBrowserNewTabBtn: qs('sourcesBrowserNewTabBtn'),
     sourcesBrowserWebview: qs('sourcesBrowserWebview'),
     sourcesBrowserCtxOverlay: qs('sourcesBrowserCtxOverlay'),
     sourcesBrowserCtxMenu: qs('sourcesBrowserCtxMenu'),
+    sourcesBrowserDrawerOverlay: qs('sourcesBrowserDrawerOverlay'),
+    sourcesBrowserDrawer: qs('sourcesBrowserDrawer'),
+    sourcesBrowserDrawerTitle: qs('sourcesBrowserDrawerTitle'),
+    sourcesBrowserDrawerCloseBtn: qs('sourcesBrowserDrawerCloseBtn'),
     sourcesBrowserHistoryOverlay: qs('sourcesBrowserHistoryOverlay'),
-    sourcesBrowserHistoryCloseBtn: qs('sourcesBrowserHistoryCloseBtn'),
+    sourcesBrowserBookmarksPanel: qs('sourcesBrowserBookmarksPanel'),
+    sourcesBrowserDownloadsPanel: qs('sourcesBrowserDownloadsPanel'),
     sourcesBrowserHistoryClearBtn: qs('sourcesBrowserHistoryClearBtn'),
     sourcesBrowserHistorySearchInput: qs('sourcesBrowserHistorySearchInput'),
     sourcesBrowserHistoryList: qs('sourcesBrowserHistoryList'),
     sourcesBrowserHistoryEmpty: qs('sourcesBrowserHistoryEmpty'),
+    sourcesBrowserBookmarksList: qs('sourcesBrowserBookmarksList'),
+    sourcesBrowserBookmarksEmpty: qs('sourcesBrowserBookmarksEmpty'),
     sourcesBrowserHome: qs('sourcesBrowserHome'),
     sourcesBrowserHomeSearchForm: qs('sourcesBrowserHomeSearchForm'),
     sourcesBrowserHomeSearchInput: qs('sourcesBrowserHomeSearchInput'),
@@ -268,6 +294,9 @@
     sourcesBrowserHomeShortcutsEmpty: qs('sourcesBrowserHomeShortcutsEmpty'),
     sourcesBrowserHomeRecentTabs: qs('sourcesBrowserHomeRecentTabs'),
     sourcesBrowserHomeRecentTabsEmpty: qs('sourcesBrowserHomeRecentTabsEmpty'),
+    sourcesBrowserHomeEmbeddedRoot: qs('sourcesBrowserHomeEmbeddedRoot'),
+    sourcesBrowserHomeDownloadsBody: qs('sourcesBrowserHomeDownloadsBody'),
+    sourcesBrowserHomeDownloadsClearBtn: qs('sourcesBrowserHomeDownloadsClearBtn'),
     sourcesBrowserTabSearchOverlay: qs('sourcesBrowserTabSearchOverlay'),
     sourcesBrowserTabSearchCloseBtn: qs('sourcesBrowserTabSearchCloseBtn'),
     sourcesBrowserTabSearchInput: qs('sourcesBrowserTabSearchInput'),
@@ -331,7 +360,7 @@
       downloads: { behavior: 'ask', folderModeHint: true },
       sourcesMinimalTorrentV1: false,
       sourcesLastDestinationByCategory: { comics: '', books: '', videos: '' },
-      sourcesBrowser: { expandedByDefault: true, lastUrl: '' },
+      sourcesBrowser: { expandedByDefault: true, lastUrl: '', chromeDensity: 'single_row_v1', omniboxMode: 'collapsed_chip' },
       privacy: { doNotTrack: false, clearOnExit: { history: false, downloads: false, cookies: false, cache: false } }
       ,
       jackett: { baseUrl: '', apiKey: '', indexer: 'all', timeoutMs: 30000, indexersByCategory: { all: 'all', comics: 'all', books: 'all', tv: 'all' } },
@@ -422,6 +451,7 @@
     sourcesOmniResults: [],
     sourcesOmniSelectedIdx: -1,
     sourcesOmniOpen: false,
+    sourcesOmniExpanded: false,
     sourcesOmniDebounceTimer: 0,
     sourcesOmniSuppressInputOnce: false,
     sourcesOmniReqSeq: 0,
@@ -429,6 +459,7 @@
     sourcesTabSearchQuery: '',
     sourcesTabSearchSelectedIdx: -1,
     sourcesTabSearchMatches: [],
+    sourcesBrowserDrawerKind: '',
   };
 
   // ── Event bus ──
@@ -677,9 +708,56 @@
     if (document.activeElement !== el.sourcesBrowserUrlInput) {
       el.sourcesBrowserUrlInput.value = active.home ? '' : String(active.url || '');
     }
+    syncSourcesOmniChipText();
+  }
+
+  function getSourcesOmniChipText() {
+    var active = getSourcesActiveTab();
+    if (!active) return 'Search or enter URL';
+    if (active.home) return 'Search or enter URL';
+    var raw = String(active.url || '').trim();
+    if (!raw) return 'Search or enter URL';
+    var site = siteNameFromUrl(raw);
+    if (site) return site;
+    return raw;
+  }
+
+  function syncSourcesOmniChipText() {
+    if (!el.sourcesBrowserOmniChip) return;
+    var text = getSourcesOmniChipText();
+    el.sourcesBrowserOmniChip.textContent = text;
+    el.sourcesBrowserOmniChip.title = text;
+  }
+
+  function setSourcesOmniExpanded(expanded, opts) {
+    var options = (opts && typeof opts === 'object') ? opts : {};
+    var open = !!expanded;
+    state.sourcesOmniExpanded = open;
+    if (el.sourcesBrowserOmniHost) el.sourcesBrowserOmniHost.classList.toggle('isExpanded', open);
+    if (el.sourcesBrowserOmniChip) el.sourcesBrowserOmniChip.classList.toggle('hidden', open);
+    if (el.sourcesBrowserOmniWrap) el.sourcesBrowserOmniWrap.classList.toggle('hidden', !open);
+    if (!open) {
+      closeSourcesOmniDropdown();
+      syncSourcesOmniChipText();
+      return;
+    }
+    var active = getSourcesActiveTab();
+    if (el.sourcesBrowserUrlInput) {
+      if (!options.keepValue) {
+        if (active && active.home) el.sourcesBrowserUrlInput.value = '';
+        else el.sourcesBrowserUrlInput.value = String(active && active.url || state.sourcesBrowserUrl || '');
+      }
+      setTimeout(function () {
+        try { el.sourcesBrowserUrlInput.focus(); } catch (_eFocusOmni) {}
+        if (options.select !== false && el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.select) {
+          try { el.sourcesBrowserUrlInput.select(); } catch (_eSelOmni) {}
+        }
+      }, 0);
+    }
   }
 
   function ensureSourcesBrowserWebviewNode() {
+    if (isButterfly) return null; // Qt manages views natively
     var viewport = null;
     var root = getSourcesBrowserWebview();
     if (root && root.parentElement) viewport = root.parentElement;
@@ -715,7 +793,7 @@
         + (tab.pinned ? ' pinned' : '')
         + '" data-sources-tab-id="' + escapeHtml(String(tab.id || '')) + '" title="' + escapeHtml(title) + '">'
         + '<span class="sourcesBrowserTabTitle">' + escapeHtml(title) + '</span>'
-        + '<button class="sourcesBrowserTabClose" type="button" data-sources-tab-close="' + escapeHtml(String(tab.id || '')) + '" aria-label="Close tab">×</button>'
+        + '<button class="sourcesBrowserTabClose" type="button" data-sources-tab-close="' + escapeHtml(String(tab.id || '')) + '" aria-label="Close tab">&times;</button>'
         + '</div>';
     }
     el.sourcesBrowserTabList.innerHTML = html;
@@ -785,8 +863,21 @@
     return Promise.resolve(out);
   }
 
+  function mountSourcesBrowserHomePanels() {
+    if (!el.sourcesBrowserHomeEmbeddedRoot) return;
+    if (el.sourcesSearchPanel && el.sourcesSearchPanel.parentElement !== el.sourcesBrowserHomeEmbeddedRoot) {
+      el.sourcesSearchPanel.classList.add('sourcesBrowserEmbeddedPanel');
+      el.sourcesBrowserHomeEmbeddedRoot.appendChild(el.sourcesSearchPanel);
+    }
+    if (el.sourcesTorrentPanel && el.sourcesTorrentPanel.parentElement !== el.sourcesBrowserHomeEmbeddedRoot) {
+      el.sourcesTorrentPanel.classList.add('sourcesBrowserEmbeddedPanel');
+      el.sourcesBrowserHomeEmbeddedRoot.appendChild(el.sourcesTorrentPanel);
+    }
+  }
+
   function renderSourcesBrowserHome() {
     if (!el.sourcesBrowserHome) return;
+    mountSourcesBrowserHomePanels();
     var active = getSourcesActiveTab();
     var show = !!(active && active.home);
     el.sourcesBrowserHome.classList.toggle('hidden', !show);
@@ -857,16 +948,32 @@
     state.sourcesBrowserUrl = tab.home ? '' : String(tab.url || '');
     state.sourcesBrowserLoading = !!tab.loading;
     closeSourcesOmniDropdown();
-    syncSourcesWebviewVisibility();
+    if (isButterfly) {
+      // Butterfly: tell Qt which tab overlay to show
+      if (tab._bridgeTabId) {
+        try { api.webTabManager.switchTab({ tabId: tab._bridgeTabId }); } catch (_eBSwitch) {}
+      }
+      // Tell Qt whether this is a home tab (hide overlay when home)
+      if (tab._bridgeTabId) {
+        try { api.webTabManager.setTabHome({ tabId: tab._bridgeTabId, home: !!tab.home }); } catch (_eBHome) {}
+      }
+    } else {
+      syncSourcesWebviewVisibility();
+    }
     renderSourcesBrowserTabStrip();
     renderSourcesBrowserHome();
     syncSourcesBrowserUrlInput();
     syncSourcesBrowserOmniPlaceholder();
+    if (!options.keepOmni) setSourcesOmniExpanded(false, { keepValue: true, select: false });
     refreshSourcesBrowserNav();
     refreshSourcesBrowserBookmarkUi(tab.home ? '' : (tab.url || ''));
     scheduleSourcesBrowserViewportLayout();
-    if (options.focus && !tab.home && tab.webview && typeof tab.webview.focus === 'function') {
-      setTimeout(function () { try { tab.webview.focus(); } catch (_eFocus) {} }, 0);
+    if (options.focus && !tab.home) {
+      if (isButterfly) {
+        // Focus is handled by Qt overlay — no webview DOM to focus
+      } else if (tab.webview && typeof tab.webview.focus === 'function') {
+        setTimeout(function () { try { tab.webview.focus(); } catch (_eFocus) {} }, 0);
+      }
     }
     return tab;
   }
@@ -887,7 +994,12 @@
       home: !!tab.home,
     });
     if (state.sourcesClosedTabs.length > SOURCES_MAX_CLOSED_TABS) state.sourcesClosedTabs.length = SOURCES_MAX_CLOSED_TABS;
-    if (tab.webview && tab.webview.parentElement) {
+    if (isButterfly) {
+      // Butterfly: tell Qt to destroy the QWebEngineView
+      if (tab._bridgeTabId) {
+        try { api.webTabManager.closeTab({ tabId: tab._bridgeTabId }); } catch (_eBClose) {}
+      }
+    } else if (tab.webview && tab.webview.parentElement) {
       try {
         if (tab.webview === el.sourcesBrowserWebview) {
           tab.webview.src = 'about:blank';
@@ -1040,6 +1152,7 @@
     if (!text) return false;
     closeSourcesOmniDropdown();
     navigateSourcesBrowser(text, { focus: true });
+    setSourcesOmniExpanded(false, { keepValue: true, select: false });
     return true;
   }
 
@@ -1220,6 +1333,23 @@
     syncSourcesBrowserOverlayLock();
   }
 
+  function pasteAndGoFromClipboard() {
+    if (!(navigator.clipboard && navigator.clipboard.readText)) {
+      showToast('Clipboard access unavailable');
+      return;
+    }
+    navigator.clipboard.readText().then(function (text) {
+      var value = String(text || '').trim();
+      if (!value) return;
+      setSourcesOmniExpanded(true, { keepValue: true, select: false });
+      if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = value;
+      navigateSourcesBrowser(value, { focus: true });
+      setSourcesOmniExpanded(false, { keepValue: true, select: false });
+    }).catch(function () {
+      showToast('Unable to read clipboard');
+    });
+  }
+
   function runSourcesContextAction(action) {
     var meta = state.sourcesContextMenuMeta || {};
     var active = getSourcesActiveTab();
@@ -1227,11 +1357,19 @@
     var tabTarget = meta.tabId ? getSourcesTabById(meta.tabId) : null;
     var targetWv = tabTarget && tabTarget.webview ? tabTarget.webview : wv;
     var wcId = 0;
-    try { wcId = Number(targetWv && typeof targetWv.getWebContentsId === 'function' ? targetWv.getWebContentsId() : 0) || 0; } catch (_eWc) { wcId = 0; }
+    if (!isButterfly) {
+      try { wcId = Number(targetWv && typeof targetWv.getWebContentsId === 'function' ? targetWv.getWebContentsId() : 0) || 0; } catch (_eWc) { wcId = 0; }
+    }
     var ctx = meta.params || {};
     var sendCtx = function (name, payload) {
-      if (!wcId || !api.webBrowserActions || typeof api.webBrowserActions.ctxAction !== 'function') return;
-      api.webBrowserActions.ctxAction({ webContentsId: wcId, action: name, payload: payload });
+      if (!api.webBrowserActions || typeof api.webBrowserActions.ctxAction !== 'function') return;
+      if (isButterfly) {
+        // Butterfly: ctxAction operates on the page set by switchTab — no wcId needed
+        api.webBrowserActions.ctxAction({ webContentsId: 0, action: name, payload: payload });
+      } else {
+        if (!wcId) return;
+        api.webBrowserActions.ctxAction({ webContentsId: wcId, action: name, payload: payload });
+      }
     };
     var runHomeEdit = function (kind) {
       var input = document.activeElement;
@@ -1244,9 +1382,18 @@
       } catch (_eHomeEdit) {}
     };
     switch (String(action || '')) {
-      case 'back': if (wv && typeof wv.goBack === 'function') wv.goBack(); break;
-      case 'forward': if (wv && typeof wv.goForward === 'function') wv.goForward(); break;
-      case 'reload': if (targetWv && typeof targetWv.reload === 'function') targetWv.reload(); break;
+      case 'back':
+        if (isButterfly) { if (active && active._bridgeTabId) try { api.webTabManager.goBack({ tabId: active._bridgeTabId }); } catch (_e) {} }
+        else if (wv && typeof wv.goBack === 'function') wv.goBack();
+        break;
+      case 'forward':
+        if (isButterfly) { if (active && active._bridgeTabId) try { api.webTabManager.goForward({ tabId: active._bridgeTabId }); } catch (_e) {} }
+        else if (wv && typeof wv.goForward === 'function') wv.goForward();
+        break;
+      case 'reload':
+        if (isButterfly) { var rt = tabTarget || active; if (rt && rt._bridgeTabId) try { api.webTabManager.reload({ tabId: rt._bridgeTabId }); } catch (_e) {} }
+        else if (targetWv && typeof targetWv.reload === 'function') targetWv.reload();
+        break;
       case 'copy': sendCtx('copy'); break;
       case 'cut': sendCtx('cut'); break;
       case 'paste': sendCtx('paste'); break;
@@ -1258,6 +1405,7 @@
       case 'homeCut': runHomeEdit('cut'); break;
       case 'homePaste': runHomeEdit('paste'); break;
       case 'homeSelectAll': runHomeEdit('selectAll'); break;
+      case 'homePasteGo': pasteAndGoFromClipboard(); break;
       case 'homeOpenShortcut': if (ctx.homeUrl) navigateSourcesBrowser(String(ctx.homeUrl), { focus: true }); break;
       case 'homeOpenShortcutNewTab': if (ctx.homeUrl) openSourcesTab(String(ctx.homeUrl), { switchTo: true, focus: true }); break;
       case 'homeCopyLink':
@@ -1358,6 +1506,9 @@
       items.push({ label: 'Copy Link Address', action: 'homeCopyLink' });
     } else {
       items.push({ label: 'New Tab', action: 'newTab', shortcut: 'Ctrl+T' });
+      if (p.omniChip) {
+        items.push({ label: 'Paste and Go', action: 'homePasteGo' });
+      }
     }
     showSourcesBrowserContextMenu(items, Number(p.x || 0), Number(p.y || 0), {
       type: 'home',
@@ -1494,11 +1645,84 @@
       showToast('Tab limit reached');
       return null;
     }
-    var wv = ensureSourcesBrowserWebviewNode();
-    if (!wv) return null;
     var initialUrl = String(rawUrl || '').trim();
     var homeMode = !!options.home || initialUrl === 'about:blank';
     var id = 'st_' + String(state.sourcesTabSeq++);
+
+    if (isButterfly) {
+      // Butterfly: Qt manages QWebEngineView natively — no DOM webview
+      var tab = {
+        id: id,
+        webview: null,
+        _bridgeTabId: null,
+        url: '',
+        title: homeMode ? 'Home' : 'New Tab',
+        pinned: !!options.pinned,
+        loading: false,
+        favicon: '',
+        lastHistoryUrl: '',
+        lastHistoryAt: 0,
+        home: homeMode,
+      };
+      getSourcesHomeStateForTab(tab);
+      if (tab.pinned) {
+        var insertAt = 0;
+        while (insertAt < state.sourcesTabs.length && state.sourcesTabs[insertAt] && state.sourcesTabs[insertAt].pinned) insertAt++;
+        state.sourcesTabs.splice(insertAt, 0, tab);
+      } else {
+        state.sourcesTabs.push(tab);
+      }
+      var target = '';
+      if (!homeMode) {
+        target = normalizeSourcesBrowserInput(rawUrl || '');
+        if (!target) target = getSourcesBrowserStartUrl();
+        tab.url = target;
+        tab.loading = true;
+      }
+      var createResult = api.webTabManager.createTab({ url: target || '', home: homeMode });
+      var _bfFinishTab = function () {
+        renderSourcesBrowserTabStrip();
+        if (!homeMode && String(tab.id) === String(state.sourcesActiveTabId)) {
+          state.sourcesBrowserLoading = true;
+          state.sourcesBrowserUrl = target;
+          if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = target;
+          refreshSourcesBrowserNav();
+          if (options.persist !== false) persistSourcesBrowserLastUrl(target);
+        } else if (homeMode && String(tab.id) === String(state.sourcesActiveTabId)) {
+          state.sourcesBrowserLoading = false;
+          state.sourcesBrowserUrl = '';
+          if (el.sourcesBrowserUrlInput) el.sourcesBrowserUrlInput.value = '';
+          refreshSourcesBrowserNav();
+        }
+        if (options.switchTo !== false) switchSourcesTab(tab.id, { focus: !!options.focus });
+      };
+      var _bfApplyBridgeId = function (tabId) {
+        tab._bridgeTabId = tabId;
+        // Execute any navigation queued while createTab was pending
+        if (tab._pendingNav && tab._pendingNav.url) {
+          var nav = tab._pendingNav;
+          tab._pendingNav = null;
+          try { api.webTabManager.navigateTo({ tabId: tabId, url: nav.url }); } catch (_ePN) {}
+          try { api.webTabManager.setTabHome({ tabId: tabId, home: false }); } catch (_ePH) {}
+        }
+      };
+      if (createResult && typeof createResult.then === 'function') {
+        createResult.then(function (r) {
+          var parsed = (typeof r === 'string') ? JSON.parse(r) : r;
+          if (parsed && parsed.tabId) _bfApplyBridgeId(parsed.tabId);
+          _bfFinishTab();
+        });
+      } else if (createResult) {
+        var parsed = (typeof createResult === 'string') ? JSON.parse(createResult) : createResult;
+        if (parsed && parsed.tabId) _bfApplyBridgeId(parsed.tabId);
+        _bfFinishTab();
+      }
+      return tab;
+    }
+
+    // Electron: create <webview> DOM element
+    var wv = ensureSourcesBrowserWebviewNode();
+    if (!wv) return null;
     var tab = {
       id: id,
       webview: wv,
@@ -1617,9 +1841,9 @@
   function setSourcesBrowserBookmarkUi(isBookmarked) {
     state.sourcesBrowserBookmarked = !!isBookmarked;
     if (!el.sourcesBrowserBookmarkBtn) return;
-    el.sourcesBrowserBookmarkBtn.textContent = isBookmarked ? 'Bookmarked' : 'Bookmark';
-    el.sourcesBrowserBookmarkBtn.classList.toggle('btn', true);
-    el.sourcesBrowserBookmarkBtn.classList.toggle('btn-ghost', !isBookmarked);
+    el.sourcesBrowserBookmarkBtn.title = isBookmarked ? 'Bookmarked' : 'Bookmark page';
+    el.sourcesBrowserBookmarkBtn.setAttribute('aria-label', isBookmarked ? 'Bookmarked' : 'Bookmark page');
+    el.sourcesBrowserBookmarkBtn.classList.toggle('isBookmarked', !!isBookmarked);
   }
 
   function refreshSourcesBrowserBookmarkUi(url) {
@@ -1677,6 +1901,7 @@
     var meta = engines[key] || engines.google || null;
     var label = String(meta && meta.label || 'Google');
     el.sourcesBrowserUrlInput.placeholder = 'Search with ' + label + ' or enter URL';
+    syncSourcesOmniChipText();
   }
 
   function normalizeSourcesBrowserInput(raw) {
@@ -1696,36 +1921,47 @@
   }
 
   function refreshSourcesBrowserNav() {
-    var wv = getSourcesBrowserWebview();
     var activeTab = getSourcesActiveTab();
     var activeHome = !!(activeTab && activeTab.home);
     state.sourcesBrowserLoading = !!(activeTab && activeTab.loading && !activeHome);
-    if (!wv) return;
+    syncSourcesOmniChipText();
     if (activeHome) {
       if (el.sourcesBrowserBackBtn) el.sourcesBrowserBackBtn.disabled = true;
       if (el.sourcesBrowserForwardBtn) el.sourcesBrowserForwardBtn.disabled = true;
       if (el.sourcesBrowserReloadBtn) {
         el.sourcesBrowserReloadBtn.classList.remove('isLoading');
-        el.sourcesBrowserReloadBtn.innerHTML = '&#x21bb;';
         el.sourcesBrowserReloadBtn.title = 'Reload';
         el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Reload');
       }
       return;
     }
-    if (el.sourcesBrowserBackBtn) {
-      try { el.sourcesBrowserBackBtn.disabled = !wv.canGoBack(); } catch (_e) { el.sourcesBrowserBackBtn.disabled = true; }
-    }
-    if (el.sourcesBrowserForwardBtn) {
-      try { el.sourcesBrowserForwardBtn.disabled = !wv.canGoForward(); } catch (_e2) { el.sourcesBrowserForwardBtn.disabled = true; }
+    if (isButterfly) {
+      // Butterfly: canGoBack/canGoForward tracked from onTabUpdated signals
+      var canBack = !!(activeTab && activeTab._canGoBack);
+      var canFwd = !!(activeTab && activeTab._canGoForward);
+      if (el.sourcesBrowserBackBtn) el.sourcesBrowserBackBtn.disabled = !canBack;
+      if (el.sourcesBrowserForwardBtn) el.sourcesBrowserForwardBtn.disabled = !canFwd;
+    } else {
+      var wv = getSourcesBrowserWebview();
+      if (!wv) return;
+      if (el.sourcesBrowserBackBtn) {
+        try {
+          var canBack = !!(wv && typeof wv.canGoBack === 'function' && wv.canGoBack());
+          el.sourcesBrowserBackBtn.disabled = !(canBack || !activeHome);
+        } catch (_e) {
+          el.sourcesBrowserBackBtn.disabled = !!activeHome;
+        }
+      }
+      if (el.sourcesBrowserForwardBtn) {
+        try { el.sourcesBrowserForwardBtn.disabled = !wv.canGoForward(); } catch (_e2) { el.sourcesBrowserForwardBtn.disabled = true; }
+      }
     }
     if (el.sourcesBrowserReloadBtn) {
       el.sourcesBrowserReloadBtn.classList.toggle('isLoading', !!state.sourcesBrowserLoading);
       if (state.sourcesBrowserLoading) {
-        el.sourcesBrowserReloadBtn.innerHTML = '';
         el.sourcesBrowserReloadBtn.title = 'Stop loading';
         el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Stop loading');
       } else {
-        el.sourcesBrowserReloadBtn.innerHTML = '&#x21bb;';
         el.sourcesBrowserReloadBtn.title = 'Reload';
         el.sourcesBrowserReloadBtn.setAttribute('aria-label', 'Reload');
       }
@@ -1733,6 +1969,23 @@
   }
 
   function applySourcesBrowserViewportLayout() {
+    if (isButterfly) {
+      // Butterfly: report viewport rect to Qt so it can position QWebEngineView overlays
+      var viewport = el.sourcesBrowserViewport || document.querySelector('.sourcesBrowserViewport');
+      if (!viewport) return;
+      var rect = viewport.getBoundingClientRect();
+      // QWidget.setGeometry uses logical pixels — same as getBoundingClientRect CSS pixels
+      var x = Math.round(rect.left);
+      var y = Math.round(rect.top);
+      var w = Math.round(rect.width);
+      var h = Math.round(rect.height);
+      try { api.webTabManager.setViewportBounds({ x: x, y: y, w: w, h: h }); } catch (_eBounds) {}
+      state.sourcesBrowserLastHostWidth = Math.round(rect.width);
+      state.sourcesBrowserLastHostHeight = Math.round(rect.height);
+      if (w >= 8 && h >= 8) setSourcesBrowserRenderState('ok');
+      return;
+    }
+    // Electron: position <webview> via CSS
     syncSourcesWebviewVisibility();
     var metrics = getSourcesBrowserViewportMetrics();
     if (!metrics) return;
@@ -1840,8 +2093,6 @@
       active = openSourcesTab('', { switchTo: true, persist: false, home: true });
       if (!active) return false;
     }
-    var wv = active.webview;
-    if (!wv) return false;
     var target = normalizeSourcesBrowserInput(raw);
     if (!target) return false;
     if (target === 'about:blank') target = getSourcesBrowserStartUrl();
@@ -1864,6 +2115,26 @@
     if (el.sourcesBrowserUrlInput && !options.keepInput) el.sourcesBrowserUrlInput.value = target;
     syncSourcesBrowserOmniPlaceholder();
     renderSourcesBrowserHome();
+    if (isButterfly) {
+      // Butterfly: delegate navigation to Qt
+      if (active._bridgeTabId) {
+        try { api.webTabManager.navigateTo({ tabId: active._bridgeTabId, url: target }); } catch (_eBNav) {}
+        try { api.webTabManager.setTabHome({ tabId: active._bridgeTabId, home: false }); } catch (_eBHome) {}
+      } else {
+        // _bridgeTabId not yet set (createTab Promise pending) — queue for later
+        active._pendingNav = { url: target };
+      }
+      active.loading = true;
+      state.sourcesBrowserLoading = true;
+      refreshSourcesBrowserNav();
+      setSourcesBrowserStatus('Loading...', true);
+      scheduleSourcesBrowserViewportLayout();
+      if (options.persist !== false) persistSourcesBrowserLastUrl(target);
+      return true;
+    }
+    // Electron: use webview.loadURL
+    var wv = active.webview;
+    if (!wv) return false;
     try {
       wv.loadURL(target);
       active.loading = true;
@@ -1961,34 +2232,119 @@
     if (el.sourcesBrowserHistoryEmpty) el.sourcesBrowserHistoryEmpty.classList.toggle('hidden', !!html);
   }
 
-  function openSourcesBrowserHistoryOverlay() {
-    if (!api.webHistory || typeof api.webHistory.list !== 'function') {
-      showToast('History service unavailable');
+  function renderSourcesBrowserBookmarksRows() {
+    if (!el.sourcesBrowserBookmarksList) return;
+    var rows = Array.isArray(state.bookmarks) ? state.bookmarks.slice() : [];
+    rows.sort(function (a, b) { return Number(b && b.updatedAt || 0) - Number(a && a.updatedAt || 0); });
+    if (!rows.length) {
+      el.sourcesBrowserBookmarksList.innerHTML = '';
+      if (el.sourcesBrowserBookmarksEmpty) el.sourcesBrowserBookmarksEmpty.classList.remove('hidden');
       return;
     }
-    api.webHistory.list({ scope: 'sources_browser', limit: MAX_BROWSING_HISTORY_UI }).then(function (res) {
-      state.sourcesBrowserHistoryRows = (res && res.ok && Array.isArray(res.entries)) ? res.entries : [];
-      renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput && el.sourcesBrowserHistorySearchInput.value);
-      if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.remove('hidden');
-      syncSourcesBrowserOverlayLock();
-      if (el.sourcesBrowserHistorySearchInput) {
-        setTimeout(function () {
-          try { el.sourcesBrowserHistorySearchInput.focus(); } catch (_e) {}
-        }, 0);
+    if (el.sourcesBrowserBookmarksEmpty) el.sourcesBrowserBookmarksEmpty.classList.add('hidden');
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      var id = String(r.id || '').trim();
+      var url = String(r.url || '').trim();
+      var title = getSourcesHistoryTitle(url, r.title);
+      var favicon = String(r.favicon || getFaviconUrl(url) || '').trim();
+      var faviconHtml = favicon
+        ? '<img class="sourcesBrowserHistoryFavicon" src="' + escapeHtml(favicon) + '" alt="">'
+        : '<span class="sourcesBrowserHistoryFavicon sourcesBrowserHistoryFaviconFallback"></span>';
+      html += '<div class="sourcesBrowserHistoryRow" data-bookmark-url="' + escapeHtml(url) + '" data-bookmark-id="' + escapeHtml(id) + '">'
+        + faviconHtml
+        + '<div class="sourcesBrowserHistoryInfo">'
+          + '<div class="sourcesBrowserHistoryTitle" title="' + escapeHtml(title) + '">' + escapeHtml(title) + '</div>'
+          + '<div class="sourcesBrowserHistoryUrl" title="' + escapeHtml(url) + '">' + escapeHtml(url || '-') + '</div>'
+        + '</div>'
+        + '<button class="sourcesBrowserHistoryRemoveBtn" type="button" title="Remove bookmark" data-bookmark-remove-id="' + escapeHtml(id) + '">x</button>'
+      + '</div>';
+    }
+    el.sourcesBrowserBookmarksList.innerHTML = html;
+  }
+
+  function openSourcesBrowserDrawer(kind) {
+    var panel = String(kind || '').trim().toLowerCase();
+    if (!panel) return;
+    state.sourcesBrowserDrawerKind = panel;
+    if (el.sourcesBrowserDrawerTitle) {
+      if (panel === 'history') el.sourcesBrowserDrawerTitle.textContent = 'History';
+      else if (panel === 'bookmarks') el.sourcesBrowserDrawerTitle.textContent = 'Bookmarks';
+      else if (panel === 'downloads') el.sourcesBrowserDrawerTitle.textContent = 'Downloads';
+      else el.sourcesBrowserDrawerTitle.textContent = 'Panel';
+    }
+    if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.toggle('hidden', panel !== 'history');
+    if (el.sourcesBrowserBookmarksPanel) el.sourcesBrowserBookmarksPanel.classList.toggle('hidden', panel !== 'bookmarks');
+    if (el.sourcesBrowserDownloadsPanel) el.sourcesBrowserDownloadsPanel.classList.toggle('hidden', panel !== 'downloads');
+    if (el.sourcesBrowserDrawerOverlay) el.sourcesBrowserDrawerOverlay.classList.remove('hidden');
+    if (el.sourcesBrowserDrawer) {
+      el.sourcesBrowserDrawer.classList.remove('hidden');
+      el.sourcesBrowserDrawer.setAttribute('aria-hidden', 'false');
+    }
+    if (panel === 'history') {
+      setSourcesOmniExpanded(false, { keepValue: true, select: false });
+      if (!api.webHistory || typeof api.webHistory.list !== 'function') {
+        showToast('History service unavailable');
+      } else {
+        api.webHistory.list({ scope: 'sources_browser', limit: MAX_BROWSING_HISTORY_UI }).then(function (res) {
+          state.sourcesBrowserHistoryRows = (res && res.ok && Array.isArray(res.entries)) ? res.entries : [];
+          renderSourcesBrowserHistoryRows(el.sourcesBrowserHistorySearchInput && el.sourcesBrowserHistorySearchInput.value);
+          if (el.sourcesBrowserHistorySearchInput) {
+            setTimeout(function () {
+              try { el.sourcesBrowserHistorySearchInput.focus(); } catch (_eHistFocus) {}
+            }, 0);
+          }
+        }).catch(function () {
+          showToast('Failed to load history');
+        });
       }
-    }).catch(function () {
-      showToast('Failed to load history');
-    });
+    } else if (panel === 'bookmarks') {
+      setSourcesOmniExpanded(false, { keepValue: true, select: false });
+      if (api.webBookmarks && typeof api.webBookmarks.list === 'function') {
+        api.webBookmarks.list().then(function (res) {
+          state.bookmarks = (res && res.ok && Array.isArray(res.bookmarks)) ? res.bookmarks : [];
+          renderSourcesBrowserBookmarksRows();
+        }).catch(function () {
+          state.bookmarks = [];
+          renderSourcesBrowserBookmarksRows();
+          showToast('Failed to load bookmarks');
+        });
+      } else {
+        state.bookmarks = [];
+        renderSourcesBrowserBookmarksRows();
+      }
+    } else if (panel === 'downloads') {
+      setSourcesOmniExpanded(false, { keepValue: true, select: false });
+      renderSourcesBrowserDownloadsRows();
+    }
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function closeSourcesBrowserDrawer() {
+    state.sourcesBrowserDrawerKind = '';
+    if (el.sourcesBrowserDrawerOverlay) el.sourcesBrowserDrawerOverlay.classList.add('hidden');
+    if (el.sourcesBrowserDrawer) {
+      el.sourcesBrowserDrawer.classList.add('hidden');
+      el.sourcesBrowserDrawer.setAttribute('aria-hidden', 'true');
+    }
+    if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.add('hidden');
+    if (el.sourcesBrowserBookmarksPanel) el.sourcesBrowserBookmarksPanel.classList.add('hidden');
+    if (el.sourcesBrowserDownloadsPanel) el.sourcesBrowserDownloadsPanel.classList.add('hidden');
+    syncSourcesBrowserOverlayLock();
+  }
+
+  function openSourcesBrowserHistoryOverlay() {
+    openSourcesBrowserDrawer('history');
   }
 
   function closeSourcesBrowserHistoryOverlay() {
-    if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.add('hidden');
-    syncSourcesBrowserOverlayLock();
+    closeSourcesBrowserDrawer();
   }
 
   function syncSourcesBrowserOverlayLock() {
     var locked = false;
-    if (el.sourcesBrowserHistoryOverlay && !el.sourcesBrowserHistoryOverlay.classList.contains('hidden')) locked = true;
+    if (el.sourcesBrowserDrawer && !el.sourcesBrowserDrawer.classList.contains('hidden')) locked = true;
     if (el.sourcesBrowserTabSearchOverlay && !el.sourcesBrowserTabSearchOverlay.classList.contains('hidden')) locked = true;
     if (el.torrentProvidersOverlay && !el.torrentProvidersOverlay.classList.contains('hidden')) locked = true;
     if (el.sourcesBrowserCtxOverlay && !el.sourcesBrowserCtxOverlay.classList.contains('hidden')) locked = true;
@@ -2001,32 +2357,148 @@
     if (state.sourcesBrowserBound) return;
     state.sourcesBrowserBound = true;
 
-    var baseWv = el.sourcesBrowserWebview;
-    if (!baseWv) return;
-    try { baseWv.removeAttribute('autosize'); } catch (_e0) {}
-    var viewport = baseWv.parentElement;
-    if (viewport && !state.sourcesBrowserResizeObserver && typeof ResizeObserver === 'function') {
-      try {
-        state.sourcesBrowserResizeObserver = new ResizeObserver(function () {
-          scheduleSourcesBrowserViewportLayout();
-        });
-        state.sourcesBrowserResizeObserver.observe(viewport);
-      } catch (_eObs) {
-        state.sourcesBrowserResizeObserver = null;
+    if (isButterfly) {
+      // Butterfly: register bridge signal listeners for tab state sync
+      if (api.webTabManager) {
+        if (typeof api.webTabManager.onTabUpdated === 'function') {
+          api.webTabManager.onTabUpdated(function (raw) {
+            var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            if (!data || !data.tabId) return;
+            var tab = getTabByBridgeId(data.tabId);
+            if (!tab) return;
+            if (data.url != null) tab.url = String(data.url);
+            if (data.title != null) tab.title = String(data.title);
+            if (data.icon != null) tab.favicon = String(data.icon);
+            if (data.loading != null) tab.loading = !!data.loading;
+            if (data.canGoBack != null) tab._canGoBack = !!data.canGoBack;
+            if (data.canGoForward != null) tab._canGoForward = !!data.canGoForward;
+            var isActive = String(tab.id) === String(state.sourcesActiveTabId);
+            if (isActive) {
+              if (data.url != null) {
+                state.sourcesBrowserUrl = tab.home ? '' : String(data.url);
+                syncSourcesBrowserUrlInput();
+                if (isAllowedSourcesHistoryUrl(data.url)) maybeRecordSourcesHistory(tab, data.url, 'page-url-updated');
+              }
+              if (data.title != null) {
+                if (isAllowedSourcesHistoryUrl(tab.url)) maybeRecordSourcesHistory(tab, tab.url, 'page-title-updated');
+              }
+              refreshSourcesBrowserNav();
+              refreshSourcesBrowserBookmarkUi(tab.home ? '' : (tab.url || ''));
+            }
+            renderSourcesBrowserTabStrip();
+          });
+        }
+        if (typeof api.webTabManager.onTabCreated === 'function') {
+          api.webTabManager.onTabCreated(function (raw) {
+            var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            if (!data || !data.tabId) return;
+            // Popup or new-window from Qt — check if we already have a tab waiting
+            var existing = getTabByBridgeId(data.tabId);
+            if (existing) return; // Already tracked from openSourcesTab
+            // Qt created a tab (e.g. from createWindow) — create matching JS tab
+            var id = 'st_' + String(state.sourcesTabSeq++);
+            var tab = {
+              id: id,
+              webview: null,
+              _bridgeTabId: data.tabId,
+              url: String(data.url || ''),
+              title: String(data.title || 'New Tab'),
+              pinned: false,
+              loading: false,
+              favicon: '',
+              lastHistoryUrl: '',
+              lastHistoryAt: 0,
+              home: !!data.home,
+              _canGoBack: false,
+              _canGoForward: false,
+            };
+            getSourcesHomeStateForTab(tab);
+            state.sourcesTabs.push(tab);
+            renderSourcesBrowserTabStrip();
+            switchSourcesTab(tab.id, { focus: false });
+          });
+        }
+        if (typeof api.webTabManager.onTabClosed === 'function') {
+          api.webTabManager.onTabClosed(function (raw) {
+            var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            if (!data || !data.tabId) return;
+            var tab = getTabByBridgeId(data.tabId);
+            if (!tab) return;
+            // Qt closed a tab — remove from JS state
+            var idx = state.sourcesTabs.indexOf(tab);
+            if (idx !== -1) state.sourcesTabs.splice(idx, 1);
+            if (!state.sourcesTabs.length) {
+              openSourcesTab('', { switchTo: true, persist: false, home: true, focus: true });
+              return;
+            }
+            var next = state.sourcesTabs[Math.max(0, idx - 1)] || state.sourcesTabs[0];
+            switchSourcesTab(next && next.id, { focus: false });
+          });
+        }
+        if (typeof api.webTabManager.onMagnetRequested === 'function') {
+          api.webTabManager.onMagnetRequested(function (raw) {
+            var data = (typeof raw === 'string') ? JSON.parse(raw) : raw;
+            if (data && data.url) emit('openMagnet', data.url);
+          });
+        }
+      }
+      // Butterfly: observe viewport for resize bounds reporting
+      var viewport = el.sourcesBrowserViewport || document.querySelector('.sourcesBrowserViewport');
+      if (viewport && !state.sourcesBrowserResizeObserver && typeof ResizeObserver === 'function') {
+        try {
+          state.sourcesBrowserResizeObserver = new ResizeObserver(function () {
+            scheduleSourcesBrowserViewportLayout();
+          });
+          state.sourcesBrowserResizeObserver.observe(viewport);
+        } catch (_eObs) {
+          state.sourcesBrowserResizeObserver = null;
+        }
+      }
+    } else {
+      // Electron: set up base webview
+      var baseWv = el.sourcesBrowserWebview;
+      if (!baseWv) return;
+      try { baseWv.removeAttribute('autosize'); } catch (_e0) {}
+      var viewport = baseWv.parentElement;
+      if (viewport && !state.sourcesBrowserResizeObserver && typeof ResizeObserver === 'function') {
+        try {
+          state.sourcesBrowserResizeObserver = new ResizeObserver(function () {
+            scheduleSourcesBrowserViewportLayout();
+          });
+          state.sourcesBrowserResizeObserver.observe(viewport);
+        } catch (_eObs) {
+          state.sourcesBrowserResizeObserver = null;
+        }
       }
     }
 
-    if (el.sourcesBrowserGoBtn) {
-      el.sourcesBrowserGoBtn.innerHTML = '&#x27a4;';
-      el.sourcesBrowserGoBtn.title = 'Go';
-      el.sourcesBrowserGoBtn.setAttribute('aria-label', 'Go');
-    }
+    mountSourcesBrowserHomePanels();
     syncSourcesBrowserOmniPlaceholder();
+    setSourcesOmniExpanded(false, { keepValue: true, select: false });
+
+    if (el.sourcesBrowserOmniChip) {
+      el.sourcesBrowserOmniChip.addEventListener('click', function () {
+        setSourcesOmniExpanded(true);
+      });
+      el.sourcesBrowserOmniChip.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        showSourcesHomeContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          omniChip: true,
+        });
+      });
+    }
 
     if (el.sourcesBrowserGoBtn) {
       el.sourcesBrowserGoBtn.addEventListener('click', function () {
+        if (!state.sourcesOmniExpanded) {
+          setSourcesOmniExpanded(true);
+          return;
+        }
         closeSourcesOmniDropdown();
         navigateSourcesBrowser(el.sourcesBrowserUrlInput && el.sourcesBrowserUrlInput.value, { focus: true });
+        setSourcesOmniExpanded(false, { keepValue: true, select: false });
       });
     }
     if (el.sourcesBrowserUrlInput) {
@@ -2050,9 +2522,9 @@
           return;
         }
         if (e.key === 'Escape') {
-          if (!state.sourcesOmniOpen) return;
           e.preventDefault();
-          closeSourcesOmniDropdown();
+          if (state.sourcesOmniOpen) closeSourcesOmniDropdown();
+          setSourcesOmniExpanded(false, { keepValue: true, select: false });
           return;
         }
         if (e.key !== 'Enter') return;
@@ -2060,6 +2532,7 @@
         if (state.sourcesOmniOpen && runSourcesOmniResult(state.sourcesOmniSelectedIdx)) return;
         closeSourcesOmniDropdown();
         navigateSourcesBrowser(el.sourcesBrowserUrlInput.value, { focus: true });
+        setSourcesOmniExpanded(false, { keepValue: true, select: false });
       });
       el.sourcesBrowserUrlInput.addEventListener('input', function () {
         if (state.sourcesOmniSuppressInputOnce) {
@@ -2069,11 +2542,15 @@
         requestSourcesOmniSuggestions(el.sourcesBrowserUrlInput.value);
       });
       el.sourcesBrowserUrlInput.addEventListener('focus', function () {
+        if (!state.sourcesOmniExpanded) setSourcesOmniExpanded(true, { keepValue: true, select: false });
         requestSourcesOmniSuggestions(el.sourcesBrowserUrlInput.value);
       });
       el.sourcesBrowserUrlInput.addEventListener('blur', function () {
         setTimeout(function () {
           closeSourcesOmniDropdown();
+          if (document.activeElement === el.sourcesBrowserUrlInput) return;
+          if (state.sourcesBrowserDrawerKind) return;
+          setSourcesOmniExpanded(false, { keepValue: true, select: false });
         }, 120);
       });
     }
@@ -2087,12 +2564,50 @@
     }
     if (el.sourcesBrowserBackBtn) {
       el.sourcesBrowserBackBtn.addEventListener('click', function () {
-        var wv = getSourcesBrowserWebview();
-        try { if (wv && wv.canGoBack()) wv.goBack(); } catch (_e) {}
+        var active = getSourcesActiveTab();
+        var navigated = false;
+        if (isButterfly) {
+          if (active && active._bridgeTabId && active._canGoBack) {
+            try { api.webTabManager.goBack({ tabId: active._bridgeTabId }); } catch (_eBBack) {}
+            navigated = true;
+          }
+        } else {
+          var wv = getSourcesBrowserWebview();
+          try {
+            if (wv && typeof wv.canGoBack === 'function' && wv.canGoBack()) {
+              wv.goBack();
+              navigated = true;
+            }
+          } catch (_e) {}
+        }
+        if (!navigated && active && !active.home) {
+          active.home = true;
+          state.sourcesBrowserUrl = '';
+          switchSourcesTab(active.id, { focus: false });
+        }
+      });
+    }
+    if (el.sourcesBrowserHomeBtn) {
+      el.sourcesBrowserHomeBtn.addEventListener('click', function () {
+        var active = getSourcesActiveTab();
+        if (!active) {
+          openSourcesTab('', { switchTo: true, persist: false, home: true, focus: true });
+          return;
+        }
+        active.home = true;
+        state.sourcesBrowserUrl = '';
+        switchSourcesTab(active.id, { focus: false });
       });
     }
     if (el.sourcesBrowserForwardBtn) {
       el.sourcesBrowserForwardBtn.addEventListener('click', function () {
+        if (isButterfly) {
+          var active = getSourcesActiveTab();
+          if (active && active._bridgeTabId && active._canGoForward) {
+            try { api.webTabManager.goForward({ tabId: active._bridgeTabId }); } catch (_eBFwd) {}
+          }
+          return;
+        }
         var wv = getSourcesBrowserWebview();
         try { if (wv && wv.canGoForward()) wv.goForward(); } catch (_e) {}
       });
@@ -2100,6 +2615,15 @@
     if (el.sourcesBrowserReloadBtn) {
       el.sourcesBrowserReloadBtn.addEventListener('click', function () {
         var active = getSourcesActiveTab();
+        if (isButterfly) {
+          if (active && active._bridgeTabId) {
+            try {
+              if (state.sourcesBrowserLoading) api.webTabManager.stop({ tabId: active._bridgeTabId });
+              else api.webTabManager.reload({ tabId: active._bridgeTabId });
+            } catch (_eBReload) {}
+          }
+          return;
+        }
         var wv = active && active.webview ? active.webview : getSourcesBrowserWebview();
         try {
           if (!wv) return;
@@ -2119,9 +2643,15 @@
         try { title = String((active && active.title) || (wv && wv.getTitle && wv.getTitle()) || '').trim(); } catch (_e) {}
         api.webBookmarks.toggle({ url: target, title: title, favicon: getFaviconUrl(target) }).then(function () {
           refreshSourcesBrowserBookmarkUi(target);
+          renderSourcesBrowserBookmarksRows();
           if (panels.renderBookmarkBar) panels.renderBookmarkBar();
           if (hub.renderHubBookmarks) hub.renderHubBookmarks();
         }).catch(function () {});
+      });
+    }
+    if (el.sourcesBrowserBookmarksBtn) {
+      el.sourcesBrowserBookmarksBtn.addEventListener('click', function () {
+        openSourcesBrowserDrawer('bookmarks');
       });
     }
     if (el.sourcesBrowserHistoryBtn) {
@@ -2129,12 +2659,28 @@
         openSourcesBrowserHistoryOverlay();
       });
     }
-    if (el.sourcesBrowserHistoryCloseBtn) {
-      el.sourcesBrowserHistoryCloseBtn.addEventListener('click', closeSourcesBrowserHistoryOverlay);
+    if (el.sourcesBrowserDownloadsBtn) {
+      el.sourcesBrowserDownloadsBtn.addEventListener('click', function () {
+        var active = getSourcesActiveTab();
+        if (active && active.home && el.sourcesBrowserHomeDownloadsBody) {
+          closeSourcesBrowserDrawer();
+          var section = el.sourcesBrowserHomeDownloadsBody.closest
+            ? el.sourcesBrowserHomeDownloadsBody.closest('.sourcesBrowserHomeSection')
+            : null;
+          if (section && typeof section.scrollIntoView === 'function') {
+            section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          }
+          return;
+        }
+        openSourcesBrowserDrawer('downloads');
+      });
     }
-    if (el.sourcesBrowserHistoryOverlay) {
-      el.sourcesBrowserHistoryOverlay.addEventListener('click', function (e) {
-        if (e.target === el.sourcesBrowserHistoryOverlay) closeSourcesBrowserHistoryOverlay();
+    if (el.sourcesBrowserDrawerCloseBtn) {
+      el.sourcesBrowserDrawerCloseBtn.addEventListener('click', closeSourcesBrowserDrawer);
+    }
+    if (el.sourcesBrowserDrawerOverlay) {
+      el.sourcesBrowserDrawerOverlay.addEventListener('click', function () {
+        closeSourcesBrowserDrawer();
       });
     }
     if (el.sourcesBrowserHistorySearchInput) {
@@ -2177,6 +2723,29 @@
         var url = String(row.getAttribute('data-history-url') || '').trim();
         if (!url) return;
         closeSourcesBrowserHistoryOverlay();
+        navigateSourcesBrowser(url, { focus: true });
+      });
+    }
+    if (el.sourcesBrowserBookmarksList) {
+      el.sourcesBrowserBookmarksList.addEventListener('click', function (e) {
+        var removeBtn = e.target && e.target.closest ? e.target.closest('[data-bookmark-remove-id]') : null;
+        if (removeBtn) {
+          var removeId = String(removeBtn.getAttribute('data-bookmark-remove-id') || '').trim();
+          if (!removeId || !api.webBookmarks || typeof api.webBookmarks.remove !== 'function') return;
+          api.webBookmarks.remove({ id: removeId }).then(function () {
+            state.bookmarks = (state.bookmarks || []).filter(function (b) { return !(b && String(b.id) === removeId); });
+            renderSourcesBrowserBookmarksRows();
+            refreshSourcesBrowserBookmarkUi(state.sourcesBrowserUrl || '');
+          }).catch(function () {
+            showToast('Failed to remove bookmark');
+          });
+          return;
+        }
+        var row = e.target && e.target.closest ? e.target.closest('.sourcesBrowserHistoryRow[data-bookmark-url]') : null;
+        if (!row) return;
+        var url = String(row.getAttribute('data-bookmark-url') || '').trim();
+        if (!url) return;
+        closeSourcesBrowserDrawer();
         navigateSourcesBrowser(url, { focus: true });
       });
     }
@@ -2351,27 +2920,31 @@
     }
     refreshSourcesBrowserHomeShortcuts();
     renderSourcesBrowserHome();
-    if (el.sourcesBrowserDownloadsClearBtn) {
-      el.sourcesBrowserDownloadsClearBtn.addEventListener('click', function () {
-        var src = state.downloads;
-        if (Array.isArray(src)) {
-          state.downloads = src.filter(function (d) {
-            var st = String(d && d.state || '').toLowerCase();
-            return st !== 'completed' && st !== 'cancelled' && st !== 'failed' && st !== 'interrupted';
-          });
-        } else if (src && typeof src === 'object') {
-          var next = {};
-          var keys = Object.keys(src);
-          for (var i = 0; i < keys.length; i++) {
-            var item = src[keys[i]];
-            var s = String(item && item.state || '').toLowerCase();
-            if (s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted') continue;
-            next[keys[i]] = item;
-          }
-          state.downloads = next;
+    var clearSourcesBrowserDownloads = function () {
+      var src = state.downloads;
+      if (Array.isArray(src)) {
+        state.downloads = src.filter(function (d) {
+          var st = String(d && d.state || '').toLowerCase();
+          return st !== 'completed' && st !== 'cancelled' && st !== 'failed' && st !== 'interrupted';
+        });
+      } else if (src && typeof src === 'object') {
+        var next = {};
+        var keys = Object.keys(src);
+        for (var i = 0; i < keys.length; i++) {
+          var item = src[keys[i]];
+          var s = String(item && item.state || '').toLowerCase();
+          if (s === 'completed' || s === 'cancelled' || s === 'failed' || s === 'interrupted') continue;
+          next[keys[i]] = item;
         }
-        renderHomeDownloads();
-      });
+        state.downloads = next;
+      }
+      renderHomeDownloads();
+    };
+    if (el.sourcesBrowserDownloadsClearBtn) {
+      el.sourcesBrowserDownloadsClearBtn.addEventListener('click', clearSourcesBrowserDownloads);
+    }
+    if (el.sourcesBrowserHomeDownloadsClearBtn) {
+      el.sourcesBrowserHomeDownloadsClearBtn.addEventListener('click', clearSourcesBrowserDownloads);
     }
 
     refreshSourcesBrowserNav();
@@ -2391,13 +2964,18 @@
   }
 
   function renderSourcesBrowserDownloadsRows() {
-    if (!el.sourcesBrowserDownloadsBody) return;
+    var bodies = [];
+    if (el.sourcesBrowserDownloadsBody) bodies.push(el.sourcesBrowserDownloadsBody);
+    if (el.sourcesBrowserHomeDownloadsBody) bodies.push(el.sourcesBrowserHomeDownloadsBody);
+    if (!bodies.length) return;
     var rows = getSourcesBrowserDownloadsList();
     rows.sort(function (a, b) {
       return Number(b && b.startedAt || b && b.updatedAt || 0) - Number(a && a.startedAt || a && a.updatedAt || 0);
     });
     if (!rows.length) {
-      el.sourcesBrowserDownloadsBody.innerHTML = '<tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>';
+      for (var bi = 0; bi < bodies.length; bi++) {
+        bodies[bi].innerHTML = '<tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>';
+      }
       return;
     }
     var html = '';
@@ -2427,7 +3005,9 @@
         + '<td>' + action + '</td>'
       + '</tr>';
     }
-    el.sourcesBrowserDownloadsBody.innerHTML = html;
+    for (var bi2 = 0; bi2 < bodies.length; bi2++) {
+      bodies[bi2].innerHTML = html;
+    }
   }
 
   // ── webTabs shim (replaces old WCV IPC) ──
@@ -2629,7 +3209,7 @@
       if (source && source.url) {
         navigateSourcesBrowser(source.url, { focus: true });
       } else if (el.sourcesBrowserUrlInput) {
-        try { el.sourcesBrowserUrlInput.focus(); } catch (_e) {}
+        setSourcesOmniExpanded(true);
       }
     });
   }
@@ -4041,38 +4621,29 @@
       showToast('Set a valid provider base URL first');
       return;
     }
-    // Provider UI must always open in Sources-embedded TankoBrowser.
-    // Legacy browser fallback causes mode/view desync and blank-shell regressions.
     ensureSourcesModeActive().then(function () {
-      try {
-        forceSourcesViewVisible();
-        applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-        initSourcesBrowser();
-        closeTorrentProvidersDialog();
-        var ok = navigateSourcesBrowser(url, { focus: true });
-        if (!ok) {
-          // One delayed retry handles transient webview readiness timing.
-          setTimeout(function () {
-            var okRetry = false;
-            try { okRetry = navigateSourcesBrowser(url, { focus: true }); } catch (_retryErr) { okRetry = false; }
-            if (okRetry) {
-              showToast('Opened provider UI in TankoBrowser');
-              return;
-            }
-            forceSourcesViewVisible();
-            applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-            showToast('Unable to open provider UI');
-          }, 120);
-          return;
-        }
-        showToast('Opened provider UI in TankoBrowser');
-        return;
-      } catch (_e) {}
-      // Self-heal: keep Sources visible even if webview navigation fails.
+      closeTorrentProvidersDialog();
       forceSourcesViewVisible();
       applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-      closeTorrentProvidersDialog();
-      showToast('Unable to open provider UI');
+      initSourcesBrowser();
+      if (!getSourcesActiveTab()) {
+        openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
+      }
+      var ok = false;
+      try { ok = navigateSourcesBrowser(url, { focus: true }); } catch (_eNow) { ok = false; }
+      if (ok) {
+        showToast('Opened provider UI in TankoBrowser');
+        return;
+      }
+      setTimeout(function () {
+        var okRetry = false;
+        try { okRetry = navigateSourcesBrowser(url, { focus: true }); } catch (_eRetry) { okRetry = false; }
+        if (okRetry) {
+          showToast('Opened provider UI in TankoBrowser');
+          return;
+        }
+        showToast('Unable to open provider UI');
+      }, 220);
     });
   }
 
@@ -4164,7 +4735,9 @@
       },
       sourcesBrowser: {
         expandedByDefault: sourcesBrowser.expandedByDefault !== false,
-        lastUrl: String(sourcesBrowser.lastUrl || src.sourcesBrowserLastUrl || '').trim()
+        lastUrl: String(sourcesBrowser.lastUrl || src.sourcesBrowserLastUrl || '').trim(),
+        chromeDensity: String(sourcesBrowser.chromeDensity || 'single_row_v1').trim().toLowerCase() || 'single_row_v1',
+        omniboxMode: String(sourcesBrowser.omniboxMode || 'collapsed_chip').trim().toLowerCase() || 'collapsed_chip'
       },
       privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } },
       jackett: {
@@ -4342,15 +4915,22 @@
       }
       if (ctrl && !shift && key === 'l') {
         e.preventDefault();
-        if (el.sourcesBrowserUrlInput) {
-          el.sourcesBrowserUrlInput.focus();
-          if (el.sourcesBrowserUrlInput.select) el.sourcesBrowserUrlInput.select();
-        }
+        setSourcesOmniExpanded(true);
         return;
       }
       if (ctrl && !shift && key === 'h') {
         e.preventDefault();
         openSourcesBrowserHistoryOverlay();
+        return;
+      }
+      if (ctrl && !shift && key === 'b') {
+        e.preventDefault();
+        openSourcesBrowserDrawer('bookmarks');
+        return;
+      }
+      if (ctrl && !shift && key === 'j') {
+        e.preventDefault();
+        openSourcesBrowserDrawer('downloads');
         return;
       }
       if (ctrl && shift && (key === 'A' || key === 'a')) {
@@ -4366,8 +4946,20 @@
       }
       if (e.altKey && key === 'ArrowLeft') {
         e.preventDefault();
+        var activeBack = getSourcesActiveTab();
         var bwv0 = getSourcesBrowserWebview();
-        if (bwv0 && typeof bwv0.goBack === 'function') bwv0.goBack();
+        var moved = false;
+        try {
+          if (bwv0 && typeof bwv0.canGoBack === 'function' && bwv0.canGoBack()) {
+            bwv0.goBack();
+            moved = true;
+          }
+        } catch (_eAltBack) {}
+        if (!moved && activeBack && !activeBack.home) {
+          activeBack.home = true;
+          state.sourcesBrowserUrl = '';
+          switchSourcesTab(activeBack.id, { focus: false });
+        }
         return;
       }
       if (e.altKey && key === 'ArrowRight') {
@@ -4384,6 +4976,7 @@
         }
         if (state.sourcesOmniOpen) {
           closeSourcesOmniDropdown();
+          setSourcesOmniExpanded(false, { keepValue: true, select: false });
           e.preventDefault();
           return;
         }
@@ -4392,8 +4985,8 @@
           e.preventDefault();
           return;
         }
-        if (el.sourcesBrowserHistoryOverlay && !el.sourcesBrowserHistoryOverlay.classList.contains('hidden')) {
-          closeSourcesBrowserHistoryOverlay();
+        if (state.sourcesBrowserDrawerKind) {
+          closeSourcesBrowserDrawer();
           e.preventDefault();
           return;
         }
@@ -4877,44 +5470,48 @@
         renderHomeDownloads();
       });
     }
+    var onSourcesBrowserDownloadsClick = function (e) {
+      var cancelBtn = e.target && e.target.closest ? e.target.closest('[data-dl-cancel]') : null;
+      if (cancelBtn) {
+        var id = String(cancelBtn.getAttribute('data-dl-cancel') || '').trim();
+        if (id && api.webSources && typeof api.webSources.cancelDownload === 'function') {
+          api.webSources.cancelDownload({ id: id }).catch(function () {});
+        }
+        return;
+      }
+      var openBtn = e.target && e.target.closest ? e.target.closest('[data-dl-open]') : null;
+      if (openBtn) {
+        var openId = String(openBtn.getAttribute('data-dl-open') || '').trim();
+        var list = getSourcesBrowserDownloadsList();
+        for (var i = 0; i < list.length; i++) {
+          var item = list[i];
+          if (String(item && item.id || '') !== openId) continue;
+          if (item.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadOpenFile === 'function') {
+            api.webBrowserActions.downloadOpenFile({ path: item.savePath });
+          }
+          break;
+        }
+        return;
+      }
+      var showBtn = e.target && e.target.closest ? e.target.closest('[data-dl-show]') : null;
+      if (showBtn) {
+        var showId = String(showBtn.getAttribute('data-dl-show') || '').trim();
+        var list2 = getSourcesBrowserDownloadsList();
+        for (var j = 0; j < list2.length; j++) {
+          var it = list2[j];
+          if (String(it && it.id || '') !== showId) continue;
+          if (it.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadShowInFolder === 'function') {
+            api.webBrowserActions.downloadShowInFolder({ path: it.savePath });
+          }
+          break;
+        }
+      }
+    };
     if (el.sourcesBrowserDownloadsBody) {
-      el.sourcesBrowserDownloadsBody.addEventListener('click', function (e) {
-        var cancelBtn = e.target && e.target.closest ? e.target.closest('[data-dl-cancel]') : null;
-        if (cancelBtn) {
-          var id = String(cancelBtn.getAttribute('data-dl-cancel') || '').trim();
-          if (id && api.webSources && typeof api.webSources.cancelDownload === 'function') {
-            api.webSources.cancelDownload({ id: id }).catch(function () {});
-          }
-          return;
-        }
-        var openBtn = e.target && e.target.closest ? e.target.closest('[data-dl-open]') : null;
-        if (openBtn) {
-          var openId = String(openBtn.getAttribute('data-dl-open') || '').trim();
-          var list = getSourcesBrowserDownloadsList();
-          for (var i = 0; i < list.length; i++) {
-            var item = list[i];
-            if (String(item && item.id || '') !== openId) continue;
-            if (item.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadOpenFile === 'function') {
-              api.webBrowserActions.downloadOpenFile({ path: item.savePath });
-            }
-            break;
-          }
-          return;
-        }
-        var showBtn = e.target && e.target.closest ? e.target.closest('[data-dl-show]') : null;
-        if (showBtn) {
-          var showId = String(showBtn.getAttribute('data-dl-show') || '').trim();
-          var list2 = getSourcesBrowserDownloadsList();
-          for (var j = 0; j < list2.length; j++) {
-            var it = list2[j];
-            if (String(it && it.id || '') !== showId) continue;
-            if (it.savePath && api.webBrowserActions && typeof api.webBrowserActions.downloadShowInFolder === 'function') {
-              api.webBrowserActions.downloadShowInFolder({ path: it.savePath });
-            }
-            break;
-          }
-        }
-      });
+      el.sourcesBrowserDownloadsBody.addEventListener('click', onSourcesBrowserDownloadsClick);
+    }
+    if (el.sourcesBrowserHomeDownloadsBody) {
+      el.sourcesBrowserHomeDownloadsBody.addEventListener('click', onSourcesBrowserDownloadsClick);
     }
 
     // Continue browsing tile clicks are bound in renderContinue()
@@ -5386,6 +5983,13 @@
   // Auto-refresh bookmark bar when bookmarks change from any source
   if (api.webBookmarks && api.webBookmarks.onUpdated) {
     api.webBookmarks.onUpdated(function () {
+      if (api.webBookmarks && typeof api.webBookmarks.list === 'function') {
+        api.webBookmarks.list().then(function (res) {
+          state.bookmarks = (res && res.ok && Array.isArray(res.bookmarks)) ? res.bookmarks : [];
+          renderSourcesBrowserBookmarksRows();
+          refreshSourcesBrowserBookmarkUi(state.sourcesBrowserUrl || '');
+        }).catch(function () {});
+      }
       if (panels.renderBookmarkBar) panels.renderBookmarkBar();
     });
   }
@@ -5450,6 +6054,9 @@
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();
       scheduleSourcesBrowserViewportLayout();
+      if (el.homeView) {
+        try { el.homeView.scrollTop = 0; } catch (_eScrollTop) {}
+      }
     });
   }
 
