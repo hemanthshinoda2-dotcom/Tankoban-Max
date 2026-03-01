@@ -4,7 +4,7 @@
 (function bindShellBindings(){
   if (typeof el === 'undefined') return;
 
-  // Build 8 (UI): Tile density (thumbnail size). Default is Large.
+  // Build 8 (UI): Tile density (thumbnail size). Default is Medium.
   const applyTileDensity = (density) => {
     const d = (density === 'compact') ? 'compact' : 'comfortable';
     try { document.body.dataset.tileDensity = d; } catch {}
@@ -22,7 +22,7 @@
   };
 
   // Initialize from persistence before first render.
-  try { applyTileDensity(localStorage.getItem('tileDensity') || 'comfortable'); } catch { applyTileDensity('comfortable'); }
+  try { applyTileDensity(localStorage.getItem('tileDensity') || 'compact'); } catch { applyTileDensity('compact'); }
 
   if (el.tileDensityBtn) {
     el.tileDensityBtn.addEventListener('click', (e) => {
@@ -39,6 +39,14 @@
   const applyAppTheme = (theme) => {
     var t = APP_THEMES.indexOf(theme) >= 0 ? theme : 'dark';
     try { document.body.dataset.appTheme = t; } catch {}
+    // Force repaint of backdrop-filter elements (Chromium/QWebEngine bug: backdrop-filter
+    // layers are cached by the GPU compositor and do not repaint when CSS variables change
+    // on an ancestor. Reading offsetHeight forces a synchronous layout flush that invalidates
+    // the cached compositor layer and triggers an immediate repaint.)
+    try {
+      var bfEls = document.querySelectorAll('.topbar, .libSidebar, .searchResults, .volTableHead');
+      bfEls.forEach(function(bfEl) { void bfEl.offsetHeight; });
+    } catch {}
     // Shoelace theme: light for "light", dark for everything else
     try {
       if (t === 'light') {
@@ -440,6 +448,19 @@
   }
 
   function openBrowserFromTopButton() {
+    // Butterfly (Qt) mode: activate native BrowserWidget via bridge.
+    // Handle the case where QWebChannel isn't ready yet by queuing the call.
+    if (window.__tankoButterfly) {
+      if (window.electronAPI && window.electronAPI.webTabManager) {
+        try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
+      } else {
+        // Bridge not yet ready — queue for when electronAPI:ready fires
+        document.addEventListener('electronAPI:ready', function _bf_open() {
+          try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
+        }, { once: true });
+      }
+      return;
+    }
     var d = window.Tanko && window.Tanko.deferred;
     if (!d || typeof d.ensureWebModulesLoaded !== 'function') {
       console.warn('[DBG-WEB] ensureWebModulesLoaded not available', d);
@@ -1175,6 +1196,15 @@
       try { Tanko.api.window.close(); } catch (err) {}
     });
   }
+
+  // FIX: Chromium stuck :hover after minimize — briefly toggle pointer-events on focus regain
+  window.addEventListener('focus', function () {
+    var btns = document.querySelectorAll('.winCtrl');
+    btns.forEach(function (btn) { btn.style.pointerEvents = 'none'; });
+    requestAnimationFrame(function () {
+      btns.forEach(function (btn) { btn.style.pointerEvents = ''; });
+    });
+  });
 
   // FIX-WIN-CTRL2: browser overlay window controls (same actions, different IDs)
   var webWinMinBtn = document.getElementById('webWinMinBtn');

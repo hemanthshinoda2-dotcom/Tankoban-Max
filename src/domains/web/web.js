@@ -6332,6 +6332,12 @@
     if (window.Tanko.modeRouter && typeof window.Tanko.modeRouter.registerModeHandler === 'function') {
       window.Tanko.modeRouter.registerModeHandler('sources', {
         setMode: function () {
+          if (isButterfly) {
+            // Qt BrowserWidget handles sources mode natively — activate via bridge.
+            // Never render old HTML browser chrome in Butterfly mode.
+            try { api.webTabManager.openBrowser(); } catch (_eBf) {}
+            return Promise.resolve();
+          }
           applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
           return Promise.resolve();
         },
