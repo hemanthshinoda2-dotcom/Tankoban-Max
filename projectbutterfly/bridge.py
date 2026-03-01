@@ -10623,8 +10623,6 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
     web_view.page().setWebChannel(channel)
     # Keep a Python reference so GC doesn't destroy the channel
     bridge._channel = channel
-    # Store combined shim so home-tab pages can get their own bridge injection
-    bridge._bridge_shim_combined = combined
 
     # Read qwebchannel.js from Qt's built-in resources and inline it together
     # with the bridge shim into a single QWebEngineScript.  This avoids the
@@ -10637,6 +10635,8 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
 
     # Keep newlines — flattening breaks // comments (they eat rest of line)
     combined = qwc_js + "\n" + BRIDGE_SHIM_JS if qwc_js else BRIDGE_SHIM_JS
+    # Store combined shim so home-tab pages can get their own bridge injection
+    bridge._bridge_shim_combined = combined
 
     from PySide6.QtWebEngineCore import QWebEngineScript
     script = QWebEngineScript()
