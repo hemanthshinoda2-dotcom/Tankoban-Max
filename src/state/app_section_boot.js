@@ -93,19 +93,6 @@
 
   async function openBrowserWorkspace(opts) {
     const options = (opts && typeof opts === 'object') ? opts : {};
-
-    // Butterfly (Qt) mode: go straight to native BrowserWidget — skip
-    // setMode('sources') which would briefly flash the Comics view
-    // (mode_router normalizes 'sources' → 'comics').
-    if (window.__tankoButterfly) {
-      try {
-        if (window.electronAPI && window.electronAPI.webTabManager) {
-          window.electronAPI.webTabManager.openBrowser();
-        }
-      } catch (_e) {}
-      return;
-    }
-
     await setMode('sources');
 
     await ensureWebModulesLoaded();
@@ -134,16 +121,6 @@
   }
 
   async function openSourcesWorkspace() {
-    // Butterfly: same as browser — go directly to BrowserWidget
-    if (window.__tankoButterfly) {
-      try {
-        if (window.electronAPI && window.electronAPI.webTabManager) {
-          window.electronAPI.webTabManager.openBrowser();
-        }
-      } catch (_e) {}
-      return;
-    }
-
     await setMode('sources');
     await ensureWebModulesLoaded();
     try {
