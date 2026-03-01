@@ -214,9 +214,28 @@ QToolButton#utilBtn {{
     color: {muted};
     font-size: 15px; min-width: 30px; min-height: 30px;
     border-radius: 6px; padding: 2px;
+    font-family: "Segoe UI Symbol", "Segoe UI", "Apple Symbols", sans-serif;
 }}
 QToolButton#utilBtn:hover  {{ background: {bh}; color: {text}; }}
 QToolButton#utilBtn:checked {{ color: {accent}; }}
+
+/* ── Window controls (min / max / close) ── */
+QToolButton#wcBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 13px; min-width: 42px; min-height: 36px; max-height: 36px;
+    border-radius: 0; padding: 0;
+    font-family: "Segoe UI", sans-serif;
+}}
+QToolButton#wcBtn:hover {{ background: {bh}; color: {text}; }}
+QToolButton#wcBtnClose {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 13px; min-width: 42px; min-height: 36px; max-height: 36px;
+    border-radius: 0; padding: 0;
+    font-family: "Segoe UI", sans-serif;
+}}
+QToolButton#wcBtnClose:hover {{ background: #c42b1c; color: white; }}
 
 /* ── Content area ── */
 QStackedWidget#contentStack {{ background: {bg}; }}
@@ -400,6 +419,17 @@ class BrowserWidget(QWidget):
         tr.addWidget(self._new_tab_btn)
         tr.addStretch()
 
+        # Window controls (far right of tab strip, Chrome-style)
+        self._wc_min   = self._wc_btn("─", "wcBtn",      "Minimize")
+        self._wc_max   = self._wc_btn("□", "wcBtn",      "Maximize / Restore")
+        self._wc_close = self._wc_btn("×", "wcBtnClose", "Close")
+        tr.addWidget(self._wc_min)
+        tr.addWidget(self._wc_max)
+        tr.addWidget(self._wc_close)
+        self._wc_min.clicked.connect(lambda: self.window().showMinimized())
+        self._wc_max.clicked.connect(self._toggle_maximize)
+        self._wc_close.clicked.connect(self.window().close)
+
         tab_row.hide()   # hidden on home screen; shown when a real browser tab activates
         root.addWidget(tab_row)
 
@@ -429,8 +459,8 @@ class BrowserWidget(QWidget):
         nl.addSpacing(4)
 
         self._bookmark_btn  = self._util_btn("☆", "Bookmark")
-        self._history_btn_w = self._util_btn("⏱", "History")
-        self._downloads_btn = self._util_btn("↓", "Downloads")
+        self._history_btn_w = self._util_btn("↺", "History")
+        self._downloads_btn = self._util_btn("⤓", "Downloads")
         nl.addWidget(self._bookmark_btn)
         nl.addWidget(self._history_btn_w)
         nl.addWidget(self._downloads_btn)
@@ -523,6 +553,22 @@ class BrowserWidget(QWidget):
         b.setText(text)
         b.setToolTip(tip)
         return b
+
+    def _wc_btn(self, text, obj_name, tip):
+        b = QToolButton()
+        b.setObjectName(obj_name)
+        b.setText(text)
+        b.setToolTip(tip)
+        return b
+
+    def _toggle_maximize(self):
+        w = self.window()
+        if w.isMaximized():
+            w.showNormal()
+            self._wc_max.setText("□")
+        else:
+            w.showMaximized()
+            self._wc_max.setText("❐")
 
     def _setup_shortcuts(self):
         def _mk(seq, fn):
