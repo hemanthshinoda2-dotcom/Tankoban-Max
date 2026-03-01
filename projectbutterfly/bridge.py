@@ -9056,8 +9056,23 @@ class WebTabManagerBridge(QObject):
                 tab_id, loading=False,
                 canGoBack=can_back, canGoForward=can_fwd,
             )
-            # Userscript injection
             if ok:
+                # Auto-record history for real URLs (skip file://, about:blank, data:)
+                u = self._tabs[tab_id].get("url", "")
+                if u and not u.startswith(("file://", "data:", "about:")):
+                    root = self.parent()
+                    if root and hasattr(root, "webHistory"):
+                        import time as _t
+                        try:
+                            root.webHistory.add(json.dumps({
+                                "url": u,
+                                "title": self._tabs[tab_id].get("title", ""),
+                                "visitedAt": int(_t.time() * 1000),
+                                "scope": "sources_browser",
+                            }))
+                        except Exception:
+                            pass
+                # Userscript injection
                 self._inject_userscripts(tab_id, page, "did-finish-load")
 
         page.urlChanged.connect(on_url_changed)

@@ -314,12 +314,13 @@ class TankobanWindow(QMainWindow):
             self._bridge.webSources.handleDownloadRequested
         )
 
-        # Wire Phase 2/3 bridge references into BrowserWidget (torrent search + downloads panel)
+        # Wire Phase 2/3 bridge references into BrowserWidget
         self._browser_widget.set_bridges(
             torrent_search=self._bridge.torrentSearch,
             torrent=self._bridge.webTorrent,
             sources=self._bridge.webSources,
             history=getattr(self._bridge, "webHistory", None),
+            bookmarks=getattr(self._bridge, "webBookmarks", None),
         )
 
         # --- DevTools ---

@@ -198,6 +198,9 @@ class BrowserWidget(QWidget):
         self._torrent_bridge = None
         self._sources_bridge = None
         self._history_bridge = None
+        self._bookmarks_bridge = None
+        self._history_panel = None
+        self._downloads_panel = None
 
         self._setup_ui()
         self._setup_shortcuts()
@@ -210,12 +213,14 @@ class BrowserWidget(QWidget):
 
     # ── Phase 2/3 bridge wiring ───────────────────────────────────────────────
 
-    def set_bridges(self, torrent_search=None, torrent=None, sources=None, history=None):
+    def set_bridges(self, torrent_search=None, torrent=None, sources=None,
+                    history=None, bookmarks=None):
         """Wire Phase 2/3 bridge references and create torrent/downloads panels."""
         self._torrent_search_bridge = torrent_search
         self._torrent_bridge = torrent
         self._sources_bridge = sources
         self._history_bridge = history
+        self._bookmarks_bridge = bookmarks
 
         # Phase 2: Torrent Search pinned tab
         if torrent_search or torrent:
@@ -244,6 +249,19 @@ class BrowserWidget(QWidget):
             self._downloads_btn.clicked.connect(self._toggle_downloads_panel)
         else:
             self._downloads_panel = None
+
+        # Phase 3b: History panel
+        if history:
+            self._history_panel = HistoryPanel(history, parent=self)
+            self._history_panel.hide()
+            self._history_panel.navigateTo.connect(self._on_history_navigate)
+            self._history_btn_w.clicked.connect(self._toggle_history_panel)
+        else:
+            self._history_panel = None
+
+        # Phase 3b: Bookmark button wiring
+        if bookmarks:
+            self._bookmark_btn.clicked.connect(self._toggle_bookmark)
 
     def _on_special_tab_check(self, bar_idx):
         """Handle clicks on special (non-closeable) pinned tabs."""
@@ -275,6 +293,8 @@ class BrowserWidget(QWidget):
         super().resizeEvent(event)
         if self._downloads_panel and self._downloads_panel.isVisible():
             self._position_downloads_panel()
+        if getattr(self, "_history_panel", None) and self._history_panel.isVisible():
+            self._position_history_panel()
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -334,6 +354,58 @@ class BrowserWidget(QWidget):
 
         root.addWidget(toolbar)
 
+        # ── Find bar (hidden by default; Ctrl+F reveals it) ──
+        find_bar = QWidget()
+        find_bar.setObjectName("findBar")
+        find_bar.setStyleSheet(
+            "QWidget#findBar { background:#161b22; border-bottom:1px solid rgba(255,255,255,0.06); }"
+            "QLineEdit#findInput { background:#0d1117; border:1px solid rgba(255,255,255,0.1);"
+            "  border-radius:6px; color:#e6edf3; font-size:12px; padding:3px 10px; }"
+            "QLineEdit#findInput:focus { border-color:rgba(88,101,242,0.8); }"
+            "QPushButton#findNavBtn { background:transparent; border:none; color:#8b949e;"
+            "  font-size:13px; min-width:24px; min-height:24px; border-radius:4px; }"
+            "QPushButton#findNavBtn:hover { background:rgba(255,255,255,0.08); color:#e6edf3; }"
+            "QLabel#findCount { color:#8b949e; font-size:11px; min-width:48px; }"
+            "QToolButton#findClose { background:transparent; border:none; color:#8b949e;"
+            "  font-size:14px; min-width:22px; min-height:22px; border-radius:4px; }"
+            "QToolButton#findClose:hover { background:rgba(255,255,255,0.08); color:#e6edf3; }"
+        )
+        fl = QHBoxLayout(find_bar)
+        fl.setContentsMargins(8, 4, 8, 4)
+        fl.setSpacing(4)
+        fl.addStretch()
+        fl.addWidget(QLabel("Find:"))
+        self._find_input = QLineEdit()
+        self._find_input.setObjectName("findInput")
+        self._find_input.setPlaceholderText("Search…")
+        self._find_input.setFixedWidth(200)
+        self._find_prev_btn = QPushButton("↑")
+        self._find_prev_btn.setObjectName("findNavBtn")
+        self._find_prev_btn.setToolTip("Previous match")
+        self._find_next_btn = QPushButton("↓")
+        self._find_next_btn.setObjectName("findNavBtn")
+        self._find_next_btn.setToolTip("Next match")
+        self._find_count_lbl = QLabel("0/0")
+        self._find_count_lbl.setObjectName("findCount")
+        self._find_close_btn = QToolButton()
+        self._find_close_btn.setObjectName("findClose")
+        self._find_close_btn.setText("×")
+        fl.addWidget(self._find_input)
+        fl.addWidget(self._find_prev_btn)
+        fl.addWidget(self._find_next_btn)
+        fl.addWidget(self._find_count_lbl)
+        fl.addWidget(self._find_close_btn)
+        self._find_bar = find_bar
+        self._find_bar.hide()
+        root.addWidget(self._find_bar)
+
+        # Wire find bar
+        self._find_input.returnPressed.connect(self._find_next_action)
+        self._find_input.textChanged.connect(self._on_find_text_changed)
+        self._find_next_btn.clicked.connect(self._find_next_action)
+        self._find_prev_btn.clicked.connect(self._find_prev_action)
+        self._find_close_btn.clicked.connect(self._close_find_bar)
+
         # ── Content stack ──
         self._content_stack = QStackedWidget()
         self._content_stack.setObjectName("contentStack")
@@ -372,14 +444,26 @@ class BrowserWidget(QWidget):
             s = QShortcut(QKeySequence(seq), self)
             s.activated.connect(fn)
 
-        _mk("Ctrl+T",      self._on_new_tab)
-        _mk("Ctrl+W",      lambda: self._on_tab_close_requested(self._tab_bar.currentIndex()))
-        _mk("Ctrl+L",      lambda: (self._address_bar.setFocus(), self._address_bar.selectAll()))
-        _mk("Alt+Left",    self._on_back)
-        _mk("Alt+Right",   self._on_fwd)
-        _mk("F5",          self._on_reload)
-        _mk("Ctrl+R",      self._on_reload)
-        _mk("Escape",      self._on_escape)
+        _mk("Ctrl+T",         self._on_new_tab)
+        _mk("Ctrl+W",         lambda: self._on_tab_close_requested(self._tab_bar.currentIndex()))
+        _mk("Ctrl+L",         lambda: (self._address_bar.setFocus(), self._address_bar.selectAll()))
+        _mk("Alt+Left",       self._on_back)
+        _mk("Alt+Right",      self._on_fwd)
+        _mk("F5",             self._on_reload)
+        _mk("Ctrl+R",         self._on_reload)
+        _mk("Escape",         self._on_escape)
+        # Find in page
+        _mk("Ctrl+F",         self._show_find_bar)
+        _mk("Ctrl+G",         self._find_next_action)
+        _mk("Ctrl+Shift+G",   self._find_prev_action)
+        # Zoom
+        _mk("Ctrl+=",         self._zoom_in)
+        _mk("Ctrl++",         self._zoom_in)
+        _mk("Ctrl+-",         self._zoom_out)
+        _mk("Ctrl+0",         self._zoom_reset)
+        # Tab cycling
+        _mk("Ctrl+Tab",       self._cycle_tab_next)
+        _mk("Ctrl+Shift+Tab", self._cycle_tab_prev)
 
     # ── Called by WebTabManagerBridge ─────────────────────────────────────────
 
@@ -461,6 +545,7 @@ class BrowserWidget(QWidget):
             self._address_bar.setText(tab.get("url", ""))
 
         self._sync_nav_buttons(tab_id)
+        self._update_bookmark_state(tab_id)
 
     def navigate_tab(self, tab_id, url):
         """
@@ -623,7 +708,10 @@ class BrowserWidget(QWidget):
         self.userOpenNewTab.emit()
 
     def _on_escape(self):
-        self._address_bar.clearFocus()
+        if self._find_bar.isVisible():
+            self._close_find_bar()
+        else:
+            self._address_bar.clearFocus()
 
     def _on_address_entered(self):
         raw = self._address_bar.text().strip()
@@ -635,6 +723,169 @@ class BrowserWidget(QWidget):
         else:
             self.userOpenNewTab.emit()
             # bridge will create a tab and JS will call navigateTo
+
+    # ── Find in page ─────────────────────────────────────────────────────────
+
+    def _show_find_bar(self):
+        self._find_bar.show()
+        self._find_input.setFocus()
+        self._find_input.selectAll()
+
+    def _close_find_bar(self):
+        self._find_bar.hide()
+        self._find_count_lbl.setText("0/0")
+        tab = self._tabs.get(self._active_tab_id)
+        if tab and tab.get("view"):
+            tab["view"].page().findText("")  # clear highlights
+
+    def _on_find_text_changed(self, text):
+        tab = self._tabs.get(self._active_tab_id)
+        if not tab or not tab.get("view"):
+            return
+        from PySide6.QtWebEngineCore import QWebEnginePage as _QWP
+        page = tab["view"].page()
+        if not text:
+            page.findText("")
+            self._find_count_lbl.setText("0/0")
+            return
+
+        lbl = self._find_count_lbl
+
+        def _on_result(result):
+            try:
+                m = result.numberOfMatches()
+                i = result.activeMatch()
+                lbl.setText(f"{i}/{m}" if m else "0/0")
+            except Exception:
+                pass
+
+        page.findText(text, _QWP.FindFlags(), _on_result)
+
+    def _find_next_action(self):
+        if not self._find_bar.isVisible():
+            self._show_find_bar()
+            return
+        text = self._find_input.text()
+        if not text:
+            return
+        tab = self._tabs.get(self._active_tab_id)
+        if tab and tab.get("view"):
+            tab["view"].page().findText(text)
+
+    def _find_prev_action(self):
+        if not self._find_bar.isVisible():
+            self._show_find_bar()
+            return
+        text = self._find_input.text()
+        if not text:
+            return
+        tab = self._tabs.get(self._active_tab_id)
+        if tab and tab.get("view"):
+            from PySide6.QtWebEngineCore import QWebEnginePage as _QWP
+            tab["view"].page().findText(
+                text, _QWP.FindFlag.FindBackward
+            )
+
+    # ── Zoom ─────────────────────────────────────────────────────────────────
+
+    def _active_view(self):
+        tab = self._tabs.get(self._active_tab_id)
+        return tab.get("view") if tab else None
+
+    def _zoom_in(self):
+        v = self._active_view()
+        if v:
+            v.setZoomFactor(min(5.0, v.zoomFactor() + 0.1))
+
+    def _zoom_out(self):
+        v = self._active_view()
+        if v:
+            v.setZoomFactor(max(0.25, v.zoomFactor() - 0.1))
+
+    def _zoom_reset(self):
+        v = self._active_view()
+        if v:
+            v.setZoomFactor(1.0)
+
+    # ── Bookmarks ─────────────────────────────────────────────────────────────
+
+    def _toggle_bookmark(self):
+        if not self._bookmarks_bridge:
+            return
+        tab = self._tabs.get(self._active_tab_id, {})
+        url = tab.get("url", "")
+        if not url or url.startswith("file://"):
+            return
+        try:
+            result = json.loads(self._bookmarks_bridge.toggle(json.dumps({
+                "url": url,
+                "title": tab.get("title", ""),
+            })))
+            # Visual feedback: fill/unfill the star
+            added = result.get("added", False)
+            self._bookmark_btn.setText("★" if added else "☆")
+        except Exception:
+            pass
+
+    def _update_bookmark_state(self, tab_id):
+        """Update ★ button appearance for the given tab's URL."""
+        if not self._bookmarks_bridge:
+            return
+        tab = self._tabs.get(tab_id, {})
+        url = tab.get("url", "")
+        if not url or url.startswith("file://"):
+            self._bookmark_btn.setText("☆")
+            return
+        try:
+            r = json.loads(self._bookmarks_bridge.list())
+            bookmarks = r.get("bookmarks", [])
+            is_bm = any(b.get("url") == url for b in bookmarks if b)
+            self._bookmark_btn.setText("★" if is_bm else "☆")
+        except Exception:
+            self._bookmark_btn.setText("☆")
+
+    # ── History panel ─────────────────────────────────────────────────────────
+
+    def _toggle_history_panel(self):
+        if not self._history_panel:
+            return
+        if self._history_panel.isVisible():
+            self._history_panel.hide()
+        else:
+            self._position_history_panel()
+            self._history_panel.refresh()
+            self._history_panel.show()
+            self._history_panel.raise_()
+
+    def _position_history_panel(self):
+        if not self._history_panel:
+            return
+        w = 340
+        h = self.height() - 44
+        x = self.width() - w
+        y = 44
+        self._history_panel.setGeometry(x, y, w, h)
+
+    def _on_history_navigate(self, url):
+        self._history_panel.hide()
+        self.userOpenNewTab.emit()
+        QTimer.singleShot(300, lambda: self.userNavigated.emit(
+            self._find_latest_tab_id(), url
+        ))
+
+    # ── Tab cycling ───────────────────────────────────────────────────────────
+
+    def _cycle_tab_next(self):
+        n = self._tab_bar.count()
+        if n < 2:
+            return
+        self._tab_bar.setCurrentIndex((self._tab_bar.currentIndex() + 1) % n)
+
+    def _cycle_tab_prev(self):
+        n = self._tab_bar.count()
+        if n < 2:
+            return
+        self._tab_bar.setCurrentIndex((self._tab_bar.currentIndex() - 1) % n)
 
     def _on_tab_bar_changed(self, bar_idx):
         tab_id = self._tab_id_by_bar_idx.get(bar_idx)
@@ -998,6 +1249,139 @@ class TorrentSearchTab(QWidget):
             QApplication.clipboard().setText(item.get("title", ""))
         elif chosen == act_copy_mag and magnet:
             QApplication.clipboard().setText(magnet)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 3b — HistoryPanel
+# ─────────────────────────────────────────────────────────────────────────────
+
+_HISTORY_PANEL_SS = """
+HistoryPanel {
+    background: #161b22;
+    border-left: 1px solid rgba(255,255,255,0.08);
+}
+QLabel#histPanelTitle {
+    color: #e6edf3;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 12px 12px 8px;
+}
+QLineEdit#histSearch {
+    background: #0d1117;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: #e6edf3;
+    font-size: 12px;
+    padding: 5px 10px;
+    margin: 0 12px 8px;
+}
+QLineEdit#histSearch:focus { border-color: rgba(88,101,242,0.8); }
+QListWidget {
+    background: transparent;
+    border: none;
+    color: #e6edf3;
+    font-size: 12px;
+}
+QListWidget::item {
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+QListWidget::item:hover { background: rgba(255,255,255,0.06); }
+QListWidget::item:selected { background: rgba(88,101,242,0.2); }
+QPushButton#histClearBtn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: #8b949e;
+    font-size: 11px;
+    padding: 4px 12px;
+    margin: 8px 12px;
+}
+QPushButton#histClearBtn:hover { border-color: rgba(248,81,73,0.6); color: #f85149; }
+"""
+
+
+class HistoryPanel(QWidget):
+    """
+    Phase 3b — History side panel.
+    Floating overlay; shows recent browsing history.
+    Signal navigateTo(url) emitted when user clicks an entry.
+    """
+    navigateTo = Signal(str)
+
+    def __init__(self, history_bridge, parent=None):
+        super().__init__(parent)
+        self._bridge = history_bridge
+        self._all_entries = []
+        self.setStyleSheet(_HISTORY_PANEL_SS)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        from PySide6.QtWidgets import QListWidget, QListWidgetItem
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+
+        title = QLabel("History")
+        title.setObjectName("histPanelTitle")
+        root.addWidget(title)
+
+        self._search_input = QLineEdit()
+        self._search_input.setObjectName("histSearch")
+        self._search_input.setPlaceholderText("Filter history…")
+        self._search_input.textChanged.connect(self._apply_filter)
+        root.addWidget(self._search_input)
+
+        self._list = QListWidget()
+        self._list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        root.addWidget(self._list, stretch=1)
+
+        self._clear_btn = QPushButton("Clear history")
+        self._clear_btn.setObjectName("histClearBtn")
+        self._clear_btn.clicked.connect(self._clear_history)
+        root.addWidget(self._clear_btn)
+
+    def refresh(self):
+        try:
+            r = json.loads(self._bridge.list(json.dumps({
+                "scope": "sources_browser",
+                "limit": 200,
+            })))
+            self._all_entries = r.get("entries", []) if r.get("ok") else []
+        except Exception:
+            self._all_entries = []
+        self._apply_filter(self._search_input.text())
+
+    def _apply_filter(self, text):
+        self._list.clear()
+        q = text.strip().lower()
+        for e in self._all_entries:
+            if not e:
+                continue
+            url   = e.get("url", "")
+            title = e.get("title", "") or url
+            if q and q not in url.lower() and q not in title.lower():
+                continue
+            display = (title[:46] + "…") if len(title) > 46 else title
+            from PySide6.QtWidgets import QListWidgetItem
+            item = QListWidgetItem(display)
+            item.setData(Qt.ItemDataRole.UserRole, url)
+            item.setToolTip(url)
+            self._list.addItem(item)
+
+    def _on_item_double_clicked(self, item):
+        url = item.data(Qt.ItemDataRole.UserRole)
+        if url:
+            self.navigateTo.emit(url)
+
+    def _clear_history(self):
+        try:
+            self._bridge.clear(json.dumps({"scope": "sources_browser"}))
+        except Exception:
+            pass
+        self._all_entries = []
+        self._list.clear()
 
 
 def _fmt_size(b):
