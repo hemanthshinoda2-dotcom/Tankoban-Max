@@ -227,6 +227,8 @@ class TankobanWindow(QMainWindow):
     def __init__(self, app_section: str = "", dev_tools: bool = False):
         super().__init__()
 
+        self._app_section = app_section  # Stored for post-load routing
+
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(800, 600)
         self.resize(1200, 800)
@@ -258,6 +260,12 @@ class TankobanWindow(QMainWindow):
         self._browser_profile.setPersistentStoragePath(
             os.path.join(storage.data_path(""), "WebEngine_browser")
         )
+        # Allow home.html (file://) to load adjacent CSS/JS files
+        _bp_settings = self._browser_profile.settings()
+        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
 
         self._web_page = TankobanWebPage(self._profile, self)
         self._web_view = QWebEngineView()
@@ -347,6 +355,17 @@ class TankobanWindow(QMainWindow):
         else:
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
+        # Belt-and-suspenders: if launched in browser mode, activate the Qt browser
+        # from Python side in case JS routing fails (e.g. timing race with bridge shim).
+        if self._app_section == "browser":
+            QTimer.singleShot(400, self._python_activate_browser)
+
+    def _python_activate_browser(self):
+        """Force-activate BrowserWidget from Python side, bypassing JS routing."""
+        self.show_browser()
+        wtm = getattr(self._bridge, "webTabManager", None)
+        if wtm and not wtm._tabs:
+            wtm._create_tab_internal("", home=True)
 
     # --- Player widget switching ---
 

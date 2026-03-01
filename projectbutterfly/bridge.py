@@ -9240,9 +9240,17 @@ class WebTabManagerBridge(QObject):
         # Load URL or home page
         from PySide6.QtCore import QUrl
         import os as _os
+        from pathlib import Path as _Path
         if home:
-            home_path = _os.path.join(_os.path.dirname(__file__), "data", "home.html")
-            page.load(QUrl.fromLocalFile(home_path))
+            # Use setHtml() with file:// base so adjacent CSS/JS resolve correctly.
+            # More reliable than load(QUrl.fromLocalFile()) in restricted profiles.
+            _home = _Path(_os.path.dirname(__file__)) / "data" / "home.html"
+            if _home.exists():
+                _html = _home.read_text(encoding="utf-8")
+                _base = QUrl.fromLocalFile(str(_home))
+                page.setHtml(_html, _base)
+            else:
+                page.setHtml("<h1 style='color:#ccc;font-family:sans-serif'>Home</h1>", QUrl())
         elif url:
             page.load(QUrl(url))
 
@@ -9539,8 +9547,7 @@ class WebTabManagerBridge(QObject):
             bridge_root = self.parent()
             win = getattr(getattr(bridge_root, "window", None), "_win", None)
             if win and hasattr(win, "show_browser"):
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(0, win.show_browser)
+                win.show_browser()  # Direct call — no QTimer delay
             # Auto-create a home tab if the browser has no tabs yet
             if not self._tabs:
                 self._create_tab_internal("", home=True)
@@ -9937,6 +9944,10 @@ class BridgeRoot(QObject):
 
 BRIDGE_SHIM_JS = r"""
 (function() {
+  // SET SYNCHRONOUSLY — must be visible before QWebChannel async callback fires.
+  // Renderer JS checks this flag at load time to choose the Butterfly code path.
+  window.__tankoButterfly = true;
+
   // QWebChannel is loaded via qrc, bridge object is registered as 'bridge'
   new QWebChannel(qt.webChannelTransport, function(channel) {
     var b = channel.objects.bridge;
@@ -10037,9 +10048,6 @@ BRIDGE_SHIM_JS = r"""
         return function() {};
       };
     }
-
-    // Butterfly environment flag (lets renderer code detect Qt mode)
-    window.__tankoButterfly = true;
 
     // Build window.electronAPI matching the preload namespace shape
     window.electronAPI = {
