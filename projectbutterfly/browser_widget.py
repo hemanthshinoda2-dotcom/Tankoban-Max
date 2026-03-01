@@ -147,6 +147,50 @@ class BrowserChromeBridge(QObject):
         except Exception:
             return "dark"
 
+    @Slot()
+    def toggleTheme(self):
+        try:
+            import storage as _st
+            themes = ["dark", "light", "nord", "solarized", "gruvbox", "catppuccin"]
+            prefs = _st.read_json(_st.data_path("app_prefs.json")) or {}
+            current = prefs.get("appTheme", "dark")
+            idx = themes.index(current) if current in themes else 0
+            next_theme = themes[(idx + 1) % len(themes)]
+            prefs["appTheme"] = next_theme
+            _st.write_json(_st.data_path("app_prefs.json"), prefs)
+            self._bw._push_chrome("applyTheme", next_theme)
+            win = self._bw.window()
+            if win:
+                web_page = getattr(win, "_web_page", None)
+                if web_page:
+                    web_page.runJavaScript(
+                        "try { if(window.applyTheme) window.applyTheme('" + next_theme + "'); } catch(e) {}"
+                    )
+        except Exception:
+            pass
+
+    # ── Section switching ──
+    @Slot(str)
+    def switchSection(self, section):
+        win = self._bw.window()
+        if not win:
+            return
+        if hasattr(win, "show_web_view"):
+            win.show_web_view()
+        web_page = getattr(win, "_web_page", None)
+        if web_page and section in ("comics", "books", "videos"):
+            web_page.runJavaScript(
+                "try { if(window.setMode) window.setMode('" + section + "'); } catch(e) {}"
+            )
+
+    # ── App icon path ──
+    @Slot(result=str)
+    def getAppIconPath(self):
+        icon_path = Path(__file__).parent.parent / "build" / "icon.png"
+        if icon_path.exists():
+            return icon_path.as_uri()
+        return ""
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BrowserWidget
@@ -258,7 +302,7 @@ class BrowserWidget(QWidget):
     def _position_downloads_panel(self):
         if not self._downloads_panel:
             return
-        chrome_h = 76 if (self._chrome_view and self._chrome_view.isVisible()) else 0
+        chrome_h = 146 if (self._chrome_view and self._chrome_view.isVisible()) else 0
         find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
         w = 360
         h = self.height() - chrome_h - find_h
@@ -284,7 +328,7 @@ class BrowserWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── HTML Chrome view (tab strip 36px + nav bar 40px = 76px) ──
+        # ── HTML Chrome view (topbar 46px + TankoBrowser panel ~100px = 146px) ──
         chrome_profile = QWebEngineProfile("tankoweb-chrome", self)
         chrome_page = QWebEnginePage(chrome_profile, self)
         chrome_page.setBackgroundColor(QColor(10, 12, 20))   # prevent white flash
@@ -296,7 +340,7 @@ class BrowserWidget(QWidget):
 
         self._chrome_view = QWebEngineView()
         self._chrome_view.setPage(chrome_page)
-        self._chrome_view.setFixedHeight(76)
+        self._chrome_view.setFixedHeight(146)
         self._chrome_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         chrome_url = QUrl.fromLocalFile(
@@ -809,7 +853,7 @@ class BrowserWidget(QWidget):
     def _position_history_panel(self):
         if not self._history_panel:
             return
-        chrome_h = 76 if (self._chrome_view and self._chrome_view.isVisible()) else 0
+        chrome_h = 146 if (self._chrome_view and self._chrome_view.isVisible()) else 0
         find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
         w = 340
         h = self.height() - chrome_h - find_h

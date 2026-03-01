@@ -9,30 +9,65 @@
     button { font-family: inherit; cursor: pointer; }
     input  { font-family: inherit; }
 
-    /* ── Design tokens (dark default — overridden by applyTheme()) ── */
+    /* ── Design tokens — mapped from app globals ── */
     :root {
-      --bg1:        #0a0c14;          /* tab strip bg */
-      --bg2:        #07090f;          /* nav bar bg */
-      --bg3:        rgba(255,255,255,.04);  /* inactive tab bg */
-      --text:       rgba(245,245,245,.92);
-      --muted:      rgba(245,245,245,.46);
-      --accent-rgb: 199,167,107;      /* muted gold */
-      --accent2-rgb:156,163,175;      /* smoke grey */
-      --chr-rgb:    255,255,255;
-      --border:     rgba(255,255,255,.10);
-      --border2:    rgba(255,255,255,.16);
-      --btn-hover:  rgba(255,255,255,.08);
-      --btn-press:  rgba(255,255,255,.14);
-      --tab-hover:  rgba(255,255,255,.06);
-      --addr-bg:    rgba(255,255,255,.05);
-      --addr-focus: rgba(255,255,255,.08);
-      --radius:     10px;
+      /* App palette (overridden by applyTheme()) */
+      --bg:           #0a0c14;
+      --text:         rgba(245,245,245,.92);
+      --muted:        rgba(245,245,245,.46);
+      --panel:        rgba(255,255,255,.04);
+      --panel2:       rgba(255,255,255,.06);
+      --accent-rgb:   199,167,107;
+      --accent2-rgb:  156,163,175;
+      --chrome-rgb:   255,255,255;
+      --vx-border:    rgba(255,255,255,.10);
+      --vx-border2:   rgba(255,255,255,.16);
+      --vx-radius:    14px;
+      --btn-hover:    rgba(255,255,255,.08);
+      --btn-press:    rgba(255,255,255,.14);
+
+      /* Overhaul gradient tokens (used by .bgFx) */
+      --vx-bg0:       #050505;
+      --vx-bg1:       #0a0a0a;
+      --vx-accent-rgb:199,167,107;
+      --vx-accent2-rgb:156,163,175;
+
+      /* Browser tokens — 1:1 from web-browser.css */
+      --wb-bg:            var(--bg);
+      --wb-text:          var(--text);
+      --wb-muted:         var(--muted);
+      --wb-surface:       var(--panel);
+      --wb-surface-raised:var(--panel2);
+      --wb-border:        var(--vx-border);
+      --wb-border-subtle: var(--vx-border2);
+      --wb-accent:        rgb(var(--accent-rgb));
+      --wb-accent-dim:    rgba(var(--accent-rgb), 0.30);
+      --wb-hover:         rgba(var(--accent-rgb), 0.08);
+      --wb-active:        rgba(var(--accent-rgb), 0.12);
+      --wb-disabled:      var(--muted);
+
+      /* Typography tokens (from overhaul.css) */
+      --tx-size-xs:   12px;
+      --tx-size-sm:   13px;
+      --tx-w-ui:      800;
+      --tx-w-head:    800;
+      --tx-w-title:   900;
+      --tx-track-wide:0.04em;
+      --tx-lh-tight:  1.25;
+      --lib-radius-sm:10px;
     }
 
     /* ── Root layout ── */
     html, body {
-      width: 100%; height: 76px; overflow: hidden;
-      background: var(--bg1);
+      width: 100%; height: 146px; overflow: hidden;
+      /* Gradient background — 1:1 from overhaul.css .bgFx
+         This makes the chrome blend with the app's gradient instead of
+         looking like a solid bar on top of the viewport. */
+      background:
+        radial-gradient(1200px 800px at 15% 10%, rgba(var(--vx-accent2-rgb), .22), transparent 60%),
+        radial-gradient(900px 700px at 85% 20%, rgba(var(--vx-accent-rgb), .18), transparent 55%),
+        radial-gradient(1100px 900px at 50% 85%, rgba(251,113,133,.12), transparent 60%),
+        linear-gradient(180deg, var(--vx-bg0) 0%, var(--vx-bg1) 100%);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
                    Roboto, Helvetica, Arial, sans-serif;
       font-size: 13px;
@@ -41,187 +76,273 @@
       user-select: none;
     }
 
-    /* ── Tab strip row (36px) ── */
-    #tabStrip {
-      display: flex;
-      align-items: stretch;
-      height: 36px;
-      background: var(--bg1);
-      border-bottom: 1px solid var(--border);
-      padding: 0 4px;
-      gap: 0;
-    }
-
-    /* ── Nav bar row (40px) ── */
-    #navBar {
+    /* ═══════════════════════════════════════════
+       Topbar (46px) — app topbar replica
+       ═══════════════════════════════════════════ */
+    #topbar {
       display: flex;
       align-items: center;
-      height: 40px;
-      background: var(--bg2);
-      border-bottom: 1px solid var(--border);
-      padding: 0 8px;
-      gap: 3px;
+      height: 46px;
+      padding: 6px 12px;
+      background: transparent;
+      border-bottom: 1px solid rgba(var(--chrome-rgb),.06);
+      -webkit-app-region: drag;
     }
+    #topbar button, #topbar .modeSwitch, #topbar .winControls {
+      -webkit-app-region: no-drag;
+    }
+    .tbLeft, .tbRight { display: flex; align-items: center; gap: 4px; }
+    .tbCenter { flex: 1; display: flex; justify-content: center; }
 
-    /* ── Shared button base ── */
-    .iconBtn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 30px;
-      height: 30px;
-      flex-shrink: 0;
-      border: 1px solid rgba(var(--chr-rgb), .12);
-      border-radius: var(--radius);
-      background: rgba(var(--chr-rgb), .06);
+    /* Topbar icon buttons — from overhaul.css .iconBtn */
+    .tbIconBtn {
+      width: 30px; height: 30px; border-radius: 12px;
+      border: 1px solid rgba(var(--chrome-rgb),.12);
+      background: rgba(var(--chrome-rgb),.06);
       color: var(--text);
-      transition:
-        background-color .16s ease,
-        border-color .16s ease,
-        box-shadow .16s ease,
-        transform .10s ease;
-    }
-    .iconBtn:hover  { background: var(--btn-hover); box-shadow: 0 12px 26px -18px rgba(0,0,0,.85); }
-    .iconBtn:active { transform: translateY(1px) scale(.98); }
-    .iconBtn:disabled, .iconBtn[disabled] {
-      color: var(--muted); pointer-events: none; border-color: transparent;
-      background: transparent;
-    }
-
-    /* ── Home button (tab strip, slightly taller to fill row) ── */
-    #homeBtn {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 34px; height: 34px; flex-shrink: 0; align-self: center;
-      border: 1px solid transparent;
-      border-radius: var(--radius);
-      background: transparent;
-      color: var(--muted);
-      font-size: 14px;
-      transition: background-color .16s ease, color .16s ease;
+      cursor: pointer; flex-shrink: 0;
+      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease, transform .10s ease;
     }
-    #homeBtn:hover { background: var(--btn-hover); color: var(--text); }
-    #homeBtn:active { background: var(--btn-press); }
+    .tbIconBtn:hover { background: var(--btn-hover); box-shadow: 0 12px 26px -18px rgba(0,0,0,.85); }
+    .tbIconBtn:active { transform: translateY(1px) scale(.98); }
+    .tbIconBtn:disabled { color: var(--muted); pointer-events: none; border-color: transparent; background: transparent; }
 
-    /* ── Tab list (scrollable, flex-row) ── */
-    #tabList {
-      display: flex;
-      align-items: flex-end;
-      flex: 1;
-      min-width: 0;
-      height: 100%;
-      padding: 4px 2px 0;
-      gap: 2px;
-      overflow-x: hidden;
+    /* Mode switch — from overhaul.css .modeSwitch */
+    .modeSwitch {
+      background: rgba(var(--chrome-rgb),.06);
+      border: 1px solid rgba(var(--chrome-rgb),.10);
+      border-radius: 999px; padding: 2px; display: flex; gap: 2px;
     }
-
-    /* ── Individual tab ── */
-    .tab {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      height: 28px;
-      padding: 0 8px 0 10px;
-      min-width: 80px;
-      max-width: 200px;
-      flex-shrink: 1;
-      border: 1px solid var(--border);
-      border-bottom: none;
-      border-top: 2px solid transparent;
-      border-radius: 8px 8px 0 0;
-      background: var(--bg3);
-      color: var(--muted);
-      font-size: 12px;
+    .modeBtn {
+      border-radius: 999px; border: 1px solid transparent;
+      background: transparent; color: rgba(var(--chrome-rgb),.78);
+      padding: 7px 12px; font-size: 12px; font-weight: 800;
       cursor: pointer;
-      overflow: hidden;
-      white-space: nowrap;
-      transition: background-color .12s ease, color .12s ease, border-top-color .12s ease;
-      position: relative;
+      transition: background-color .16s ease, color .16s ease, border-color .16s ease;
     }
-    .tab:hover { background: var(--tab-hover); color: var(--text); }
-    .tab.active {
-      background: var(--bg2);
-      color: var(--text);
-      border-top: 2px solid rgba(var(--accent-rgb), .85);
-      border-color: var(--border);
-      border-bottom: none;
+    .modeBtn:hover { background: rgba(var(--chrome-rgb),.06); }
+    .modeBtn.active {
+      background: linear-gradient(135deg, rgba(var(--accent2-rgb),.30), rgba(var(--accent-rgb),.22));
+      border-color: rgba(var(--accent-rgb),.40);
+      color: rgba(var(--chrome-rgb),.94);
+      box-shadow: 0 10px 26px -18px rgba(var(--accent-rgb),.55);
     }
-    .tab-favicon {
-      width: 14px; height: 14px; flex-shrink: 0;
-      border-radius: 2px; object-fit: contain;
-    }
-    .tab-title {
-      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      font-size: 12px;
-    }
-    .tab-loading .tab-title::before {
-      content: "↻ ";
-      animation: spin 1s linear infinite;
-      display: inline-block;
-    }
-    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-    .tab-close {
-      display: none; flex-shrink: 0;
-      width: 16px; height: 16px; border-radius: 4px;
-      border: none; background: transparent; color: var(--muted);
-      font-size: 12px; padding: 0; cursor: pointer; align-items: center; justify-content: center;
-      transition: background-color .12s ease, color .12s ease;
-    }
-    .tab:hover .tab-close, .tab.active .tab-close { display: inline-flex; }
-    .tab-close:hover { background: rgba(248,81,73,.25); color: #f85149; }
 
-    /* ── New tab button ── */
-    #newTabBtn {
+    /* Ghost buttons — from overhaul.css .btn-ghost */
+    .tbGhost {
+      border-radius: 999px; border: 1px solid rgba(var(--chrome-rgb),.14);
+      background: rgba(var(--chrome-rgb),.06); color: var(--text);
+      padding: 7px 10px; font-size: 12px; font-weight: 800;
+      cursor: default;
+      transition: background-color .16s ease;
+    }
+
+    /* Window controls — from overhaul.css .winControls */
+    .winControls { display: flex; align-items: center; gap: 0; margin-left: 6px; }
+    .winCtrl {
+      appearance: none; -webkit-app-region: no-drag;
+      width: 46px; height: 30px; border: none;
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; flex-shrink: 0; align-self: center;
-      border: 1px solid transparent; border-radius: 8px;
-      background: transparent; color: var(--muted); font-size: 18px;
-      transition: background-color .16s ease, color .16s ease;
-    }
-    #newTabBtn:hover { background: var(--btn-hover); color: var(--text); }
-    #newTabBtn:active { background: var(--btn-press); }
-
-    /* ── Tab strip spacer ── */
-    .ts-spacer { flex: 1; }
-
-    /* ── Window controls ── */
-    #wcGroup {
-      display: flex;
-      align-items: stretch;
-      height: 100%;
-    }
-    .wc {
-      display: flex; align-items: center; justify-content: center;
-      width: 46px; height: 100%;
-      border: none; border-radius: 0;
       background: transparent; color: var(--muted);
-      font-size: 13px; font-family: "Segoe UI", system-ui, sans-serif;
-      transition: background-color .12s ease, color .12s ease;
+      font-size: 10px; cursor: pointer; border-radius: 0; padding: 0;
+      transition: background-color .12s ease;
     }
-    .wc:hover { background: rgba(var(--chr-rgb), .08); color: var(--text); }
-    .wc:active { background: rgba(var(--chr-rgb), .14); }
-    #wcClose:hover { background: #c42b1c !important; color: #fff !important; }
+    .winCtrl:hover { background: rgba(var(--chrome-rgb),.10); }
+    .winCtrl:active { background: rgba(var(--chrome-rgb),.20); }
+    .winCtrl--close:hover { background: #e81123; color: #fff; }
+    .winCtrl--close:active { background: #f1707a; color: #fff; }
 
-    /* ── Address bar ── */
-    #addrBar {
-      flex: 1;
-      height: 30px;
-      padding: 0 14px;
-      border: 1px solid rgba(var(--chr-rgb), .12);
-      border-radius: 18px;
-      background: var(--addr-bg);
+    /* Theme icon toggle */
+    .themeIcon--moon { display: none; }
+    [data-theme="light"] .themeIcon--sun { display: none; }
+    [data-theme="light"] .themeIcon--moon { display: inline; }
+
+    /* ═══════════════════════════════════════════
+       App design system classes — copied from overhaul.css
+       (these are what make the browser feel like the app's skin)
+       ═══════════════════════════════════════════ */
+
+    /* .btn — accent-gradient primary button */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 999px;
+      border: 1px solid rgba(var(--accent-rgb), .35);
+      background: linear-gradient(135deg, rgba(var(--accent2-rgb), .18), rgba(var(--accent-rgb), .12));
+      box-shadow: 0 12px 30px -22px rgba(var(--accent-rgb), .45);
       color: var(--text);
-      font-size: 12px;
-      outline: none;
-      caret-color: rgba(var(--accent-rgb), .9);
-      transition: background-color .16s ease, border-color .16s ease, box-shadow .16s ease;
+      font-family: inherit; font-weight: 800; letter-spacing: 0.005em;
+      padding: 10px 13px;
+      cursor: pointer;
+      transition: box-shadow .16s ease;
     }
-    #addrBar::placeholder { color: var(--muted); }
-    #addrBar:focus {
-      background: var(--addr-focus);
+    .btn:hover { box-shadow: 0 14px 34px -22px rgba(var(--accent-rgb), .55); }
+
+    /* .btn-ghost — subtle ghost button */
+    .btn-ghost {
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 999px;
+      border: 1px solid rgba(var(--chrome-rgb),.14);
+      background: rgba(var(--chrome-rgb),.06);
+      color: var(--text);
+      font-family: inherit; font-weight: 800; letter-spacing: 0.005em;
+      padding: 10px 13px;
+      cursor: pointer;
+      transition: background-color .16s ease;
+    }
+    .btn-ghost:hover { background: rgba(var(--chrome-rgb),.10); }
+
+    /* .btn-sm — smaller variant */
+    .btn-sm { font-size: 12px; padding: 7px 10px; }
+
+    /* .search — app input field */
+    .search {
+      border-radius: 12px;
+      border: 1px solid rgba(var(--chrome-rgb),.12);
+      background: rgba(var(--chrome-rgb),.05);
+      color: rgba(var(--chrome-rgb),.92);
+      box-shadow: 0 10px 24px -20px rgba(0,0,0,.9);
+      font-family: inherit; font-size: 13px;
+      padding: 8px 14px;
+      outline: none;
+      transition: border-color .16s ease, background-color .16s ease;
+    }
+    .search::placeholder { color: rgba(var(--chrome-rgb),.40); }
+    .search:focus {
       border-color: rgba(var(--accent-rgb), .50);
+      background: rgba(var(--chrome-rgb),.08);
       box-shadow: 0 0 0 2px rgba(var(--accent-rgb), .14);
     }
-    #addrBar::selection { background: rgba(var(--accent-rgb), .30); }
+
+    /* .panel — in the browser chrome, transparent (no box);
+       the gradient background shows through, matching Electron */
+    .panel {
+      background: transparent;
+      border: none;
+      box-shadow: none;
+      padding: 0;
+    }
+
+    /* .panelTitleRow + .panelTitle */
+    .panelTitleRow {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .panelTitle {
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.25;
+      color: rgba(var(--chrome-rgb),.84);
+      margin: 0;
+    }
+
+    /* ═══════════════════════════════════════════
+       TankoBrowser panel — 1:1 from web-browser.css
+       ═══════════════════════════════════════════ */
+
+    .sourcesBrowserPanel { margin: 0; padding: 8px 14px; }
+
+    /* Tab strip */
+    .sourcesBrowserTabStrip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .sourcesBrowserTabList {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+    }
+
+    /* Floating chip tabs — 1:1 from web-browser.css */
+    .sourcesBrowserTab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 210px;
+      min-width: 80px;
+      padding: 4px 8px;
+      border: 1px solid var(--wb-border-subtle);
+      border-radius: 10px;
+      background: rgba(20, 27, 36, 0.85);
+      cursor: pointer;
+      color: var(--wb-muted);
+      transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+    }
+    .sourcesBrowserTab:hover {
+      background: var(--wb-hover);
+      border-color: rgba(var(--accent-rgb), 0.2);
+      color: var(--wb-text);
+    }
+    .sourcesBrowserTab.active {
+      background: rgba(var(--accent-rgb), 0.12);
+      border-color: rgba(var(--accent-rgb), 0.35);
+      color: var(--wb-text);
+    }
+
+    .sourcesBrowserTabTitle {
+      flex: 1 1 auto;
+      min-width: 0;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sourcesBrowserTabClose {
+      width: 18px; height: 18px;
+      border: none; border-radius: 999px;
+      background: transparent; color: inherit;
+      cursor: pointer; line-height: 1; padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity .12s ease, background-color .12s ease;
+    }
+    .sourcesBrowserTab:hover .sourcesBrowserTabClose,
+    .sourcesBrowserTab.active .sourcesBrowserTabClose { opacity: 1; }
+    .sourcesBrowserTabClose:hover { background: rgba(var(--accent-rgb), 0.18); }
+
+    .sourcesBrowserNewTabBtn {
+      flex: 0 0 auto;
+      width: 30px; min-width: 30px;
+      padding: 0; font-weight: 700;
+    }
+
+    /* Toolbar */
+    .sourcesBrowserToolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: nowrap;
+    }
+
+    .sourcesBrowserIconBtn {
+      width: 32px; min-width: 32px;
+      padding: 0; text-align: center;
+      line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+
+    /* Omni wrap — 1:1 from web-browser.css */
+    .sourcesBrowserOmniWrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    /* URL input (uses .search base + full-width) */
+    #sourcesBrowserUrlInput {
+      width: 100%;
+      min-width: 0;
+    }
 
     /* ── Scrollbar (slim) ── */
     ::-webkit-scrollbar { width: 0; height: 0; }
@@ -242,56 +363,90 @@
   <symbol id="ic-download"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
   <symbol id="ic-plus"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
   <symbol id="ic-home"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></symbol>
+  <symbol id="ic-menu"        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></symbol>
 </svg>
 
-<!-- Tab strip row -->
-<div id="tabStrip">
-  <button id="homeBtn" title="Home">
-    <svg width="16" height="16"><use href="#ic-home"/></svg>
-  </button>
+<!-- ═══ Topbar (app topbar replica) ═══ -->
+<div id="topbar">
+  <div class="tbLeft">
+    <button class="tbIconBtn" id="tbMenuBtn" title="Menu" disabled>
+      <svg width="15" height="15"><use href="#ic-menu"/></svg>
+    </button>
+    <button class="tbIconBtn" id="tbBackBtn" title="Back" disabled>
+      <svg width="15" height="15"><use href="#ic-arrow-left"/></svg>
+    </button>
+    <button class="tbIconBtn" id="tbFwdBtn" title="Forward" disabled>
+      <svg width="15" height="15"><use href="#ic-arrow-right"/></svg>
+    </button>
+    <img id="tbAppIcon" width="22" height="22" style="margin-left:4px;border-radius:4px;" onerror="this.style.display='none'">
+  </div>
 
-  <div id="tabList"></div>
+  <div class="tbCenter">
+    <div class="modeSwitch">
+      <button class="modeBtn" data-section="comics">Comics</button>
+      <button class="modeBtn" data-section="books">Books</button>
+      <button class="modeBtn" data-section="videos">Videos</button>
+      <button class="modeBtn active" data-section="web">Web</button>
+    </div>
+  </div>
 
-  <button id="newTabBtn" title="New tab (Ctrl+T)">
-    <svg width="16" height="16"><use href="#ic-plus"/></svg>
-  </button>
-
-  <div class="ts-spacer"></div>
-
-  <div id="wcGroup">
-    <button class="wc" id="wcMin"   title="Minimize">&#x2500;</button>
-    <button class="wc" id="wcMax"   title="Maximize / Restore">&#x25A1;</button>
-    <button class="wc" id="wcClose" title="Close">&#x00D7;</button>
+  <div class="tbRight">
+    <button class="tbGhost" disabled>Tiles: Medium</button>
+    <button class="tbIconBtn" id="tbThemeBtn" title="Toggle theme">
+      <svg class="themeIcon themeIcon--sun" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M8 11a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 1a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/></svg>
+      <svg class="themeIcon themeIcon--moon" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
+    </button>
+    <button class="tbGhost" disabled>Hidden</button>
+    <div class="winControls">
+      <button class="winCtrl" id="tbWcMin" title="Minimize">
+        <svg viewBox="0 0 10 1" width="10" height="1"><rect width="10" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="winCtrl" id="tbWcMax" title="Maximize">
+        <svg viewBox="0 0 10 10" width="10" height="10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+      </button>
+      <button class="winCtrl winCtrl--close" id="tbWcClose" title="Close">
+        <svg viewBox="0 0 10 10" width="10" height="10"><path d="M1 1L9 9M9 1L1 9" stroke="currentColor" stroke-width="1.2"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 
-<!-- Navigation bar row -->
-<div id="navBar">
-  <button class="iconBtn" id="backBtn"   title="Back (Alt+Left)" disabled>
-    <svg width="15" height="15"><use href="#ic-arrow-left"/></svg>
-  </button>
-  <button class="iconBtn" id="fwdBtn"    title="Forward (Alt+Right)" disabled>
-    <svg width="15" height="15"><use href="#ic-arrow-right"/></svg>
-  </button>
-  <button class="iconBtn" id="reloadBtn" title="Reload (F5)">
-    <svg width="15" height="15" id="reloadIcon"><use href="#ic-rotate-cw"/></svg>
-  </button>
+<!-- ═══ TankoBrowser panel — 1:1 from Electron's sourcesBrowserPanel ═══ -->
+<div class="panel sourcesBrowserPanel" id="sourcesBrowserPanel">
+  <div class="panelTitleRow">
+    <div class="panelTitle">TankoBrowser</div>
+  </div>
 
-  <div style="width:6px;flex-shrink:0;"></div>
+  <!-- Tab strip — floating chips -->
+  <div class="sourcesBrowserTabStrip">
+    <div id="sourcesBrowserTabList" class="sourcesBrowserTabList"></div>
+    <button id="sourcesBrowserNewTabBtn" class="btn btn-ghost btn-sm sourcesBrowserNewTabBtn" type="button" title="New tab (Ctrl+T)" aria-label="New tab">+</button>
+  </div>
 
-  <input id="addrBar" type="text" placeholder="Search or enter address" spellcheck="false" autocomplete="off">
-
-  <div style="width:4px;flex-shrink:0;"></div>
-
-  <button class="iconBtn" id="bookmarkBtn" title="Bookmark">
-    <svg width="15" height="15" id="bookmarkIcon"><use href="#ic-bookmark"/></svg>
-  </button>
-  <button class="iconBtn" id="histBtn"     title="History">
-    <svg width="15" height="15"><use href="#ic-clock"/></svg>
-  </button>
-  <button class="iconBtn" id="dlBtn"       title="Downloads">
-    <svg width="15" height="15"><use href="#ic-download"/></svg>
-  </button>
+  <!-- Toolbar — back/fwd/reload, URL bar, bookmark/history -->
+  <div class="sourcesBrowserToolbar">
+    <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back (Alt+Left)" aria-label="Back" disabled>
+      <svg width="14" height="14"><use href="#ic-arrow-left"/></svg>
+    </button>
+    <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward (Alt+Right)" aria-label="Forward" disabled>
+      <svg width="14" height="14"><use href="#ic-arrow-right"/></svg>
+    </button>
+    <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload (F5)" aria-label="Reload">
+      <svg width="14" height="14" id="reloadIcon"><use href="#ic-rotate-cw"/></svg>
+    </button>
+    <div class="sourcesBrowserOmniWrap">
+      <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search or enter address" spellcheck="false" autocomplete="off">
+    </div>
+    <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm" type="button" title="Bookmark">
+      <svg width="14" height="14" id="bookmarkIcon"><use href="#ic-bookmark"/></svg>
+    </button>
+    <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm" type="button" title="History">
+      <svg width="14" height="14"><use href="#ic-clock"/></svg>
+    </button>
+    <button id="sourcesBrowserDownloadsBtn" class="btn btn-ghost btn-sm" type="button" title="Downloads">
+      <svg width="14" height="14"><use href="#ic-download"/></svg>
+    </button>
+  </div>
 </div>
 
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
@@ -310,83 +465,78 @@ var _cb = null;  // BrowserChromeBridge (set when QWebChannel initialises)
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 var THEME_VARS = {
-  dark:       { bg1:'#0a0c14', bg2:'#07090f', bg3:'rgba(255,255,255,.04)',
+  dark:       { bg:'#0a0c14', bg0:'#050505', bg1:'#0a0a0a',
                 text:'rgba(245,245,245,.92)', muted:'rgba(245,245,245,.46)',
-                accentRgb:'199,167,107', accent2Rgb:'156,163,175',
-                border:'rgba(255,255,255,.10)', btnHover:'rgba(255,255,255,.08)',
-                btnPress:'rgba(255,255,255,.14)', tabHover:'rgba(255,255,255,.06)',
-                addrBg:'rgba(255,255,255,.05)', addrFocus:'rgba(255,255,255,.08)' },
-  light:      { bg1:'#e8e8ee', bg2:'#dcdce4', bg3:'rgba(0,0,0,.04)',
+                accentRgb:'199,167,107', accent2Rgb:'156,163,175', chromeRgb:'255,255,255',
+                border:'rgba(255,255,255,.10)', border2:'rgba(255,255,255,.16)',
+                btnHover:'rgba(255,255,255,.08)', btnPress:'rgba(255,255,255,.14)' },
+  light:      { bg:'#e8e8ee', bg0:'#e0e0e6', bg1:'#e8e8ee',
                 text:'rgba(20,20,24,.90)', muted:'rgba(20,20,24,.50)',
-                accentRgb:'88,101,242', accent2Rgb:'100,116,139',
-                border:'rgba(0,0,0,.10)', btnHover:'rgba(0,0,0,.06)',
-                btnPress:'rgba(0,0,0,.10)', tabHover:'rgba(0,0,0,.04)',
-                addrBg:'rgba(0,0,0,.04)', addrFocus:'rgba(0,0,0,.07)' },
-  nord:       { bg1:'#2e3440', bg2:'#252932', bg3:'rgba(255,255,255,.05)',
+                accentRgb:'88,101,242', accent2Rgb:'100,116,139', chromeRgb:'0,0,0',
+                border:'rgba(0,0,0,.10)', border2:'rgba(0,0,0,.16)',
+                btnHover:'rgba(0,0,0,.06)', btnPress:'rgba(0,0,0,.10)' },
+  nord:       { bg:'#2e3440', bg0:'#272c36', bg1:'#2e3440',
                 text:'#eceff4', muted:'#9099aa',
-                accentRgb:'94,129,172', accent2Rgb:'136,192,208',
-                border:'rgba(255,255,255,.10)', btnHover:'rgba(255,255,255,.08)',
-                btnPress:'rgba(255,255,255,.13)', tabHover:'rgba(255,255,255,.06)',
-                addrBg:'rgba(255,255,255,.06)', addrFocus:'rgba(255,255,255,.10)' },
-  solarized:  { bg1:'#002b36', bg2:'#00222c', bg3:'rgba(255,255,255,.04)',
+                accentRgb:'94,129,172', accent2Rgb:'136,192,208', chromeRgb:'255,255,255',
+                border:'rgba(255,255,255,.10)', border2:'rgba(255,255,255,.16)',
+                btnHover:'rgba(255,255,255,.08)', btnPress:'rgba(255,255,255,.13)' },
+  solarized:  { bg:'#002b36', bg0:'#001f28', bg1:'#002b36',
                 text:'#93a1a1', muted:'#586e75',
-                accentRgb:'38,139,210', accent2Rgb:'42,161,152',
-                border:'rgba(255,255,255,.08)', btnHover:'rgba(255,255,255,.06)',
-                btnPress:'rgba(255,255,255,.10)', tabHover:'rgba(255,255,255,.05)',
-                addrBg:'rgba(255,255,255,.05)', addrFocus:'rgba(255,255,255,.08)' },
-  gruvbox:    { bg1:'#282828', bg2:'#1d2021', bg3:'rgba(255,255,255,.04)',
+                accentRgb:'38,139,210', accent2Rgb:'42,161,152', chromeRgb:'255,255,255',
+                border:'rgba(255,255,255,.08)', border2:'rgba(255,255,255,.12)',
+                btnHover:'rgba(255,255,255,.06)', btnPress:'rgba(255,255,255,.10)' },
+  gruvbox:    { bg:'#282828', bg0:'#1d2021', bg1:'#282828',
                 text:'#ebdbb2', muted:'#928374',
-                accentRgb:'215,153,33', accent2Rgb:'184,187,38',
-                border:'rgba(255,255,255,.10)', btnHover:'rgba(255,255,255,.07)',
-                btnPress:'rgba(255,255,255,.12)', tabHover:'rgba(255,255,255,.05)',
-                addrBg:'rgba(255,255,255,.05)', addrFocus:'rgba(255,255,255,.09)' },
-  catppuccin: { bg1:'#1e1e2e', bg2:'#181825', bg3:'rgba(255,255,255,.04)',
+                accentRgb:'215,153,33', accent2Rgb:'184,187,38', chromeRgb:'255,255,255',
+                border:'rgba(255,255,255,.10)', border2:'rgba(255,255,255,.16)',
+                btnHover:'rgba(255,255,255,.07)', btnPress:'rgba(255,255,255,.12)' },
+  catppuccin: { bg:'#1e1e2e', bg0:'#181825', bg1:'#1e1e2e',
                 text:'#cdd6f4', muted:'#a6adc8',
-                accentRgb:'203,166,247', accent2Rgb:'137,180,250',
-                border:'rgba(255,255,255,.09)', btnHover:'rgba(255,255,255,.07)',
-                btnPress:'rgba(255,255,255,.11)', tabHover:'rgba(255,255,255,.05)',
-                addrBg:'rgba(255,255,255,.05)', addrFocus:'rgba(255,255,255,.08)' },
+                accentRgb:'203,166,247', accent2Rgb:'137,180,250', chromeRgb:'255,255,255',
+                border:'rgba(255,255,255,.09)', border2:'rgba(255,255,255,.14)',
+                btnHover:'rgba(255,255,255,.07)', btnPress:'rgba(255,255,255,.11)' },
 };
 
 function applyTheme(name) {
   var v = THEME_VARS[name] || THEME_VARS['dark'];
   var r = document.documentElement;
-  r.style.setProperty('--bg1',       v.bg1);
-  r.style.setProperty('--bg2',       v.bg2);
-  r.style.setProperty('--bg3',       v.bg3);
-  r.style.setProperty('--text',      v.text);
-  r.style.setProperty('--muted',     v.muted);
+  r.style.setProperty('--bg',          v.bg);
+  r.style.setProperty('--vx-bg0',      v.bg0);
+  r.style.setProperty('--vx-bg1',      v.bg1);
+  r.style.setProperty('--text',        v.text);
+  r.style.setProperty('--muted',       v.muted);
   r.style.setProperty('--accent-rgb',  v.accentRgb);
   r.style.setProperty('--accent2-rgb', v.accent2Rgb);
-  r.style.setProperty('--border',    v.border);
-  r.style.setProperty('--btn-hover', v.btnHover);
-  r.style.setProperty('--btn-press', v.btnPress);
-  r.style.setProperty('--tab-hover', v.tabHover);
-  r.style.setProperty('--addr-bg',   v.addrBg);
-  r.style.setProperty('--addr-focus',v.addrFocus);
+  r.style.setProperty('--vx-accent-rgb', v.accentRgb);
+  r.style.setProperty('--vx-accent2-rgb', v.accent2Rgb);
+  r.style.setProperty('--chrome-rgb',  v.chromeRgb);
+  r.style.setProperty('--vx-border',   v.border);
+  r.style.setProperty('--vx-border2',  v.border2);
+  r.style.setProperty('--btn-hover',   v.btnHover);
+  r.style.setProperty('--btn-press',   v.btnPress);
   document.body.dataset.theme = name;
 }
 
-// ── Tab rendering ──────────────────────────────────────────────────────────
+// ── Tab rendering (floating chips — 1:1 from Electron) ────────────────────
 function renderTabs(tabs) {
-  var list = document.getElementById('tabList');
+  var list = document.getElementById('sourcesBrowserTabList');
   var scrollLeft = list.scrollLeft;
   list.innerHTML = '';
   tabs.forEach(function(t) {
     var el = document.createElement('div');
-    el.className = 'tab' + (t.id === _state.activeId ? ' active' : '') +
-                   (t.loading ? ' tab-loading' : '');
+    el.className = 'sourcesBrowserTab' + (t.id === _state.activeId ? ' active' : '');
     el.dataset.id = t.id;
     el.title = t.title || t.url || 'New Tab';
 
     var titleEl = document.createElement('span');
-    titleEl.className = 'tab-title';
+    titleEl.className = 'sourcesBrowserTabTitle';
     titleEl.textContent = t.title || 'New Tab';
+    if (t.loading) titleEl.textContent = '\u21bb ' + titleEl.textContent;
     el.appendChild(titleEl);
 
     var closeEl = document.createElement('button');
-    closeEl.className = 'tab-close';
-    closeEl.innerHTML = '<svg width="10" height="10"><use href="#ic-x"/></svg>';
+    closeEl.className = 'sourcesBrowserTabClose';
+    closeEl.innerHTML = '\u00d7';
     closeEl.title = 'Close tab';
     closeEl.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -397,7 +547,6 @@ function renderTabs(tabs) {
     el.addEventListener('click', function() {
       if (_cb && t.id !== _state.activeId) _cb.switchTab(t.id);
     });
-    // Middle-click to close
     el.addEventListener('auxclick', function(e) {
       if (e.button === 1 && _cb) _cb.closeTab(t.id);
     });
@@ -412,20 +561,19 @@ function _getActiveTab() {
 }
 
 function _setAddrBar(url) {
-  var el = document.getElementById('addrBar');
+  var el = document.getElementById('sourcesBrowserUrlInput');
   if (document.activeElement !== el) el.value = url || '';
 }
 
 function _syncNavButtons(tab) {
-  var back   = document.getElementById('backBtn');
-  var fwd    = document.getElementById('fwdBtn');
-  var reload = document.getElementById('reloadBtn');
+  var back   = document.getElementById('sourcesBrowserBackBtn');
+  var fwd    = document.getElementById('sourcesBrowserForwardBtn');
+  var reload = document.getElementById('sourcesBrowserReloadBtn');
   var loading = tab ? tab.loading : false;
   if (tab && tab.canBack) back.removeAttribute('disabled');
   else back.setAttribute('disabled', '');
   if (tab && tab.canFwd) fwd.removeAttribute('disabled');
   else fwd.setAttribute('disabled', '');
-  // Toggle reload icon: stop square when loading, rotate-cw otherwise
   document.getElementById('reloadIcon').innerHTML =
     loading ? '<use href="#ic-square"/>' : '<use href="#ic-rotate-cw"/>';
   reload.title = loading ? 'Stop loading (Esc)' : 'Reload (F5)';
@@ -436,8 +584,8 @@ function _syncBookmarkBtn() {
   icon.innerHTML = _state.bookmarked
     ? '<use href="#ic-bookmark-fill"/>'
     : '<use href="#ic-bookmark"/>';
-  var btn = document.getElementById('bookmarkBtn');
-  btn.style.color = _state.bookmarked ? 'rgba(var(--accent-rgb), 1)' : '';
+  var btn = document.getElementById('sourcesBrowserBookmarkBtn');
+  btn.style.color = _state.bookmarked ? 'rgb(var(--accent-rgb))' : '';
 }
 
 // ── Public API (called by Python via runJavaScript) ────────────────────────
@@ -456,7 +604,6 @@ window._chrome = {
     var active = _getActiveTab();
     _setAddrBar(active ? active.url : '');
     _syncNavButtons(active);
-    // Reset bookmark icon until Python confirms
     _state.bookmarkUrl = active ? active.url : null;
     _syncBookmarkBtn();
   },
@@ -470,13 +617,10 @@ window._chrome = {
     if (fields.canBack !== undefined) tab.canBack = fields.canBack;
     if (fields.canFwd  !== undefined) tab.canFwd  = fields.canFwd;
 
-    // Re-render tab element efficiently
-    var tabEl = document.querySelector('.tab[data-id="' + id + '"]');
+    var tabEl = document.querySelector('.sourcesBrowserTab[data-id="' + id + '"]');
     if (tabEl) {
-      var titleEl = tabEl.querySelector('.tab-title');
-      if (titleEl) titleEl.textContent = tab.title || 'New Tab';
-      if (tab.loading) tabEl.classList.add('tab-loading');
-      else tabEl.classList.remove('tab-loading');
+      var titleEl = tabEl.querySelector('.sourcesBrowserTabTitle');
+      if (titleEl) titleEl.textContent = (tab.loading ? '\u21bb ' : '') + (tab.title || 'New Tab');
     }
 
     if (id === _state.activeId) {
@@ -496,11 +640,14 @@ window._chrome = {
   },
 
   setMaximized: function(maximized) {
-    document.getElementById('wcMax').textContent = maximized ? '\u2750' : '\u25A1';
+    var el = document.getElementById('tbWcMax');
+    if (el) el.innerHTML = maximized
+      ? '<svg viewBox="0 0 10 10" width="10" height="10"><rect x="2.5" y=".5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/><rect x=".5" y="2.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1"/></svg>'
+      : '<svg viewBox="0 0 10 10" width="10" height="10"><rect x=".5" y=".5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1"/></svg>';
   },
 
   focusAddrBar: function() {
-    var el = document.getElementById('addrBar');
+    var el = document.getElementById('sourcesBrowserUrlInput');
     el.focus();
     el.select();
   },
@@ -508,13 +655,13 @@ window._chrome = {
 
 // ── Navigation helpers ─────────────────────────────────────────────────────
 function _submitAddr() {
-  var raw = document.getElementById('addrBar').value.trim();
+  var raw = document.getElementById('sourcesBrowserUrlInput').value.trim();
   if (!raw || !_cb) return;
   var url = _normalizeUrl(raw);
   var active = _getActiveTab();
   if (active) _cb.navigate(active.id, url);
   else _cb.createTab();
-  document.getElementById('addrBar').blur();
+  document.getElementById('sourcesBrowserUrlInput').blur();
 }
 
 function _normalizeUrl(text) {
@@ -526,55 +673,66 @@ function _normalizeUrl(text) {
 }
 
 // ── Button wiring ──────────────────────────────────────────────────────────
-document.getElementById('homeBtn').addEventListener('click', function() {
-  if (_cb) _cb.goHome();
-});
-document.getElementById('newTabBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserNewTabBtn').addEventListener('click', function() {
   if (_cb) _cb.createTab();
 });
-document.getElementById('backBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserBackBtn').addEventListener('click', function() {
   if (_cb && _state.activeId) _cb.goBack(_state.activeId);
 });
-document.getElementById('fwdBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserForwardBtn').addEventListener('click', function() {
   if (_cb && _state.activeId) _cb.goForward(_state.activeId);
 });
-document.getElementById('reloadBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserReloadBtn').addEventListener('click', function() {
   if (!_cb || !_state.activeId) return;
   var active = _getActiveTab();
   if (active && active.loading) _cb.stop(_state.activeId);
   else _cb.reload(_state.activeId);
 });
-document.getElementById('bookmarkBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserBookmarkBtn').addEventListener('click', function() {
   if (!_cb || !_state.activeId) return;
   var active = _getActiveTab();
   if (active) _cb.bookmarkToggle(active.url || '', active.title || '');
 });
-document.getElementById('histBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserHistoryBtn').addEventListener('click', function() {
   if (_cb) _cb.showHistory();
 });
-document.getElementById('dlBtn').addEventListener('click', function() {
+document.getElementById('sourcesBrowserDownloadsBtn').addEventListener('click', function() {
   if (_cb) _cb.showDownloads();
 });
 
-// Window controls
-document.getElementById('wcMin').addEventListener('click',   function() { if (_cb) _cb.windowMinimize(); });
-document.getElementById('wcMax').addEventListener('click',   function() { if (_cb) _cb.windowMaxRestore(); });
-document.getElementById('wcClose').addEventListener('click', function() { if (_cb) _cb.windowClose(); });
+// Window controls (topbar)
+document.getElementById('tbWcMin').addEventListener('click',   function() { if (_cb) _cb.windowMinimize(); });
+document.getElementById('tbWcMax').addEventListener('click',   function() { if (_cb) _cb.windowMaxRestore(); });
+document.getElementById('tbWcClose').addEventListener('click', function() { if (_cb) _cb.windowClose(); });
+
+// Section tabs (topbar)
+document.querySelectorAll('.modeBtn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var section = btn.dataset.section;
+    if (section === 'web') return;  // already in browser
+    if (_cb) _cb.switchSection(section);
+  });
+});
+
+// Theme toggle (topbar)
+document.getElementById('tbThemeBtn').addEventListener('click', function() {
+  if (_cb) _cb.toggleTheme();
+});
 
 // Address bar
-document.getElementById('addrBar').addEventListener('keydown', function(e) {
+document.getElementById('sourcesBrowserUrlInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') { _submitAddr(); }
   if (e.key === 'Escape') { this.blur(); }
 });
-document.getElementById('addrBar').addEventListener('focus', function() {
+document.getElementById('sourcesBrowserUrlInput').addEventListener('focus', function() {
   this.select();
 });
 
-// ── Keyboard shortcuts (when chrome view has focus) ────────────────────────
+// ── Keyboard shortcuts ─────────────────────────────────────────────────────
 document.addEventListener('keydown', function(e) {
   if (!_cb) return;
   var ctrl = e.ctrlKey || e.metaKey;
-  var addr = document.getElementById('addrBar');
+  var addr = document.getElementById('sourcesBrowserUrlInput');
   var addrFocused = document.activeElement === addr;
 
   if (ctrl && e.key === 't') { e.preventDefault(); _cb.createTab(); return; }
@@ -602,6 +760,11 @@ new QWebChannel(qt.webChannelTransport, function(channel) {
   // Load initial theme
   _cb.getAppTheme(function(theme) {
     applyTheme(theme || 'dark');
+  });
+
+  // Load app icon
+  _cb.getAppIconPath(function(path) {
+    if (path) document.getElementById('tbAppIcon').src = path;
   });
 
   // Signal Python that chrome is ready to receive state
