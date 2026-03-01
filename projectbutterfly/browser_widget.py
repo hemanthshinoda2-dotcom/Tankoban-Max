@@ -295,7 +295,7 @@ class BrowserWidget(QWidget):
     def _position_downloads_panel(self):
         if not self._downloads_panel:
             return
-        chrome_h = 146 if (self._chrome_view and self._chrome_view.isVisible()) else 0
+        chrome_h = 118 if (self._chrome_view and self._chrome_view.isVisible()) else 0
         find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
         w = 360
         h = self.height() - chrome_h - find_h
@@ -321,7 +321,7 @@ class BrowserWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── HTML Chrome view (topbar 46px + TankoBrowser panel ~100px = 146px) ──
+        # ── HTML Chrome view (topbar 46px + tab strip ~34px + toolbar ~34px = ~118px) ──
         chrome_profile = QWebEngineProfile("tankoweb-chrome", self)
         chrome_page = QWebEnginePage(chrome_profile, self)
         chrome_page.setBackgroundColor(QColor(10, 12, 20))   # prevent white flash
@@ -333,7 +333,7 @@ class BrowserWidget(QWidget):
 
         self._chrome_view = QWebEngineView()
         self._chrome_view.setPage(chrome_page)
-        self._chrome_view.setFixedHeight(146)
+        self._chrome_view.setFixedHeight(118)
         self._chrome_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         chrome_url = QUrl.fromLocalFile(
@@ -819,7 +819,7 @@ class BrowserWidget(QWidget):
     def _position_history_panel(self):
         if not self._history_panel:
             return
-        chrome_h = 146 if (self._chrome_view and self._chrome_view.isVisible()) else 0
+        chrome_h = 118 if (self._chrome_view and self._chrome_view.isVisible()) else 0
         find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
         w = 340
         h = self.height() - chrome_h - find_h

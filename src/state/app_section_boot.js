@@ -92,68 +92,12 @@
   }
 
   async function openBrowserWorkspace(opts) {
-    const options = (opts && typeof opts === 'object') ? opts : {};
-
-    // Butterfly (Qt) mode: go straight to native BrowserWidget — skip
-    // setMode('sources') which would briefly flash the Comics view
-    // (mode_router normalizes 'sources' → 'comics').
-    if (window.__tankoButterfly) {
-      try {
-        if (window.electronAPI && window.electronAPI.webTabManager) {
-          window.electronAPI.webTabManager.openBrowser();
-        }
-      } catch (_e) {}
-      return;
-    }
-
-    await setMode('sources');
-
-    await ensureWebModulesLoaded();
-
-    const web = window.Tanko && window.Tanko.web;
-    if (!web) return;
-
-    if (options.openTorrentWorkspace && typeof web.openTorrentWorkspace === 'function') {
-      web.openTorrentWorkspace();
-      return;
-    }
-
-    if (typeof web.openDefault === 'function') {
-      web.openDefault();
-      return;
-    }
-
-    if (typeof web.openHome === 'function') {
-      web.openHome();
-      return;
-    }
-
-    if (typeof web.openBrowser === 'function') {
-      web.openBrowser(null);
-    }
+    // 'web' is a proper mode now — mode_router handles Butterfly→BrowserWidget redirect
+    await setMode('web');
   }
 
   async function openSourcesWorkspace() {
-    // Butterfly: same as browser — go directly to BrowserWidget
-    if (window.__tankoButterfly) {
-      try {
-        if (window.electronAPI && window.electronAPI.webTabManager) {
-          window.electronAPI.webTabManager.openBrowser();
-        }
-      } catch (_e) {}
-      return;
-    }
-
-    await setMode('sources');
-    await ensureWebModulesLoaded();
-    try {
-      if (window.Tanko && window.Tanko.sources) {
-        if (typeof window.Tanko.sources.openSources === 'function') {
-          window.Tanko.sources.openSources();
-          return;
-        }
-      }
-    } catch (_err) {}
+    await setMode('web');
   }
 
   /** @param {AppSection} section */

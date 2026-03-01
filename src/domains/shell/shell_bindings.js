@@ -454,41 +454,9 @@
   }
 
   function openBrowserFromTopButton() {
-    // Butterfly (Qt) mode: activate native BrowserWidget via bridge.
-    // Handle the case where QWebChannel isn't ready yet by queuing the call.
-    if (window.__tankoButterfly) {
-      if (window.electronAPI && window.electronAPI.webTabManager) {
-        try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
-      } else {
-        // Bridge not yet ready — queue for when electronAPI:ready fires
-        document.addEventListener('electronAPI:ready', function _bf_open() {
-          try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
-        }, { once: true });
-      }
-      return;
+    if (typeof window.setMode === 'function') {
+      window.setMode('web');
     }
-    var d = window.Tanko && window.Tanko.deferred;
-    if (!d || typeof d.ensureWebModulesLoaded !== 'function') {
-      console.warn('[DBG-WEB] ensureWebModulesLoaded not available', d);
-      return;
-    }
-    d.ensureWebModulesLoaded().then(function () {
-      console.log('[DBG-WEB] ensureWebModulesLoaded resolved, Tanko.web=', window.Tanko && window.Tanko.web);
-      if (window.Tanko && window.Tanko.web) {
-        if (typeof window.Tanko.web.openDefault === 'function') {
-          window.Tanko.web.openDefault();
-          return;
-        }
-        if (typeof window.Tanko.web.openHome === 'function') {
-          window.Tanko.web.openHome();
-          return;
-        }
-      } else {
-        console.error('[DBG-WEB] Tanko.web NOT set after module load — web.js IIFE likely failed');
-      }
-    }).catch(function (err) {
-      console.error('[DBG-WEB] ensureWebModulesLoaded REJECTED:', err);
-    });
   }
 
   if (webHubToggleBtn) {

@@ -1,10 +1,8 @@
-// Central mode routing for comics/videos/books.
-// Note: 'sources'/'browser' mode is no longer a renderer mode — Tankoweb
-// is opened via #tankWebBtn → openBrowserFromTopButton() → BrowserWidget overlay.
+// Central mode routing for comics/videos/books/web.
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books']);
+  const MODES = new Set(['comics', 'videos', 'books', 'web']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -29,9 +27,11 @@
     const comics = qs('modeComicsBtn');
     const videos = qs('modeVideosBtn');
     const books = qs('modeBooksBtn');
+    const web = qs('modeWebBtn');
     if (comics) comics.classList.toggle('active', m === 'comics');
     if (videos) videos.classList.toggle('active', m === 'videos');
     if (books) books.classList.toggle('active', m === 'books');
+    if (web) web.classList.toggle('active', m === 'web');
   }
 
   function applyFallbackViewState(mode) {
@@ -39,6 +39,7 @@
     const isComics = m === 'comics';
     const isVideos = m === 'videos';
     const isBooks = m === 'books';
+    const isWeb = m === 'web';
 
     const libraryView = qs('libraryView');
     const playerView = qs('playerView');
@@ -55,8 +56,18 @@
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
+    document.body.classList.toggle('inWebMode', isWeb);
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
+
+    // Butterfly: 'web' mode activates the native BrowserWidget via bridge
+    if (isWeb && window.__tankoButterfly) {
+      try {
+        if (window.electronAPI && window.electronAPI.webTabManager) {
+          window.electronAPI.webTabManager.openBrowser();
+        }
+      } catch (_e) {}
+    }
 
     try {
       if (window.Tanko && window.Tanko.ui && typeof window.Tanko.ui.setModeTheme === 'function') {
