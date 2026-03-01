@@ -41,147 +41,195 @@ from PySide6.QtGui import QKeySequence, QShortcut, QCursor
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Stylesheet
+# Theme-aware stylesheet
 # ─────────────────────────────────────────────────────────────────────────────
 
-_SS = """
-BrowserWidget {
-    background: #0d1117;
+_THEMES = {
+    "dark": {
+        "bg": "#0d1117", "bg2": "#161b22", "bg3": "#1a2030",
+        "text": "#e6edf3", "muted": "#8b949e",
+        "accent": "#5865f2",
+        "accent_faint": "rgba(88,101,242,.14)", "accent_mid": "rgba(88,101,242,.35)",
+        "addr_bg": "#161b22", "addr_bg_focus": "#1a2030",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.08)",
+    },
+    "light": {
+        "bg": "#f5f5f7", "bg2": "#e0e0e8", "bg3": "#d4d4de",
+        "text": "rgba(20,20,24,.90)", "muted": "rgba(20,20,24,.50)",
+        "accent": "#5865f2",
+        "accent_faint": "rgba(88,101,242,.10)", "accent_mid": "rgba(88,101,242,.25)",
+        "addr_bg": "#ffffff", "addr_bg_focus": "#f8f8ff",
+        "btn_hover": "rgba(0,0,0,.06)", "btn_press": "rgba(0,0,0,.10)",
+        "tab_hover": "rgba(0,0,0,.06)",
+        "border": "rgba(0,0,0,.12)",
+    },
+    "nord": {
+        "bg": "#2e3440", "bg2": "#3b4252", "bg3": "#434c5e",
+        "text": "#eceff4", "muted": "#d8dee9",
+        "accent": "#5e81ac",
+        "accent_faint": "rgba(94,129,172,.18)", "accent_mid": "rgba(94,129,172,.38)",
+        "addr_bg": "#3b4252", "addr_bg_focus": "#434c5e",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.10)",
+    },
+    "solarized": {
+        "bg": "#002b36", "bg2": "#073642", "bg3": "#0d4a56",
+        "text": "#93a1a1", "muted": "#586e75",
+        "accent": "#268bd2",
+        "accent_faint": "rgba(38,139,210,.16)", "accent_mid": "rgba(38,139,210,.35)",
+        "addr_bg": "#073642", "addr_bg_focus": "#0d4a56",
+        "btn_hover": "rgba(255,255,255,.06)", "btn_press": "rgba(255,255,255,.10)",
+        "tab_hover": "rgba(255,255,255,.07)",
+        "border": "rgba(255,255,255,.08)",
+    },
+    "gruvbox": {
+        "bg": "#282828", "bg2": "#3c3836", "bg3": "#504945",
+        "text": "#ebdbb2", "muted": "#a89984",
+        "accent": "#d79921",
+        "accent_faint": "rgba(215,153,33,.15)", "accent_mid": "rgba(215,153,33,.32)",
+        "addr_bg": "#3c3836", "addr_bg_focus": "#504945",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.10)",
+    },
+    "catppuccin": {
+        "bg": "#1e1e2e", "bg2": "#181825", "bg3": "#313244",
+        "text": "#cdd6f4", "muted": "#a6adc8",
+        "accent": "#cba6f7",
+        "accent_faint": "rgba(203,166,247,.14)", "accent_mid": "rgba(203,166,247,.30)",
+        "addr_bg": "#1e1e2e", "addr_bg_focus": "#313244",
+        "btn_hover": "rgba(255,255,255,.06)", "btn_press": "rgba(255,255,255,.11)",
+        "tab_hover": "rgba(255,255,255,.07)",
+        "border": "rgba(255,255,255,.09)",
+    },
 }
+
+
+def _make_theme_ss(theme="dark"):
+    """Generate the BrowserWidget stylesheet for the given theme name."""
+    v = _THEMES.get(theme, _THEMES["dark"])
+    bg           = v["bg"]
+    bg2          = v["bg2"]
+    bg3          = v["bg3"]
+    text         = v["text"]
+    muted        = v["muted"]
+    accent       = v["accent"]
+    af           = v["accent_faint"]
+    am           = v["accent_mid"]
+    addr_bg      = v["addr_bg"]
+    addr_focus   = v["addr_bg_focus"]
+    bh           = v["btn_hover"]
+    bp           = v["btn_press"]
+    th           = v["tab_hover"]
+    border       = v["border"]
+
+    return f"""
+BrowserWidget {{ background: {bg}; }}
 
 /* ── Tab strip row ── */
-QWidget#tabRow {
-    background: #161b22;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
-}
+QWidget#tabRow {{
+    background: {bg2};
+    border-bottom: 1px solid {border};
+}}
 
 /* ── Navigation bar row ── */
-QWidget#navRow {
-    background: #0d1117;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-}
+QWidget#navRow {{
+    background: {bg};
+    border-bottom: 1px solid {border};
+}}
 
 /* ── Home button ── */
-QToolButton#homeBtn {
-    background: transparent;
-    border: none;
-    color: #8b949e;
-    font-size: 18px;
-    min-width: 36px;
-    min-height: 36px;
-    border-radius: 6px;
-    padding: 0 4px;
-}
-QToolButton#homeBtn:hover  { background: rgba(255,255,255,0.07); color: #e6edf3; }
-QToolButton#homeBtn:pressed { background: rgba(255,255,255,0.12); }
+QToolButton#homeBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 18px; min-width: 36px; min-height: 36px;
+    border-radius: 6px; padding: 0 4px;
+}}
+QToolButton#homeBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#homeBtn:pressed {{ background: {bp}; }}
 
-/* ── Nav buttons (back / fwd / reload) ── */
-QToolButton#navBtn {
-    background: transparent;
-    border: none;
-    color: #8b949e;
-    font-size: 16px;
-    min-width: 30px;
-    min-height: 30px;
-    border-radius: 6px;
-    padding: 2px;
-}
-QToolButton#navBtn:hover  { background: rgba(255,255,255,0.07); color: #e6edf3; }
-QToolButton#navBtn:pressed { background: rgba(255,255,255,0.12); }
-QToolButton#navBtn:disabled { color: rgba(139,148,158,0.3); }
+/* ── Nav buttons ── */
+QToolButton#navBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 16px; min-width: 30px; min-height: 30px;
+    border-radius: 6px; padding: 2px;
+}}
+QToolButton#navBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#navBtn:pressed {{ background: {bp}; }}
+QToolButton#navBtn:disabled {{ color: {muted}; }}
 
-/* ── Tab bar (Chrome-style: rounded top, flat bottom) ── */
-QTabBar {
-    background: transparent;
-    border: none;
-}
-QTabBar::tab {
-    background: rgba(255,255,255,0.03);
-    color: #8b949e;
-    border: 1px solid transparent;
-    border-top-left-radius: 8px;
-    border-top-right-radius: 8px;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-    padding: 6px 8px 6px 12px;
-    margin: 0 2px;
-    min-width: 80px;
-    max-width: 200px;
+/* ── Tab bar (Chrome-style: rounded top corners, flat bottom) ── */
+QTabBar {{ background: transparent; border: none; }}
+QTabBar::tab {{
+    background: {bg3};
+    color: {muted};
+    border: 1px solid {border};
+    border-top: 2px solid transparent;
+    border-top-left-radius: 8px; border-top-right-radius: 8px;
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    border-bottom: none;
+    padding: 6px 8px 6px 12px; margin: 4px 2px 0 2px;
+    min-width: 80px; max-width: 200px;
     font-size: 12px;
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-QTabBar::tab:selected {
-    background: #0d1117;
-    color: #e6edf3;
-    border-color: rgba(255,255,255,0.08);
-    border-bottom-color: #0d1117;
-}
-QTabBar::tab:hover:!selected {
-    background: rgba(255,255,255,0.06);
-    color: #c9d1d9;
-}
-QTabBar::close-button {
-    image: none;
-    subcontrol-position: right;
-    width: 0;
-    height: 0;
-}
+}}
+QTabBar::tab:selected {{
+    background: {bg};
+    color: {text};
+    border-color: {border};
+    border-top: 2px solid {accent};
+    border-bottom: 2px solid {bg};
+}}
+QTabBar::tab:hover:!selected {{ background: {th}; color: {text}; border-top-color: {af}; }}
+QTabBar::close-button {{ image: none; subcontrol-position: right; width: 0; height: 0; }}
 
-QToolButton#newTabBtn {
-    background: transparent;
-    border: none;
-    color: #8b949e;
-    font-size: 20px;
-    min-width: 28px;
-    min-height: 28px;
-    border-radius: 6px;
-    padding: 0;
-}
-QToolButton#newTabBtn:hover  { background: rgba(255,255,255,0.07); color: #e6edf3; }
+/* ── New tab button ── */
+QToolButton#newTabBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 20px; min-width: 28px; min-height: 28px;
+    border-radius: 6px; padding: 0;
+}}
+QToolButton#newTabBtn:hover {{ background: {bh}; color: {text}; }}
 
-QLineEdit#addressBar {
-    background: #161b22;
-    border: 1px solid rgba(255,255,255,0.08);
+/* ── Address bar ── */
+QLineEdit#addressBar {{
+    background: {addr_bg};
+    border: 1px solid {border};
     border-radius: 18px;
-    color: #e6edf3;
-    font-size: 13px;
-    padding: 5px 16px;
-    selection-background-color: rgba(88,101,242,0.4);
+    color: {text};
+    font-size: 13px; padding: 5px 16px;
+    selection-background-color: {am};
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-QLineEdit#addressBar:focus {
-    border-color: rgba(88,101,242,0.8);
-    background: #1a2030;
-}
+}}
+QLineEdit#addressBar:focus {{ border-color: {accent}; background: {addr_focus}; }}
 
-QToolButton#utilBtn {
-    background: transparent;
-    border: none;
-    color: #8b949e;
-    font-size: 15px;
-    min-width: 30px;
-    min-height: 30px;
-    border-radius: 6px;
-    padding: 2px;
-}
-QToolButton#utilBtn:hover   { background: rgba(255,255,255,0.07); color: #e6edf3; }
-QToolButton#utilBtn:checked { color: #f0b429; }
+/* ── Utility buttons (bookmark / history / downloads) ── */
+QToolButton#utilBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 15px; min-width: 30px; min-height: 30px;
+    border-radius: 6px; padding: 2px;
+}}
+QToolButton#utilBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#utilBtn:checked {{ color: {accent}; }}
 
-QStackedWidget#contentStack {
-    background: #0a1018;
-}
+/* ── Content area ── */
+QStackedWidget#contentStack {{ background: {bg}; }}
 
-QMenu {
-    background: #161b22;
-    color: #e6edf3;
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    padding: 4px;
-    font-size: 13px;
-}
-QMenu::item { padding: 6px 20px; border-radius: 4px; }
-QMenu::item:selected { background: rgba(88,101,242,0.3); }
-QMenu::separator { height: 1px; background: rgba(255,255,255,0.08); margin: 4px 8px; }
+/* ── Context menu ── */
+QMenu {{
+    background: {bg2}; color: {text};
+    border: 1px solid {border};
+    border-radius: 8px; padding: 4px; font-size: 13px;
+}}
+QMenu::item {{ padding: 6px 20px; border-radius: 4px; }}
+QMenu::item:selected {{ background: {af}; }}
+QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
 """
 
 
@@ -310,8 +358,12 @@ class BrowserWidget(QWidget):
 
     # ── UI construction ───────────────────────────────────────────────────────
 
+    def set_theme(self, theme):
+        """Apply one of the 6 app themes to the browser chrome Qt widgets."""
+        self.setStyleSheet(_make_theme_ss(theme))
+
     def _setup_ui(self):
-        self.setStyleSheet(_SS)
+        self.setStyleSheet(_make_theme_ss("dark"))
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)

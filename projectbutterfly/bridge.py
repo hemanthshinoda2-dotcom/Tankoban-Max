@@ -496,6 +496,10 @@ class ShellBridge(QObject):
                         page.runJavaScript(
                             f"if(typeof window._tankwebApplyTheme==='function')window._tankwebApplyTheme('{safe}')"
                         )
+                # Also re-skin the native Qt browser chrome
+                bw = getattr(wtm, "_bw", None)
+                if bw and hasattr(bw, "set_theme"):
+                    bw.set_theme(clean)
         except Exception:
             pass
         return json.dumps(_ok())
@@ -8987,7 +8991,15 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
                 return False
             return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
-    return _BrowserTabPage(profile)
+    page = _BrowserTabPage(profile)
+    # Dark background before any content loads — prevents white flash when
+    # creating or switching to this tab (Chromium default is white).
+    try:
+        from PySide6.QtGui import QColor
+        page.setBackgroundColor(QColor("#0d1117"))
+    except Exception:
+        pass
+    return page
 
 
 # ---------------------------------------------------------------------------
@@ -9063,6 +9075,15 @@ class WebTabManagerBridge(QObject):
         bw.userReload.connect(
             lambda tid: self.reload(json.dumps({"tabId": tid}))
         )
+
+        # Apply saved theme to browser chrome on startup
+        try:
+            prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
+            saved_theme = prefs.get("appTheme", "dark")
+            if hasattr(bw, "set_theme"):
+                bw.set_theme(saved_theme)
+        except Exception:
+            pass
 
     # -- Internal helpers --
 
