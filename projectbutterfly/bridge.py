@@ -9291,6 +9291,10 @@ class WebTabManagerBridge(QObject):
         # Register with BrowserWidget (adds to QStackedWidget + chrome tab strip)
         self._bw.add_tab_view(tab_id, view, title="New Tab")
 
+        # Activate the new tab so the chrome & content stack show it
+        self._active_tab_id = tab_id
+        self._bw.set_active_tab_id(tab_id)
+
         # Load URL if provided
         if url:
             from PySide6.QtCore import QUrl
@@ -9588,7 +9592,7 @@ class WebTabManagerBridge(QObject):
             bridge_root = self.parent()
             win = getattr(getattr(bridge_root, "window", None), "_win", None)
             if win and hasattr(win, "show_browser"):
-                win.show_browser()  # Direct call — no QTimer delay
+                win.show_browser()
             # Auto-create a new tab if the browser has no tabs yet
             if not self._tabs:
                 self._create_tab_internal("")
