@@ -193,13 +193,43 @@ Added `BrowserTabPage` subclass (lazy QWebEnginePage with `createWindow`/`accept
 
 | Feature | Implementation |
 |---------|---------------|
-| Context menu | Fixed wiring: moved from `page.contextMenuRequested` (invalid) to `view.customContextMenuRequested` with `Qt.CustomContextMenu` policy. `_on_context_menu` gathers `page.contextMenuData()` → emits `webBrowserActions.contextMenu` |
+| Context menu | Uses `view.customContextMenuRequested` + `Qt.CustomContextMenu` policy. `_on_context_menu` calls `view.lastContextMenuRequest()` (Qt 6.x API, replaces deprecated `page.contextMenuData()`) to get `QWebEngineContextMenuRequest` → extracts link/media/edit/selection data → emits `webBrowserActions.contextMenu` signal to JS. `req.setAccepted(True)` suppresses Chromium's native menu. |
 | Download lifecycle | `pauseDownload`/`resumeDownload`/`cancelDownload` already implemented via stored `QWebEngineDownloadRequest` handles |
 | Permission prompts | `featurePermissionRequested` signal connected in `_connect_page_signals`. Maps Qt Feature enums to permission strings. Checks stored rules first (auto-grant/deny). Falls back to `permissionPrompt` signal → JS prompt. `resolvePrompt()` grants/denies and optionally persists decision |
 | Userscript injection | `_inject_userscripts()` in WebTabManagerBridge, called on `loadFinished`. Queries `WebUserscriptsBridge.get_matching_scripts()`, runs via `page.runJavaScript()`, updates injection stats |
 
-### Phase 6 (Optional) — Native Qt UI
-- Incremental replacement of HTML/CSS UI with native Qt widgets
+### Phase 6 — Qt Browser Web Mode (butterfly branch, current session)
+
+5-phase build of the native Qt browser for Web mode, committed as 4 atomic commits:
+
+| Phase | Commit | Summary |
+|-------|--------|---------|
+| 1+2 | `0867a14` | Browser shell fix (QWebChannel injection for home tab) + full home.html hub page (search, sources grid, torrent search, download manager) |
+| 3 | `3d28f44` | Browser parity: find bar (Ctrl+F), zoom (Ctrl+±), bookmarks toggle, HistoryPanel, auto-history recording, tab cycling |
+| 4 | `a12e4fa` | Torrent deep integration: magnet link auto-download via `onMagnetRequested`, `showToast()` notifications |
+| 5 | `b167731` | Aesthetic polish: pill tab style, custom × close buttons, ⌂ Home label, loading ⟳ indicator, reload/stop toggle |
+
+**Architecture**: Home tab = QWebEngineView loading `data/home.html` with full QWebChannel bridge access (Chrome `chrome://newtab/` model). Magnet links intercepted in `acceptNavigationRequest()` → `magnetRequested` signal → home tab auto-starts download. History auto-recorded on `loadFinished` for real URLs.
+
+### Session: Video Progress Parity Audit
+
+Comprehensive comparison of `VideoProgressBridge` and `VideoUiBridge` against Electron counterparts (`main/domains/videoProgress/index.js`, `main/ipc/register/video_progress.js`, `main/domains/videoUi/index.js`). Found 12 issues, fixed 7 critical/high ones.
+
+**Root cause of all Continue Watching bugs**: The Python bridge didn't match Electron's data contracts — wrong field names, missing signal data, wrong return shapes, no in-memory caching.
+
+| Bug ID | Severity | What Was Wrong | Fix |
+|--------|----------|----------------|-----|
+| VIDEO-001 | CRITICAL | `_persist_progress()` saved `position`/`duration`/`maxPosition`/`watchedTime`/`timestamp` — JS reads `positionSec`/`durationSec`/`maxPositionSec`/`watchedSecApprox`/`lastWatchedAtMs` | Renamed all fields, added `completedAtMs` |
+| VIDEO-002 | CRITICAL | `progressUpdated` signal emitted `{"videoId": vid}` without progress data — JS `onUpdated` handler does `delete state.progress[vid]` when `payload.progress` missing | Now emits `{"videoId": vid, "progress": merged}` |
+| VIDEO-003 | CRITICAL | No in-memory cache — every `save()`/`get()` re-read disk. Debounced writes + rapid saves = data loss | Added `_cache` with `_ensure_cache()` |
+| VIDEO-004 | HIGH | `playerExited` emitted `{"reason": ..., "returnState": None}` without synced progress — `build14:playerExited` handler couldn't merge progress | Now includes `synced: {videoId, progress}` + emits `progressUpdated` |
+| VIDEO-005 | HIGH | `clearAll` signal key was `"clearedAll"` but JS checks `payload.allCleared` | Fixed key name |
+| VIDEO-006 | HIGH | `clear` signal payload was `{"cleared": True}` — JS only recognizes `{"progress": null}` | Fixed payload shape |
+| VIDEO-007 | HIGH | `VideoUiBridge.getState()` returned `{"state": data, "ok": true}` — Electron returns `{"ui": {...}, "updatedAt": ...}` — broke `lastActiveEpisodeByShowId` restore | Rewrote with Electron-matching format + in-memory cache + merge-on-save |
+
+**Status**: All fixes applied to `bridge.py`, **pending commit**.
+
+**Files modified**: `projectbutterfly/bridge.py` (91 insertions, 24 deletions)
 
 ## Dependencies (pip)
 ```
