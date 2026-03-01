@@ -99,6 +99,21 @@
     const options = (opts && typeof opts === 'object') ? opts : {};
     const mode = normalizeMode(next);
 
+    // Butterfly (Qt) mode: 'sources'/'browser' activates native BrowserWidget directly.
+    // Bypass web.js module loading and HTML rendering entirely.
+    if (mode === 'sources' && window.__tankoButterfly) {
+      var _bf_open = function() {
+        try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
+      };
+      if (window.electronAPI && window.electronAPI.webTabManager) {
+        _bf_open();
+      } else {
+        document.addEventListener('electronAPI:ready', _bf_open, { once: true });
+      }
+      syncButtons(mode);
+      return { ok: true, mode };
+    }
+
     await ensureModeModules(mode);
 
     if (mode === routerState.mode && !options.force) {
