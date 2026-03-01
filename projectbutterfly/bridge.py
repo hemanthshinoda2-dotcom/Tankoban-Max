@@ -477,6 +477,38 @@ class ShellBridge(QObject):
         except Exception as e:
             return json.dumps(_err(str(e)))
 
+    @Slot(str, result=str)
+    def setAppTheme(self, theme="dark"):
+        """Called from main renderer JS when user cycles theme. Persists to app_prefs.json
+        and pushes the new theme to all open home tabs in BrowserWidget."""
+        try:
+            clean = str(theme or "dark").strip().strip('"\'')
+            # Persist so home.html can read it on next load
+            storage.write_json_sync(storage.data_path("app_prefs.json"), {"appTheme": clean})
+            # Push to any open home tabs in the browser overlay
+            bridge_root = self.parent()
+            wtm = getattr(bridge_root, "webTabManager", None)
+            if wtm and hasattr(wtm, "_tabs"):
+                for tab in wtm._tabs.values():
+                    page = tab.get("page")
+                    if page and tab.get("home"):
+                        safe = clean.replace("'", "").replace("\\", "")
+                        page.runJavaScript(
+                            f"if(typeof window._tankwebApplyTheme==='function')window._tankwebApplyTheme('{safe}')"
+                        )
+        except Exception:
+            pass
+        return json.dumps(_ok())
+
+    @Slot(result=str)
+    def getAppTheme(self):
+        """Called from home.html on load to retrieve the current app theme."""
+        try:
+            prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
+            return json.dumps({"ok": True, "theme": prefs.get("appTheme", "dark")})
+        except Exception:
+            return json.dumps({"ok": True, "theme": "dark"})
+
 
 # ---------------------------------------------------------------------------
 # clipboard
@@ -3722,6 +3754,9 @@ class PlayerBridge(QObject):
         # Player overlay reference (set by app.py)
         self._overlay = None
 
+        # Snapshot diff — skip emitting when nothing changed
+        self._last_emitted_snapshot = None
+
         # Player settings persistence path
         self._settings_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "data", "player_settings.json"
@@ -4053,10 +4088,12 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-        # Emit state to renderer and overlay
+        # Emit state to renderer and overlay (skip if unchanged)
         try:
             snapshot = self._state_snapshot()
-            self.playerStateChanged.emit(json.dumps(snapshot))
+            if snapshot != self._last_emitted_snapshot:
+                self._last_emitted_snapshot = snapshot
+                self.playerStateChanged.emit(json.dumps(snapshot))
             if self._overlay:
                 self._overlay.update_state(snapshot)
         except RuntimeError:
@@ -6588,7 +6625,7 @@ class WebUserscriptsBridge(QObject):
     # --- internals ---
 
     def _cfg_path(self):
-        return _data_path(self._CFG_FILE)
+        return storage.data_path(self._CFG_FILE)
 
     @staticmethod
     def _make_id():
@@ -8504,6 +8541,33 @@ class TorrentSearchBridge(QObject):
                     seen.add(t.lower())
                     out.append({"id": t, "name": t})
         return json.dumps({"ok": True, "indexers": out, "source": "settings", "provider": provider_key})
+
+    @Slot(str, result=str)
+    def saveSettings(self, p="{}"):
+        """Persist Prowlarr/Jackett config from home.html Tools panel."""
+        try:
+            data = json.loads(p) if p else {}
+            cfg = self._read_settings()
+            ts = cfg.setdefault("torrentSearch", {})
+            if "provider" in data:
+                ts["provider"] = str(data["provider"]).strip().lower()
+            for key in ("jackett", "prowlarr"):
+                if key in data and isinstance(data[key], dict):
+                    ts.setdefault(key, {}).update(data[key])
+            path = _data_path("web_browser_settings.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, ensure_ascii=False, indent=2)
+            return json.dumps(_ok())
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+
+    @Slot(result=str)
+    def getConfig(self):
+        """Return current Prowlarr/Jackett provider config for the Tools panel."""
+        try:
+            return json.dumps({"ok": True, **self._get_provider_config()})
+        except Exception as e:
+            return json.dumps(_err(str(e)))
 
 
 class TorProxyBridge(QObject):

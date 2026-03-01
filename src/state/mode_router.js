@@ -1,8 +1,10 @@
-// Central mode routing for comics/videos/books/sources.
+// Central mode routing for comics/videos/books.
+// Note: 'sources'/'browser' mode is no longer a renderer mode — Tankoweb
+// is opened via #tankWebBtn → openBrowserFromTopButton() → BrowserWidget overlay.
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books', 'sources']);
+  const MODES = new Set(['comics', 'videos', 'books']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -27,11 +29,9 @@
     const comics = qs('modeComicsBtn');
     const videos = qs('modeVideosBtn');
     const books = qs('modeBooksBtn');
-    const sources = qs('modeSourcesBtn');
     if (comics) comics.classList.toggle('active', m === 'comics');
     if (videos) videos.classList.toggle('active', m === 'videos');
     if (books) books.classList.toggle('active', m === 'books');
-    if (sources) sources.classList.toggle('active', m === 'sources');
   }
 
   function applyFallbackViewState(mode) {
@@ -39,7 +39,6 @@
     const isComics = m === 'comics';
     const isVideos = m === 'videos';
     const isBooks = m === 'books';
-    const isSources = m === 'sources';
 
     const libraryView = qs('libraryView');
     const playerView = qs('playerView');
@@ -53,23 +52,11 @@
     if (videoLibraryView) videoLibraryView.classList.toggle('hidden', !isVideos);
     if (videoPlayerView) videoPlayerView.classList.add('hidden');
     if (booksLibraryView) booksLibraryView.classList.toggle('hidden', !isBooks);
-    if (webLibraryView) webLibraryView.classList.toggle('hidden', !isSources);
     document.body.classList.toggle('inVideoMode', isVideos);
     document.body.classList.toggle('inBooksMode', isBooks);
     document.body.classList.toggle('inComicsMode', isComics);
-    document.body.classList.toggle('inSourcesMode', isSources);
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
-
-    // In Butterfly, switch Qt stacked widget back to renderer when leaving browser
-    if (!isSources && window.__tankoButterfly) {
-      try {
-        var api = window.electronAPI || (window.Tanko && window.Tanko.api);
-        if (api && api.webTabManager && typeof api.webTabManager.closeBrowser === 'function') {
-          api.webTabManager.closeBrowser();
-        }
-      } catch (_eCB) {}
-    }
 
     try {
       if (window.Tanko && window.Tanko.ui && typeof window.Tanko.ui.setModeTheme === 'function') {
@@ -86,33 +73,11 @@
     if (mode === 'books' && typeof d.ensureBooksModulesLoaded === 'function') {
       await d.ensureBooksModulesLoaded();
     }
-    if (mode === 'sources') {
-      if (typeof d.ensureWebModulesLoadedLegacy === 'function') {
-        await d.ensureWebModulesLoadedLegacy();
-      } else if (typeof d.ensureWebModulesLoaded === 'function') {
-        await d.ensureWebModulesLoaded();
-      }
-    }
   }
 
   async function setMode(next, opts = null) {
     const options = (opts && typeof opts === 'object') ? opts : {};
     const mode = normalizeMode(next);
-
-    // Butterfly (Qt) mode: 'sources'/'browser' activates native BrowserWidget directly.
-    // Bypass web.js module loading and HTML rendering entirely.
-    if (mode === 'sources' && window.__tankoButterfly) {
-      var _bf_open = function() {
-        try { window.electronAPI.webTabManager.openBrowser(); } catch (_e) {}
-      };
-      if (window.electronAPI && window.electronAPI.webTabManager) {
-        _bf_open();
-      } else {
-        document.addEventListener('electronAPI:ready', _bf_open, { once: true });
-      }
-      syncButtons(mode);
-      return { ok: true, mode };
-    }
 
     await ensureModeModules(mode);
 

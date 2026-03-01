@@ -56,6 +56,12 @@
       }
     } catch {}
     try { localStorage.setItem('appTheme', t); } catch {}
+    // Butterfly: push theme to home.html (isolated webmode profile — no shared localStorage)
+    try {
+      if (window.__tankoButterfly && window.electronAPI && window.electronAPI.shell) {
+        window.electronAPI.shell.setAppTheme(t);
+      }
+    } catch (_eThemeSync) {}
     // Swap icon: sun for dark themes (click = go lighter), moon for light theme
     if (el.themeToggleBtn) {
       try {
@@ -487,6 +493,14 @@
 
   if (webHubToggleBtn) {
     webHubToggleBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openBrowserFromTopButton();
+    });
+  }
+  var tankWebBtn = document.getElementById('tankWebBtn');
+  if (tankWebBtn) {
+    tankWebBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
       openBrowserFromTopButton();

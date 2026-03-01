@@ -231,6 +231,20 @@ Comprehensive comparison of `VideoProgressBridge` and `VideoUiBridge` against El
 
 **Files modified**: `projectbutterfly/bridge.py` (91 insertions, 24 deletions)
 
+### Phase 7 — Tankoweb Overlay (butterfly branch)
+
+Reframed the browser as a complementary overlay, not a renderer mode. The BrowserWidget home screen becomes a media aggregation hub accessible via a top-bar button.
+
+| Change | Details |
+|--------|---------|
+| `src/index.html` | Removed `#modeSourcesBtn` (Web mode button); added `#tankWebBtn` (globe icon) to `.tbLeft` after Refresh |
+| `src/domains/shell/shell_bindings.js` | Wired `#tankWebBtn` → `openBrowserFromTopButton()`; added `shell.setAppTheme(t)` call in `applyAppTheme()` for live theme sync to home.html |
+| `src/state/mode_router.js` | Removed `sources` from MODES set; removed Sources mode intercept block (dead code); removed `webLibraryView` Sources toggle |
+| `projectbutterfly/bridge.py` | `ShellBridge.setAppTheme(t)` — persists theme to `app_prefs.json`, pushes via `runJavaScript()` to all open home tabs; `ShellBridge.getAppTheme()` — reads `app_prefs.json`; `TorrentSearchBridge.saveSettings(p)` — persists Prowlarr/Jackett config; `TorrentSearchBridge.getConfig()` — returns full provider config for Tools panel pre-population |
+| `projectbutterfly/data/home.html` | Full redesign: Library← / Browser→ top bar; Lucide SVG sprite (arrow-left, globe, search, settings, external-link); 6-theme CSS variable system; SVG globe fallback for source tiles; Tools panel for Prowlarr/Jackett config; torrent search results table; split Torrent Downloads and DDL Downloads into separate tables with correct columns |
+| `projectbutterfly/TANKOWEB.md` | Created — canonical Tankoweb plan (converted from user's TANKOWEB_PLAN.md) |
+| `projectbutterfly/TANKOWEB_PROGRESS.md` | Created — phase-by-phase progress tracker |
+
 ## Dependencies (pip)
 ```
 PySide6>=6.7
