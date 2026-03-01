@@ -25,7 +25,6 @@ Phase 3: DownloadsPanel    -- added in add_downloads_panel()
 
 import os
 import json
-from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTabBar,
@@ -34,118 +33,223 @@ from PySide6.QtWidgets import (
     QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QApplication,
 )
-from PySide6.QtGui import QAction, QColor
+from PySide6.QtGui import QAction
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEngineSettings, QWebEngineProfile, QWebEnginePage
-from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtCore import Qt, QUrl, QTimer, Signal, Slot, QPoint, QObject, QThread
+from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtCore import Qt, QUrl, QTimer, Signal, QPoint, QObject, QThread
 from PySide6.QtGui import QKeySequence, QShortcut, QCursor
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BrowserChromeBridge — QWebChannel bridge for browser_chrome.html
+# Theme-aware stylesheet
 # ─────────────────────────────────────────────────────────────────────────────
 
-class BrowserChromeBridge(QObject):
-    """
-    Bridge between browser_chrome.html and BrowserWidget.
+_THEMES = {
+    "dark": {
+        "bg": "#0d1117", "bg2": "#161b22", "bg3": "#1a2030",
+        "text": "#e6edf3", "muted": "#8b949e",
+        "accent": "#5865f2",
+        "accent_faint": "rgba(88,101,242,.14)", "accent_mid": "rgba(88,101,242,.35)",
+        "addr_bg": "#161b22", "addr_bg_focus": "#1a2030",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.08)",
+    },
+    "light": {
+        "bg": "#f5f5f7", "bg2": "#e0e0e8", "bg3": "#d4d4de",
+        "text": "rgba(20,20,24,.90)", "muted": "rgba(20,20,24,.50)",
+        "accent": "#5865f2",
+        "accent_faint": "rgba(88,101,242,.10)", "accent_mid": "rgba(88,101,242,.25)",
+        "addr_bg": "#ffffff", "addr_bg_focus": "#f8f8ff",
+        "btn_hover": "rgba(0,0,0,.06)", "btn_press": "rgba(0,0,0,.10)",
+        "tab_hover": "rgba(0,0,0,.06)",
+        "border": "rgba(0,0,0,.12)",
+    },
+    "nord": {
+        "bg": "#2e3440", "bg2": "#3b4252", "bg3": "#434c5e",
+        "text": "#eceff4", "muted": "#d8dee9",
+        "accent": "#5e81ac",
+        "accent_faint": "rgba(94,129,172,.18)", "accent_mid": "rgba(94,129,172,.38)",
+        "addr_bg": "#3b4252", "addr_bg_focus": "#434c5e",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.10)",
+    },
+    "solarized": {
+        "bg": "#002b36", "bg2": "#073642", "bg3": "#0d4a56",
+        "text": "#93a1a1", "muted": "#586e75",
+        "accent": "#268bd2",
+        "accent_faint": "rgba(38,139,210,.16)", "accent_mid": "rgba(38,139,210,.35)",
+        "addr_bg": "#073642", "addr_bg_focus": "#0d4a56",
+        "btn_hover": "rgba(255,255,255,.06)", "btn_press": "rgba(255,255,255,.10)",
+        "tab_hover": "rgba(255,255,255,.07)",
+        "border": "rgba(255,255,255,.08)",
+    },
+    "gruvbox": {
+        "bg": "#282828", "bg2": "#3c3836", "bg3": "#504945",
+        "text": "#ebdbb2", "muted": "#a89984",
+        "accent": "#d79921",
+        "accent_faint": "rgba(215,153,33,.15)", "accent_mid": "rgba(215,153,33,.32)",
+        "addr_bg": "#3c3836", "addr_bg_focus": "#504945",
+        "btn_hover": "rgba(255,255,255,.07)", "btn_press": "rgba(255,255,255,.12)",
+        "tab_hover": "rgba(255,255,255,.08)",
+        "border": "rgba(255,255,255,.10)",
+    },
+    "catppuccin": {
+        "bg": "#1e1e2e", "bg2": "#181825", "bg3": "#313244",
+        "text": "#cdd6f4", "muted": "#a6adc8",
+        "accent": "#cba6f7",
+        "accent_faint": "rgba(203,166,247,.14)", "accent_mid": "rgba(203,166,247,.30)",
+        "addr_bg": "#1e1e2e", "addr_bg_focus": "#313244",
+        "btn_hover": "rgba(255,255,255,.06)", "btn_press": "rgba(255,255,255,.11)",
+        "tab_hover": "rgba(255,255,255,.07)",
+        "border": "rgba(255,255,255,.09)",
+    },
+}
 
-    Python → Chrome: BrowserWidget._push_chrome(action, data)
-    Chrome → Python: slots below (called via QWebChannel)
-    """
 
-    def __init__(self, browser_widget, parent=None):
-        super().__init__(parent)
-        self._bw = browser_widget
+def _make_theme_ss(theme="dark"):
+    """Generate the BrowserWidget stylesheet for the given theme name."""
+    v = _THEMES.get(theme, _THEMES["dark"])
+    bg           = v["bg"]
+    bg2          = v["bg2"]
+    bg3          = v["bg3"]
+    text         = v["text"]
+    muted        = v["muted"]
+    accent       = v["accent"]
+    af           = v["accent_faint"]
+    am           = v["accent_mid"]
+    addr_bg      = v["addr_bg"]
+    addr_focus   = v["addr_bg_focus"]
+    bh           = v["btn_hover"]
+    bp           = v["btn_press"]
+    th           = v["tab_hover"]
+    border       = v["border"]
 
-    # ── Called by chrome HTML when QWebChannel is ready ──
-    @Slot()
-    def chromeReady(self):
-        self._bw._on_chrome_ready()
+    return f"""
+BrowserWidget {{ background: {bg}; }}
 
-    # ── Tab actions ──
-    @Slot(str, str)
-    def navigate(self, tab_id, url):
-        self._bw.userNavigated.emit(tab_id, url)
+/* ── Tab strip row ── */
+QWidget#tabRow {{
+    background: {bg2};
+    border-bottom: 1px solid {border};
+}}
 
-    @Slot()
-    def createTab(self):
-        self._bw.userOpenNewTab.emit()
+/* ── Navigation bar row ── */
+QWidget#navRow {{
+    background: {bg};
+    border-bottom: 1px solid {border};
+}}
 
-    @Slot(str)
-    def closeTab(self, tab_id):
-        self._bw.userCloseTab.emit(tab_id)
+/* ── Home button ── */
+QToolButton#homeBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 18px; min-width: 36px; min-height: 36px;
+    border-radius: 6px; padding: 0 4px;
+}}
+QToolButton#homeBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#homeBtn:pressed {{ background: {bp}; }}
 
-    @Slot(str)
-    def switchTab(self, tab_id):
-        self._bw.userSwitchTab.emit(tab_id)
+/* ── Nav buttons ── */
+QToolButton#navBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 16px; min-width: 30px; min-height: 30px;
+    border-radius: 6px; padding: 2px;
+}}
+QToolButton#navBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#navBtn:pressed {{ background: {bp}; }}
+QToolButton#navBtn:disabled {{ color: {muted}; }}
 
-    @Slot(str)
-    def goBack(self, tab_id):
-        self._bw.userGoBack.emit(tab_id)
+/* ── Tab bar (Chrome-style: rounded top corners, flat bottom) ── */
+QTabBar {{ background: transparent; border: none; }}
+QTabBar::tab {{
+    background: {bg3};
+    color: {muted};
+    border: 1px solid {border};
+    border-top: 2px solid transparent;
+    border-top-left-radius: 8px; border-top-right-radius: 8px;
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    border-bottom: none;
+    padding: 6px 8px 6px 12px; margin: 4px 2px 0 2px;
+    min-width: 80px; max-width: 200px;
+    font-size: 12px;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}}
+QTabBar::tab:selected {{
+    background: {bg};
+    color: {text};
+    border-color: {border};
+    border-top: 2px solid {accent};
+    border-bottom: 2px solid {bg};
+}}
+QTabBar::tab:hover:!selected {{ background: {th}; color: {text}; border-top-color: {af}; }}
+QTabBar::close-button {{ image: none; subcontrol-position: right; width: 0; height: 0; }}
 
-    @Slot(str)
-    def goForward(self, tab_id):
-        self._bw.userGoForward.emit(tab_id)
+/* ── New tab button ── */
+QToolButton#newTabBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 20px; min-width: 28px; min-height: 28px;
+    border-radius: 6px; padding: 0;
+}}
+QToolButton#newTabBtn:hover {{ background: {bh}; color: {text}; }}
 
-    @Slot(str)
-    def reload(self, tab_id):
-        self._bw.userReload.emit(tab_id)
+/* ── Address bar ── */
+QLineEdit#addressBar {{
+    background: {addr_bg};
+    border: 1px solid {border};
+    border-radius: 18px;
+    color: {text};
+    font-size: 13px; padding: 5px 16px;
+    selection-background-color: {am};
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+}}
+QLineEdit#addressBar:focus {{ border-color: {accent}; background: {addr_focus}; }}
 
-    @Slot(str)
-    def stop(self, tab_id):
-        self._bw._stop_tab(tab_id)
+/* ── Utility buttons (bookmark / history / downloads) ── */
+QToolButton#utilBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 15px; min-width: 30px; min-height: 30px;
+    border-radius: 6px; padding: 2px;
+    font-family: "Segoe UI Symbol", "Segoe UI", "Apple Symbols", sans-serif;
+}}
+QToolButton#utilBtn:hover  {{ background: {bh}; color: {text}; }}
+QToolButton#utilBtn:checked {{ color: {accent}; }}
 
-    @Slot()
-    def goHome(self):
-        if self._bw._home_tab_id:
-            self._bw.userSwitchTab.emit(self._bw._home_tab_id)
+/* ── Window controls (min / max / close) ── */
+QToolButton#wcBtn {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 13px; min-width: 42px; min-height: 36px; max-height: 36px;
+    border-radius: 0; padding: 0;
+    font-family: "Segoe UI", sans-serif;
+}}
+QToolButton#wcBtn:hover {{ background: {bh}; color: {text}; }}
+QToolButton#wcBtnClose {{
+    background: transparent; border: none;
+    color: {muted};
+    font-size: 13px; min-width: 42px; min-height: 36px; max-height: 36px;
+    border-radius: 0; padding: 0;
+    font-family: "Segoe UI", sans-serif;
+}}
+QToolButton#wcBtnClose:hover {{ background: #c42b1c; color: white; }}
 
-    # ── Tab cycling (from chrome keyboard shortcuts) ──
-    @Slot()
-    def cycleTabNext(self):
-        self._bw._cycle_tab_next()
+/* ── Content area ── */
+QStackedWidget#contentStack {{ background: {bg}; }}
 
-    @Slot()
-    def cycleTabPrev(self):
-        self._bw._cycle_tab_prev()
-
-    # ── Utility panels ──
-    @Slot(str, str)
-    def bookmarkToggle(self, url, title):
-        self._bw._toggle_bookmark_for_url(url, title)
-
-    @Slot()
-    def showHistory(self):
-        self._bw._toggle_history_panel()
-
-    @Slot()
-    def showDownloads(self):
-        self._bw._toggle_downloads_panel()
-
-    # ── Window controls ──
-    @Slot()
-    def windowMinimize(self):
-        self._bw.window().showMinimized()
-
-    @Slot()
-    def windowMaxRestore(self):
-        w = self._bw.window()
-        w.showNormal() if w.isMaximized() else w.showMaximized()
-
-    @Slot()
-    def windowClose(self):
-        self._bw.window().close()
-
-    # ── Theme ──
-    @Slot(result=str)
-    def getAppTheme(self):
-        try:
-            import storage as _st
-            prefs = _st.read_json(_st.data_path("app_prefs.json")) or {}
-            return prefs.get("appTheme", "dark")
-        except Exception:
-            return "dark"
+/* ── Context menu ── */
+QMenu {{
+    background: {bg2}; color: {text};
+    border: 1px solid {border};
+    border-radius: 8px; padding: 4px; font-size: 13px;
+}}
+QMenu::item {{ padding: 6px 20px; border-radius: 4px; }}
+QMenu::item:selected {{ background: {af}; }}
+QMenu::separator {{ height: 1px; background: {border}; margin: 4px 8px; }}
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -180,14 +284,9 @@ class BrowserWidget(QWidget):
         super().__init__(parent)
         self._profile = profile                  # QWebEngineProfile("webmode")
         self._tabs = {}                          # tab_id → dict
-        self._tab_id_by_bar_idx = {}             # bar_idx → tab_id (ordering only)
+        self._tab_id_by_bar_idx = {}             # QTabBar index → tab_id
         self._active_tab_id = ""
         self._home_tab_id   = ""
-
-        # HTML chrome bridge (set in _setup_ui)
-        self._chrome_view   = None
-        self._chrome_bridge = None
-        self._chrome_ready  = False
 
         # Phase 2/3 bridge refs (set via set_bridges())
         self._torrent_search_bridge = None
@@ -222,10 +321,10 @@ class BrowserWidget(QWidget):
         self._torrent_tab = None
 
         # Phase 3: Downloads panel (overlay drawer, not a tab)
-        # Button clicks are routed from chrome HTML via BrowserChromeBridge.showDownloads()
         if sources or torrent:
             self._downloads_panel = DownloadsPanel(sources, torrent, parent=self)
             self._downloads_panel.hide()
+            self._downloads_btn.clicked.connect(self._toggle_downloads_panel)
         else:
             self._downloads_panel = None
 
@@ -234,10 +333,13 @@ class BrowserWidget(QWidget):
             self._history_panel = HistoryPanel(history, parent=self)
             self._history_panel.hide()
             self._history_panel.navigateTo.connect(self._on_history_navigate)
+            self._history_btn_w.clicked.connect(self._toggle_history_panel)
         else:
             self._history_panel = None
 
-        # Bookmark state is synced via _push_chrome("setBookmark", ...)
+        # Phase 3b: Bookmark button wiring
+        if bookmarks:
+            self._bookmark_btn.clicked.connect(self._toggle_bookmark)
 
     def _on_special_tab_check(self, bar_idx):
         """Handle clicks on special (non-closeable) pinned tabs."""
@@ -258,12 +360,12 @@ class BrowserWidget(QWidget):
     def _position_downloads_panel(self):
         if not self._downloads_panel:
             return
-        chrome_h = 76 if (self._chrome_view and self._chrome_view.isVisible()) else 0
-        find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
+        # Place as floating panel at the right side of BrowserWidget
+        # below tab row (36px) + nav row (40px) = 76px
         w = 360
-        h = self.height() - chrome_h - find_h
+        h = self.height() - 76
         x = self.width() - w
-        y = chrome_h + find_h
+        y = 76
         self._downloads_panel.setGeometry(x, y, w, h)
 
     def resizeEvent(self, event):
@@ -276,35 +378,95 @@ class BrowserWidget(QWidget):
     # ── UI construction ───────────────────────────────────────────────────────
 
     def set_theme(self, theme):
-        """Apply theme to the HTML browser chrome."""
-        self._push_chrome("applyTheme", theme)
+        """Apply one of the 6 app themes to the browser chrome Qt widgets."""
+        self.setStyleSheet(_make_theme_ss(theme))
 
     def _setup_ui(self):
+        self.setStyleSheet(_make_theme_ss("dark"))
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── HTML Chrome view (tab strip 36px + nav bar 40px = 76px) ──
-        chrome_profile = QWebEngineProfile("tankoweb-chrome", self)
-        chrome_page = QWebEnginePage(chrome_profile, self)
-        chrome_page.setBackgroundColor(QColor(10, 12, 20))   # prevent white flash
+        # ── Tab strip row (Chrome-style: home btn + tabs + new tab) ──
+        tab_row = QWidget()
+        tab_row.setObjectName("tabRow")
+        self._tab_row = tab_row
+        tab_row.setFixedHeight(36)
+        tr = QHBoxLayout(tab_row)
+        tr.setContentsMargins(4, 0, 4, 0)
+        tr.setSpacing(0)
 
-        self._chrome_channel = QWebChannel(chrome_page)
-        self._chrome_bridge  = BrowserChromeBridge(self)
-        self._chrome_channel.registerObject("chrome", self._chrome_bridge)
-        chrome_page.setWebChannel(self._chrome_channel)
+        self._home_btn = QToolButton()
+        self._home_btn.setObjectName("homeBtn")
+        self._home_btn.setText("⌂")
+        self._home_btn.setToolTip("Home")
+        tr.addWidget(self._home_btn)
+        tr.addSpacing(2)
 
-        self._chrome_view = QWebEngineView()
-        self._chrome_view.setPage(chrome_page)
-        self._chrome_view.setFixedHeight(76)
-        self._chrome_view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        self._tab_bar = QTabBar()
+        self._tab_bar.setExpanding(False)
+        self._tab_bar.setMovable(True)
+        self._tab_bar.setTabsClosable(True)
+        self._tab_bar.setDrawBase(False)
+        self._tab_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        tr.addWidget(self._tab_bar, stretch=1)
 
-        chrome_url = QUrl.fromLocalFile(
-            str(Path(__file__).parent / "data" / "browser_chrome.html")
-        )
-        self._chrome_view.setUrl(chrome_url)
-        self._chrome_view.hide()   # hidden on home screen; shown when a real tab activates
-        root.addWidget(self._chrome_view)
+        self._new_tab_btn = QToolButton()
+        self._new_tab_btn.setObjectName("newTabBtn")
+        self._new_tab_btn.setText("+")
+        self._new_tab_btn.setToolTip("New tab  (Ctrl+T)")
+        tr.addWidget(self._new_tab_btn)
+        tr.addStretch()
+
+        # Window controls (far right of tab strip, Chrome-style)
+        self._wc_min   = self._wc_btn("─", "wcBtn",      "Minimize")
+        self._wc_max   = self._wc_btn("□", "wcBtn",      "Maximize / Restore")
+        self._wc_close = self._wc_btn("×", "wcBtnClose", "Close")
+        tr.addWidget(self._wc_min)
+        tr.addWidget(self._wc_max)
+        tr.addWidget(self._wc_close)
+        self._wc_min.clicked.connect(lambda: self.window().showMinimized())
+        self._wc_max.clicked.connect(self._toggle_maximize)
+        self._wc_close.clicked.connect(self.window().close)
+
+        tab_row.hide()   # hidden on home screen; shown when a real browser tab activates
+        root.addWidget(tab_row)
+
+        # ── Navigation bar row (back/fwd/reload + address bar + util buttons) ──
+        nav_row = QWidget()
+        nav_row.setObjectName("navRow")
+        self._nav_row = nav_row
+        nav_row.setFixedHeight(40)
+        nl = QHBoxLayout(nav_row)
+        nl.setContentsMargins(8, 4, 8, 4)
+        nl.setSpacing(3)
+
+        self._back_btn   = self._nav_btn("←", "Back  (Alt+Left)")
+        self._fwd_btn    = self._nav_btn("→", "Forward  (Alt+Right)")
+        self._reload_btn = self._nav_btn("↻", "Reload  (F5)")
+        nl.addWidget(self._back_btn)
+        nl.addWidget(self._fwd_btn)
+        nl.addWidget(self._reload_btn)
+        nl.addSpacing(4)
+
+        self._address_bar = QLineEdit()
+        self._address_bar.setObjectName("addressBar")
+        self._address_bar.setPlaceholderText("Search or enter address")
+        self._address_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        nl.addWidget(self._address_bar, stretch=2)
+
+        nl.addSpacing(4)
+
+        self._bookmark_btn  = self._util_btn("☆", "Bookmark")
+        self._history_btn_w = self._util_btn("↺", "History")
+        self._downloads_btn = self._util_btn("⤓", "Downloads")
+        nl.addWidget(self._bookmark_btn)
+        nl.addWidget(self._history_btn_w)
+        nl.addWidget(self._downloads_btn)
+
+        nav_row.hide()   # hidden on home screen; shown when a real browser tab activates
+        root.addWidget(nav_row)
 
         # ── Find bar (hidden by default; Ctrl+F reveals it) ──
         find_bar = QWidget()
@@ -363,14 +525,59 @@ class BrowserWidget(QWidget):
         self._content_stack.setObjectName("contentStack")
         root.addWidget(self._content_stack, stretch=1)
 
+        # ── Toolbar signal wiring ──
+        self._home_btn.clicked.connect(self._on_home_clicked)
+        self._back_btn.clicked.connect(self._on_back)
+        self._fwd_btn.clicked.connect(self._on_fwd)
+        self._reload_btn.clicked.connect(self._on_reload)
+        self._new_tab_btn.clicked.connect(self._on_new_tab)
+        self._address_bar.returnPressed.connect(self._on_address_entered)
+        self._tab_bar.currentChanged.connect(self._on_tab_bar_changed)
+        self._tab_bar.tabCloseRequested.connect(self._on_tab_close_requested)
+        self._tab_bar.tabMoved.connect(self._on_tab_moved)
+
+        # Disable nav buttons initially
+        self._back_btn.setEnabled(False)
+        self._fwd_btn.setEnabled(False)
+
+    def _nav_btn(self, text, tip):
+        b = QToolButton()
+        b.setObjectName("navBtn")
+        b.setText(text)
+        b.setToolTip(tip)
+        return b
+
+    def _util_btn(self, text, tip):
+        b = QToolButton()
+        b.setObjectName("utilBtn")
+        b.setText(text)
+        b.setToolTip(tip)
+        return b
+
+    def _wc_btn(self, text, obj_name, tip):
+        b = QToolButton()
+        b.setObjectName(obj_name)
+        b.setText(text)
+        b.setToolTip(tip)
+        return b
+
+    def _toggle_maximize(self):
+        w = self.window()
+        if w.isMaximized():
+            w.showNormal()
+            self._wc_max.setText("□")
+        else:
+            w.showMaximized()
+            self._wc_max.setText("❐")
+
     def _setup_shortcuts(self):
         def _mk(seq, fn):
             s = QShortcut(QKeySequence(seq), self)
             s.activated.connect(fn)
 
         _mk("Ctrl+T",         self._on_new_tab)
-        _mk("Ctrl+W",         self._close_active_tab)
-        _mk("Ctrl+L",         lambda: self._push_chrome("focusAddrBar"))
+        _mk("Ctrl+W",         lambda: self._on_tab_close_requested(self._tab_bar.currentIndex()))
+        _mk("Ctrl+L",         lambda: (self._address_bar.setFocus(), self._address_bar.selectAll()))
         _mk("Alt+Left",       self._on_back)
         _mk("Alt+Right",      self._on_fwd)
         _mk("F5",             self._on_reload)
@@ -402,12 +609,22 @@ class BrowserWidget(QWidget):
         stack_idx = self._content_stack.addWidget(view)
 
         if home:
+            # Home tab is NOT added to QTabBar — it's accessed via the ⌂ home button
             bar_idx = -1
             self._home_tab_id = tab_id
         else:
-            # Assign next bar_idx in insertion order
-            existing = [t["bar_idx"] for t in self._tabs.values() if t.get("bar_idx", -1) >= 0]
-            bar_idx = (max(existing) + 1) if existing else 0
+            # Regular tabs: add to QTabBar with a custom × close button
+            bar_idx = self._tab_bar.addTab(title)
+            close_btn = QPushButton("×")
+            close_btn.setFixedSize(18, 18)
+            close_btn.setStyleSheet(
+                "QPushButton { background:transparent; border:none; color:#8b949e;"
+                " font-size:14px; padding:0; border-radius:4px; }"
+                "QPushButton:hover { background:rgba(248,81,73,0.25); color:#f85149; }"
+            )
+            _v = view  # capture for lambda
+            close_btn.clicked.connect(lambda checked=False, v=_v: self._close_tab_by_view(v))
+            self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, close_btn)
             self._tab_id_by_bar_idx[bar_idx] = tab_id
 
         self._tabs[tab_id] = {
@@ -419,11 +636,7 @@ class BrowserWidget(QWidget):
             "url":       "",
             "can_back":  False,
             "can_fwd":   False,
-            "loading":   False,
         }
-
-        if not home:
-            self._push_chrome("setTabs", self._build_tab_list_payload())
 
     def remove_tab_view(self, tab_id):
         """
@@ -436,6 +649,11 @@ class BrowserWidget(QWidget):
         bar_idx = tab.get("bar_idx", -1)
         view    = tab.get("view")
 
+        # Remove from tab bar (home tab has bar_idx = -1, skip)
+        self._tab_bar.blockSignals(True)
+        if 0 <= bar_idx < self._tab_bar.count():
+            self._tab_bar.removeTab(bar_idx)
+        self._tab_bar.blockSignals(False)
         if tab_id == self._home_tab_id:
             self._home_tab_id = ""
 
@@ -444,17 +662,12 @@ class BrowserWidget(QWidget):
             self._content_stack.removeWidget(view)
             view.deleteLater()
 
-        # Remove from ordering map
-        if bar_idx >= 0:
-            self._tab_id_by_bar_idx.pop(bar_idx, None)
-
-        # Rebuild index maps and push updated tab list to chrome
+        # Rebuild index maps
         self._rebuild_maps()
-        self._push_chrome("setTabs", self._build_tab_list_payload())
 
     def set_active_tab_id(self, tab_id):
         """
-        Switch the visible content and HTML chrome selection.
+        Switch the visible content and QTabBar selection.
         Called by WebTabManagerBridge.switchTab().
         """
         tab = self._tabs.get(tab_id)
@@ -462,24 +675,45 @@ class BrowserWidget(QWidget):
             return
         self._active_tab_id = tab_id
 
-        # Switch content stack
+        # Switch QTabBar selection — home tabs have bar_idx = -1 (not in tab bar)
+        bar_idx = tab.get("bar_idx", -1)
+        if bar_idx >= 0:
+            self._tab_bar.blockSignals(True)
+            self._tab_bar.setCurrentIndex(bar_idx)
+            self._tab_bar.blockSignals(False)
+
+        # Switch content
         view = tab.get("view")
         if view:
             self._content_stack.setCurrentWidget(view)
 
-        # Show/hide HTML chrome: hidden on home, visible on real browser tabs
+        # Show/hide Chrome rows: hidden on home, visible on real browser tabs
         is_home = tab.get("home", False)
+        self._tab_row.setVisible(not is_home)
+        self._nav_row.setVisible(not is_home)
+
+        # Address bar
         if is_home:
-            self._chrome_view.hide()
+            self._address_bar.clear()
+            self._address_bar.setPlaceholderText("Search or enter address")
         else:
-            self._chrome_view.show()
-            self._push_chrome("setActiveTab", tab_id)
-            self._update_bookmark_state(tab_id)
+            self._address_bar.setText(tab.get("url", ""))
+
+        self._sync_nav_buttons(tab_id)
+        self._update_bookmark_state(tab_id)
+        # Sync reload/stop button for the newly active tab
+        is_loading = tab.get("loading", False)
+        if is_loading:
+            self._reload_btn.setText("✕")
+            self._reload_btn.setToolTip("Stop loading")
+        else:
+            self._reload_btn.setText("↻")
+            self._reload_btn.setToolTip("Reload  (F5)")
 
     def navigate_tab(self, tab_id, url):
         """
         Called when a home tab navigates to a real URL (becomes a URL tab).
-        Assigns bar_idx, shows chrome, pushes updated tab list to HTML chrome.
+        Updates address bar + switches content to this tab's view.
         """
         tab = self._tabs.get(tab_id)
         if not tab:
@@ -487,58 +721,64 @@ class BrowserWidget(QWidget):
         was_home = tab.get("home", False)
         tab["home"] = False
         tab["url"]  = url
-
-        if was_home:
-            # Assign a bar_idx so this tab appears in the chrome tab strip
-            existing = [t["bar_idx"] for t in self._tabs.values() if t.get("bar_idx", -1) >= 0]
-            bar_idx = (max(existing) + 1) if existing else 0
-            tab["bar_idx"] = bar_idx
-            self._tab_id_by_bar_idx[bar_idx] = tab_id
-            if tab_id == self._home_tab_id:
-                self._home_tab_id = ""
-
         if tab_id == self._active_tab_id:
             view = tab.get("view")
             if view:
                 self._content_stack.setCurrentWidget(view)
-            self._chrome_view.show()
-            self._push_chrome("setTabs", self._build_tab_list_payload())
-            self._push_chrome("setActiveTab", tab_id)
+            self._address_bar.setText(url)
+            if was_home:
+                self._tab_row.show()
+                self._nav_row.show()
 
     def update_tab(self, tab_id, **fields):
         """
         Update tab metadata from page signals (url, title, loading, canGoBack, canGoForward).
         Called by WebTabManagerBridge._emit_tab_update().
-        Pushes changed fields to the HTML chrome via _push_chrome("updateTab", ...).
         """
         tab = self._tabs.get(tab_id)
         if not tab:
             return
 
-        changed = {}
-
         if "url" in fields:
-            tab["url"] = fields["url"]
-            changed["url"] = fields["url"]
+            u = fields["url"]
+            tab["url"] = u
+            if tab_id == self._active_tab_id and not tab.get("home"):
+                self._address_bar.setText(u)
 
         if "title" in fields and fields["title"]:
-            tab["title"] = fields["title"]
-            changed["title"] = fields["title"]
+            t = fields["title"]
+            tab["title"] = t
+            bar_idx = tab.get("bar_idx", -1)
+            loading = tab.get("loading", False)
+            if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
+                display = ("↻ " + t[:24]) if loading else t[:28]
+                self._tab_bar.setTabText(bar_idx, display)
 
         if "loading" in fields:
-            tab["loading"] = bool(fields["loading"])
-            changed["loading"] = tab["loading"]
+            bar_idx = tab.get("bar_idx", -1)
+            is_loading = bool(fields["loading"])
+            # Update tab title with ↻ prefix while loading
+            if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
+                t = tab.get("title", "")
+                if t:
+                    display = ("↻ " + t[:24]) if is_loading else t[:28]
+                    self._tab_bar.setTabText(bar_idx, display)
+            # Toggle reload button: ✕ while loading, ↻ when done
+            if tab_id == self._active_tab_id:
+                if is_loading:
+                    self._reload_btn.setText("✕")
+                    self._reload_btn.setToolTip("Stop loading")
+                else:
+                    self._reload_btn.setText("↻")
+                    self._reload_btn.setToolTip("Reload  (F5)")
 
         if "canGoBack" in fields:
             tab["can_back"] = bool(fields["canGoBack"])
-            changed["canBack"] = tab["can_back"]
-
         if "canGoForward" in fields:
             tab["can_fwd"] = bool(fields["canGoForward"])
-            changed["canFwd"] = tab["can_fwd"]
 
-        if changed and not tab.get("home"):
-            self._push_chrome("updateTab", {"id": tab_id, **changed})
+        if tab_id == self._active_tab_id:
+            self._sync_nav_buttons(tab_id)
 
     def show_context_menu(self, tab_id, req, screen_pos):
         """
@@ -648,35 +888,43 @@ class BrowserWidget(QWidget):
             self.userGoForward.emit(self._active_tab_id)
 
     def _on_reload(self):
-        """Keyboard shortcut handler: stop if loading, reload otherwise."""
         if not self._active_tab_id:
             return
         tab = self._tabs.get(self._active_tab_id, {})
         if tab.get("loading"):
-            self._stop_tab(self._active_tab_id)
+            # Stop loading
+            view = tab.get("view")
+            if view:
+                view.stop()
+            self._reload_btn.setText("↻")
+            self._reload_btn.setToolTip("Reload  (F5)")
         else:
             self.userReload.emit(self._active_tab_id)
-
-    def _stop_tab(self, tab_id):
-        """Stop loading a tab (called from BrowserChromeBridge.stop or keyboard)."""
-        tab = self._tabs.get(tab_id, {})
-        view = tab.get("view")
-        if view:
-            view.stop()
-
-    def _close_active_tab(self):
-        """Ctrl+W: close the active non-home tab."""
-        if self._active_tab_id:
-            tab = self._tabs.get(self._active_tab_id, {})
-            if not tab.get("home"):
-                self.userCloseTab.emit(self._active_tab_id)
 
     def _on_new_tab(self):
         self.userOpenNewTab.emit()
 
+    def _on_home_clicked(self):
+        """Switch back to the home tab (home.html) when ⌂ is clicked."""
+        if self._home_tab_id:
+            self.userSwitchTab.emit(self._home_tab_id)
+
     def _on_escape(self):
         if self._find_bar.isVisible():
             self._close_find_bar()
+        else:
+            self._address_bar.clearFocus()
+
+    def _on_address_entered(self):
+        raw = self._address_bar.text().strip()
+        if not raw:
+            return
+        url = _normalize_url(raw)
+        if self._active_tab_id:
+            self.userNavigated.emit(self._active_tab_id, url)
+        else:
+            self.userOpenNewTab.emit()
+            # bridge will create a tab and JS will call navigateTo
 
     # ── Find in page ─────────────────────────────────────────────────────────
 
@@ -763,35 +1011,40 @@ class BrowserWidget(QWidget):
 
     # ── Bookmarks ─────────────────────────────────────────────────────────────
 
-    def _toggle_bookmark_for_url(self, url, title):
-        """Called by BrowserChromeBridge.bookmarkToggle()."""
-        if not self._bookmarks_bridge or not url or url.startswith("file://"):
+    def _toggle_bookmark(self):
+        if not self._bookmarks_bridge:
+            return
+        tab = self._tabs.get(self._active_tab_id, {})
+        url = tab.get("url", "")
+        if not url or url.startswith("file://"):
             return
         try:
             result = json.loads(self._bookmarks_bridge.toggle(json.dumps({
-                "url": url, "title": title,
+                "url": url,
+                "title": tab.get("title", ""),
             })))
+            # Visual feedback: fill/unfill the star
             added = result.get("added", False)
-            self._push_chrome("setBookmark", {"url": url, "bookmarked": added})
+            self._bookmark_btn.setText("★" if added else "☆")
         except Exception:
             pass
 
     def _update_bookmark_state(self, tab_id):
-        """Push bookmark state for the active tab to the HTML chrome."""
+        """Update ★ button appearance for the given tab's URL."""
         if not self._bookmarks_bridge:
             return
         tab = self._tabs.get(tab_id, {})
         url = tab.get("url", "")
         if not url or url.startswith("file://"):
-            self._push_chrome("setBookmark", {"url": url, "bookmarked": False})
+            self._bookmark_btn.setText("☆")
             return
         try:
             r = json.loads(self._bookmarks_bridge.list())
             bookmarks = r.get("bookmarks", [])
             is_bm = any(b.get("url") == url for b in bookmarks if b)
-            self._push_chrome("setBookmark", {"url": url, "bookmarked": is_bm})
+            self._bookmark_btn.setText("★" if is_bm else "☆")
         except Exception:
-            self._push_chrome("setBookmark", {"url": url, "bookmarked": False})
+            self._bookmark_btn.setText("☆")
 
     # ── History panel ─────────────────────────────────────────────────────────
 
@@ -809,12 +1062,10 @@ class BrowserWidget(QWidget):
     def _position_history_panel(self):
         if not self._history_panel:
             return
-        chrome_h = 76 if (self._chrome_view and self._chrome_view.isVisible()) else 0
-        find_h   = self._find_bar.height() if self._find_bar.isVisible() else 0
         w = 340
-        h = self.height() - chrome_h - find_h
+        h = self.height() - 76
         x = self.width() - w
-        y = chrome_h + find_h
+        y = 76
         self._history_panel.setGeometry(x, y, w, h)
 
     def _on_history_navigate(self, url):
@@ -827,85 +1078,71 @@ class BrowserWidget(QWidget):
     # ── Tab cycling ───────────────────────────────────────────────────────────
 
     def _cycle_tab_next(self):
-        ordered = sorted(self._tab_id_by_bar_idx.keys())
-        if len(ordered) < 2:
+        n = self._tab_bar.count()
+        if n < 2:
             return
-        cur_bar = self._tabs.get(self._active_tab_id, {}).get("bar_idx", -1)
-        if cur_bar < 0:
-            self.userSwitchTab.emit(self._tab_id_by_bar_idx[ordered[0]])
-            return
-        try:
-            pos = ordered.index(cur_bar)
-            self.userSwitchTab.emit(self._tab_id_by_bar_idx[ordered[(pos + 1) % len(ordered)]])
-        except ValueError:
-            pass
+        self._tab_bar.setCurrentIndex((self._tab_bar.currentIndex() + 1) % n)
 
     def _cycle_tab_prev(self):
-        ordered = sorted(self._tab_id_by_bar_idx.keys())
-        if len(ordered) < 2:
+        n = self._tab_bar.count()
+        if n < 2:
             return
-        cur_bar = self._tabs.get(self._active_tab_id, {}).get("bar_idx", -1)
-        if cur_bar < 0:
-            self.userSwitchTab.emit(self._tab_id_by_bar_idx[ordered[-1]])
-            return
-        try:
-            pos = ordered.index(cur_bar)
-            self.userSwitchTab.emit(self._tab_id_by_bar_idx[ordered[(pos - 1) % len(ordered)]])
-        except ValueError:
-            pass
+        self._tab_bar.setCurrentIndex((self._tab_bar.currentIndex() - 1) % n)
+
+    def _on_tab_bar_changed(self, bar_idx):
+        tab_id = self._tab_id_by_bar_idx.get(bar_idx)
+        if tab_id and tab_id != self._active_tab_id:
+            self.userSwitchTab.emit(tab_id)
+
+    def _on_tab_close_requested(self, bar_idx):
+        tab_id = self._tab_id_by_bar_idx.get(bar_idx)
+        if tab_id:
+            self.userCloseTab.emit(tab_id)
+
+    def _on_tab_moved(self, from_idx, to_idx):
+        self._rebuild_maps()
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 
     def _rebuild_maps(self):
         """Rebuild bar_idx maps and stack_idx after structural changes."""
+        self._tab_id_by_bar_idx = {}
+        for tid, t in self._tabs.items():
+            # Find bar index by matching current text (fragile) or by scanning
+            pass
+        # Safer: rebuild by scanning all tabs against QTabBar text is unreliable.
+        # Instead maintain a list and update on add/remove.
+        # After removeTab, bar indices of later tabs shift down by 1.
+        # Rebuild from scratch using the remaining tabs' bar positions.
         remaining = sorted(
             [(t["bar_idx"], tid) for tid, t in self._tabs.items() if t.get("bar_idx", -1) >= 0]
         )
-        self._tab_id_by_bar_idx = {}
+        # QTabBar removes the tab at bar_idx and shifts subsequent indices
+        # After rebuild we need to re-query actual indices.
+        # Use a position-scan approach: iterate QTabBar count and match by title.
+        # Actually the cleanest: store bar indices keyed by insertion order, then
+        # recalculate after each remove.
+        # We update _tab_id_by_bar_idx by iterating the sorted remaining list
+        # and reassigning consecutive indices from 0:
         for new_idx, (_, tid) in enumerate(remaining):
             self._tabs[tid]["bar_idx"] = new_idx
             self._tab_id_by_bar_idx[new_idx] = tid
 
+        # Update stack_idx
         for tid, t in self._tabs.items():
             view = t.get("view")
             if view:
                 t["stack_idx"] = self._content_stack.indexOf(view)
 
-    def _push_chrome(self, action, data=None):
-        """Push a state update to browser_chrome.html via runJavaScript."""
-        if not self._chrome_view:
+    def _sync_nav_buttons(self, tab_id):
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            self._back_btn.setEnabled(False)
+            self._fwd_btn.setEnabled(False)
             return
-        if data is None:
-            js = f"if(window._chrome)window._chrome['{action}']()"
-        else:
-            js = f"if(window._chrome)window._chrome['{action}']({json.dumps(data, ensure_ascii=False)})"
-        self._chrome_view.page().runJavaScript(js)
-
-    def _on_chrome_ready(self):
-        """Called by BrowserChromeBridge.chromeReady() when HTML is initialised."""
-        self._chrome_ready = True
-        self._push_chrome("setTabs", self._build_tab_list_payload())
-        if self._active_tab_id:
-            tab = self._tabs.get(self._active_tab_id, {})
-            if not tab.get("home"):
-                self._push_chrome("setActiveTab", self._active_tab_id)
-
-    def _build_tab_list_payload(self):
-        """Build the tabs array for _push_chrome("setTabs", ...)."""
-        result = []
-        for tid, t in self._tabs.items():
-            if t.get("home"):
-                continue
-            result.append({
-                "id":      tid,
-                "title":   t.get("title", "New Tab"),
-                "url":     t.get("url", ""),
-                "loading": t.get("loading", False),
-                "canBack": t.get("can_back", False),
-                "canFwd":  t.get("can_fwd", False),
-            })
-        result.sort(key=lambda x: self._tabs[x["id"]].get("bar_idx", 999))
-        return result
+        # Use cached values from tabUpdated signals
+        self._back_btn.setEnabled(tab.get("can_back", False))
+        self._fwd_btn.setEnabled(tab.get("can_fwd", False))
 
     def _close_tab_by_view(self, view):
         """Close the tab associated with a specific view widget."""
@@ -934,12 +1171,6 @@ class BrowserWidget(QWidget):
                     pass
         self._tabs.clear()
         self._tab_id_by_bar_idx.clear()
-        if self._chrome_view:
-            try:
-                self._chrome_view.deleteLater()
-            except Exception:
-                pass
-            self._chrome_view = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
