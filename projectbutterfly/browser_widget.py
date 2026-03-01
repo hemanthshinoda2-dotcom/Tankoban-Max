@@ -49,11 +49,33 @@ BrowserWidget {
     background: #0d1117;
 }
 
-QWidget#browserToolbar {
+/* ── Tab strip row ── */
+QWidget#tabRow {
+    background: #161b22;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+/* ── Navigation bar row ── */
+QWidget#navRow {
     background: #0d1117;
     border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
+/* ── Home button ── */
+QToolButton#homeBtn {
+    background: transparent;
+    border: none;
+    color: #8b949e;
+    font-size: 18px;
+    min-width: 36px;
+    min-height: 36px;
+    border-radius: 6px;
+    padding: 0 4px;
+}
+QToolButton#homeBtn:hover  { background: rgba(255,255,255,0.07); color: #e6edf3; }
+QToolButton#homeBtn:pressed { background: rgba(255,255,255,0.12); }
+
+/* ── Nav buttons (back / fwd / reload) ── */
 QToolButton#navBtn {
     background: transparent;
     border: none;
@@ -68,32 +90,36 @@ QToolButton#navBtn:hover  { background: rgba(255,255,255,0.07); color: #e6edf3; 
 QToolButton#navBtn:pressed { background: rgba(255,255,255,0.12); }
 QToolButton#navBtn:disabled { color: rgba(139,148,158,0.3); }
 
+/* ── Tab bar (Chrome-style: rounded top, flat bottom) ── */
 QTabBar {
     background: transparent;
     border: none;
 }
 QTabBar::tab {
-    background: rgba(255,255,255,0.04);
+    background: rgba(255,255,255,0.03);
     color: #8b949e;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 8px;
-    padding: 5px 6px 5px 10px;
-    margin: 4px 2px;
+    border: 1px solid transparent;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    padding: 6px 8px 6px 12px;
+    margin: 0 2px;
     min-width: 80px;
     max-width: 200px;
     font-size: 12px;
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 QTabBar::tab:selected {
-    background: rgba(88,101,242,0.18);
+    background: #0d1117;
     color: #e6edf3;
-    border-color: rgba(88,101,242,0.5);
+    border-color: rgba(255,255,255,0.08);
+    border-bottom-color: #0d1117;
 }
 QTabBar::tab:hover:!selected {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.06);
     color: #c9d1d9;
 }
-QTabBar::tab:first:selected { border-top-left-radius: 8px; }
 QTabBar::close-button {
     image: none;
     subcontrol-position: right;
@@ -193,6 +219,7 @@ class BrowserWidget(QWidget):
         self._tabs = {}                          # tab_id → dict
         self._tab_id_by_bar_idx = {}             # QTabBar index → tab_id
         self._active_tab_id = ""
+        self._home_tab_id   = ""
 
         # Phase 2/3 bridge refs (set via set_bridges())
         self._torrent_search_bridge = None
@@ -223,25 +250,8 @@ class BrowserWidget(QWidget):
         self._history_bridge = history
         self._bookmarks_bridge = bookmarks
 
-        # Phase 2: Torrent Search pinned tab
-        if torrent_search or torrent:
-            self._torrent_tab = TorrentSearchTab(
-                torrent_search, torrent,
-                open_new_tab_fn=self.userOpenNewTab.emit,
-                navigate_fn=lambda url: self.userNavigated.emit(self._active_tab_id, url),
-                parent=self,
-            )
-            stack_idx = self._content_stack.addWidget(self._torrent_tab)
-            bar_idx   = self._tab_bar.addTab("⚡ Torrents")
-            self._tab_bar.setTabToolTip(bar_idx, "Torrent Search")
-            # Mark as non-closeable
-            self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, None)
-            self._torrent_tab_bar_idx   = bar_idx
-            self._torrent_tab_stack_idx = stack_idx
-            # Wire tab bar click for torrent tab
-            self._tab_bar.currentChanged.connect(self._on_special_tab_check)
-        else:
-            self._torrent_tab = None
+        # Torrent Search pinned tab removed — torrent search is now in home.html
+        self._torrent_tab = None
 
         # Phase 3: Downloads panel (overlay drawer, not a tab)
         if sources or torrent:
@@ -284,10 +294,11 @@ class BrowserWidget(QWidget):
         if not self._downloads_panel:
             return
         # Place as floating panel at the right side of BrowserWidget
+        # below tab row (36px) + nav row (40px) = 76px
         w = 360
-        h = self.height() - 44  # below toolbar
+        h = self.height() - 76
         x = self.width() - w
-        y = 44
+        y = 76
         self._downloads_panel.setGeometry(x, y, w, h)
 
     def resizeEvent(self, event):
@@ -306,21 +317,21 @@ class BrowserWidget(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── Toolbar ──
-        toolbar = QWidget()
-        toolbar.setObjectName("browserToolbar")
-        toolbar.setFixedHeight(44)
-        tl = QHBoxLayout(toolbar)
-        tl.setContentsMargins(8, 4, 8, 4)
-        tl.setSpacing(3)
+        # ── Tab strip row (Chrome-style: home btn + tabs + new tab) ──
+        tab_row = QWidget()
+        tab_row.setObjectName("tabRow")
+        self._tab_row = tab_row
+        tab_row.setFixedHeight(36)
+        tr = QHBoxLayout(tab_row)
+        tr.setContentsMargins(4, 0, 4, 0)
+        tr.setSpacing(0)
 
-        self._back_btn   = self._nav_btn("←", "Back  (Alt+Left)")
-        self._fwd_btn    = self._nav_btn("→", "Forward  (Alt+Right)")
-        self._reload_btn = self._nav_btn("⟳", "Reload  (F5)")
-        tl.addWidget(self._back_btn)
-        tl.addWidget(self._fwd_btn)
-        tl.addWidget(self._reload_btn)
-        tl.addSpacing(4)
+        self._home_btn = QToolButton()
+        self._home_btn.setObjectName("homeBtn")
+        self._home_btn.setText("⌂")
+        self._home_btn.setToolTip("Home")
+        tr.addWidget(self._home_btn)
+        tr.addSpacing(2)
 
         self._tab_bar = QTabBar()
         self._tab_bar.setExpanding(False)
@@ -328,32 +339,52 @@ class BrowserWidget(QWidget):
         self._tab_bar.setTabsClosable(True)
         self._tab_bar.setDrawBase(False)
         self._tab_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        tl.addWidget(self._tab_bar, stretch=1)
+        tr.addWidget(self._tab_bar, stretch=1)
 
         self._new_tab_btn = QToolButton()
         self._new_tab_btn.setObjectName("newTabBtn")
         self._new_tab_btn.setText("+")
         self._new_tab_btn.setToolTip("New tab  (Ctrl+T)")
-        tl.addWidget(self._new_tab_btn)
+        tr.addWidget(self._new_tab_btn)
+        tr.addStretch()
 
-        tl.addSpacing(6)
+        tab_row.hide()   # hidden on home screen; shown when a real browser tab activates
+        root.addWidget(tab_row)
+
+        # ── Navigation bar row (back/fwd/reload + address bar + util buttons) ──
+        nav_row = QWidget()
+        nav_row.setObjectName("navRow")
+        self._nav_row = nav_row
+        nav_row.setFixedHeight(40)
+        nl = QHBoxLayout(nav_row)
+        nl.setContentsMargins(8, 4, 8, 4)
+        nl.setSpacing(3)
+
+        self._back_btn   = self._nav_btn("←", "Back  (Alt+Left)")
+        self._fwd_btn    = self._nav_btn("→", "Forward  (Alt+Right)")
+        self._reload_btn = self._nav_btn("↻", "Reload  (F5)")
+        nl.addWidget(self._back_btn)
+        nl.addWidget(self._fwd_btn)
+        nl.addWidget(self._reload_btn)
+        nl.addSpacing(4)
 
         self._address_bar = QLineEdit()
         self._address_bar.setObjectName("addressBar")
         self._address_bar.setPlaceholderText("Search or enter address")
         self._address_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        tl.addWidget(self._address_bar, stretch=2)
+        nl.addWidget(self._address_bar, stretch=2)
 
-        tl.addSpacing(4)
+        nl.addSpacing(4)
 
-        self._bookmark_btn  = self._util_btn("★", "Bookmark")
+        self._bookmark_btn  = self._util_btn("☆", "Bookmark")
         self._history_btn_w = self._util_btn("⏱", "History")
         self._downloads_btn = self._util_btn("↓", "Downloads")
-        tl.addWidget(self._bookmark_btn)
-        tl.addWidget(self._history_btn_w)
-        tl.addWidget(self._downloads_btn)
+        nl.addWidget(self._bookmark_btn)
+        nl.addWidget(self._history_btn_w)
+        nl.addWidget(self._downloads_btn)
 
-        root.addWidget(toolbar)
+        nav_row.hide()   # hidden on home screen; shown when a real browser tab activates
+        root.addWidget(nav_row)
 
         # ── Find bar (hidden by default; Ctrl+F reveals it) ──
         find_bar = QWidget()
@@ -413,6 +444,7 @@ class BrowserWidget(QWidget):
         root.addWidget(self._content_stack, stretch=1)
 
         # ── Toolbar signal wiring ──
+        self._home_btn.clicked.connect(self._on_home_clicked)
         self._back_btn.clicked.connect(self._on_back)
         self._fwd_btn.clicked.connect(self._on_fwd)
         self._reload_btn.clicked.connect(self._on_reload)
@@ -477,14 +509,14 @@ class BrowserWidget(QWidget):
         """
         view.setParent(self)
         stack_idx = self._content_stack.addWidget(view)
-        bar_idx   = self._tab_bar.addTab(title)
+
         if home:
-            # Home tab: permanent, no close button, "⌂ Home" label
-            self._tab_bar.setTabText(bar_idx, "⌂ Home")
-            self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, None)
-            self._tab_bar.setTabToolTip(bar_idx, "Tankoban Home — Search, Sources, Downloads")
+            # Home tab is NOT added to QTabBar — it's accessed via the ⌂ home button
+            bar_idx = -1
+            self._home_tab_id = tab_id
         else:
-            # Regular tabs: custom × close button with red hover
+            # Regular tabs: add to QTabBar with a custom × close button
+            bar_idx = self._tab_bar.addTab(title)
             close_btn = QPushButton("×")
             close_btn.setFixedSize(18, 18)
             close_btn.setStyleSheet(
@@ -495,7 +527,8 @@ class BrowserWidget(QWidget):
             _v = view  # capture for lambda
             close_btn.clicked.connect(lambda checked=False, v=_v: self._close_tab_by_view(v))
             self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, close_btn)
-        self._tab_id_by_bar_idx[bar_idx] = tab_id
+            self._tab_id_by_bar_idx[bar_idx] = tab_id
+
         self._tabs[tab_id] = {
             "view":      view,
             "stack_idx": stack_idx,
@@ -518,11 +551,13 @@ class BrowserWidget(QWidget):
         bar_idx = tab.get("bar_idx", -1)
         view    = tab.get("view")
 
-        # Remove from tab bar (block signals to prevent recursive switchTab)
+        # Remove from tab bar (home tab has bar_idx = -1, skip)
         self._tab_bar.blockSignals(True)
         if 0 <= bar_idx < self._tab_bar.count():
             self._tab_bar.removeTab(bar_idx)
         self._tab_bar.blockSignals(False)
+        if tab_id == self._home_tab_id:
+            self._home_tab_id = ""
 
         # Remove from content stack and destroy view
         if view:
@@ -542,18 +577,25 @@ class BrowserWidget(QWidget):
             return
         self._active_tab_id = tab_id
 
-        # Switch QTabBar selection (block to avoid re-emit)
-        self._tab_bar.blockSignals(True)
-        self._tab_bar.setCurrentIndex(tab["bar_idx"])
-        self._tab_bar.blockSignals(False)
+        # Switch QTabBar selection — home tabs have bar_idx = -1 (not in tab bar)
+        bar_idx = tab.get("bar_idx", -1)
+        if bar_idx >= 0:
+            self._tab_bar.blockSignals(True)
+            self._tab_bar.setCurrentIndex(bar_idx)
+            self._tab_bar.blockSignals(False)
 
         # Switch content
         view = tab.get("view")
         if view:
             self._content_stack.setCurrentWidget(view)
 
+        # Show/hide Chrome rows: hidden on home, visible on real browser tabs
+        is_home = tab.get("home", False)
+        self._tab_row.setVisible(not is_home)
+        self._nav_row.setVisible(not is_home)
+
         # Address bar
-        if tab.get("home"):
+        if is_home:
             self._address_bar.clear()
             self._address_bar.setPlaceholderText("Search or enter address")
         else:
@@ -567,7 +609,7 @@ class BrowserWidget(QWidget):
             self._reload_btn.setText("✕")
             self._reload_btn.setToolTip("Stop loading")
         else:
-            self._reload_btn.setText("⟳")
+            self._reload_btn.setText("↻")
             self._reload_btn.setToolTip("Reload  (F5)")
 
     def navigate_tab(self, tab_id, url):
@@ -578,6 +620,7 @@ class BrowserWidget(QWidget):
         tab = self._tabs.get(tab_id)
         if not tab:
             return
+        was_home = tab.get("home", False)
         tab["home"] = False
         tab["url"]  = url
         if tab_id == self._active_tab_id:
@@ -585,6 +628,9 @@ class BrowserWidget(QWidget):
             if view:
                 self._content_stack.setCurrentWidget(view)
             self._address_bar.setText(url)
+            if was_home:
+                self._tab_row.show()
+                self._nav_row.show()
 
     def update_tab(self, tab_id, **fields):
         """
@@ -607,25 +653,25 @@ class BrowserWidget(QWidget):
             bar_idx = tab.get("bar_idx", -1)
             loading = tab.get("loading", False)
             if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
-                display = ("⟳ " + t[:24]) if loading else t[:28]
+                display = ("↻ " + t[:24]) if loading else t[:28]
                 self._tab_bar.setTabText(bar_idx, display)
 
         if "loading" in fields:
             bar_idx = tab.get("bar_idx", -1)
             is_loading = bool(fields["loading"])
-            # Update tab title with ⟳ prefix while loading
+            # Update tab title with ↻ prefix while loading
             if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
                 t = tab.get("title", "")
                 if t:
-                    display = ("⟳ " + t[:24]) if is_loading else t[:28]
+                    display = ("↻ " + t[:24]) if is_loading else t[:28]
                     self._tab_bar.setTabText(bar_idx, display)
-            # Toggle reload button: ✕ while loading, ⟳ when done
+            # Toggle reload button: ✕ while loading, ↻ when done
             if tab_id == self._active_tab_id:
                 if is_loading:
                     self._reload_btn.setText("✕")
                     self._reload_btn.setToolTip("Stop loading")
                 else:
-                    self._reload_btn.setText("⟳")
+                    self._reload_btn.setText("↻")
                     self._reload_btn.setToolTip("Reload  (F5)")
 
         if "canGoBack" in fields:
@@ -752,13 +798,18 @@ class BrowserWidget(QWidget):
             view = tab.get("view")
             if view:
                 view.stop()
-            self._reload_btn.setText("⟳")
+            self._reload_btn.setText("↻")
             self._reload_btn.setToolTip("Reload  (F5)")
         else:
             self.userReload.emit(self._active_tab_id)
 
     def _on_new_tab(self):
         self.userOpenNewTab.emit()
+
+    def _on_home_clicked(self):
+        """Switch back to the home tab (home.html) when ⌂ is clicked."""
+        if self._home_tab_id:
+            self.userSwitchTab.emit(self._home_tab_id)
 
     def _on_escape(self):
         if self._find_bar.isVisible():
@@ -914,9 +965,9 @@ class BrowserWidget(QWidget):
         if not self._history_panel:
             return
         w = 340
-        h = self.height() - 44
+        h = self.height() - 76
         x = self.width() - w
-        y = 44
+        y = 76
         self._history_panel.setGeometry(x, y, w, h)
 
     def _on_history_navigate(self, url):
