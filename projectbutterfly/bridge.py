@@ -9201,6 +9201,27 @@ class WebTabManagerBridge(QObject):
         # Register with BrowserWidget (adds to QTabBar + QStackedWidget)
         self._bw.add_tab_view(tab_id, view, title=title, home=home)
 
+        # For home tabs: attach the shared QWebChannel so home.html can call bridge APIs
+        if home:
+            root = self.parent()
+            if root and getattr(root, "_channel", None) and getattr(root, "_bridge_shim_combined", None):
+                page.setWebChannel(root._channel)
+                from PySide6.QtWebEngineCore import QWebEngineScript as _QWS
+                # Inject tab ID first so home.js knows which tab it is
+                id_scr = _QWS()
+                id_scr.setName(f"tanko_home_tab_id_{tab_id}")
+                id_scr.setSourceCode(f"window.__tankoHomeTabId = '{tab_id}';")
+                id_scr.setInjectionPoint(_QWS.InjectionPoint.DocumentCreation)
+                id_scr.setWorldId(_QWS.ScriptWorldId.MainWorld)
+                page.scripts().insert(id_scr)
+                # Inject qwebchannel.js + bridge shim (gives window.electronAPI + all APIs)
+                shim_scr = _QWS()
+                shim_scr.setName(f"tanko_home_bridge_shim_{tab_id}")
+                shim_scr.setSourceCode(root._bridge_shim_combined)
+                shim_scr.setInjectionPoint(_QWS.InjectionPoint.DocumentCreation)
+                shim_scr.setWorldId(_QWS.ScriptWorldId.MainWorld)
+                page.scripts().insert(shim_scr)
+
         # Load URL or home page
         from PySide6.QtCore import QUrl
         import os as _os
@@ -9500,12 +9521,14 @@ class WebTabManagerBridge(QObject):
     def openBrowser(self):
         """Switch the app stack to the native BrowserWidget. Called from JS openSources()."""
         try:
-            # self.parent() is BridgeRoot; the window ref is on BridgeRoot.window._win
             bridge_root = self.parent()
             win = getattr(getattr(bridge_root, "window", None), "_win", None)
             if win and hasattr(win, "show_browser"):
                 from PySide6.QtCore import QTimer
                 QTimer.singleShot(0, win.show_browser)
+            # Auto-create a home tab if the browser has no tabs yet
+            if not self._tabs:
+                self._create_tab_internal("", home=True)
         except Exception:
             pass
         return json.dumps({"ok": True})
@@ -10585,6 +10608,8 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
     web_view.page().setWebChannel(channel)
     # Keep a Python reference so GC doesn't destroy the channel
     bridge._channel = channel
+    # Store combined shim so home-tab pages can get their own bridge injection
+    bridge._bridge_shim_combined = combined
 
     # Read qwebchannel.js from Qt's built-in resources and inline it together
     # with the bridge shim into a single QWebEngineScript.  This avoids the

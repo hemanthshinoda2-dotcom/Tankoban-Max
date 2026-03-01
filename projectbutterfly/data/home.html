@@ -3,294 +3,759 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tankoban — New Tab</title>
+<title>Tankoban — Home</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg: #0d1117;
-    --bg2: #161b22;
-    --bg3: #1a2030;
-    --accent: #5865f2;
-    --accent-hover: #6b78f5;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --border: rgba(255,255,255,0.08);
-    --card: rgba(255,255,255,0.04);
-    --card-hover: rgba(255,255,255,0.08);
-    --radius: 12px;
-  }
+:root {
+  --bg:        #0d1117;
+  --bg2:       #161b22;
+  --bg3:       #1a2030;
+  --bg4:       #21262d;
+  --accent:    #5865f2;
+  --accent-h:  #6b78f5;
+  --ok:        #3fb950;
+  --warn:      #f0b429;
+  --err:       #f85149;
+  --text:      #e6edf3;
+  --muted:     #8b949e;
+  --border:    rgba(255,255,255,0.08);
+  --card:      rgba(255,255,255,0.04);
+  --card-h:    rgba(255,255,255,0.09);
+  --radius:    10px;
+  --radius-sm: 6px;
+}
 
-  html, body {
-    height: 100%;
-    background: var(--bg);
-    color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    overflow-x: hidden;
-  }
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
 
-  body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    padding: 60px 24px 40px;
-    min-height: 100%;
-  }
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px 60px;
+  gap: 0;
+}
 
-  /* ── Logo / greeting ── */
-  .greeting {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    margin-bottom: 36px;
-    background: linear-gradient(135deg, #5865f2 0%, #a78bfa 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
+/* ── Page width container ── */
+.page { width: 100%; max-width: 780px; }
 
-  /* ── Search bar ── */
-  .search-wrap {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    max-width: 640px;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    padding: 0 16px;
-    gap: 10px;
-    transition: border-color 0.15s;
-    margin-bottom: 48px;
-  }
-  .search-wrap:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(88,101,242,0.15);
-  }
+/* ── Header ── */
+.header {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 32px;
+  background: linear-gradient(135deg, #5865f2 0%, #a78bfa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-align: center;
+}
 
-  .engine-select {
-    background: none;
-    border: none;
-    color: var(--muted);
-    font-size: 13px;
-    cursor: pointer;
-    outline: none;
-    padding: 0;
-    flex-shrink: 0;
-  }
-  .engine-select option { background: var(--bg2); color: var(--text); }
+/* ── Section title ── */
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 10px;
+  margin-top: 36px;
+}
 
-  .search-divider {
-    width: 1px;
-    height: 20px;
-    background: var(--border);
-    flex-shrink: 0;
-  }
+/* ── Search bar ── */
+.search-wrap {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 0 14px;
+  gap: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin-bottom: 0;
+}
+.search-wrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(88,101,242,0.15);
+}
 
-  .search-input {
-    flex: 1;
-    background: none;
-    border: none;
-    color: var(--text);
-    font-size: 16px;
-    outline: none;
-    padding: 14px 0;
-  }
-  .search-input::placeholder { color: var(--muted); }
+.engine-select {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.engine-select option { background: var(--bg2); color: var(--text); }
 
-  .search-btn {
-    background: var(--accent);
-    border: none;
-    color: #fff;
-    border-radius: 20px;
-    padding: 6px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background 0.15s;
-  }
-  .search-btn:hover { background: var(--accent-hover); }
+.search-sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
 
-  /* ── Shortcuts grid ── */
-  .section-label {
-    width: 100%;
-    max-width: 640px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+  padding: 13px 0;
+  min-width: 0;
+}
+.search-input::placeholder { color: var(--muted); }
 
-  .shortcuts {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: 12px;
-    width: 100%;
-    max-width: 640px;
-    margin-bottom: 48px;
-  }
+.search-btn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: 20px;
+  padding: 5px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
+}
+.search-btn:hover { background: var(--accent-h); }
 
-  .shortcut {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding: 16px 8px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    cursor: pointer;
-    text-decoration: none;
-    color: var(--text);
-    transition: background 0.12s, transform 0.1s;
-    user-select: none;
-  }
-  .shortcut:hover {
-    background: var(--card-hover);
-    transform: translateY(-1px);
-  }
+/* ── Sources grid ── */
+.sources-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 10px;
+}
 
-  .shortcut-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--bg3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 18px;
-    overflow: hidden;
-  }
-  .shortcut-icon img {
-    width: 24px;
-    height: 24px;
-    object-fit: contain;
-  }
+.source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--text);
+  transition: background 0.1s, transform 0.1s, border-color 0.1s;
+  user-select: none;
+}
+.source-card:hover { background: var(--card-h); transform: translateY(-1px); border-color: rgba(88,101,242,0.3); }
+.source-card:active { transform: translateY(0); }
 
-  .shortcut-label {
-    font-size: 12px;
-    color: var(--muted);
-    text-align: center;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    width: 100%;
-  }
+.source-icon {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; overflow: hidden; flex-shrink: 0;
+}
+.source-icon img { width: 20px; height: 20px; object-fit: contain; }
 
-  /* ── Tips footer ── */
-  .tips {
-    margin-top: auto;
-    padding-top: 24px;
-    font-size: 12px;
-    color: var(--muted);
-    text-align: center;
-    line-height: 1.8;
-  }
-  .tips kbd {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 1px 6px;
-    font-family: inherit;
-    font-size: 11px;
-  }
+.source-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.sources-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+/* ── Torrent search ── */
+.tsearch-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tsearch-input {
+  flex: 1;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+  min-width: 0;
+}
+.tsearch-input:focus { border-color: var(--accent); }
+.tsearch-input::placeholder { color: var(--muted); }
+
+.tsearch-cat {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 10px;
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.tsearch-cat option { background: var(--bg2); }
+
+.tsearch-btn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius-sm);
+  padding: 7px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.tsearch-btn:hover { background: var(--accent-h); }
+.tsearch-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tsearch-status { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+
+/* Torrent results table */
+.tresults {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 12px;
+}
+.tresults th {
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.tresults td {
+  padding: 7px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+.tresults tr:hover td { background: var(--card); }
+.tresults .t-title { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tresults .t-size  { color: var(--muted); white-space: nowrap; }
+.tresults .t-seeds { color: var(--ok); white-space: nowrap; }
+.tresults .t-action { white-space: nowrap; }
+
+.btn-magnet {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+}
+.btn-magnet:hover { background: var(--bg3); border-color: var(--accent); color: var(--accent); }
+.btn-magnet.adding { opacity: 0.5; pointer-events: none; }
+.btn-magnet.added  { border-color: var(--ok); color: var(--ok); }
+
+/* ── Downloads ── */
+.dl-list { display: flex; flex-direction: column; gap: 8px; }
+
+.dl-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.dl-item-row1 { display: flex; align-items: center; gap: 8px; }
+.dl-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.dl-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: rgba(88,101,242,0.2);
+  color: var(--accent);
+}
+.dl-badge.torrent { background: rgba(240,180,41,0.15); color: var(--warn); }
+.dl-badge.direct  { background: rgba(63,185,80,0.15); color: var(--ok); }
+.dl-badge.done    { background: rgba(63,185,80,0.1); color: var(--ok); }
+.dl-badge.err     { background: rgba(248,81,73,0.15); color: var(--err); }
+
+.dl-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.dl-progress-wrap { margin-top: 7px; }
+.dl-progress-bar {
+  height: 3px;
+  background: var(--bg4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.dl-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.5s; }
+.dl-progress-fill.done { background: var(--ok); }
+.dl-progress-fill.err  { background: var(--err); }
+
+.dl-actions { display: flex; gap: 6px; margin-top: 8px; }
+.dl-btn {
+  background: var(--bg4);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius-sm);
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.dl-btn:hover { background: var(--bg3); color: var(--text); }
+.dl-btn.cancel:hover { border-color: var(--err); color: var(--err); }
+
+.dl-empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+/* ── Tips ── */
+.tips {
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 48px;
+  line-height: 2;
+}
+.tips kbd {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 10px;
+}
 </style>
 </head>
 <body>
 
-<div class="greeting">Tankoban</div>
+<div class="page">
 
-<div class="search-wrap">
-  <select class="engine-select" id="engineSelect">
-    <option value="https://www.google.com/search?q=">Google</option>
-    <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
-    <option value="https://search.brave.com/search?q=">Brave</option>
-    <option value="https://www.bing.com/search?q=">Bing</option>
-  </select>
-  <div class="search-divider"></div>
-  <input class="search-input" id="searchInput" type="text" placeholder="Search or enter address" autofocus>
-  <button class="search-btn" id="searchBtn">Go</button>
-</div>
+  <!-- Header -->
+  <div class="header">TANKOBAN</div>
 
-<div class="section-label">Quick Access</div>
-<div class="shortcuts" id="shortcuts">
-  <a class="shortcut" data-url="https://getcomics.org">
-    <div class="shortcut-icon">📚</div>
-    <span class="shortcut-label">GetComics</span>
-  </a>
-  <a class="shortcut" data-url="https://readcomiconline.li">
-    <div class="shortcut-icon">🦸</div>
-    <span class="shortcut-label">ReadComicOnline</span>
-  </a>
-  <a class="shortcut" data-url="https://www.reddit.com">
-    <div class="shortcut-icon">🟠</div>
-    <span class="shortcut-label">Reddit</span>
-  </a>
-  <a class="shortcut" data-url="https://github.com">
-    <div class="shortcut-icon">🐙</div>
-    <span class="shortcut-label">GitHub</span>
-  </a>
-  <a class="shortcut" data-url="https://www.youtube.com">
-    <div class="shortcut-icon">▶️</div>
-    <span class="shortcut-label">YouTube</span>
-  </a>
-  <a class="shortcut" data-url="https://1337x.to">
-    <div class="shortcut-icon">🧲</div>
-    <span class="shortcut-label">1337x</span>
-  </a>
-</div>
+  <!-- Search -->
+  <div class="search-wrap">
+    <select class="engine-select" id="engineSelect">
+      <option value="https://yandex.com/search/?text=">Yandex</option>
+      <option value="https://www.google.com/search?q=">Google</option>
+      <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+      <option value="https://search.brave.com/search?q=">Brave</option>
+      <option value="https://www.bing.com/search?q=">Bing</option>
+    </select>
+    <div class="search-sep"></div>
+    <input class="search-input" id="searchInput" type="text" placeholder="Search or enter address" autofocus>
+    <button class="search-btn" id="searchBtn">Go</button>
+  </div>
 
-<div class="tips">
-  <kbd>Ctrl+T</kbd> New tab &nbsp;·&nbsp;
-  <kbd>Ctrl+W</kbd> Close tab &nbsp;·&nbsp;
-  <kbd>Ctrl+L</kbd> Focus address bar &nbsp;·&nbsp;
-  <kbd>Alt+←</kbd> Back
-</div>
+  <!-- Sources shortcuts -->
+  <div class="section-title">SOURCES</div>
+  <div class="sources-grid" id="sourcesGrid">
+    <div class="sources-empty">Loading sources…</div>
+  </div>
+
+  <!-- Torrent search -->
+  <div class="section-title">TORRENT SEARCH</div>
+  <div class="tsearch-row">
+    <input class="tsearch-input" id="tsearchInput" type="text" placeholder="Search torrents…">
+    <select class="tsearch-cat" id="tsearchCat">
+      <option value="all">All</option>
+      <option value="comics">Comics</option>
+      <option value="manga">Manga</option>
+      <option value="books">Books</option>
+      <option value="anime">Anime</option>
+      <option value="tv">TV</option>
+      <option value="movies">Movies</option>
+    </select>
+    <button class="tsearch-btn" id="tsearchBtn">Search</button>
+  </div>
+  <div class="tsearch-status" id="tsearchStatus"></div>
+  <div id="tsearchResults"></div>
+
+  <!-- Downloads -->
+  <div class="section-title">DOWNLOADS</div>
+  <div class="dl-list" id="dlList">
+    <div class="dl-empty">No active downloads.</div>
+  </div>
+
+  <!-- Tips -->
+  <div class="tips">
+    <kbd>Ctrl+T</kbd> New tab &nbsp;·&nbsp;
+    <kbd>Ctrl+W</kbd> Close tab &nbsp;·&nbsp;
+    <kbd>Ctrl+L</kbd> Focus address bar &nbsp;·&nbsp;
+    <kbd>Alt+←</kbd> Back
+  </div>
+
+</div><!-- .page -->
 
 <script>
 (function () {
-  // Navigate within the browser — post a message to the parent BrowserWidget
+  'use strict';
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
+  }
+
+  function fmtSize(bytes) {
+    var b = Number(bytes) || 0;
+    if (b >= 1073741824) return (b / 1073741824).toFixed(1) + ' GB';
+    if (b >= 1048576)    return (b / 1048576).toFixed(1) + ' MB';
+    if (b >= 1024)       return (b / 1024).toFixed(0) + ' KB';
+    return b + ' B';
+  }
+
+  function fmtSpeed(bps) {
+    var b = Number(bps) || 0;
+    if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB/s';
+    if (b >= 1024)    return (b / 1024).toFixed(0) + ' KB/s';
+    return b + ' B/s';
+  }
+
+  // ── Navigate ─────────────────────────────────────────────────────────────
+
   function navigate(url) {
     if (!url) return;
-    // Normalize: if no protocol and not a search, treat as URL
-    if (!url.startsWith('http://') && !url.startsWith('https://')) {
-      // Looks like a domain?
+    url = String(url).trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('magnet:')) {
       if (/^[\w\-]+\.[\w\-]+/.test(url) && !url.includes(' ')) {
         url = 'https://' + url;
       } else {
-        var engine = document.getElementById('engineSelect').value;
-        url = engine + encodeURIComponent(url);
+        var eng = document.getElementById('engineSelect').value;
+        url = eng + encodeURIComponent(url);
       }
     }
-    // Tell Qt to navigate the current tab to this URL
-    if (window.__tankoNavigateHome) {
-      window.__tankoNavigateHome(url);
+    var api = window.electronAPI;
+    if (api && window.__tankoHomeTabId) {
+      api.webTabManager.navigateTo({tabId: window.__tankoHomeTabId, url: url});
     } else {
-      // Fallback: just navigate this view (Qt will intercept)
       window.location.href = url;
     }
   }
 
-  // Search / go button
+  function openNewTab(url) {
+    var api = window.electronAPI;
+    if (!api) { navigate(url); return; }
+    api.webTabManager.createTab({url: url, home: false}).then(function (r) {
+      if (r && r.ok && r.tabId) {
+        api.webTabManager.switchTab({tabId: r.tabId});
+      }
+    }).catch(function(){});
+  }
+
+  // ── Search bar ───────────────────────────────────────────────────────────
+
   document.getElementById('searchBtn').addEventListener('click', function () {
     navigate(document.getElementById('searchInput').value.trim());
   });
-
   document.getElementById('searchInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') navigate(this.value.trim());
   });
 
-  // Shortcut tiles
-  document.querySelectorAll('.shortcut[data-url]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.preventDefault();
-      navigate(el.getAttribute('data-url'));
+  // ── Sources ──────────────────────────────────────────────────────────────
+
+  function renderSources(sources) {
+    var grid = document.getElementById('sourcesGrid');
+    if (!sources || !sources.length) {
+      grid.innerHTML = '<div class="sources-empty">No sources configured. Add some in settings.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < sources.length; i++) {
+      var s = sources[i];
+      var u = String(s.url || '');
+      var iconHtml = '';
+      try {
+        var origin = new URL(u).origin;
+        iconHtml = '<img src="' + esc(origin) + '/favicon.ico" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'" alt="">'
+                 + '<span style="display:none;font-size:16px">🌐</span>';
+      } catch(e) {
+        iconHtml = '<span style="font-size:16px">🌐</span>';
+      }
+      html += '<div class="source-card" data-url="' + esc(u) + '">'
+            + '<div class="source-icon">' + iconHtml + '</div>'
+            + '<span class="source-label">' + esc(s.name || u) + '</span>'
+            + '</div>';
+    }
+    grid.innerHTML = html;
+    grid.querySelectorAll('.source-card').forEach(function (el) {
+      el.addEventListener('click', function () { openNewTab(el.getAttribute('data-url')); });
     });
+  }
+
+  // ── Torrent search ───────────────────────────────────────────────────────
+
+  var _tsearchBusy = false;
+
+  function renderTorrentResults(items, provider) {
+    var el = document.getElementById('tsearchResults');
+    if (!items || !items.length) {
+      el.innerHTML = '';
+      return;
+    }
+    var html = '<table class="tresults"><thead><tr>'
+             + '<th>Title</th><th>Size</th><th>Seeds</th><th></th>'
+             + '</tr></thead><tbody>';
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      var mag = esc(it.magnetUri || it.magnet || '');
+      var hasLink = !!(it.magnetUri || it.magnet);
+      html += '<tr>'
+            + '<td class="t-title" title="' + esc(it.title) + '">' + esc(it.title) + '</td>'
+            + '<td class="t-size">' + fmtSize(it.size || it.Size || 0) + '</td>'
+            + '<td class="t-seeds">' + (it.seeders || it.Seeders || 0) + '</td>'
+            + '<td class="t-action">';
+      if (hasLink) {
+        html += '<button class="btn-magnet" data-magnet="' + mag + '">↓ Add</button>';
+      } else {
+        html += '<span style="color:var(--muted);font-size:11px">—</span>';
+      }
+      html += '</td></tr>';
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+
+    el.querySelectorAll('.btn-magnet').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var mag = btn.getAttribute('data-magnet');
+        if (!mag || !window.electronAPI) return;
+        btn.classList.add('adding');
+        btn.textContent = '…';
+        window.electronAPI.webTorrent.startMagnet({magnetUri: mag})
+          .then(function (r) {
+            btn.classList.remove('adding');
+            btn.classList.add('added');
+            btn.textContent = '✓ Added';
+            setTimeout(refreshDownloads, 800);
+          })
+          .catch(function () {
+            btn.classList.remove('adding');
+            btn.textContent = '↓ Add';
+          });
+      });
+    });
+  }
+
+  function doTorrentSearch() {
+    if (_tsearchBusy) return;
+    var q = document.getElementById('tsearchInput').value.trim();
+    if (!q) return;
+    var cat = document.getElementById('tsearchCat').value;
+    var btn = document.getElementById('tsearchBtn');
+    var status = document.getElementById('tsearchStatus');
+    _tsearchBusy = true;
+    btn.disabled = true;
+    btn.textContent = '…';
+    status.textContent = 'Searching…';
+    document.getElementById('tsearchResults').innerHTML = '';
+
+    if (!window.electronAPI) {
+      status.textContent = 'Bridge not available.';
+      _tsearchBusy = false; btn.disabled = false; btn.textContent = 'Search';
+      return;
+    }
+    window.electronAPI.torrentSearch.query({query: q, category: cat})
+      .then(function (r) {
+        _tsearchBusy = false; btn.disabled = false; btn.textContent = 'Search';
+        if (!r || !r.ok) {
+          status.textContent = (r && r.error) ? r.error : 'Not configured. Set up Jackett or Prowlarr in settings.';
+          return;
+        }
+        var count = (r.items || []).length;
+        status.textContent = count + ' result' + (count === 1 ? '' : 's')
+          + (r.provider ? ' via ' + r.provider : '');
+        renderTorrentResults(r.items || []);
+      })
+      .catch(function (e) {
+        _tsearchBusy = false; btn.disabled = false; btn.textContent = 'Search';
+        status.textContent = 'Search error.';
+      });
+  }
+
+  document.getElementById('tsearchBtn').addEventListener('click', doTorrentSearch);
+  document.getElementById('tsearchInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doTorrentSearch();
   });
+
+  // ── Downloads ─────────────────────────────────────────────────────────────
+
+  var _dlPollTimer = null;
+
+  function renderDownloads(torrents, directDownloads) {
+    var list = document.getElementById('dlList');
+    var items = [];
+
+    // Active/recent torrents
+    var tl = torrents || [];
+    for (var i = 0; i < tl.length; i++) {
+      var t = tl[i];
+      var state = String(t.state || '');
+      var isActive = (state === 'downloading' || state === 'seeding' || state === 'checking' || state === 'metadata_ready');
+      var isPaused = (state === 'paused');
+      var isDone   = (state === 'completed' || state === 'seeding' || state === 'completed_pending' || state === 'completed_with_errors');
+      var isErr    = (state === 'failed' || state === 'error' || state === 'cancelled');
+      var pct      = Math.min(100, Math.round((Number(t.progress) || 0) * 100));
+      var speed    = isActive ? fmtSpeed(t.downloadRate || 0) : '';
+      var meta     = state + (speed ? '  ·  ' + speed : '') + (t.numPeers ? '  ·  ' + t.numPeers + ' peers' : '');
+      items.push({
+        id: t.id, name: t.name || 'Downloading…', pct: pct,
+        badge: 'Torrent', badgeClass: 'torrent',
+        meta: meta, isActive: isActive, isPaused: isPaused, isDone: isDone, isErr: isErr,
+        barClass: isDone ? 'done' : (isErr ? 'err' : ''),
+        canPause: isActive, canResume: isPaused, canCancel: isActive || isPaused,
+        type: 'torrent'
+      });
+    }
+
+    // Direct downloads from webSources
+    var dl = directDownloads || [];
+    for (var j = 0; j < dl.length; j++) {
+      var d = dl[j];
+      var ds = String(d.state || '');
+      var total = Number(d.totalBytes || d.total || 0);
+      var recv  = Number(d.receivedBytes || d.received || 0);
+      var dpct  = total > 0 ? Math.min(100, Math.round(recv / total * 100)) : 0;
+      var dDone = (ds === 'completed' || ds === 'complete');
+      var dErr  = (ds === 'failed' || ds === 'cancelled');
+      items.push({
+        id: d.id, name: d.filename || d.url || 'Download…', pct: dpct,
+        badge: 'Direct', badgeClass: 'direct',
+        meta: ds + (total > 0 ? '  ·  ' + fmtSize(recv) + ' / ' + fmtSize(total) : ''),
+        isActive: !dDone && !dErr, isPaused: (ds === 'paused'), isDone: dDone, isErr: dErr,
+        barClass: dDone ? 'done' : (dErr ? 'err' : ''),
+        canPause: (ds === 'downloading'), canResume: (ds === 'paused'), canCancel: !dDone && !dErr,
+        type: 'direct'
+      });
+    }
+
+    if (!items.length) {
+      list.innerHTML = '<div class="dl-empty">No active downloads.</div>';
+      return;
+    }
+
+    var html = '';
+    for (var k = 0; k < items.length; k++) {
+      var it = items[k];
+      html += '<div class="dl-item" data-id="' + esc(it.id) + '" data-type="' + it.type + '">'
+            + '<div class="dl-item-row1">'
+            + '<span class="dl-name" title="' + esc(it.name) + '">' + esc(it.name) + '</span>'
+            + '<span class="dl-badge ' + it.badgeClass + '">' + it.badge + '</span>'
+            + '</div>'
+            + '<div class="dl-meta">' + esc(it.meta) + '</div>';
+      if (!it.isDone && !it.isErr) {
+        html += '<div class="dl-progress-wrap">'
+              + '<div class="dl-progress-bar"><div class="dl-progress-fill ' + it.barClass + '" style="width:' + it.pct + '%"></div></div>'
+              + '</div>';
+      }
+      html += '<div class="dl-actions">';
+      if (it.canPause)  html += '<button class="dl-btn" data-action="pause">⏸ Pause</button>';
+      if (it.canResume) html += '<button class="dl-btn" data-action="resume">▶ Resume</button>';
+      if (it.canCancel) html += '<button class="dl-btn cancel" data-action="cancel">✕ Cancel</button>';
+      if (it.isDone)    html += '<span style="font-size:11px;color:var(--ok)">✓ Done</span>';
+      if (it.isErr)     html += '<span style="font-size:11px;color:var(--err)">✕ ' + esc(it.meta) + '</span>';
+      html += '</div></div>';
+    }
+    list.innerHTML = html;
+
+    // Wire action buttons
+    list.querySelectorAll('.dl-btn[data-action]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var item = btn.closest('.dl-item');
+        if (!item || !window.electronAPI) return;
+        var id   = item.getAttribute('data-id');
+        var type = item.getAttribute('data-type');
+        var act  = btn.getAttribute('data-action');
+        if (type === 'torrent') {
+          if (act === 'pause')  window.electronAPI.webTorrent.pause({id: id}).catch(function(){});
+          if (act === 'resume') window.electronAPI.webTorrent.resume({id: id}).catch(function(){});
+          if (act === 'cancel') window.electronAPI.webTorrent.cancel({id: id}).catch(function(){});
+        } else {
+          if (act === 'pause')  window.electronAPI.webSources.pauseDownload({id: id}).catch(function(){});
+          if (act === 'resume') window.electronAPI.webSources.resumeDownload({id: id}).catch(function(){});
+          if (act === 'cancel') window.electronAPI.webSources.cancelDownload({id: id}).catch(function(){});
+        }
+        setTimeout(refreshDownloads, 600);
+      });
+    });
+  }
+
+  function refreshDownloads() {
+    var api = window.electronAPI;
+    if (!api) return;
+    var torrents = [];
+    var directs  = [];
+    api.webTorrent.getActive()
+      .then(function (r) {
+        torrents = (r && r.torrents) ? r.torrents : [];
+        return api.webSources.getDownloadHistory({limit: 20});
+      })
+      .then(function (r) {
+        directs = (r && r.downloads) ? r.downloads : [];
+        renderDownloads(torrents, directs);
+      })
+      .catch(function () {
+        renderDownloads(torrents, directs);
+      });
+  }
+
+  // ── Init on bridge ready ─────────────────────────────────────────────────
+
+  function init() {
+    var api = window.electronAPI;
+    if (!api) return;
+
+    // Load sources
+    api.webSources.get()
+      .then(function (r) { renderSources(r && r.sources ? r.sources : []); })
+      .catch(function () { renderSources([]); });
+
+    // Load downloads
+    refreshDownloads();
+
+    // Poll downloads every 3s
+    if (_dlPollTimer) clearInterval(_dlPollTimer);
+    _dlPollTimer = setInterval(refreshDownloads, 3000);
+
+    // Live torrent progress signal
+    api.webTorrent.onProgress(function () { refreshDownloads(); });
+    api.webTorrent.onStarted(function ()  { refreshDownloads(); });
+    api.webTorrent.onCompleted(function (){ refreshDownloads(); });
+    api.webSources.onDownloadProgress(function () { refreshDownloads(); });
+    api.webSources.onDownloadCompleted(function (){ refreshDownloads(); });
+    api.webSources.onUpdated(function (r) {
+      if (r && r.sources) renderSources(r.sources);
+    });
+  }
+
+  // Bridge may already be ready (injected at DocumentCreation)
+  // or may fire after DOMContentLoaded — handle both cases.
+  if (window.electronAPI) {
+    init();
+  } else {
+    document.addEventListener('electronAPI:ready', init, {once: true});
+    // Fallback: poll briefly in case event was missed
+    var _poll = setInterval(function () {
+      if (window.electronAPI) { clearInterval(_poll); init(); }
+    }, 200);
+    setTimeout(function () { clearInterval(_poll); }, 10000);
+  }
+
 })();
 </script>
 </body>

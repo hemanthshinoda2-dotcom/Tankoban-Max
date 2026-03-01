@@ -393,7 +393,9 @@ class BrowserWidget(QWidget):
         view.setParent(self)
         stack_idx = self._content_stack.addWidget(view)
         bar_idx   = self._tab_bar.addTab(title)
-        # Close button text (× character via stylesheet isn't supported, use tab text suffix)
+        # Home tab has no close button — it's permanent
+        if home:
+            self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, None)
         self._tab_id_by_bar_idx[bar_idx] = tab_id
         self._tabs[tab_id] = {
             "view":      view,
