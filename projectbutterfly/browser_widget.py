@@ -96,11 +96,6 @@ class BrowserChromeBridge(QObject):
     def stop(self, tab_id):
         self._bw._stop_tab(tab_id)
 
-    @Slot()
-    def goHome(self):
-        if self._bw._home_tab_id:
-            self._bw.userSwitchTab.emit(self._bw._home_tab_id)
-
     # ── Tab cycling (from chrome keyboard shortcuts) ──
     @Slot()
     def cycleTabNext(self):
@@ -204,7 +199,7 @@ class BrowserWidget(QWidget):
       1. WebTabManagerBridge.createTab() → _create_tab_internal() → add_tab_view()
       2. WebTabManagerBridge.switchTab()  → set_active_tab_id()
       3. WebTabManagerBridge.closeTab()   → remove_tab_view()
-      4. WebTabManagerBridge.navigateTo() → navigate_tab() (if was home tab)
+      4. WebTabManagerBridge.navigateTo() → navigate_tab()
 
     User actions (BrowserWidget → bridge):
       userNavigated, userOpenNewTab, userCloseTab, userSwitchTab,
@@ -226,7 +221,6 @@ class BrowserWidget(QWidget):
         self._tabs = {}                          # tab_id → dict
         self._tab_id_by_bar_idx = {}             # bar_idx → tab_id (ordering only)
         self._active_tab_id = ""
-        self._home_tab_id   = ""
 
         # HTML chrome bridge (set in _setup_ui)
         self._chrome_view   = None
@@ -262,7 +256,6 @@ class BrowserWidget(QWidget):
         self._history_bridge = history
         self._bookmarks_bridge = bookmarks
 
-        # Torrent Search pinned tab removed — torrent search is now in home.html
         self._torrent_tab = None
 
         # Phase 3: Downloads panel (overlay drawer, not a tab)
@@ -347,7 +340,7 @@ class BrowserWidget(QWidget):
             str(Path(__file__).parent / "data" / "browser_chrome.html")
         )
         self._chrome_view.setUrl(chrome_url)
-        self._chrome_view.hide()   # hidden on home screen; shown when a real tab activates
+        self._chrome_view.hide()   # shown when a tab activates
         root.addWidget(self._chrome_view)
 
         # ── Find bar (hidden by default; Ctrl+F reveals it) ──
@@ -435,7 +428,7 @@ class BrowserWidget(QWidget):
 
     # ── Called by WebTabManagerBridge ─────────────────────────────────────────
 
-    def add_tab_view(self, tab_id, view, title="New Tab", home=False):
+    def add_tab_view(self, tab_id, view, title="New Tab"):
         """
         Register a QWebEngineView as a tab in the UI.
         Called by WebTabManagerBridge._create_tab_internal().
@@ -445,20 +438,15 @@ class BrowserWidget(QWidget):
         view.setParent(self)
         stack_idx = self._content_stack.addWidget(view)
 
-        if home:
-            bar_idx = -1
-            self._home_tab_id = tab_id
-        else:
-            # Assign next bar_idx in insertion order
-            existing = [t["bar_idx"] for t in self._tabs.values() if t.get("bar_idx", -1) >= 0]
-            bar_idx = (max(existing) + 1) if existing else 0
-            self._tab_id_by_bar_idx[bar_idx] = tab_id
+        # Assign next bar_idx in insertion order
+        existing = [t["bar_idx"] for t in self._tabs.values() if t.get("bar_idx", -1) >= 0]
+        bar_idx = (max(existing) + 1) if existing else 0
+        self._tab_id_by_bar_idx[bar_idx] = tab_id
 
         self._tabs[tab_id] = {
             "view":      view,
             "stack_idx": stack_idx,
             "bar_idx":   bar_idx,
-            "home":      home,
             "title":     title,
             "url":       "",
             "can_back":  False,
@@ -466,8 +454,7 @@ class BrowserWidget(QWidget):
             "loading":   False,
         }
 
-        if not home:
-            self._push_chrome("setTabs", self._build_tab_list_payload())
+        self._push_chrome("setTabs", self._build_tab_list_payload())
 
     def remove_tab_view(self, tab_id):
         """
@@ -479,9 +466,6 @@ class BrowserWidget(QWidget):
             return
         bar_idx = tab.get("bar_idx", -1)
         view    = tab.get("view")
-
-        if tab_id == self._home_tab_id:
-            self._home_tab_id = ""
 
         # Remove from content stack and destroy view
         if view:
@@ -511,35 +495,19 @@ class BrowserWidget(QWidget):
         if view:
             self._content_stack.setCurrentWidget(view)
 
-        # Show/hide HTML chrome: hidden on home, visible on real browser tabs
-        is_home = tab.get("home", False)
-        if is_home:
-            self._chrome_view.hide()
-        else:
-            self._chrome_view.show()
-            self._push_chrome("setActiveTab", tab_id)
-            self._update_bookmark_state(tab_id)
+        # Show HTML chrome for browser tabs
+        self._chrome_view.show()
+        self._push_chrome("setActiveTab", tab_id)
+        self._update_bookmark_state(tab_id)
 
     def navigate_tab(self, tab_id, url):
         """
-        Called when a home tab navigates to a real URL (becomes a URL tab).
-        Assigns bar_idx, shows chrome, pushes updated tab list to HTML chrome.
+        Update a tab's URL and refresh chrome state.
         """
         tab = self._tabs.get(tab_id)
         if not tab:
             return
-        was_home = tab.get("home", False)
-        tab["home"] = False
-        tab["url"]  = url
-
-        if was_home:
-            # Assign a bar_idx so this tab appears in the chrome tab strip
-            existing = [t["bar_idx"] for t in self._tabs.values() if t.get("bar_idx", -1) >= 0]
-            bar_idx = (max(existing) + 1) if existing else 0
-            tab["bar_idx"] = bar_idx
-            self._tab_id_by_bar_idx[bar_idx] = tab_id
-            if tab_id == self._home_tab_id:
-                self._home_tab_id = ""
+        tab["url"] = url
 
         if tab_id == self._active_tab_id:
             view = tab.get("view")
@@ -581,7 +549,7 @@ class BrowserWidget(QWidget):
             tab["can_fwd"] = bool(fields["canGoForward"])
             changed["canFwd"] = tab["can_fwd"]
 
-        if changed and not tab.get("home"):
+        if changed:
             self._push_chrome("updateTab", {"id": tab_id, **changed})
 
     def show_context_menu(self, tab_id, req, screen_pos):
@@ -709,11 +677,9 @@ class BrowserWidget(QWidget):
             view.stop()
 
     def _close_active_tab(self):
-        """Ctrl+W: close the active non-home tab."""
+        """Ctrl+W: close the active tab."""
         if self._active_tab_id:
-            tab = self._tabs.get(self._active_tab_id, {})
-            if not tab.get("home"):
-                self.userCloseTab.emit(self._active_tab_id)
+            self.userCloseTab.emit(self._active_tab_id)
 
     def _on_new_tab(self):
         self.userOpenNewTab.emit()
@@ -931,15 +897,12 @@ class BrowserWidget(QWidget):
         self._push_chrome("setTabs", self._build_tab_list_payload())
         if self._active_tab_id:
             tab = self._tabs.get(self._active_tab_id, {})
-            if not tab.get("home"):
-                self._push_chrome("setActiveTab", self._active_tab_id)
+            self._push_chrome("setActiveTab", self._active_tab_id)
 
     def _build_tab_list_payload(self):
         """Build the tabs array for _push_chrome("setTabs", ...)."""
         result = []
         for tid, t in self._tabs.items():
-            if t.get("home"):
-                continue
             result.append({
                 "id":      tid,
                 "title":   t.get("title", "New Tab"),

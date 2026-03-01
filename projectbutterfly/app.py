@@ -260,7 +260,6 @@ class TankobanWindow(QMainWindow):
         self._browser_profile.setPersistentStoragePath(
             os.path.join(storage.data_path(""), "WebEngine_browser")
         )
-        # Allow home.html (file://) to load adjacent CSS/JS files
         _bp_settings = self._browser_profile.settings()
         _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
@@ -365,7 +364,7 @@ class TankobanWindow(QMainWindow):
         self.show_browser()
         wtm = getattr(self._bridge, "webTabManager", None)
         if wtm and not wtm._tabs:
-            wtm._create_tab_internal("", home=True)
+            wtm._create_tab_internal("")
 
     # --- Player widget switching ---
 
