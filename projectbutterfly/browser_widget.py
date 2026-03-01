@@ -75,9 +75,9 @@ QTabBar {
 QTabBar::tab {
     background: rgba(255,255,255,0.04);
     color: #8b949e;
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 6px;
-    padding: 5px 28px 5px 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    padding: 5px 6px 5px 10px;
     margin: 4px 2px;
     min-width: 80px;
     max-width: 200px;
@@ -85,19 +85,20 @@ QTabBar::tab {
     font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 QTabBar::tab:selected {
-    background: rgba(255,255,255,0.12);
+    background: rgba(88,101,242,0.18);
     color: #e6edf3;
-    border-color: rgba(88,101,242,0.45);
+    border-color: rgba(88,101,242,0.5);
 }
 QTabBar::tab:hover:!selected {
     background: rgba(255,255,255,0.08);
     color: #c9d1d9;
 }
+QTabBar::tab:first:selected { border-top-left-radius: 8px; }
 QTabBar::close-button {
     image: none;
     subcontrol-position: right;
-    width: 14px;
-    height: 14px;
+    width: 0;
+    height: 0;
 }
 
 QToolButton#newTabBtn {
@@ -477,9 +478,23 @@ class BrowserWidget(QWidget):
         view.setParent(self)
         stack_idx = self._content_stack.addWidget(view)
         bar_idx   = self._tab_bar.addTab(title)
-        # Home tab has no close button — it's permanent
         if home:
+            # Home tab: permanent, no close button, "⌂ Home" label
+            self._tab_bar.setTabText(bar_idx, "⌂ Home")
             self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, None)
+            self._tab_bar.setTabToolTip(bar_idx, "Tankoban Home — Search, Sources, Downloads")
+        else:
+            # Regular tabs: custom × close button with red hover
+            close_btn = QPushButton("×")
+            close_btn.setFixedSize(18, 18)
+            close_btn.setStyleSheet(
+                "QPushButton { background:transparent; border:none; color:#8b949e;"
+                " font-size:14px; padding:0; border-radius:4px; }"
+                "QPushButton:hover { background:rgba(248,81,73,0.25); color:#f85149; }"
+            )
+            _v = view  # capture for lambda
+            close_btn.clicked.connect(lambda checked=False, v=_v: self._close_tab_by_view(v))
+            self._tab_bar.setTabButton(bar_idx, QTabBar.ButtonPosition.RightSide, close_btn)
         self._tab_id_by_bar_idx[bar_idx] = tab_id
         self._tabs[tab_id] = {
             "view":      view,
@@ -546,6 +561,14 @@ class BrowserWidget(QWidget):
 
         self._sync_nav_buttons(tab_id)
         self._update_bookmark_state(tab_id)
+        # Sync reload/stop button for the newly active tab
+        is_loading = tab.get("loading", False)
+        if is_loading:
+            self._reload_btn.setText("✕")
+            self._reload_btn.setToolTip("Stop loading")
+        else:
+            self._reload_btn.setText("⟳")
+            self._reload_btn.setToolTip("Reload  (F5)")
 
     def navigate_tab(self, tab_id, url):
         """
@@ -582,8 +605,28 @@ class BrowserWidget(QWidget):
             t = fields["title"]
             tab["title"] = t
             bar_idx = tab.get("bar_idx", -1)
-            if 0 <= bar_idx < self._tab_bar.count():
-                self._tab_bar.setTabText(bar_idx, t[:28])
+            loading = tab.get("loading", False)
+            if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
+                display = ("⟳ " + t[:24]) if loading else t[:28]
+                self._tab_bar.setTabText(bar_idx, display)
+
+        if "loading" in fields:
+            bar_idx = tab.get("bar_idx", -1)
+            is_loading = bool(fields["loading"])
+            # Update tab title with ⟳ prefix while loading
+            if 0 <= bar_idx < self._tab_bar.count() and not tab.get("home"):
+                t = tab.get("title", "")
+                if t:
+                    display = ("⟳ " + t[:24]) if is_loading else t[:28]
+                    self._tab_bar.setTabText(bar_idx, display)
+            # Toggle reload button: ✕ while loading, ⟳ when done
+            if tab_id == self._active_tab_id:
+                if is_loading:
+                    self._reload_btn.setText("✕")
+                    self._reload_btn.setToolTip("Stop loading")
+                else:
+                    self._reload_btn.setText("⟳")
+                    self._reload_btn.setToolTip("Reload  (F5)")
 
         if "canGoBack" in fields:
             tab["can_back"] = bool(fields["canGoBack"])
@@ -701,7 +744,17 @@ class BrowserWidget(QWidget):
             self.userGoForward.emit(self._active_tab_id)
 
     def _on_reload(self):
-        if self._active_tab_id:
+        if not self._active_tab_id:
+            return
+        tab = self._tabs.get(self._active_tab_id, {})
+        if tab.get("loading"):
+            # Stop loading
+            view = tab.get("view")
+            if view:
+                view.stop()
+            self._reload_btn.setText("⟳")
+            self._reload_btn.setToolTip("Reload  (F5)")
+        else:
             self.userReload.emit(self._active_tab_id)
 
     def _on_new_tab(self):
@@ -941,6 +994,13 @@ class BrowserWidget(QWidget):
         # Use cached values from tabUpdated signals
         self._back_btn.setEnabled(tab.get("can_back", False))
         self._fwd_btn.setEnabled(tab.get("can_fwd", False))
+
+    def _close_tab_by_view(self, view):
+        """Close the tab associated with a specific view widget."""
+        for tid, t in self._tabs.items():
+            if t.get("view") is view:
+                self.userCloseTab.emit(tid)
+                return
 
     def _find_latest_tab_id(self):
         """Return the tab_id with the highest bar index (most recently opened)."""
