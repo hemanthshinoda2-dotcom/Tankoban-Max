@@ -10588,6 +10588,8 @@ BRIDGE_SHIM_JS = r"""
         query:           wrap(b.torrentSearch.query, b.torrentSearch),
         health:          wrap(b.torrentSearch.health, b.torrentSearch),
         indexers:        wrap(b.torrentSearch.indexers, b.torrentSearch),
+        saveSettings:    wrap(b.torrentSearch.saveSettings, b.torrentSearch),
+        getConfig:       wrap(b.torrentSearch.getConfig, b.torrentSearch),
         onStatusChanged: onEvent(b.torrentSearch.statusChanged),
       },
 
