@@ -60,11 +60,16 @@
     document.body.classList.remove('inPlayer');
     document.body.classList.remove('inVideoPlayer');
 
-    // Butterfly: 'web' mode activates the native BrowserWidget via bridge
-    if (isWeb && window.__tankoButterfly) {
+    // Butterfly: 'web' mode activates the native BrowserWidget via bridge;
+    // leaving 'web' mode switches back to the renderer.
+    if (window.__tankoButterfly) {
       try {
         if (window.electronAPI && window.electronAPI.webTabManager) {
-          window.electronAPI.webTabManager.openBrowser();
+          if (isWeb) {
+            window.electronAPI.webTabManager.openBrowser();
+          } else {
+            window.electronAPI.webTabManager.closeBrowser();
+          }
         }
       } catch (_e) {}
     }

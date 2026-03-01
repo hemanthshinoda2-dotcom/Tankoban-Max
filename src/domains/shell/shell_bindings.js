@@ -466,14 +466,6 @@
       openBrowserFromTopButton();
     });
   }
-  var tankWebBtn = document.getElementById('tankWebBtn');
-  if (tankWebBtn) {
-    tankWebBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      openBrowserFromTopButton();
-    });
-  }
   webUtilityBtns.forEach(function (btn) {
     if (!btn) return;
     btn.addEventListener('click', function (e) {
