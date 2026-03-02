@@ -326,26 +326,23 @@ class _TankoWebPage(QWebEnginePage):
 # ═══════════════════════════════════════════════════════════════════════════
 
 class _FaviconCircle(QWidget):
-    """48x48 circle with the first letter of a source name, colored by source."""
+    """48x48 neutral glass circle with the first letter of a source name."""
 
-    def __init__(self, letter, color, parent=None):
+    def __init__(self, letter, parent=None):
         super().__init__(parent)
         self._letter = letter.upper() if letter else "?"
-        self._color = QColor(color)
         self.setFixedSize(48, 48)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
 
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Filled circle with source color at low opacity
-        fill = QColor(self._color)
-        fill.setAlpha(40)
-        p.setBrush(fill)
-        p.setPen(QPen(self._color, 1.5))
+        # Neutral glass circle
+        p.setBrush(QColor(255, 255, 255, 15))
+        p.setPen(QPen(QColor(255, 255, 255, 30), 1.0))
         p.drawEllipse(QRectF(2, 2, 44, 44))
         # Letter
-        p.setPen(QPen(QColor(245, 245, 245, 220)))
+        p.setPen(QPen(QColor(245, 245, 245, 180)))
         font = p.font()
         font.setFamily(FONT)
         font.setPixelSize(18)
@@ -444,7 +441,6 @@ class _HomeWidget(QScrollArea):
 
     def _build_source_tile(self, src):
         """Vertical stack: favicon circle + name label."""
-        color = src.get("color", "#888888")
         name = src.get("name", "")
         url = src.get("url", "")
         letter = name[0] if name else "?"
@@ -465,7 +461,7 @@ class _HomeWidget(QScrollArea):
         layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        icon = _FaviconCircle(letter, color)
+        icon = _FaviconCircle(letter)
         layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignCenter)
 
         label = QLabel(name)
