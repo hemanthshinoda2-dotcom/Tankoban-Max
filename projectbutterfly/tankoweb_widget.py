@@ -573,7 +573,7 @@ class TankoWebWidget(QWidget):
         )
 
         frame_layout.addWidget(self._view)
-        root_layout.addWidget(self._viewport_frame)
+        root_layout.addWidget(self._viewport_frame, 1)  # stretch=1: fill all remaining space
 
     # ══════════════════════════════════════════════════════════════════════
     # Navigation actions
