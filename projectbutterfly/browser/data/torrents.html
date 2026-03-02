@@ -27,7 +27,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 16px 24px;
+    padding: 12px 24px;
     background: #292a2d;
     border-bottom: 1px solid #3c4043;
     flex-shrink: 0;
@@ -39,6 +39,35 @@
     color: #e8eaed;
     flex-shrink: 0;
   }
+
+  .header-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+
+  .header-btn {
+    height: 30px;
+    padding: 0 12px;
+    background: transparent;
+    border: 1px solid #5f6368;
+    border-radius: 6px;
+    color: #9aa0a6;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .header-btn:hover { border-color: #8ab4f8; color: #e8eaed; }
+  .header-btn.accent {
+    background: #8ab4f8;
+    color: #202124;
+    border-color: transparent;
+    font-weight: 600;
+  }
+  .header-btn.accent:hover { background: #aecbfa; }
 
   .content {
     flex: 1;
@@ -187,6 +216,7 @@
   }
 
   tr:hover td { background: rgba(255,255,255,0.03); }
+  tr.selected td { background: rgba(138,180,248,0.08); }
 
   /* Column widths — search results */
   .col-title   { width: auto; }
@@ -199,9 +229,10 @@
   /* Column widths — downloads */
   .dl-col-name     { width: auto; }
   .dl-col-size     { width: 80px; text-align: right; }
-  .dl-col-seeds    { width: 60px; text-align: right; }
-  .dl-col-speed    { width: 90px; text-align: right; }
-  .dl-col-progress { width: 140px; }
+  .dl-col-peers    { width: 60px; text-align: right; }
+  .dl-col-dlspeed  { width: 90px; text-align: right; }
+  .dl-col-ulspeed  { width: 90px; text-align: right; }
+  .dl-col-progress { width: 150px; }
   .dl-col-status   { width: 90px; text-align: center; }
 
   .seeds { color: #81c995; }
@@ -238,6 +269,7 @@
     transition: width 0.3s;
   }
   .progress-bar.complete { background: #81c995; }
+  .progress-bar.paused   { background: #fdd663; }
 
   .progress-text {
     font-size: 11px;
@@ -254,8 +286,9 @@
   .status-downloading { background: rgba(138,180,248,0.15); color: #8ab4f8; }
   .status-seeding     { background: rgba(129,201,149,0.15); color: #81c995; }
   .status-completed   { background: rgba(129,201,149,0.15); color: #81c995; }
-  .status-paused      { background: rgba(154,160,166,0.15); color: #9aa0a6; }
+  .status-paused      { background: rgba(253,214,99,0.15);  color: #fdd663; }
   .status-error       { background: rgba(242,139,130,0.15); color: #f28b82; }
+  .status-resolving   { background: rgba(138,180,248,0.15); color: #8ab4f8; }
 
   /* ------------------------------------------------------------------ */
   /* Download filter tabs                                                */
@@ -286,6 +319,38 @@
     border-color: rgba(138,180,248,0.3);
   }
   .dl-filter:hover { color: #e8eaed; }
+
+  /* ------------------------------------------------------------------ */
+  /* Context menu                                                        */
+  /* ------------------------------------------------------------------ */
+
+  .ctx-menu {
+    position: fixed;
+    background: #292a2d;
+    border: 1px solid #3c4043;
+    border-radius: 8px;
+    padding: 4px 0;
+    min-width: 180px;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .ctx-item {
+    padding: 7px 16px;
+    font-size: 13px;
+    color: #e8eaed;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ctx-item:hover { background: rgba(255,255,255,0.08); }
+  .ctx-item.danger { color: #f28b82; }
+  .ctx-sep {
+    height: 1px;
+    background: #3c4043;
+    margin: 4px 8px;
+  }
 
   /* ------------------------------------------------------------------ */
   /* Status bar (bottom)                                                 */
@@ -329,13 +394,18 @@
 
 <div class="page">
 
-  <!-- Header -->
+  <!-- Header with toolbar -->
   <div class="header">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z"/>
       <path d="M9 21h6"/><path d="M10 17v4"/><path d="M14 17v4"/>
     </svg>
     <h1>Torrents</h1>
+    <div class="header-actions">
+      <button class="header-btn" onclick="doAction('torrent-resume-all')" title="Resume All">&#9654; Resume All</button>
+      <button class="header-btn" onclick="doAction('torrent-pause-all')" title="Pause All">&#10074;&#10074; Pause All</button>
+      <button class="header-btn accent" onclick="addManual()" title="Add Magnet">+ Add Magnet</button>
+    </div>
   </div>
 
   <!-- Search bar -->
@@ -353,7 +423,9 @@
   <!-- Section tabs -->
   <div class="section-tabs">
     <div class="section-tab active" data-section="search" onclick="switchSection('search')">Search Results</div>
-    <div class="section-tab" data-section="downloads" onclick="switchSection('downloads')">Downloads</div>
+    <div class="section-tab" data-section="downloads" onclick="switchSection('downloads')">
+      Downloads <span id="dlCount" style="margin-left:4px;font-size:11px;color:#9aa0a6"></span>
+    </div>
   </div>
 
   <!-- Content -->
@@ -387,8 +459,10 @@
       <div class="dl-filters">
         <button class="dl-filter active" data-filter="all" onclick="filterDownloads('all', this)">All</button>
         <button class="dl-filter" data-filter="downloading" onclick="filterDownloads('downloading', this)">Downloading</button>
-        <button class="dl-filter" data-filter="completed" onclick="filterDownloads('completed', this)">Completed</button>
         <button class="dl-filter" data-filter="seeding" onclick="filterDownloads('seeding', this)">Seeding</button>
+        <button class="dl-filter" data-filter="completed" onclick="filterDownloads('completed', this)">Completed</button>
+        <button class="dl-filter" data-filter="paused" onclick="filterDownloads('paused', this)">Paused</button>
+        <button class="dl-filter" data-filter="errored" onclick="filterDownloads('errored', this)">Errored</button>
       </div>
       <div class="table-container">
         <div class="empty-state" id="dlEmpty">
@@ -405,8 +479,9 @@
             <tr>
               <th class="dl-col-name">Name</th>
               <th class="dl-col-size">Size</th>
-              <th class="dl-col-seeds">Seeds</th>
-              <th class="dl-col-speed">Speed</th>
+              <th class="dl-col-peers">Peers</th>
+              <th class="dl-col-dlspeed">&#8595; Speed</th>
+              <th class="dl-col-ulspeed">&#8593; Speed</th>
               <th class="dl-col-progress">Progress</th>
               <th class="dl-col-status">Status</th>
             </tr>
@@ -427,17 +502,21 @@
 
 </div>
 
+<!-- Context menu overlay -->
+<div id="ctxMenu" class="ctx-menu hidden" style="top:0;left:0"></div>
+
 <script>
   // =====================================================================
   // State
   // =====================================================================
 
   let searchResults = [];
-  let torrents = [];
+  let allTorrents = [];   // active + history merged
   let currentSection = 'search';
   let dlFilter = 'all';
   let activeSites = new Set(['piratebay', '1337x', 'nyaa']);
   let searching = false;
+  let selectedTid = null;
 
   // =====================================================================
   // Search
@@ -456,11 +535,9 @@
     searching = true;
     searchBtn.disabled = true;
     searchBtn.textContent = 'Searching...';
-    // Build URL with site filters
     const encoded = encodeURIComponent(q);
     const sites = Array.from(activeSites).join(',');
     window.location.href = 'tanko-browser://torrent-search?q=' + encoded + '&sites=' + sites;
-    // Reset button after timeout (Python will call setSearchResults)
     setTimeout(() => {
       searching = false;
       searchBtn.disabled = false;
@@ -473,7 +550,6 @@
     searchBtn.disabled = false;
     searchBtn.textContent = 'Search';
 
-    // data may be a string (JSON from Python) or object
     if (typeof data === 'string') {
       try { data = JSON.parse(data); } catch(e) { data = {}; }
     }
@@ -518,8 +594,13 @@
 
   function addMagnet(uri) {
     window.location.href = 'tanko-browser://torrent-add?magnet=' + encodeURIComponent(uri);
-    // Switch to downloads tab
-    switchSection('downloads');
+  }
+
+  function addManual() {
+    const uri = prompt('Enter magnet URI:');
+    if (uri && uri.startsWith('magnet:')) {
+      addMagnet(uri);
+    }
   }
 
   // =====================================================================
@@ -530,10 +611,22 @@
     if (typeof data === 'string') {
       try { data = JSON.parse(data); } catch(e) { data = {}; }
     }
-    const entries = (data && data.entries) || (data && Array.isArray(data) ? data : []);
-    torrents = entries;
+
+    // Merge active + history, dedup by id
+    const active = (data && data.active) || [];
+    const history = (data && data.history) || [];
+    const seen = new Set();
+    allTorrents = [];
+    for (const t of active) {
+      if (t && t.id) { seen.add(t.id); allTorrents.push(t); }
+    }
+    for (const t of history) {
+      if (t && t.id && !seen.has(t.id)) { allTorrents.push(t); }
+    }
+
     renderDownloads();
     renderStatusBar();
+    updateDlCount();
   }
 
   function renderDownloads() {
@@ -541,13 +634,15 @@
     const table = document.getElementById('dlTable');
     const empty = document.getElementById('dlEmpty');
 
-    let filtered = torrents;
+    let filtered = allTorrents;
     if (dlFilter !== 'all') {
-      filtered = torrents.filter(t => {
+      filtered = allTorrents.filter(t => {
         const state = (t.state || '').toLowerCase();
-        if (dlFilter === 'downloading') return state === 'downloading' || state === 'resolving_metadata';
+        if (dlFilter === 'downloading') return state === 'downloading' || state === 'resolving_metadata' || state === 'metadata_ready';
         if (dlFilter === 'completed') return state === 'completed' || state === 'completed_pending';
         if (dlFilter === 'seeding') return state === 'seeding';
+        if (dlFilter === 'paused') return state === 'paused';
+        if (dlFilter === 'errored') return state === 'failed' || state === 'cancelled' || state === 'error';
         return true;
       });
     }
@@ -564,23 +659,28 @@
     tbody.innerHTML = filtered.map(t => {
       const name = escapeHtml(t.name || 'Resolving...');
       const size = formatSize(t.totalSize || 0);
-      const seeds = t.numPeers || 0;
-      const speed = formatSpeed(t.downloadRate || 0);
+      const peers = t.numPeers || 0;
+      const dlSpeed = formatSpeed(t.downloadRate || 0);
+      const ulSpeed = formatSpeed(t.uploadSpeed || 0);
       const pct = Math.round((t.progress || 0) * 100);
       const state = t.state || 'unknown';
       const statusClass = getStatusClass(state);
       const statusLabel = getStatusLabel(state);
       const tid = escapeAttr(t.id || '');
+      const barClass = pct >= 100 ? 'complete' : (state === 'paused' ? 'paused' : '');
 
-      return `<tr data-id="${tid}" oncontextmenu="showDlMenu(event, '${tid}')">
+      return `<tr data-id="${tid}" class="${selectedTid === t.id ? 'selected' : ''}"
+                  onclick="selectTorrent('${tid}')"
+                  oncontextmenu="showCtxMenu(event, '${tid}')">
         <td class="dl-col-name" title="${escapeAttr(t.name || '')}">${name}</td>
         <td class="dl-col-size">${size}</td>
-        <td class="dl-col-seeds"><span class="seeds">${seeds}</span></td>
-        <td class="dl-col-speed">${speed}</td>
+        <td class="dl-col-peers">${peers}</td>
+        <td class="dl-col-dlspeed">${dlSpeed}</td>
+        <td class="dl-col-ulspeed">${ulSpeed}</td>
         <td class="dl-col-progress">
           <div class="progress-text">${pct}%</div>
           <div class="progress-wrap">
-            <div class="progress-bar ${pct >= 100 ? 'complete' : ''}" style="width:${pct}%"></div>
+            <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
           </div>
         </td>
         <td class="dl-col-status"><span class="status ${statusClass}">${statusLabel}</span></td>
@@ -588,42 +688,115 @@
     }).join('');
   }
 
+  function selectTorrent(tid) {
+    selectedTid = (selectedTid === tid) ? null : tid;
+    renderDownloads();
+  }
+
   function renderStatusBar() {
     let dlRate = 0, ulRate = 0, active = 0;
-    for (const t of torrents) {
+    for (const t of allTorrents) {
       dlRate += (t.downloadRate || 0);
-      ulRate += (t.uploadRate || 0);
-      if (t.state === 'downloading' || t.state === 'seeding') active++;
+      ulRate += (t.uploadSpeed || 0);
+      const s = (t.state || '').toLowerCase();
+      if (s === 'downloading' || s === 'seeding' || s === 'resolving_metadata') active++;
     }
     document.getElementById('statDl').innerHTML = '&#8595; ' + formatSpeed(dlRate);
     document.getElementById('statUl').innerHTML = '&#8593; ' + formatSpeed(ulRate);
     document.getElementById('statActive').textContent = active + ' active';
   }
 
+  function updateDlCount() {
+    const activeCount = allTorrents.filter(t => {
+      const s = (t.state || '').toLowerCase();
+      return s === 'downloading' || s === 'resolving_metadata' || s === 'metadata_ready';
+    }).length;
+    const el = document.getElementById('dlCount');
+    el.textContent = activeCount > 0 ? `(${activeCount})` : '';
+  }
+
   // =====================================================================
-  // Download context menu actions
+  // Context menu
   // =====================================================================
 
-  function showDlMenu(e, tid) {
+  function showCtxMenu(e, tid) {
     e.preventDefault();
-    // Use tanko-browser:// scheme for actions
-    // For now, simple confirm-based actions
-    const t = torrents.find(x => x.id === tid);
+    e.stopPropagation();
+    selectedTid = tid;
+    renderDownloads();
+
+    const t = allTorrents.find(x => x.id === tid);
     if (!t) return;
     const state = (t.state || '').toLowerCase();
-    if (state === 'downloading') {
-      if (confirm('Pause this torrent?')) {
-        window.location.href = 'tanko-browser://torrent-action?action=pause&id=' + encodeURIComponent(tid);
-      }
-    } else if (state === 'paused') {
-      if (confirm('Resume this torrent?')) {
-        window.location.href = 'tanko-browser://torrent-action?action=resume&id=' + encodeURIComponent(tid);
-      }
-    } else {
-      if (confirm('Remove this torrent?')) {
-        window.location.href = 'tanko-browser://torrent-action?action=remove&id=' + encodeURIComponent(tid);
-      }
+
+    let items = [];
+
+    if (state === 'downloading' || state === 'seeding') {
+      items.push({ label: 'Pause', action: () => doTorrentAction('pause', tid) });
     }
+    if (state === 'paused') {
+      items.push({ label: 'Resume', action: () => doTorrentAction('resume', tid) });
+    }
+    if (state === 'completed' || state === 'completed_pending') {
+      items.push({ label: 'Open Folder', action: () => doAction('torrent-open-folder', { id: tid }) });
+    }
+    if (items.length) items.push(null); // separator
+
+    items.push({ label: 'Copy Name', action: () => copyText(t.name || '') });
+    items.push({ label: 'Copy Magnet', action: () => copyText(t.magnetUri || '') });
+    items.push({ label: 'Copy Hash', action: () => copyText(t.infoHash || '') });
+
+    items.push(null); // separator
+    items.push({ label: 'Remove', action: () => doTorrentAction('remove', tid) });
+    items.push({ label: 'Remove + Delete Files', cls: 'danger', action: () => doTorrentAction('remove', tid, true) });
+
+    const menu = document.getElementById('ctxMenu');
+    menu.innerHTML = items.map(item => {
+      if (!item) return '<div class="ctx-sep"></div>';
+      return `<div class="ctx-item ${item.cls || ''}" data-action="${items.indexOf(item)}">${item.label}</div>`;
+    }).join('');
+
+    // Position
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.classList.remove('hidden');
+
+    // Wire click handlers
+    menu.querySelectorAll('.ctx-item').forEach((el, idx) => {
+      const itemIdx = parseInt(el.dataset.action);
+      const item = items[itemIdx];
+      if (item && item.action) {
+        el.onclick = () => { hideCtxMenu(); item.action(); };
+      }
+    });
+  }
+
+  function hideCtxMenu() {
+    document.getElementById('ctxMenu').classList.add('hidden');
+  }
+
+  document.addEventListener('click', hideCtxMenu);
+  document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('#dlBody')) hideCtxMenu();
+  });
+
+  function doTorrentAction(action, tid, deleteFiles) {
+    let url = 'tanko-browser://torrent-action?action=' + action + '&id=' + encodeURIComponent(tid);
+    if (deleteFiles) url += '&deleteFiles=true';
+    window.location.href = url;
+  }
+
+  function doAction(cmd, params) {
+    let url = 'tanko-browser://' + cmd;
+    if (params) {
+      const qs = Object.entries(params).map(([k,v]) => k + '=' + encodeURIComponent(v)).join('&');
+      url += '?' + qs;
+    }
+    window.location.href = url;
+  }
+
+  function copyText(text) {
+    navigator.clipboard.writeText(text).catch(() => {});
   }
 
   // =====================================================================
@@ -657,7 +830,6 @@
   function toggleSite(el) {
     const site = el.dataset.site;
     if (site === 'all') {
-      // Toggle all
       const allActive = activeSites.size >= 3;
       activeSites.clear();
       if (!allActive) {
@@ -669,7 +841,6 @@
       if (activeSites.has(site)) activeSites.delete(site);
       else activeSites.add(site);
     }
-    // Update chip visuals
     document.querySelectorAll('.chip').forEach(c => {
       if (c.dataset.site === 'all') {
         c.classList.toggle('active', activeSites.size >= 3);
@@ -684,7 +855,7 @@
   // =====================================================================
 
   function formatSize(bytes) {
-    if (!bytes || bytes <= 0) return '—';
+    if (!bytes || bytes <= 0) return '\u2014';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0;
     let val = bytes;
@@ -699,18 +870,22 @@
 
   function getStatusClass(state) {
     state = state.toLowerCase();
-    if (state === 'downloading' || state === 'resolving_metadata') return 'status-downloading';
+    if (state === 'downloading') return 'status-downloading';
+    if (state === 'resolving_metadata' || state === 'metadata_ready') return 'status-resolving';
     if (state === 'seeding') return 'status-seeding';
     if (state === 'completed' || state === 'completed_pending') return 'status-completed';
     if (state === 'paused') return 'status-paused';
-    if (state === 'error') return 'status-error';
+    if (state === 'failed' || state === 'cancelled' || state === 'error') return 'status-error';
     return '';
   }
 
   function getStatusLabel(state) {
     state = state.toLowerCase();
     if (state === 'resolving_metadata') return 'Resolving';
+    if (state === 'metadata_ready') return 'Ready';
     if (state === 'completed_pending') return 'Done';
+    if (state === 'cancelled') return 'Cancelled';
+    if (state === 'failed') return 'Failed';
     return state.charAt(0).toUpperCase() + state.slice(1);
   }
 

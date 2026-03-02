@@ -357,6 +357,7 @@ class ChromePage(QWebEnginePage):
     new_tab_requested = Signal(QUrl)
     internal_command = Signal(str, str)  # (command, params)
     permission_prompt = Signal(object, object)  # (origin, feature)
+    magnet_requested = Signal(str)  # magnet URI intercepted
 
     # Permissions auto-granted (safe defaults)
     _AUTO_GRANT = {
@@ -434,7 +435,7 @@ class ChromePage(QWebEnginePage):
         return None
 
     def acceptNavigationRequest(self, url: QUrl, nav_type, is_main_frame: bool) -> bool:
-        """Intercept internal URL schemes."""
+        """Intercept internal URL schemes and magnet links."""
         scheme = url.scheme()
 
         if scheme == "tanko-browser":
@@ -442,6 +443,11 @@ class ChromePage(QWebEnginePage):
             host = url.host()
             query = url.query() or ""
             self.internal_command.emit(host, query)
+            return False
+
+        if scheme == "magnet":
+            # Magnet link clicked — intercept and show add-torrent dialog
+            self.magnet_requested.emit(url.toString())
             return False
 
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)

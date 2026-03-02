@@ -21,10 +21,11 @@ import json
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -33,6 +34,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngin
 import storage
 import bridge as bridge_module
 from player_ui import MpvContainer
+from qtroute_library_ui import QTRouteLibraryPanel
 from browser import ChromeBrowser
 import torrent_service
 from flaresolverr_bridge import FlareSolverrBridge
@@ -79,6 +81,11 @@ VIDEO_EXTENSIONS = frozenset(
 )
 
 COMIC_EXTENSIONS = frozenset([".cbz", ".cbr"])
+BOOK_EXTENSIONS = frozenset(getattr(
+    bridge_module,
+    "BOOK_EXTENSIONS",
+    [".epub", ".pdf", ".txt", ".mobi", ".fb2"],
+))
 
 
 def normalize_section(raw: str) -> str:
@@ -95,6 +102,10 @@ def is_video_path(p: str) -> bool:
 
 def is_comic_path(p: str) -> bool:
     return Path(p).suffix.lower() in COMIC_EXTENSIONS
+
+
+def is_book_path(p: str) -> bool:
+    return Path(p).suffix.lower() in BOOK_EXTENSIONS
 
 
 # ---------------------------------------------------------------------------
@@ -223,16 +234,19 @@ class TankobanWindow(QMainWindow):
     """
     Main application window.
 
-    QStackedWidget with three layers:
-      index 0 = QWebEngineView  (existing renderer UI)
-      index 1 = MpvContainer    (mpv native render surface)
-      index 2 = ChromeBrowser   (Chrome-like browser, lazy-created)
+    QStackedWidget layers:
+      - Native QTRoute library shell (Qt widgets)
+      - Legacy web frontend (existing renderer UI / readers)
+      - MpvContainer (native video render surface)
+      - ChromeBrowser (Chrome-like browser, lazy-created)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
         super().__init__()
 
         self._app_section = app_section  # Stored for post-load routing
+        self._renderer_loaded = False
+        self._pending_open_queue = []
 
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(800, 600)
@@ -268,8 +282,10 @@ class TankobanWindow(QMainWindow):
         )
 
         self._web_page = TankobanWebPage(self._profile, self)
+        self._web_page.setBackgroundColor(QColor(32, 33, 36))  # prevent blank flash on minimize/restore
         self._web_view = QWebEngineView()
         self._web_view.setPage(self._web_page)
+        self._web_view.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
 
         # Web settings matching Electron's BrowserWindow webPreferences
         settings = self._web_view.settings()
@@ -278,17 +294,28 @@ class TankobanWindow(QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
 
-        self._stack.addWidget(self._web_view)  # index 0
-
         # --- QWebChannel bridge (replaces Electron preload + ipcMain) ---
         # Must be created before MpvContainer so player bridge exists.
         self._bridge = bridge_module.setup_bridge(self._web_view, self)
 
-        # --- MpvContainer (layer 1) ---
+        # --- Native QTRoute library shell (layer 0) ---
+        self._library_panel = QTRouteLibraryPanel(
+            self._bridge,
+            on_open_paths=self.queue_open_files,
+            on_open_video=self._open_video_path,
+            on_open_legacy=self.show_legacy_frontend,
+            parent=self,
+        )
+        self._stack.addWidget(self._library_panel)
+
+        # --- Legacy web frontend (layer 1) ---
+        self._stack.addWidget(self._web_view)
+
+        # --- MpvContainer (layer 2) ---
         # Hosts the mpv render surface + control widgets as direct siblings.
         # No covering overlay — controls are raised above the native HWND.
         self._mpv_container = MpvContainer(self._bridge.player, self)
-        self._stack.addWidget(self._mpv_container)  # index 1
+        self._stack.addWidget(self._mpv_container)
 
         # --- ChromeBrowser (layer 2, lazy-created) ---
         self._tankoweb: ChromeBrowser | None = None
@@ -341,8 +368,14 @@ class TankobanWindow(QMainWindow):
 
     def _on_load_finished(self, ok: bool):
         if ok:
+            self._renderer_loaded = True
+            if self._app_section in {"comic", "book", "audiobook", "video", "browser", "torrent"}:
+                self.show_legacy_frontend()
+            else:
+                self.show_web_view()
             self.show()
             self.showMaximized()
+            QTimer.singleShot(350, self._flush_open_file_queue)
         else:
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
@@ -350,17 +383,87 @@ class TankobanWindow(QMainWindow):
     # --- Player widget switching ---
 
     def show_web_view(self):
-        """Switch to the web UI layer."""
-        self._stack.setCurrentIndex(0)
+        """Switch to native QTRoute library shell."""
+        self._stack.setCurrentWidget(self._library_panel)
+
+    def show_legacy_frontend(self):
+        """Switch to legacy web frontend (old readers/library shell)."""
+        self._stack.setCurrentWidget(self._web_view)
 
     def show_player(self):
         """Switch to the mpv player layer and give keyboard focus to container."""
-        self._stack.setCurrentIndex(1)
+        self._stack.setCurrentWidget(self._mpv_container)
         try:
             self._mpv_container.setFocus(Qt.FocusReason.OtherFocusReason)
             self._mpv_container._show_controls()
         except Exception:
             pass
+
+    # --- External open / argv forwarding ---
+
+    def queue_open_files(self, paths, source: str = "os"):
+        clean = []
+        for p in paths or []:
+            s = str(p or "").strip()
+            if s:
+                clean.append(s)
+        if not clean:
+            return False
+        self._pending_open_queue.append({
+            "paths": clean,
+            "source": str(source or "os"),
+        })
+        if self._renderer_loaded:
+            QTimer.singleShot(0, self._flush_open_file_queue)
+        return True
+
+    def _flush_open_file_queue(self):
+        if not self._pending_open_queue:
+            return
+        while self._pending_open_queue:
+            item = self._pending_open_queue.pop(0)
+            try:
+                self._dispatch_open_files(item.get("paths", []), item.get("source", "os"))
+            except Exception as e:
+                print(f"[butterfly] Failed to dispatch open files: {e}")
+
+    def _dispatch_open_files(self, paths, source: str = "os"):
+        # First supported file wins, mirroring renderer external-open behavior.
+        for raw in paths or []:
+            p = str(raw or "").strip()
+            if not p:
+                continue
+            if is_comic_path(p):
+                self.show_legacy_frontend()
+                self._bridge.library.emit_app_open_files([p], source=source)
+                return True
+            if is_book_path(p):
+                self.show_legacy_frontend()
+                self._bridge.library.emit_app_open_files([p], source=source)
+                return True
+            if is_video_path(p):
+                out = self._open_video_path(p, source=source)
+                return bool(isinstance(out, dict) and out.get("ok"))
+        print(f"[butterfly] No supported files in payload: {paths}")
+        return False
+
+    def _open_video_path(self, file_path: str, source: str = "os"):
+        payload = {
+            "filePath": str(file_path),
+            "startSeconds": 0,
+            "sessionId": str(int(time.time() * 1000)),
+            "source": str(source or "os"),
+        }
+        raw = self._bridge.player.launchQt(json.dumps(payload))
+        try:
+            out = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception:
+            out = {"ok": False, "error": "invalid_player_response"}
+        if not isinstance(out, dict):
+            out = {"ok": False, "error": "invalid_player_response"}
+        if not out.get("ok"):
+            print(f"[butterfly] Video launch failed: {out}")
+        return out
 
     # --- TankoWeb mode switching ---
 
@@ -523,7 +626,7 @@ class SingleInstanceGuard:
 # CLI argument parsing
 # ---------------------------------------------------------------------------
 
-def parse_args():
+def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Tankoban — Project Butterfly")
     parser.add_argument(
         "--app-section", "--section", "--app",
@@ -535,10 +638,14 @@ def parse_args():
         help="Enable DevTools (Ctrl+Shift+I / F12)"
     )
     parser.add_argument(
-        "files", nargs="*", default=[],
-        help="Files to open (video or comic archives)"
+        "--show-library", action="store_true", default=False,
+        help="Focus the main library shell in the existing window"
     )
-    return parser.parse_known_args()
+    parser.add_argument(
+        "files", nargs="*", default=[],
+        help="Files to open (video, comic, or book)"
+    )
+    return parser.parse_known_args(argv)
 
 
 # ---------------------------------------------------------------------------
@@ -546,7 +653,7 @@ def parse_args():
 # ---------------------------------------------------------------------------
 
 def main():
-    args, _unknown = parse_args()
+    args, _unknown = parse_args(sys.argv[1:])
 
     # Resolve boot section from args or env
     app_section = normalize_section(args.app_section)
@@ -584,7 +691,12 @@ def main():
         """Handle second instance: show/focus existing window."""
         if win is None:
             return
-        # TODO: handle --show-library flag, video file forwarding, comic open
+        forwarded = list(argv[1:]) if isinstance(argv, list) and argv else []
+        second_args, _ = parse_args(forwarded)
+        if second_args.show_library:
+            win.show_web_view()
+        if second_args.files:
+            win.queue_open_files(second_args.files, source="second-instance")
         if win.isMinimized():
             win.showNormal()
         win.show()
@@ -597,6 +709,10 @@ def main():
 
     # Create main window
     win = TankobanWindow(app_section=app_section, dev_tools=dev_tools)
+    if args.show_library:
+        win.show_web_view()
+    if args.files:
+        win.queue_open_files(args.files, source="cli")
 
     # --- Keyboard shortcuts ---
     if dev_tools:

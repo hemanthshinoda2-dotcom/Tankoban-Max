@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QKeySequence, QShortcut, QClipboard, QPixmap, QImage
+from PySide6.QtGui import QColor, QKeySequence, QShortcut, QClipboard, QPixmap, QImage
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QApplication, QFileDialog,
 )
@@ -262,6 +262,7 @@ class ChromeBrowser(QWidget):
         # Create QWebEngineView + ChromePage for this tab
         view = QWebEngineView()
         page = ChromePage(self._profile, tab.id, self)
+        page.setBackgroundColor(QColor(32, 33, 36))  # prevent blank white flash on minimize/restore
         view.setPage(page)
 
         # Web settings
@@ -392,6 +393,7 @@ class ChromeBrowser(QWidget):
             lambda url, tid=tab_id: self._on_new_tab_requested(url)
         )
         page.internal_command.connect(self._on_internal_command)
+        page.magnet_requested.connect(self._on_magnet_detected)
 
         # Permission prompts
         page.permission_prompt.connect(
@@ -544,6 +546,14 @@ class ChromeBrowser(QWidget):
             self._handle_torrent_add(params)
         elif command == "torrent-action":
             self._handle_torrent_action(params)
+        elif command == "torrent-select-files":
+            self._handle_torrent_select_files(params)
+        elif command == "torrent-open-folder":
+            self._handle_torrent_open_folder(params)
+        elif command == "torrent-pause-all":
+            self._handle_torrent_global("pauseAll")
+        elif command == "torrent-resume-all":
+            self._handle_torrent_global("resumeAll")
 
     def open_settings(self):
         """Open settings in a new tab."""
@@ -598,6 +608,24 @@ class ChromeBrowser(QWidget):
     # Torrents page
     # -----------------------------------------------------------------------
 
+    def _on_magnet_detected(self, magnet_uri: str):
+        """Handle magnet link click — show the add-torrent dialog."""
+        from .torrent_add_dialog import TorrentAddDialog
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        dlg = TorrentAddDialog(magnet_uri, bridge_root=bridge, parent=self)
+        dlg.torrent_started.connect(self._on_torrent_added)
+        dlg.exec()
+
+    def _on_torrent_added(self, torrent_id: str):
+        """Called when a torrent is added via the dialog — switch to torrents tab."""
+        # If already on torrents page, just refresh. Otherwise open it.
+        tab = self._tab_mgr.active_tab
+        url = tab.url if tab else ""
+        if "torrents.html" in url:
+            self._push_torrent_updates()
+        else:
+            self.open_torrents()
+
     def open_torrents(self):
         """Open the torrent search + manager page."""
         if self._TORRENTS_HTML.exists():
@@ -629,9 +657,16 @@ class ChromeBrowser(QWidget):
             return
         import json
         try:
-            result = bridge.webTorrent.list()
+            active_json = bridge.webTorrent.getActive()
+            history_json = bridge.webTorrent.getHistory()
+            active = json.loads(active_json) if isinstance(active_json, str) else active_json
+            history = json.loads(history_json) if isinstance(history_json, str) else history_json
+            combined = json.dumps({
+                "active": active.get("torrents", []),
+                "history": history.get("torrents", []),
+            })
             tab.view.page().runJavaScript(
-                f"if(typeof updateTorrents==='function')updateTorrents({result});"
+                f"if(typeof updateTorrents==='function')updateTorrents({combined});"
             )
         except Exception:
             pass
@@ -677,20 +712,13 @@ class ChromeBrowser(QWidget):
             )
 
     def _handle_torrent_add(self, params: str):
-        """Handle adding a magnet from the torrents page."""
-        import urllib.parse, json
+        """Handle adding a magnet — show the add dialog."""
+        import urllib.parse
         parsed = urllib.parse.parse_qs(params)
         magnet = parsed.get("magnet", [""])[0]
         if not magnet:
             return
-        bridge = self._data_bridge._bridge if self._data_bridge else None
-        if not bridge or not hasattr(bridge, "webTorrent"):
-            return
-        try:
-            payload = json.dumps({"magnetUri": magnet})
-            bridge.webTorrent.startMagnet(payload)
-        except Exception:
-            pass
+        self._on_magnet_detected(magnet)
 
     def _handle_torrent_action(self, params: str):
         """Handle torrent actions (pause/resume/remove) from the torrents page."""
@@ -713,6 +741,70 @@ class ChromeBrowser(QWidget):
                 delete_files = parsed.get("deleteFiles", ["false"])[0] == "true"
                 payload = json.dumps({"id": torrent_id, "deleteFiles": delete_files})
                 bridge.webTorrent.remove(payload)
+        except Exception:
+            pass
+
+    def _handle_torrent_select_files(self, params: str):
+        """Handle file selection change from the torrents page."""
+        import urllib.parse, json
+        parsed = urllib.parse.parse_qs(params)
+        torrent_id = parsed.get("id", [""])[0]
+        indices_raw = parsed.get("indices", [""])[0]
+        if not torrent_id or not indices_raw:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        try:
+            indices = json.loads(indices_raw)
+            bridge.webTorrent.selectFiles(json.dumps({
+                "id": torrent_id,
+                "selectedIndices": indices,
+            }))
+        except Exception:
+            pass
+
+    def _handle_torrent_open_folder(self, params: str):
+        """Open the save folder of a completed torrent in the file manager."""
+        import urllib.parse, subprocess, json
+        parsed = urllib.parse.parse_qs(params)
+        torrent_id = parsed.get("id", [""])[0]
+        if not torrent_id:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        try:
+            active_json = bridge.webTorrent.getActive()
+            active = json.loads(active_json) if isinstance(active_json, str) else active_json
+            for t in active.get("torrents", []):
+                if t.get("id") == torrent_id:
+                    path = t.get("savePath") or t.get("destinationRoot", "")
+                    if path and os.path.isdir(path):
+                        subprocess.Popen(["explorer", os.path.normpath(path)])
+                    return
+            # Check history too
+            hist_json = bridge.webTorrent.getHistory()
+            hist = json.loads(hist_json) if isinstance(hist_json, str) else hist_json
+            for t in hist.get("torrents", []):
+                if t.get("id") == torrent_id:
+                    path = t.get("savePath") or t.get("destinationRoot", "")
+                    if path and os.path.isdir(path):
+                        subprocess.Popen(["explorer", os.path.normpath(path)])
+                    return
+        except Exception:
+            pass
+
+    def _handle_torrent_global(self, action: str):
+        """Handle global torrent actions (pauseAll, resumeAll)."""
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        try:
+            if action == "pauseAll":
+                bridge.webTorrent.pauseAll()
+            elif action == "resumeAll":
+                bridge.webTorrent.resumeAll()
         except Exception:
             pass
 
