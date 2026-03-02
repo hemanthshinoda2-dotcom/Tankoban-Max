@@ -35,6 +35,7 @@ from .downloads_shelf import DownloadsShelf
 from .data_bridge import DataBridge
 from .context_menu import build_context_menu
 from .permission_bar import PermissionBar
+from .status_bar import StatusBar
 from .shortcuts import SHORTCUTS
 
 # ---------------------------------------------------------------------------
@@ -123,6 +124,9 @@ class ChromeBrowser(QWidget):
         # Downloads shelf (hidden, shows when download starts)
         self._downloads_shelf = DownloadsShelf()
         layout.addWidget(self._downloads_shelf)
+
+        # Status bar (floating overlay on viewport, shows link URL on hover)
+        self._status_bar = StatusBar(self._viewport)
 
         # -- Wire signals --
         self._wire_tab_manager()
@@ -353,6 +357,11 @@ class ChromeBrowser(QWidget):
             lambda audible, tid=tab_id: self._on_audio_changed(tid, audible)
         )
 
+        # Link hover → status bar
+        page.linkHovered.connect(
+            lambda url, tid=tab_id: self._on_link_hovered(tid, url)
+        )
+
         # Context menu
         view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         view.customContextMenuRequested.connect(
@@ -395,6 +404,11 @@ class ChromeBrowser(QWidget):
             self._tab_mgr.tab_audio_changed.emit(tab_id, audible, tab.muted)
             self._tab_bar.update_audio(tab_id, audible, tab.muted)
 
+    def _on_link_hovered(self, tab_id: str, url: str):
+        """Show link URL in status bar when hovering on the active tab."""
+        if tab_id == self._tab_mgr.active_id:
+            self._status_bar.show_url(url)
+
     def _on_new_tab_requested(self, url: QUrl):
         url_str = url.toString() if url and not url.isEmpty() else None
         self.new_tab(url_str)
@@ -432,6 +446,12 @@ class ChromeBrowser(QWidget):
         tab = self._tab_mgr.active_tab
         if tab and tab.view:
             self._load_newtab(tab.view)
+
+    def _search_selection(self, text: str):
+        """Search Google for selected text in a new tab."""
+        from .nav_bar import DEFAULT_SEARCH_URL
+        url = DEFAULT_SEARCH_URL.format(QUrl.toPercentEncoding(text).data().decode())
+        self.new_tab(url)
 
     def _load_newtab(self, view: QWebEngineView):
         """Load the new tab page."""
@@ -557,6 +577,7 @@ class ChromeBrowser(QWidget):
             on_save_image=lambda url: self._save_image(url),
             on_copy_image=lambda url: self._copy_image(url),
             on_inspect=lambda: self.toggle_devtools(),
+            on_search_selection=lambda text: self._search_selection(text),
         )
 
         menu.exec(view.mapToGlobal(pos))
@@ -813,13 +834,44 @@ class ChromeBrowser(QWidget):
         self.open_settings()
 
     def print_page(self):
-        """Print the current page."""
+        """Print the current page (save as PDF via file dialog)."""
         tab = self._tab_mgr.active_tab
-        if tab and tab.view:
-            tab.view.page().printToPdf("page.pdf")
+        if not tab or not tab.view:
+            return
+        title = tab.title.replace("/", "-").replace("\\", "-")[:50] or "page"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save as PDF", f"{title}.pdf", "PDF Files (*.pdf)",
+        )
+        if path:
+            tab.view.page().printToPdf(path)
 
     def view_source(self):
         """View page source in a new tab."""
         tab = self._tab_mgr.active_tab
         if tab and tab.url and tab.url.startswith("http"):
             self.new_tab(f"view-source:{tab.url}")
+
+    # -----------------------------------------------------------------------
+    # Tab number shortcuts (Ctrl+1..8, Ctrl+9)
+    # -----------------------------------------------------------------------
+
+    def _switch_to_tab_n(self, n: int):
+        """Switch to the Nth tab (0-indexed)."""
+        tabs = self._tab_mgr.tabs
+        if 0 <= n < len(tabs):
+            self._tab_mgr.activate(tabs[n].id)
+
+    def switch_to_tab_1(self): self._switch_to_tab_n(0)
+    def switch_to_tab_2(self): self._switch_to_tab_n(1)
+    def switch_to_tab_3(self): self._switch_to_tab_n(2)
+    def switch_to_tab_4(self): self._switch_to_tab_n(3)
+    def switch_to_tab_5(self): self._switch_to_tab_n(4)
+    def switch_to_tab_6(self): self._switch_to_tab_n(5)
+    def switch_to_tab_7(self): self._switch_to_tab_n(6)
+    def switch_to_tab_8(self): self._switch_to_tab_n(7)
+
+    def switch_to_last_tab(self):
+        """Ctrl+9: switch to the last tab."""
+        tabs = self._tab_mgr.tabs
+        if tabs:
+            self._tab_mgr.activate(tabs[-1].id)

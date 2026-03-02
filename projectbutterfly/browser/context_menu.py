@@ -34,6 +34,7 @@ def build_context_menu(
     on_save_image=None,
     on_copy_image=None,
     on_inspect=None,
+    on_search_selection=None,
 ) -> QMenu:
     """
     Build and return a context menu for the given context menu request.
@@ -97,6 +98,15 @@ def build_context_menu(
             a = menu.addAction("Paste")
             a.setShortcut("Ctrl+V")
             a.triggered.connect(on_paste)
+
+    # -- Search selection --
+    if has_selection and on_search_selection:
+        # Truncate long selections for menu label
+        snippet = selected.strip()[:30]
+        if len(selected.strip()) > 30:
+            snippet += "..."
+        a = menu.addAction(f'Search Google for "{snippet}"')
+        a.triggered.connect(lambda: on_search_selection(selected.strip()))
 
     if has_selection or is_editable:
         menu.addSeparator()

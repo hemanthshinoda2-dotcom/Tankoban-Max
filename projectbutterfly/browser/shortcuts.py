@@ -37,4 +37,14 @@ SHORTCUTS = [
     ("Ctrl+U",          "view_source"),
     ("Ctrl+G",          "focus_address_bar"),
     ("Ctrl+Shift+J",    "toggle_devtools"),
+    # Ctrl+1..8 switch to tab N, Ctrl+9 switches to last tab
+    ("Ctrl+1",          "switch_to_tab_1"),
+    ("Ctrl+2",          "switch_to_tab_2"),
+    ("Ctrl+3",          "switch_to_tab_3"),
+    ("Ctrl+4",          "switch_to_tab_4"),
+    ("Ctrl+5",          "switch_to_tab_5"),
+    ("Ctrl+6",          "switch_to_tab_6"),
+    ("Ctrl+7",          "switch_to_tab_7"),
+    ("Ctrl+8",          "switch_to_tab_8"),
+    ("Ctrl+9",          "switch_to_last_tab"),
 ]
