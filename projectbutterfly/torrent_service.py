@@ -520,6 +520,188 @@ class ProwlarrClient:
 
 
 # ---------------------------------------------------------------------------
+# JackettClient — Jackett Torznab API
+# ---------------------------------------------------------------------------
+
+class JackettClient:
+    """
+    Jackett Torznab API client.
+
+    Communicates via HTTP to the Jackett instance running on localhost.
+    Parses Torznab XML responses (same format used by Sonarr/Radarr).
+    """
+
+    def __init__(self, base_url: str, api_key: str):
+        self._base = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def _url(self, path: str) -> str:
+        return f"{self._base}{path}"
+
+    def health(self) -> bool:
+        """Check if Jackett is reachable."""
+        url = self._url(f"/api/v2.0/indexers/all/results/torznab/api?t=caps&apikey={urllib.parse.quote(self._api_key)}")
+        status, _ = _http_get(url, timeout=5)
+        return 200 <= status < 400
+
+    def search(self, query: str, indexer: str = "all",
+               categories: str = "", limit: int = 40) -> list[dict]:
+        """
+        Search via Jackett Torznab API.
+        Returns normalized results matching ProwlarrClient format.
+        """
+        params = {
+            "apikey": self._api_key,
+            "t": "search",
+            "q": query,
+            "limit": str(limit),
+        }
+        if categories:
+            params["cat"] = categories
+
+        qs = urllib.parse.urlencode(params)
+        url = self._url(f"/api/v2.0/indexers/{urllib.parse.quote(indexer)}/results/torznab/api?{qs}")
+        status, body = _http_get(url, timeout=30)
+
+        if status != 200:
+            return []
+
+        return self._parse_torznab_xml(body)
+
+    def search_with_status(self, query: str, indexer: str = "all",
+                           categories: str = "", limit: int = 40) -> tuple[list[dict], str]:
+        """Search with status info. Returns (results, status_str)."""
+        params = {
+            "apikey": self._api_key,
+            "t": "search",
+            "q": query,
+            "limit": str(limit),
+        }
+        if categories:
+            params["cat"] = categories
+
+        qs = urllib.parse.urlencode(params)
+        url = self._url(f"/api/v2.0/indexers/{urllib.parse.quote(indexer)}/results/torznab/api?{qs}")
+        status, body = _http_get(url, timeout=30)
+
+        if status == 403:
+            return [], "cf_blocked"
+        if status != 200:
+            body_lower = body.lower()
+            if "cloudflare" in body_lower or "cf-ray" in body_lower:
+                return [], "cf_blocked"
+            return [], "error"
+
+        results = self._parse_torznab_xml(body)
+        return results, "ok"
+
+    def list_indexers(self) -> list[dict]:
+        """Get list of configured indexers from Jackett."""
+        url = self._url(f"/api/v2.0/indexers?apikey={urllib.parse.quote(self._api_key)}&configured=true")
+        status, body = _http_get(url, timeout=10)
+        if status != 200:
+            return []
+        try:
+            raw = json.loads(body)
+            results = []
+            seen = set()
+            for row in raw:
+                ix_id = str(row.get("id", row.get("ID", row.get("identifier", ""))))
+                if not ix_id or ix_id.lower() in seen:
+                    continue
+                seen.add(ix_id.lower())
+                name = str(row.get("title", row.get("name", row.get("displayName", "")))) or ix_id
+                results.append({
+                    "id": ix_id,
+                    "name": name,
+                    "enabled": True,
+                    "provider": "jackett",
+                })
+            return results
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    @staticmethod
+    def _parse_torznab_xml(xml: str) -> list[dict]:
+        """Parse Torznab XML response into normalized result dicts."""
+        import re
+        results = []
+        # Match each <item>...</item> block
+        item_re = re.compile(r'<item\b[\s\S]*?</item>', re.IGNORECASE)
+        for m in item_re.finditer(xml):
+            item = m.group(0)
+
+            title = _xml_text(item, "title")
+            if not title:
+                continue
+
+            # Extract magnet URI from enclosure or link
+            enc_match = re.search(r'<enclosure[^>]*url="(magnet:[^"]+)"', item, re.IGNORECASE)
+            link = _xml_text(item, "link")
+            magnet = ""
+            if enc_match:
+                magnet = _xml_unescape(enc_match.group(1))
+            elif link and link.startswith("magnet:"):
+                magnet = link
+
+            if not magnet:
+                continue
+
+            size = _xml_torznab_attr(item, "size") or _xml_text(item, "size")
+            seeders = _xml_torznab_attr(item, "seeders")
+            files = _xml_torznab_attr(item, "files")
+            source = _xml_torznab_attr(item, "indexer") or _xml_torznab_attr(item, "tracker") or ""
+
+            results.append({
+                "id": f"jackett_{hash(title + magnet) & 0xFFFFFFFF:08x}",
+                "title": title,
+                "sizeBytes": int(size) if size and size.isdigit() else 0,
+                "seeders": int(seeders) if seeders and seeders.isdigit() else 0,
+                "fileCount": int(files) if files and files.isdigit() else None,
+                "magnetUri": magnet,
+                "downloadUrl": magnet,
+                "sourceName": source or "Jackett",
+                "provider": "jackett",
+            })
+
+        return results
+
+
+def _xml_text(xml: str, tag: str) -> str:
+    """Extract text content of an XML tag."""
+    import re
+    m = re.search(rf'<{tag}\b[^>]*>(.*?)</{tag}>', xml, re.IGNORECASE | re.DOTALL)
+    if m:
+        text = m.group(1).strip()
+        # Handle CDATA
+        cdata = re.match(r'<!\[CDATA\[(.*?)\]\]>', text, re.DOTALL)
+        if cdata:
+            return cdata.group(1)
+        return _xml_unescape(text)
+    return ""
+
+
+def _xml_torznab_attr(xml: str, name: str) -> str:
+    """Extract a torznab:attr value from XML item."""
+    import re
+    m = re.search(rf'<torznab:attr\s+name="{name}"\s+value="([^"]*)"', xml, re.IGNORECASE)
+    if m:
+        return _xml_unescape(m.group(1))
+    # Also try newznab:attr
+    m = re.search(rf'<newznab:attr\s+name="{name}"\s+value="([^"]*)"', xml, re.IGNORECASE)
+    if m:
+        return _xml_unescape(m.group(1))
+    return ""
+
+
+def _xml_unescape(s: str) -> str:
+    """Unescape basic XML entities."""
+    return (s.replace("&amp;", "&").replace("&lt;", "<")
+             .replace("&gt;", ">").replace("&quot;", '"')
+             .replace("&apos;", "'"))
+
+
+# ---------------------------------------------------------------------------
 # Config / Bootstrap helpers
 # ---------------------------------------------------------------------------
 
@@ -699,6 +881,67 @@ def _detect_running_prowlarr() -> tuple[int, str] | None:
         status, _ = _http_get(f"http://127.0.0.1:{port}/ping", timeout=1)
         if 200 <= status < 400:
             return port, ""
+    return None
+
+
+def _detect_running_jackett() -> tuple[int, str] | None:
+    """Check if Jackett is already running on a known port. Returns (port, "")."""
+    for port in [9117, 9118]:
+        status, _ = _http_get(f"http://127.0.0.1:{port}/api/v2.0/server/config", timeout=2)
+        if 200 <= status < 400:
+            return port, ""
+    return None
+
+
+def _jackett_config_path() -> str:
+    """Path to our Jackett config cache (stores base_url and api_key)."""
+    return storage.data_path("jackett_config.json")
+
+
+def detect_jackett() -> JackettClient | None:
+    """
+    Detect a running Jackett instance.
+
+    Jackett is NOT bundled — the user must install it themselves.
+    We only detect it if it's already running on common ports,
+    or if the user has configured it manually in settings.
+    """
+    # Check saved config first
+    cache_path = _jackett_config_path()
+    cached = storage.read_json(cache_path, {})
+    base_url = cached.get("base_url", "")
+    api_key = cached.get("api_key", "")
+
+    if base_url and api_key:
+        client = JackettClient(base_url, api_key)
+        if client.health():
+            print(f"[torrent] Jackett: using saved config at {base_url}")
+            return client
+
+    # Try detecting running instance
+    result = _detect_running_jackett()
+    if result:
+        port, _ = result
+        base_url = f"http://127.0.0.1:{port}"
+        # Try to get API key from Jackett's server config
+        status, body = _http_get(f"{base_url}/api/v2.0/server/config", timeout=5)
+        if status == 200:
+            try:
+                cfg = json.loads(body)
+                api_key = cfg.get("api_key", "") or cfg.get("APIKey", "")
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        if api_key:
+            # Cache for future use
+            storage.write_json_sync(cache_path, {"base_url": base_url, "api_key": api_key})
+            client = JackettClient(base_url, api_key)
+            print(f"[torrent] Jackett: detected at {base_url}")
+            return client
+        else:
+            print(f"[torrent] Jackett: found at port {port} but no API key — configure via Hub settings")
+            return None
+
     return None
 
 

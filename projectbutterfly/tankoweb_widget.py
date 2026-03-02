@@ -463,8 +463,9 @@ class _TankoWebPage(QWebEnginePage):
             elif host == "hub-search":
                 query = params.get("q", [""])[0]
                 source = params.get("source", ["all"])[0]
+                provider = params.get("provider", ["prowlarr"])[0]
                 if query:
-                    self._tab_host._hub_search(query, source)
+                    self._tab_host._hub_search(query, source, provider)
             elif host == "hub-add-magnet":
                 uri = params.get("uri", [""])[0]
                 if uri:
@@ -1456,9 +1457,10 @@ class TankoWebWidget(QWidget):
         # Cache references on the main thread
         qbit = self._get_qbit()
         prowlarr = self._get_prowlarr()
+        jackett = self._get_jackett()
 
         # Nothing to poll — skip entirely
-        if not qbit and not prowlarr:
+        if not qbit and not prowlarr and not jackett:
             return
 
         self._hub_poll_busy = True
@@ -1467,7 +1469,12 @@ class TankoWebWidget(QWidget):
             try:
                 torrents = qbit.list_torrents() if qbit else []
                 indexers = prowlarr.list_indexers() if prowlarr else []
-                QTimer.singleShot(0, lambda: self._push_hub_data(torrents, indexers))
+                jackett_indexers = jackett.list_indexers() if jackett else []
+                QTimer.singleShot(0, lambda: self._push_hub_data(
+                    torrents, indexers, jackett_indexers,
+                    prowlarr_ok=prowlarr is not None,
+                    jackett_ok=jackett is not None,
+                ))
             except Exception as e:
                 print(f"[hub] Poll error: {e}")
             finally:
@@ -1475,22 +1482,27 @@ class TankoWebWidget(QWidget):
 
         threading.Thread(target=_bg, daemon=True).start()
 
-    def _push_hub_data(self, torrents, indexers):
+    def _push_hub_data(self, torrents, indexers, jackett_indexers=None,
+                       prowlarr_ok=False, jackett_ok=False):
         """Push torrent and indexer data to all open Hub tabs."""
         torrents_json = json.dumps(torrents)
         indexers_json = json.dumps(indexers)
+        jackett_indexers_json = json.dumps(jackett_indexers or [])
         # Get Prowlarr URL for the "Configure Indexers" button
         prowlarr_url = ""
+        jackett_url = ""
         try:
             win = self.window()
             mgr = getattr(win, "_prowlarr_mgr", None)
             if mgr and mgr.base_url:
                 prowlarr_url = mgr.base_url
             else:
-                # Check for existing instance on default port
                 prowlarr = self._get_prowlarr()
                 if prowlarr and hasattr(prowlarr, "_base"):
                     prowlarr_url = prowlarr._base
+            jackett = self._get_jackett()
+            if jackett and hasattr(jackett, "_base"):
+                jackett_url = jackett._base
         except Exception:
             pass
         for tab in self._tabs:
@@ -1501,12 +1513,24 @@ class TankoWebWidget(QWidget):
                 tab["page"].runJavaScript(
                     f"if(typeof updateSources==='function')updateSources({indexers_json});"
                 )
+                tab["page"].runJavaScript(
+                    f"if(typeof updateJackettSources==='function')updateJackettSources({jackett_indexers_json});"
+                )
+                # Push provider availability
+                tab["page"].runJavaScript(
+                    f"if(typeof setProviderStatus==='function'){{"
+                    f"setProviderStatus('prowlarr',{'true' if prowlarr_ok else 'false'});"
+                    f"setProviderStatus('jackett',{'true' if jackett_ok else 'false'});"
+                    f"}}"
+                )
                 if prowlarr_url:
                     tab["page"].runJavaScript(
                         f"if(typeof setProwlarrUrl==='function')setProwlarrUrl({json.dumps(prowlarr_url)});"
                     )
-                else:
-                    print("[hub] WARNING: No Prowlarr URL to push to Hub")
+                if jackett_url:
+                    tab["page"].runJavaScript(
+                        f"if(typeof setJackettUrl==='function')setJackettUrl({json.dumps(jackett_url)});"
+                    )
 
     def _get_qbit(self):
         """Get the QBitClient from the parent TankobanWindow (if available)."""
@@ -1524,14 +1548,28 @@ class TankoWebWidget(QWidget):
         except Exception:
             return None
 
-    def _hub_search(self, query, source="all"):
-        """Run a Prowlarr search in background and push results to Hub."""
+    def _get_jackett(self):
+        """Get the JackettClient from the parent TankobanWindow (if available)."""
+        try:
+            win = self.window()
+            return getattr(win, "_jackett", None)
+        except Exception:
+            return None
+
+    def _hub_search(self, query, source="all", provider="prowlarr"):
+        """Run a search via Prowlarr or Jackett in background and push results to Hub."""
         # Push loading state
         for tab in self._tabs:
             if self._is_tab_on_hub(tab):
                 tab["page"].runJavaScript("if(typeof setSearchLoading==='function')setSearchLoading(true);")
 
-        # Cache references on the main thread before spawning background work
+        if provider == "jackett":
+            self._hub_search_jackett(query, source)
+        else:
+            self._hub_search_prowlarr(query, source)
+
+    def _hub_search_prowlarr(self, query, source="all"):
+        """Run a Prowlarr search in background."""
         prowlarr = self._get_prowlarr()
         if not prowlarr:
             print("[hub] Prowlarr not available")
@@ -1548,7 +1586,7 @@ class TankoWebWidget(QWidget):
         def _bg():
             try:
                 results, status = prowlarr.search_with_status(query, indexer_ids=indexer_ids)
-                print(f"[hub] Search returned {len(results)} results (status={status})")
+                print(f"[hub] Prowlarr search returned {len(results)} results (status={status})")
 
                 if status == "cf_blocked":
                     print(f"[hub] Search blocked by Cloudflare, attempting solve...")
@@ -1557,7 +1595,35 @@ class TankoWebWidget(QWidget):
 
                 QTimer.singleShot(0, lambda: self._push_search_results(results))
             except Exception as e:
-                print(f"[hub] Search error: {e}")
+                print(f"[hub] Prowlarr search error: {e}")
+                QTimer.singleShot(0, lambda: self._push_search_results([]))
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _hub_search_jackett(self, query, source="all"):
+        """Run a Jackett search in background."""
+        jackett = self._get_jackett()
+        if not jackett:
+            print("[hub] Jackett not available")
+            self._push_search_results([])
+            return
+
+        indexer = source if source and source != "all" else "all"
+
+        def _bg():
+            try:
+                results, status = jackett.search_with_status(query, indexer=indexer)
+                print(f"[hub] Jackett search returned {len(results)} results (status={status})")
+
+                if status == "cf_blocked":
+                    print(f"[hub] Jackett search blocked by Cloudflare")
+                    # CF solve for Jackett — use the indexer URL directly
+                    QTimer.singleShot(0, lambda: self._start_cf_solve(query, source, None))
+                    return
+
+                QTimer.singleShot(0, lambda: self._push_search_results(results))
+            except Exception as e:
+                print(f"[hub] Jackett search error: {e}")
                 QTimer.singleShot(0, lambda: self._push_search_results([]))
 
         threading.Thread(target=_bg, daemon=True).start()

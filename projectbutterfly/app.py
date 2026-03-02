@@ -299,11 +299,12 @@ class TankobanWindow(QMainWindow):
         self._flaresolverr = FlareSolverrBridge(self._profile, parent=self)
         self._flaresolverr.start()
 
-        # --- Torrent services (qBittorrent + Prowlarr as background subprocesses) ---
+        # --- Torrent services (qBittorrent + Prowlarr + Jackett) ---
         self._qbit_mgr = torrent_service.create_qbit_manager()
         self._prowlarr_mgr, self._prowlarr_api_key = torrent_service.create_prowlarr_manager()
         self._qbit: torrent_service.QBitClient | None = None
         self._prowlarr: torrent_service.ProwlarrClient | None = None
+        self._jackett: torrent_service.JackettClient | None = None
         # Start services in a background thread to avoid blocking UI
         self._torrent_init_thread = threading.Thread(target=self._start_torrent_services, daemon=True)
         self._torrent_init_thread.start()
@@ -379,7 +380,7 @@ class TankobanWindow(QMainWindow):
         self._stack.setCurrentWidget(self._tankoweb)
 
     def _start_torrent_services(self):
-        """Start qBittorrent and Prowlarr in background (runs on a daemon thread)."""
+        """Start qBittorrent, Prowlarr, and detect Jackett in background."""
         try:
             self._start_qbit()
         except Exception as e:
@@ -389,6 +390,11 @@ class TankobanWindow(QMainWindow):
             self._start_prowlarr()
         except Exception as e:
             print(f"[torrent] Prowlarr init error: {e}")
+
+        try:
+            self._detect_jackett()
+        except Exception as e:
+            print(f"[torrent] Jackett detection error: {e}")
 
     def _start_qbit(self):
         # First check if qBittorrent WebUI is already running (user has it open)
@@ -432,6 +438,14 @@ class TankobanWindow(QMainWindow):
         # Auto-register FlareSolverr proxy in Prowlarr
         if self._prowlarr and self._flaresolverr.port:
             self._register_flaresolverr_in_prowlarr()
+
+    def _detect_jackett(self):
+        """Detect a running Jackett instance (not bundled, user-installed)."""
+        client = torrent_service.detect_jackett()
+        if client:
+            self._jackett = client
+        else:
+            print("[torrent] Jackett: not detected (install Jackett and start it to use)")
 
     def _register_flaresolverr_in_prowlarr(self):
         """Register our FlareSolverr bridge as an indexer proxy in Prowlarr."""

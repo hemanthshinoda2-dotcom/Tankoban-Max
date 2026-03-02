@@ -227,11 +227,15 @@ tbody tr:hover { background: rgba(255,255,255,0.03); }
     <span class="panel-title">Search</span>
     <div class="search-form">
       <input class="search-input" id="searchInput" type="text" placeholder="Search torrents..." autofocus>
+      <select class="search-select" id="searchProvider" title="Search provider">
+        <option value="prowlarr">Prowlarr</option>
+        <option value="jackett">Jackett</option>
+      </select>
       <select class="search-select" id="searchSource">
-        <option value="all">All Sources</option>
+        <option value="all">All Indexers</option>
       </select>
       <button class="btn btn-gold" id="searchBtn">Search</button>
-      <button class="btn" id="configIndexersBtn" title="Configure indexers in Prowlarr">&#9881; Indexers</button>
+      <button class="btn" id="configIndexersBtn" title="Configure indexers">&#9881; Indexers</button>
     </div>
   </div>
   <div id="searchStatus" class="search-status"></div>
@@ -462,10 +466,25 @@ function updateDownloads(data) {
 }
 
 /* ---- Sources dropdown ---- */
+var _prowlarrIndexers = [];
+var _jackettIndexers = [];
+
 function updateSources(indexers) {
+  _prowlarrIndexers = (indexers || []).filter(function(ix) { return ix.provider !== 'jackett'; });
+  _rebuildSourceDropdown();
+}
+
+function updateJackettSources(indexers) {
+  _jackettIndexers = indexers || [];
+  _rebuildSourceDropdown();
+}
+
+function _rebuildSourceDropdown() {
+  var provider = document.getElementById('searchProvider').value;
   var sel = document.getElementById('searchSource');
-  sel.innerHTML = '<option value="all">All Sources</option>';
-  (indexers || []).forEach(function(ix) {
+  sel.innerHTML = '<option value="all">All Indexers</option>';
+  var list = provider === 'jackett' ? _jackettIndexers : _prowlarrIndexers;
+  list.forEach(function(ix) {
     if (ix.enabled !== false) {
       var opt = document.createElement('option');
       opt.value = ix.id;
@@ -475,12 +494,33 @@ function updateSources(indexers) {
   });
 }
 
+/* Provider availability */
+var _prowlarrAvailable = false;
+var _jackettAvailable = false;
+
+function setProviderStatus(provider, available) {
+  if (provider === 'prowlarr') _prowlarrAvailable = available;
+  if (provider === 'jackett') _jackettAvailable = available;
+  var provSel = document.getElementById('searchProvider');
+  /* Auto-select an available provider */
+  if (!_prowlarrAvailable && _jackettAvailable) provSel.value = 'jackett';
+  else if (_prowlarrAvailable && !_jackettAvailable) provSel.value = 'prowlarr';
+  /* Show/hide provider options */
+  for (var i = 0; i < provSel.options.length; i++) {
+    var opt = provSel.options[i];
+    if (opt.value === 'prowlarr') opt.disabled = !_prowlarrAvailable;
+    if (opt.value === 'jackett') opt.disabled = !_jackettAvailable;
+  }
+  _rebuildSourceDropdown();
+}
+
 /* ---- Communication with Python (tankoweb:// scheme) ---- */
 function _doSearch() {
   var q = document.getElementById('searchInput').value.trim();
   if (!q) return;
   var source = document.getElementById('searchSource').value;
-  window.location.href = 'tankoweb://hub-search?q=' + encodeURIComponent(q) + '&source=' + encodeURIComponent(source);
+  var provider = document.getElementById('searchProvider').value;
+  window.location.href = 'tankoweb://hub-search?q=' + encodeURIComponent(q) + '&source=' + encodeURIComponent(source) + '&provider=' + encodeURIComponent(provider);
 }
 
 /* Search button + Enter key */
@@ -489,19 +529,25 @@ document.getElementById('searchInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') _doSearch();
 });
 
-/* Configure Indexers — opens Prowlarr web UI in a new tab */
+/* Provider dropdown change → rebuild source list */
+document.getElementById('searchProvider').addEventListener('change', _rebuildSourceDropdown);
+
+/* Configure Indexers — opens Prowlarr or Jackett web UI in a new tab */
 var _prowlarrUrl = '';
+var _jackettUrl = '';
 function setProwlarrUrl(url) {
   _prowlarrUrl = url;
-  /* Update button visual to show it's ready */
-  var btn = document.getElementById('configIndexersBtn');
-  if (btn && url) btn.style.opacity = '1';
+}
+function setJackettUrl(url) {
+  _jackettUrl = url;
 }
 document.getElementById('configIndexersBtn').addEventListener('click', function() {
-  var url = _prowlarrUrl;
-  if (!url) {
-    /* Fallback: try common Prowlarr ports */
-    url = 'http://127.0.0.1:9696';
+  var provider = document.getElementById('searchProvider').value;
+  var url = '';
+  if (provider === 'jackett') {
+    url = _jackettUrl || 'http://127.0.0.1:9117';
+  } else {
+    url = _prowlarrUrl || 'http://127.0.0.1:9696';
   }
   window.location.href = 'tankoweb://open-url?url=' + encodeURIComponent(url);
 });
