@@ -37,6 +37,7 @@ from PySide6.QtWebEngineCore import (
 
 import storage
 from cf_solver import CfSolver
+from tor_proxy import TorProxy
 
 # ---------------------------------------------------------------------------
 # Home page — loaded inside QWebEngineView as an HTML file
@@ -445,6 +446,10 @@ class TankoWebWidget(QWidget):
         self._cf_solver = None
         self._cf_pending_search = None  # (query, source) to retry after solve
 
+        # Tor proxy — routes browser traffic through Tor SOCKS5
+        self._tor = TorProxy(parent=self)
+        self._tor.status_changed.connect(self._on_tor_status_changed)
+
         # Background animation — very slow drift, pauses when not needed
         self._bg_phase = 0.0
         self._bg_timer = QTimer(self)
@@ -673,6 +678,22 @@ class TankoWebWidget(QWidget):
         hub_btn.setToolTip("Tankoban Hub — Torrents & Search")
         hub_btn.clicked.connect(self._open_hub)
         layout.addWidget(hub_btn)
+
+        # Tor toggle button
+        self._tor_btn = QPushButton("\U0001f9c5 TOR")  # 🧅
+        self._tor_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._tor_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: rgba(140,140,140,0.10); color: rgba(200,200,200,0.50);"
+            f"  border: 1px solid rgba(140,140,140,0.20); border-radius: {RADIUS_SM}px;"
+            f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
+            f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
+            f"}}"
+            f"QPushButton:hover {{ background: rgba(140,140,140,0.18); color: rgba(200,200,200,0.80); }}"
+        )
+        self._tor_btn.setToolTip("Connect to Tor — bypass blocks and captchas")
+        self._tor_btn.clicked.connect(self._toggle_tor)
+        layout.addWidget(self._tor_btn)
 
         return row
 
@@ -1272,6 +1293,78 @@ class TankoWebWidget(QWidget):
     def _shortcut_prev_tab(self):
         if len(self._tabs) > 1:
             self._switch_tab((self._active_idx - 1) % len(self._tabs))
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Tor proxy toggle
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _toggle_tor(self):
+        """Toggle Tor on/off."""
+        if self._tor.active:
+            self._tor.stop()
+        else:
+            self._tor.start_async()
+
+    def _on_tor_status_changed(self, status):
+        """Update Tor button appearance and set/clear proxy on profile."""
+        active = status.get("active", False)
+        connecting = status.get("connecting", False)
+        progress = status.get("bootstrapProgress", 0)
+
+        if active:
+            # Set SOCKS5 proxy on the tankoweb profile
+            port = status.get("port", 0)
+            if port:
+                # QWebEngineProfile proxy: use environment-style proxy config
+                # Qt reads proxy from QNetworkProxy — set it application-wide
+                # for this profile's network requests
+                from PySide6.QtNetwork import QNetworkProxy
+                proxy = QNetworkProxy(
+                    QNetworkProxy.ProxyType.Socks5Proxy,
+                    "127.0.0.1", port
+                )
+                QNetworkProxy.setApplicationProxy(proxy)
+                print(f"[tor] SOCKS5 proxy set: 127.0.0.1:{port}")
+
+            self._tor_btn.setText("\U0001f7e2 TOR")  # 🟢
+            self._tor_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background: rgba(80,200,80,0.15); color: rgba(80,220,80,0.90);"
+                f"  border: 1px solid rgba(80,200,80,0.35); border-radius: {RADIUS_SM}px;"
+                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
+                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
+                f"}}"
+                f"QPushButton:hover {{ background: rgba(80,200,80,0.25); }}"
+            )
+            self._tor_btn.setToolTip("Tor connected — click to disconnect")
+        elif connecting:
+            self._tor_btn.setText(f"\u231B TOR {progress}%")
+            self._tor_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background: rgba(220,180,50,0.12); color: rgba(220,180,50,0.80);"
+                f"  border: 1px solid rgba(220,180,50,0.25); border-radius: {RADIUS_SM}px;"
+                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
+                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
+                f"}}"
+            )
+            self._tor_btn.setToolTip(f"Connecting to Tor... {progress}%")
+        else:
+            # Clear proxy
+            from PySide6.QtNetwork import QNetworkProxy
+            QNetworkProxy.setApplicationProxy(
+                QNetworkProxy(QNetworkProxy.ProxyType.NoProxy)
+            )
+            self._tor_btn.setText("\U0001f9c5 TOR")  # 🧅
+            self._tor_btn.setStyleSheet(
+                f"QPushButton {{"
+                f"  background: rgba(140,140,140,0.10); color: rgba(200,200,200,0.50);"
+                f"  border: 1px solid rgba(140,140,140,0.20); border-radius: {RADIUS_SM}px;"
+                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
+                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
+                f"}}"
+                f"QPushButton:hover {{ background: rgba(140,140,140,0.18); color: rgba(200,200,200,0.80); }}"
+            )
+            self._tor_btn.setToolTip("Connect to Tor — bypass blocks and captchas")
 
     # ══════════════════════════════════════════════════════════════════════
     # Hub tab — singleton tab for torrent search/downloads

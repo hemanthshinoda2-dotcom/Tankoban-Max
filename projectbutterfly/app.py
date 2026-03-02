@@ -636,6 +636,12 @@ class TankobanWindow(QMainWindow):
             self._bridge.torProxy.forceKill()
         except Exception:
             pass
+        # Stop Tor proxy (if running via TankoWeb)
+        try:
+            if self._tankoweb:
+                self._tankoweb._tor.force_kill()
+        except Exception:
+            pass
         # Stop FlareSolverr bridge
         try:
             self._flaresolverr.stop()
