@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
+from . import search_engines
 from .omnibox import Omnibox
 from .data_bridge import DataBridge
 
@@ -24,14 +25,12 @@ from .data_bridge import DataBridge
 # URL helpers
 # ---------------------------------------------------------------------------
 
-DEFAULT_SEARCH_URL = "https://www.google.com/search?q={}"
-
 
 def _fixup_url(text: str) -> str:
     """
     Convert address bar input to a navigable URL.
     - If it looks like a URL (has dot + no spaces), add https://
-    - Otherwise, treat as a search query
+    - Otherwise, treat as a search query using the configured engine
     """
     t = text.strip()
     if not t:
@@ -45,8 +44,8 @@ def _fixup_url(text: str) -> str:
     if "." in t and " " not in t:
         return "https://" + t
 
-    # Search query
-    return DEFAULT_SEARCH_URL.format(QUrl.toPercentEncoding(t).data().decode())
+    # Search query — uses whatever engine is currently configured
+    return search_engines.get_search_url(t)
 
 
 # ---------------------------------------------------------------------------

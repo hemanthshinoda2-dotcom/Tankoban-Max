@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QMenu
 from PySide6.QtWebEngineCore import QWebEngineContextMenuRequest
 
 from . import theme
+from . import search_engines
 
 
 def build_context_menu(
@@ -105,7 +106,8 @@ def build_context_menu(
         snippet = selected.strip()[:30]
         if len(selected.strip()) > 30:
             snippet += "..."
-        a = menu.addAction(f'Search Google for "{snippet}"')
+        engine_name = search_engines.get_engine_name()
+        a = menu.addAction(f'Search {engine_name} for "{snippet}"')
         a.triggered.connect(lambda: on_search_selection(selected.strip()))
 
     if has_selection or is_editable:

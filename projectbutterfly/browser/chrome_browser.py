@@ -28,7 +28,7 @@ from . import theme
 from .tab_state import TabData, TabManager
 from .tab_bar import TabBar
 from .nav_bar import NavBar
-from .browser_page import ChromePage, inject_antibot_script
+from .browser_page import ChromePage, inject_antibot_script, inject_adblocker_script
 from .find_bar import FindBar
 from .bookmarks_bar import BookmarksBar
 from .downloads_shelf import DownloadsShelf
@@ -81,8 +81,9 @@ class ChromeBrowser(QWidget):
         # Data bridge (reads history/bookmarks from bridge.py)
         self._data_bridge = DataBridge(bridge_root)
 
-        # Inject anti-bot script into the profile
+        # Inject anti-bot + ad blocker scripts into the profile
         inject_antibot_script(self._profile)
+        inject_adblocker_script(self._profile)
 
         # -- Tab manager (non-visual) --
         self._tab_mgr = TabManager(self)
@@ -191,11 +192,56 @@ class ChromeBrowser(QWidget):
     def _wire_downloads(self):
         self._profile.downloadRequested.connect(self._on_download_requested)
 
+    # File extension → library type mapping
+    _BOOK_EXTS = {".epub", ".pdf", ".mobi", ".azw3", ".azw", ".txt", ".djvu", ".fb2", ".lit", ".pdb"}
+    _COMIC_EXTS = {".cbr", ".cbz", ".cb7", ".cbt"}
+    _VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".wmv", ".flv", ".m4v"}
+
     def _on_download_requested(self, download):
-        """Handle a new download from the web engine."""
-        # Accept with default path (user's Downloads folder)
+        """Handle a new download — routes to the correct library folder by type."""
+        filename = download.downloadFileName() or ""
+        ext = os.path.splitext(filename)[1].lower()
+
+        # Route to the appropriate library root
+        target_dir = self._get_download_dir(ext)
+        if target_dir:
+            download.setDownloadDirectory(target_dir)
+
         download.accept()
         self._downloads_shelf.add_download(download)
+
+    def _get_download_dir(self, ext: str) -> str | None:
+        """Determine the download directory based on file extension.
+
+        Reads config files via storage module to find library root folders:
+          - Books: books_settings.json → bookRootFolders
+          - Comics: library_config.json → rootFolders
+          - Videos: video_prefs.json → rootFolders
+        """
+        try:
+            from .. import storage
+        except Exception:
+            return None
+
+        if ext in self._BOOK_EXTS:
+            cfg = storage.read_json(storage.data_path("books_settings.json"), {})
+            roots = cfg.get("bookRootFolders", [])
+            if roots:
+                return roots[0]
+
+        elif ext in self._COMIC_EXTS:
+            cfg = storage.read_json(storage.data_path("library_config.json"), {})
+            roots = cfg.get("rootFolders", [])
+            if roots:
+                return roots[0]
+
+        elif ext in self._VIDEO_EXTS:
+            cfg = storage.read_json(storage.data_path("video_prefs.json"), {})
+            roots = cfg.get("rootFolders", [])
+            if roots:
+                return roots[0]
+
+        return None
 
     def _bind_shortcuts(self):
         for key_seq, method_name in SHORTCUTS:
@@ -448,9 +494,9 @@ class ChromeBrowser(QWidget):
             self._load_newtab(tab.view)
 
     def _search_selection(self, text: str):
-        """Search Google for selected text in a new tab."""
-        from .nav_bar import DEFAULT_SEARCH_URL
-        url = DEFAULT_SEARCH_URL.format(QUrl.toPercentEncoding(text).data().decode())
+        """Search for selected text in a new tab using the configured engine."""
+        from . import search_engines
+        url = search_engines.get_search_url(text)
         self.new_tab(url)
 
     def _load_newtab(self, view: QWebEngineView):

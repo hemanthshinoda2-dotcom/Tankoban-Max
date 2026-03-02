@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
+from . import search_engines
 from .data_bridge import DataBridge
 
 
@@ -203,7 +204,7 @@ class Omnibox(QLineEdit):
         self._is_loading = False
 
         self.setObjectName("addressBar")
-        self.setPlaceholderText("Search Google or type a URL")
+        self.setPlaceholderText(f"Search {search_engines.get_engine_name()} or type a URL")
         self.setFixedHeight(30)
         # Left padding for security icon
         self.setTextMargins(22, 0, 0, 0)

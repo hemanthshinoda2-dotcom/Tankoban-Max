@@ -125,7 +125,7 @@
   <input
     type="text"
     class="search-input"
-    placeholder="Search Google or type a URL"
+    placeholder="Search Yandex or type a URL"
     id="searchInput"
     autofocus
   >
@@ -136,9 +136,9 @@
 </div>
 
 <div class="shortcuts" id="shortcuts">
-  <a class="shortcut" href="https://www.google.com" data-url="https://www.google.com">
-    <div class="shortcut-icon">G</div>
-    <div class="shortcut-label">Google</div>
+  <a class="shortcut" href="https://yandex.com" data-url="https://yandex.com">
+    <div class="shortcut-icon">Y</div>
+    <div class="shortcut-label">Yandex</div>
   </a>
   <a class="shortcut" href="https://www.youtube.com" data-url="https://www.youtube.com">
     <div class="shortcut-icon">&#9654;</div>
@@ -165,7 +165,7 @@
         const url = q.startsWith('http') ? q : 'https://' + q;
         window.location.href = url;
       } else {
-        window.location.href = 'https://www.google.com/search?q=' + encodeURIComponent(q);
+        window.location.href = 'https://yandex.com/search/?text=' + encodeURIComponent(q);
       }
     }
   });

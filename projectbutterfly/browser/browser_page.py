@@ -51,6 +51,257 @@ if (navigator.permissions && navigator.permissions.query) {
         return _origQuery(params);
     };
 }
+
+// --- Yandex-specific anti-captcha ---
+// Yandex SmartCaptcha checks these; making them look normal avoids triggers
+Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
+Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
+
+// Canvas fingerprint randomization (tiny noise to avoid consistent hash)
+(function() {
+    const _toDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function(type) {
+        const ctx = this.getContext('2d');
+        if (ctx) {
+            const style = ctx.fillStyle;
+            ctx.fillStyle = 'rgba(0,0,1,0.003)';
+            ctx.fillRect(0, 0, 1, 1);
+            ctx.fillStyle = style;
+        }
+        return _toDataURL.apply(this, arguments);
+    };
+})();
+
+// WebGL renderer spoofing
+(function() {
+    const getParam = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(param) {
+        if (param === 37445) return 'Google Inc. (NVIDIA)';
+        if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060, OpenGL 4.5)';
+        return getParam.apply(this, arguments);
+    };
+})();
+"""
+
+
+# ---------------------------------------------------------------------------
+# Ad blocker script (cosmetic + network-level blocking via JS)
+# ---------------------------------------------------------------------------
+
+_ADBLOCKER_JS = r"""
+(function() {
+    'use strict';
+
+    // ======================================================================
+    // 1. AD DOMAIN BLOCKLIST — blocks fetch/XHR/image/script to ad domains
+    // ======================================================================
+
+    const AD_DOMAINS = new Set([
+        'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
+        'google-analytics.com', 'googletagmanager.com', 'googletagservices.com',
+        'adservice.google.com', 'pagead2.googlesyndication.com',
+        'facebook.com/tr', 'connect.facebook.net/en_US/fbevents.js',
+        'ads.yahoo.com', 'analytics.yahoo.com',
+        'ad.doubleclick.net', 'static.doubleclick.net',
+        'adnxs.com', 'adsrvr.org', 'adtechus.com', 'advertising.com',
+        'amazon-adsystem.com', 'adbrite.com', 'adroll.com',
+        'outbrain.com', 'taboola.com', 'mgid.com', 'revcontent.com',
+        'criteo.com', 'criteo.net', 'moatads.com', 'serving-sys.com',
+        'smartadserver.com', 'rubiconproject.com', 'pubmatic.com',
+        'openx.net', 'casalemedia.com', 'lijit.com', 'sharethrough.com',
+        'bidswitch.net', 'mathtag.com', 'contextweb.com',
+        'turn.com', 'spotxchange.com', 'yieldmo.com',
+        'popads.net', 'popcash.net', 'propellerads.com', 'admob.com',
+        'scorecardresearch.com', 'quantserve.com', 'hotjar.com',
+        'mixpanel.com', 'segment.com', 'optimizely.com',
+        'tpc.googlesyndication.com', 'pagead2.googlesyndication.com',
+        'securepubads.g.doubleclick.net',
+        'mc.yandex.ru', 'an.yandex.ru', 'yandexadexchange.net',
+        'adfox.yandex.ru',
+        // Tracker domains
+        'pixel.facebook.com', 'pixel.quantcount.com',
+        'sb.scorecardresearch.com', 'b.scorecardresearch.com',
+    ]);
+
+    function isAdDomain(hostname) {
+        if (!hostname) return false;
+        hostname = hostname.toLowerCase();
+        for (const ad of AD_DOMAINS) {
+            if (hostname === ad || hostname.endsWith('.' + ad)) return true;
+        }
+        return false;
+    }
+
+    function isAdUrl(urlStr) {
+        try {
+            const u = new URL(urlStr, location.href);
+            if (isAdDomain(u.hostname)) return true;
+            const path = u.pathname + u.search;
+            if (/\/ads[\/\?]|\/ad[\/\?]|\/adserv|\/advert|\/banner[s]?[\/\?]|\/popup[s]?[\/\?]/i.test(path)) return true;
+            if (/\.doubleclick\.|adsense|pagead|adclick|click\.ad/i.test(urlStr)) return true;
+            return false;
+        } catch(e) { return false; }
+    }
+
+    // --- Block fetch to ad domains ---
+    const _origFetch = window.fetch;
+    window.fetch = function(input, init) {
+        const url = (typeof input === 'string') ? input : (input && input.url) || '';
+        if (isAdUrl(url)) {
+            return Promise.reject(new TypeError('Network request blocked by ad blocker'));
+        }
+        return _origFetch.apply(this, arguments);
+    };
+
+    // --- Block XMLHttpRequest to ad domains ---
+    const _origXHROpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function(method, url) {
+        if (isAdUrl(url)) {
+            this._blocked = true;
+        }
+        return _origXHROpen.apply(this, arguments);
+    };
+    const _origXHRSend = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.send = function() {
+        if (this._blocked) return;
+        return _origXHRSend.apply(this, arguments);
+    };
+
+    // --- Block ad images/scripts/iframes from loading via MutationObserver ---
+    const AD_ELEMENT_SELECTORS = [
+        'ins.adsbygoogle', 'ins[data-ad-client]',
+        'iframe[src*="doubleclick"]', 'iframe[src*="googlesyndication"]',
+        'iframe[src*="ads"]', 'iframe[src*="adserv"]',
+        'div[id*="google_ads"]', 'div[id*="ad-container"]',
+        'div[class*="ad-banner"]', 'div[class*="ad-wrapper"]',
+        'div[class*="adsbygoogle"]',
+        'a[href*="doubleclick.net"]',
+        'div[data-ad]', 'div[data-adunit]',
+        // Common ad containers
+        '[id^="div-gpt-ad"]', '[id^="google_ads"]',
+        '.ad-slot', '.ad-unit', '.advertisement',
+        // Yandex ad elements
+        'div[class*="yandex_rtb"]', 'div[class*="ya-partner"]',
+        'div[id*="yandex_rtb"]',
+    ];
+
+    function removeAdElements(root) {
+        const sel = AD_ELEMENT_SELECTORS.join(',');
+        try {
+            const els = (root || document).querySelectorAll(sel);
+            els.forEach(el => {
+                el.remove();
+            });
+        } catch(e) {}
+    }
+
+    // Inject CSS to hide common ad elements immediately
+    const adCss = document.createElement('style');
+    adCss.textContent = `
+        ins.adsbygoogle, ins[data-ad-client],
+        div[id*="google_ads"], div[id^="div-gpt-ad"],
+        div[class*="adsbygoogle"], .ad-slot, .ad-unit,
+        .advertisement, div[class*="yandex_rtb"],
+        div[class*="ya-partner"], div[id*="yandex_rtb"],
+        iframe[src*="doubleclick"], iframe[src*="googlesyndication"],
+        iframe[src*="adserv"], iframe[src*="ads."],
+        [data-ad], [data-adunit],
+        div[class*="ad-banner"], div[class*="ad-wrapper"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            width: 0 !important;
+            overflow: hidden !important;
+        }
+    `;
+    (document.head || document.documentElement).appendChild(adCss);
+
+    // ======================================================================
+    // 2. MUTATION OBSERVER — catches dynamically injected ads
+    // ======================================================================
+
+    const observer = new MutationObserver(function(mutations) {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType !== 1) continue;
+
+                // Check if the added node itself is an ad element
+                if (node.matches && AD_ELEMENT_SELECTORS.some(sel => {
+                    try { return node.matches(sel); } catch(e) { return false; }
+                })) {
+                    node.remove();
+                    continue;
+                }
+
+                // Check children
+                removeAdElements(node);
+
+                // Block ad scripts/images/iframes by src
+                if (node.tagName === 'SCRIPT' || node.tagName === 'IMG' || node.tagName === 'IFRAME') {
+                    const src = node.src || node.getAttribute('src') || '';
+                    if (isAdUrl(src)) {
+                        node.remove();
+                        continue;
+                    }
+                }
+            }
+        }
+    });
+
+    if (document.documentElement) {
+        observer.observe(document.documentElement, { childList: true, subtree: true });
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+        });
+    }
+
+    // Initial sweep after DOM ready
+    document.addEventListener('DOMContentLoaded', () => removeAdElements());
+    // And again after full load (catches lazy ads)
+    window.addEventListener('load', () => setTimeout(removeAdElements, 1000));
+
+    // ======================================================================
+    // 3. POPUP / NEW-TAB AD BLOCKING
+    // ======================================================================
+    // Distinguish user-initiated new tabs from ad popups.
+    // Strategy: only allow window.open() during trusted user events
+    // (click, keydown, submit). Block all other window.open() calls.
+
+    let _userAction = false;
+    let _userActionTimer = null;
+
+    function markUserAction() {
+        _userAction = true;
+        clearTimeout(_userActionTimer);
+        _userActionTimer = setTimeout(() => { _userAction = false; }, 1000);
+    }
+
+    // Track user interactions
+    document.addEventListener('click', markUserAction, true);
+    document.addEventListener('mousedown', markUserAction, true);
+    document.addEventListener('keydown', markUserAction, true);
+    document.addEventListener('submit', markUserAction, true);
+
+    const _origOpen = window.open;
+    window.open = function(url, target, features) {
+        // Allow if triggered by a real user action
+        if (_userAction) {
+            return _origOpen.apply(this, arguments);
+        }
+
+        // Block: this is likely a popup ad (no user action triggered it)
+        console.log('[TankoAdBlock] Blocked popup:', url);
+        return null;
+    };
+
+    // Also block auto-assign of window.location in setTimeout/setInterval
+    // without user action (common popup ad pattern)
+    // This is hard to fully intercept without breaking sites, so we only
+    // block the window.open path above.
+
+})();
 """
 
 
@@ -65,6 +316,22 @@ def inject_antibot_script(profile: QWebEngineProfile):
     script = QWebEngineScript()
     script.setName("_tanko_antibot")
     script.setSourceCode(_ANTIBOT_JS)
+    script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    script.setRunsOnSubFrames(True)
+    scripts.insert(script)
+
+
+def inject_adblocker_script(profile: QWebEngineProfile):
+    """Register the ad blocker script on the profile (runs once per profile)."""
+    scripts = profile.scripts()
+    for s in scripts.toList():
+        if s.name() == "_tanko_adblocker":
+            return
+
+    script = QWebEngineScript()
+    script.setName("_tanko_adblocker")
+    script.setSourceCode(_ADBLOCKER_JS)
     script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
     script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
     script.setRunsOnSubFrames(True)
@@ -128,12 +395,41 @@ class ChromePage(QWebEnginePage):
                 QWebEnginePage.PermissionPolicy.PermissionDeniedByUser,
             )
 
+    # Known ad popup domains — if the current page is on one of these and opens
+    # a popup, block it. This is a server-side complement to the JS ad blocker.
+    _AD_POPUP_DOMAINS = {
+        "doubleclick.net", "googlesyndication.com", "adnxs.com",
+        "popads.net", "popcash.net", "propellerads.com",
+        "adservice.google.com", "serving-sys.com", "adroll.com",
+        "outbrain.com", "taboola.com", "mgid.com",
+    }
+
     def createWindow(self, window_type):
         """
         Called by Chromium when JS opens a new window (target=_blank, window.open).
-        We emit a signal so the browser can create a new tab instead.
-        Returns None — the new tab's page is wired by the browser after creation.
+
+        Smart popup blocking:
+        - WebBrowserTab / WebBrowserBackgroundTab → likely user-triggered (link click),
+          always allowed.
+        - WebDialog → sometimes legitimate (auth flows, popups), allow but flag.
+        - If the requesting page's domain is a known ad network, block it.
         """
+        # Legitimate link clicks create tabs
+        if window_type in (
+            QWebEnginePage.WebWindowType.WebBrowserTab,
+            QWebEnginePage.WebWindowType.WebBrowserBackgroundTab,
+        ):
+            self.new_tab_requested.emit(QUrl())
+            return None
+
+        # For dialogs/popups, check if the source page is an ad domain
+        current_host = self.url().host().lower() if self.url() else ""
+        for ad_domain in self._AD_POPUP_DOMAINS:
+            if current_host == ad_domain or current_host.endswith("." + ad_domain):
+                # Block — this is an ad popup
+                return None
+
+        # Allow — likely a legitimate popup (auth window, etc.)
         self.new_tab_requested.emit(QUrl())
         return None
 
