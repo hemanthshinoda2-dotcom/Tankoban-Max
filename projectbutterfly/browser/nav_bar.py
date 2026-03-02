@@ -11,6 +11,7 @@ Contains:
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QMenu,
 )
@@ -54,7 +55,9 @@ def _fixup_url(text: str) -> str:
 
 class NavBar(QWidget):
     """
-    Navigation toolbar with back/forward/reload, address bar, and window controls.
+    Navigation toolbar: reload/stop + address bar + home + menu + library button.
+
+    Window controls (min/max/close) live in the TabBar now.
 
     Signals:
         navigate_requested(str): URL or search to navigate to.
@@ -63,9 +66,11 @@ class NavBar(QWidget):
         reload_clicked()
         stop_clicked()
         home_clicked()
-        minimize_clicked()
-        maximize_clicked()
-        close_clicked()
+        library_clicked()
+        new_tab_clicked()
+        history_clicked()
+        settings_clicked()
+        bookmarks_bar_toggled()
     """
 
     navigate_requested = Signal(str)
@@ -74,13 +79,11 @@ class NavBar(QWidget):
     reload_clicked = Signal()
     stop_clicked = Signal()
     home_clicked = Signal()
+    library_clicked = Signal()
     new_tab_clicked = Signal()
     history_clicked = Signal()
     settings_clicked = Signal()
     bookmarks_bar_toggled = Signal()
-    minimize_clicked = Signal()
-    maximize_clicked = Signal()
-    close_clicked = Signal()
 
     def __init__(self, data_bridge: DataBridge | None = None, parent=None):
         super().__init__(parent)
@@ -94,7 +97,7 @@ class NavBar(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(2)
 
-        # -- Navigation buttons --
+        # -- Back / Forward --
         self._back_btn = self._nav_button("\u2190", "Back")  # ←
         self._back_btn.clicked.connect(self.back_clicked.emit)
         layout.addWidget(self._back_btn)
@@ -103,6 +106,7 @@ class NavBar(QWidget):
         self._fwd_btn.clicked.connect(self.forward_clicked.emit)
         layout.addWidget(self._fwd_btn)
 
+        # -- Reload / Stop --
         self._reload_btn = self._nav_button("\u27f3", "Reload")  # ⟳
         self._reload_btn.clicked.connect(self._on_reload_stop)
         layout.addWidget(self._reload_btn)
@@ -129,43 +133,16 @@ class NavBar(QWidget):
         self._menu_btn.clicked.connect(self._show_menu)
         layout.addWidget(self._menu_btn)
 
-        layout.addSpacing(8)
+        layout.addSpacing(4)
 
-        # -- Window controls --
-        self._min_btn = self._window_button("\u2014", "Minimize")  # —
-        self._min_btn.clicked.connect(self.minimize_clicked.emit)
-        layout.addWidget(self._min_btn)
-
-        self._max_btn = self._window_button("\u25a1", "Maximize")  # □
-        self._max_btn.clicked.connect(self.maximize_clicked.emit)
-        layout.addWidget(self._max_btn)
-
-        self._close_btn = self._window_button("\u2715", "Close")  # ✕
-        self._close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                color: {theme.TEXT_PRIMARY};
-                border: none;
-                border-radius: 4px;
-                padding: 4px 8px;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                background: {theme.CLOSE_HOVER};
-                color: white;
-            }}
-        """)
-        self._close_btn.clicked.connect(self.close_clicked.emit)
-        layout.addWidget(self._close_btn)
+        # -- Library button (painted SVG-style icon) --
+        self._library_btn = _LibraryButton()
+        self._library_btn.setToolTip("Back to Library")
+        self._library_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._library_btn.clicked.connect(self.library_clicked.emit)
+        layout.addWidget(self._library_btn)
 
     def _nav_button(self, text: str, tooltip: str) -> QPushButton:
-        btn = QPushButton(text)
-        btn.setToolTip(tooltip)
-        btn.setFixedSize(32, 32)
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        return btn
-
-    def _window_button(self, text: str, tooltip: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setToolTip(tooltip)
         btn.setFixedSize(32, 32)
@@ -242,3 +219,62 @@ class NavBar(QWidget):
         # Show below the menu button
         pos = self._menu_btn.mapToGlobal(self._menu_btn.rect().bottomLeft())
         menu.exec(pos)
+
+
+# ---------------------------------------------------------------------------
+# Library icon button (painted, not emoji)
+# ---------------------------------------------------------------------------
+
+class _LibraryButton(QPushButton):
+    """
+    Custom-painted library icon button — three book spines with a shelf line.
+    Clicking navigates back to the main Tankoban library.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(32, 32)
+        self._hovered = False
+        self.setMouseTracking(True)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Hover background
+        if self._hovered:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor("rgba(255,255,255,0.08)"))
+            p.drawRoundedRect(0, 0, w, h, 4, 4)
+
+        color = QColor(theme.TEXT_PRIMARY if self._hovered else theme.TEXT_SECONDARY)
+        pen = QPen(color, 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # Draw three book spines (vertical rectangles)
+        base_y = 8
+        book_h = 16
+        shelf_y = base_y + book_h
+
+        # Book 1 (left, slightly tilted)
+        p.drawRect(9, base_y, 4, book_h)
+        # Book 2 (center, taller)
+        p.drawRect(14, base_y - 1, 4, book_h + 1)
+        # Book 3 (right)
+        p.drawRect(19, base_y + 1, 4, book_h - 1)
+
+        # Shelf line
+        p.drawLine(7, shelf_y, 25, shelf_y)
+
+        p.end()
+
+    def enterEvent(self, event):
+        self._hovered = True
+        self.update()
+
+    def leaveEvent(self, event):
+        self._hovered = False
+        self.update()

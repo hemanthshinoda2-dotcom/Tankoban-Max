@@ -130,6 +130,53 @@ FIND_BAR_STYLE = f"""
     }}
 """
 
+# Tankoban-style window control buttons (matches player_ui.py TopStrip)
+WINDOW_BTN_STYLE = """
+    QPushButton {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(78,78,78,0.98),
+            stop:0.5 rgba(50,50,50,0.98),
+            stop:1 rgba(28,28,28,0.98));
+        border: 1px solid rgba(0,0,0,0.75);
+        border-top-color: rgba(130,130,130,0.65);
+        border-radius: 3px;
+        padding: 2px 6px;
+        color: rgba(245,245,245,0.96);
+        font-size: 11px;
+        font-weight: 600;
+        min-width: 22px;
+    }
+    QPushButton:hover {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(98,98,98,0.98),
+            stop:0.5 rgba(62,62,62,0.98),
+            stop:1 rgba(34,34,34,0.98));
+    }
+"""
+
+WINDOW_CLOSE_BTN_STYLE = """
+    QPushButton {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(78,78,78,0.98),
+            stop:0.5 rgba(50,50,50,0.98),
+            stop:1 rgba(28,28,28,0.98));
+        border: 1px solid rgba(0,0,0,0.75);
+        border-top-color: rgba(130,130,130,0.65);
+        border-radius: 3px;
+        padding: 2px 6px;
+        color: rgba(245,245,245,0.96);
+        font-size: 11px;
+        font-weight: 600;
+        min-width: 22px;
+    }
+    QPushButton:hover {
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(180,60,60,0.98),
+            stop:0.5 rgba(160,40,40,0.98),
+            stop:1 rgba(130,20,20,0.98));
+    }
+"""
+
 CONTEXT_MENU_STYLE = f"""
     QMenu {{
         background: {BG_POPUP};

@@ -292,10 +292,15 @@ class TabBar(QWidget):
     """
     Horizontal tab bar with scroll area for overflow.
 
+    Layout: [tabs...] [+] [stretch] [—] [□] [✕]
+
     Signals:
         tab_clicked(tab_id)
         tab_close_clicked(tab_id)
         new_tab_clicked()
+        minimize_clicked()
+        maximize_clicked()
+        close_clicked()
     """
 
     tab_clicked = Signal(str)
@@ -303,6 +308,9 @@ class TabBar(QWidget):
     new_tab_clicked = Signal()
     tab_reorder_requested = Signal(str, str)  # (source_tab_id, target_tab_id)
     tab_pin_requested = Signal(str, bool)     # (tab_id, pin)
+    minimize_clicked = Signal()
+    maximize_clicked = Signal()
+    close_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -312,7 +320,7 @@ class TabBar(QWidget):
 
         self._buttons: dict[str, TabButton] = {}
 
-        # Layout: [scroll area with tabs] [+ button]
+        # Layout: [scroll area with tabs + button] [stretch] [window controls]
         outer = QHBoxLayout(self)
         outer.setContentsMargins(8, 0, 4, 0)
         outer.setSpacing(0)
@@ -336,7 +344,7 @@ class TabBar(QWidget):
         self._scroll.setWidget(self._tab_container)
         outer.addWidget(self._scroll, 1)
 
-        # New tab button
+        # New tab button — sits right after the tab scroll area
         self._new_btn = QPushButton("+")
         self._new_btn.setFixedSize(28, 28)
         self._new_btn.setStyleSheet(f"""
@@ -357,6 +365,40 @@ class TabBar(QWidget):
         self._new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_btn.clicked.connect(self.new_tab_clicked.emit)
         outer.addWidget(self._new_btn)
+
+        # Stretch pushes window controls to the far right
+        outer.addStretch()
+
+        # Window controls — Tankoban gradient style
+        outer.addSpacing(8)
+
+        self._min_btn = self._window_button("\u2014", "Minimize")  # —
+        self._min_btn.clicked.connect(self.minimize_clicked.emit)
+        outer.addWidget(self._min_btn)
+
+        outer.addSpacing(2)
+
+        self._max_btn = self._window_button("\u25a2", "Maximize")  # ▢
+        self._max_btn.clicked.connect(self.maximize_clicked.emit)
+        outer.addWidget(self._max_btn)
+
+        outer.addSpacing(2)
+
+        self._close_btn = QPushButton("\u2715")  # ✕
+        self._close_btn.setToolTip("Close")
+        self._close_btn.setFixedSize(28, 28)
+        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._close_btn.setStyleSheet(theme.WINDOW_CLOSE_BTN_STYLE)
+        self._close_btn.clicked.connect(self.close_clicked.emit)
+        outer.addWidget(self._close_btn)
+
+    def _window_button(self, text: str, tooltip: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setToolTip(tooltip)
+        btn.setFixedSize(28, 28)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setStyleSheet(theme.WINDOW_BTN_STYLE)
+        return btn
 
     def add_tab(self, tab_id: str, title: str, index: int = -1, pinned: bool = False):
         """Add a tab button at the given index."""

@@ -147,6 +147,10 @@ class ChromeBrowser(QWidget):
         self._tab_bar.new_tab_clicked.connect(self.new_tab)
         self._tab_bar.tab_reorder_requested.connect(self._on_tab_reorder)
         self._tab_bar.tab_pin_requested.connect(self._on_tab_pin)
+        # Window controls live in the tab bar now
+        self._tab_bar.minimize_clicked.connect(lambda: self._window_action("minimize"))
+        self._tab_bar.maximize_clicked.connect(lambda: self._window_action("maximize"))
+        self._tab_bar.close_clicked.connect(lambda: self._window_action("close"))
 
     def _wire_nav_bar(self):
         nav = self._nav_bar
@@ -160,9 +164,12 @@ class ChromeBrowser(QWidget):
         nav.history_clicked.connect(self.open_history)
         nav.settings_clicked.connect(self.open_settings)
         nav.bookmarks_bar_toggled.connect(self.toggle_bookmarks_bar)
-        nav.minimize_clicked.connect(lambda: self._window_action("minimize"))
-        nav.maximize_clicked.connect(lambda: self._window_action("maximize"))
-        nav.close_clicked.connect(lambda: self._window_action("close"))
+        nav.library_clicked.connect(self._go_to_library)
+
+    def _go_to_library(self):
+        """Navigate back to the main Tankoban library."""
+        if self._on_back:
+            self._on_back()
 
     def _wire_find_bar(self):
         self._find_bar.closed.connect(self._on_find_closed)
