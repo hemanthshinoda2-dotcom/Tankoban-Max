@@ -29,6 +29,8 @@ from .tab_bar import TabBar
 from .nav_bar import NavBar
 from .browser_page import ChromePage, inject_antibot_script
 from .find_bar import FindBar
+from .bookmarks_bar import BookmarksBar
+from .data_bridge import DataBridge
 from .context_menu import build_context_menu
 from .shortcuts import SHORTCUTS
 
@@ -62,6 +64,7 @@ class ChromeBrowser(QWidget):
         profile: QWebEngineProfile | None = None,
         on_back: Callable | None = None,
         on_window_action: Callable | None = None,
+        bridge_root=None,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
@@ -70,6 +73,9 @@ class ChromeBrowser(QWidget):
         self._on_back = on_back
         self._on_window_action = on_window_action
         self._closed_tabs: list[str] = []  # URLs of recently closed tabs
+
+        # Data bridge (reads history/bookmarks from bridge.py)
+        self._data_bridge = DataBridge(bridge_root)
 
         # Inject anti-bot script into the profile
         inject_antibot_script(self._profile)
@@ -88,9 +94,14 @@ class ChromeBrowser(QWidget):
         self._tab_bar = TabBar()
         layout.addWidget(self._tab_bar)
 
-        # Nav bar
-        self._nav_bar = NavBar()
+        # Nav bar (with omnibox autocomplete)
+        self._nav_bar = NavBar(data_bridge=self._data_bridge)
         layout.addWidget(self._nav_bar)
+
+        # Bookmarks bar (hidden by default, Ctrl+Shift+B toggles)
+        self._bookmarks_bar = BookmarksBar(data_bridge=self._data_bridge)
+        self._bookmarks_bar.navigate_requested.connect(self._navigate_active)
+        layout.addWidget(self._bookmarks_bar)
 
         # Find bar (hidden by default)
         self._find_bar = FindBar()
@@ -317,6 +328,12 @@ class ChromeBrowser(QWidget):
     def _on_load_finished(self, tab_id: str, ok: bool):
         self._tab_mgr.update_loading(tab_id, False, 100 if ok else 0)
 
+        # Record in history (skip local files and internal pages)
+        if ok:
+            tab = self._tab_mgr.get(tab_id)
+            if tab and tab.url and tab.url.startswith("http"):
+                self._data_bridge.add_history_entry(tab.url, tab.title)
+
     def _on_new_tab_requested(self, url: QUrl):
         url_str = url.toString() if url and not url.isEmpty() else None
         self.new_tab(url_str)
@@ -434,3 +451,7 @@ class ChromeBrowser(QWidget):
             tab = self._tab_mgr.active_tab
             if tab and tab.view:
                 tab.view.setFocus()
+
+    def toggle_bookmarks_bar(self):
+        """Toggle bookmarks bar visibility (Ctrl+Shift+B)."""
+        self._bookmarks_bar.toggle()

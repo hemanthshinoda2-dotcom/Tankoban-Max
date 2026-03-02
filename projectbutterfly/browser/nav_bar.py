@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
+from .omnibox import Omnibox
+from .data_bridge import DataBridge
 
 # ---------------------------------------------------------------------------
 # URL helpers
@@ -76,7 +78,7 @@ class NavBar(QWidget):
     maximize_clicked = Signal()
     close_clicked = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, data_bridge: DataBridge | None = None, parent=None):
         super().__init__(parent)
         self.setObjectName("navBar")
         self.setFixedHeight(theme.TOOLBAR_HEIGHT)
@@ -103,13 +105,10 @@ class NavBar(QWidget):
 
         layout.addSpacing(4)
 
-        # -- Address bar --
-        self._address = QLineEdit()
-        self._address.setObjectName("addressBar")
-        self._address.setPlaceholderText("Search Google or type a URL")
+        # -- Omnibox (address bar with autocomplete) --
+        self._address = Omnibox(data_bridge=data_bridge)
         self._address.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._address.setFixedHeight(30)
-        self._address.returnPressed.connect(self._on_address_submit)
+        self._address.navigate_requested.connect(self._on_omnibox_navigate)
         layout.addWidget(self._address)
 
         layout.addSpacing(4)
@@ -162,8 +161,8 @@ class NavBar(QWidget):
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         return btn
 
-    def _on_address_submit(self):
-        url = _fixup_url(self._address.text())
+    def _on_omnibox_navigate(self, text: str):
+        url = _fixup_url(text)
         if url:
             self.navigate_requested.emit(url)
 

@@ -371,6 +371,7 @@ class TankobanWindow(QMainWindow):
                 profile=self._profile,
                 on_back=self.show_web_view,
                 on_window_action=self._tankoweb_window_action,
+                bridge_root=self._bridge,
             )
             self._stack.addWidget(self._tankoweb)  # index 2
 
