@@ -259,6 +259,13 @@ class TankobanWindow(QMainWindow):
         self._profile.setPersistentStoragePath(
             os.path.join(storage.data_path(""), "WebEngine")
         )
+        # Set a real Chrome User-Agent so sites don't flag us as a bot.
+        # Default QtWebEngine UA contains "QtWebEngine" which triggers captchas.
+        self._profile.setHttpUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        )
 
         self._web_page = TankobanWebPage(self._profile, self)
         self._web_view = QWebEngineView()
@@ -745,6 +752,9 @@ def main():
         "--enable-zero-copy",
         "--enable-native-gpu-memory-buffers",
         "--ignore-gpu-blocklist",
+        # Anti-bot detection: disable automation flags that captcha services
+        # (Yandex SmartCaptcha, Cloudflare, hCaptcha) use to fingerprint bots
+        "--disable-blink-features=AutomationControlled",
     ])
 
     # Init Qt app

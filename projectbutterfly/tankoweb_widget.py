@@ -432,6 +432,14 @@ class TankoWebWidget(QWidget):
         cache_path = storage.data_path("TankowebEngine")
         self._profile.setCachePath(cache_path)
         self._profile.setPersistentStoragePath(cache_path)
+        # Real Chrome UA — avoids captcha triggers from "QtWebEngine" in default UA
+        self._profile.setHttpUserAgent(
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36"
+        )
+        # Inject anti-detection script before any page JS runs
+        self._inject_antibot_script()
 
         # CF solver (lazy — created on first use, shares profile for cookies)
         self._cf_solver = None
@@ -477,6 +485,68 @@ class TankoWebWidget(QWidget):
 
         # Create first tab — starts on home page
         self._create_tab()
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Anti-bot script injection
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _inject_antibot_script(self):
+        """Inject a script into every page that hides automation fingerprints.
+
+        Captcha services (Yandex SmartCaptcha, Cloudflare, hCaptcha) check for
+        navigator.webdriver, missing plugins, and other signals to detect bots.
+        This script runs before any page JS and patches those signals.
+        """
+        from PySide6.QtWebEngineCore import QWebEngineScript
+
+        js = """
+        // Hide webdriver flag
+        Object.defineProperty(navigator, 'webdriver', { get: () => false });
+
+        // Ensure navigator.plugins is non-empty (bots have 0 plugins)
+        if (navigator.plugins.length === 0) {
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [
+                    { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer' },
+                    { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai' },
+                    { name: 'Native Client', filename: 'internal-nacl-plugin' },
+                ]
+            });
+        }
+
+        // Ensure navigator.languages is populated
+        if (!navigator.languages || navigator.languages.length === 0) {
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en']
+            });
+        }
+
+        // Chrome runtime stub (checked by some captcha scripts)
+        if (!window.chrome) {
+            window.chrome = { runtime: {}, loadTimes: function(){}, csi: function(){} };
+        }
+
+        // Fix permissions query for notifications (bot detection vector)
+        const origQuery = window.Notification && Notification.permission;
+        if (navigator.permissions && navigator.permissions.query) {
+            const origPermQuery = navigator.permissions.query.bind(navigator.permissions);
+            navigator.permissions.query = (params) => {
+                if (params.name === 'notifications') {
+                    return Promise.resolve({ state: Notification.permission || 'prompt' });
+                }
+                return origPermQuery(params);
+            };
+        }
+        """
+
+        script = QWebEngineScript()
+        script.setName("tanko-antibot")
+        script.setSourceCode(js)
+        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setRunsOnSubFrames(True)
+
+        self._profile.scripts().insert(script)
 
     # ══════════════════════════════════════════════════════════════════════
     # Background painting — animated gradient skin (ports .bgFx)
