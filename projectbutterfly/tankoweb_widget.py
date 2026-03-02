@@ -275,33 +275,123 @@ def _apply_shadow(widget, blur=22, dy=8, color=QColor(0, 0, 0, 180)):
 # QPainter icon buttons — crisp vector icons at any DPI
 # ---------------------------------------------------------------------------
 
-class _StarButton(QPushButton):
-    """30x30 glass button with a QPainter-drawn 5-pointed star (bookmark)."""
+class _TorButton(QPushButton):
+    """30x30 glass button with a QPainter-drawn Tor onion icon + status badge.
+
+    States:
+      - off: muted grey onion
+      - connecting: amber onion with pulsing glow
+      - active: purple onion (#bb86fc) with green badge dot
+    """
+    # Tor purple (from Aspect browser)
+    _PURPLE = QColor(187, 134, 252)       # #bb86fc
+    _AMBER = QColor(220, 180, 50)
+    _MUTED = QColor(200, 200, 200, 130)
+    _GREEN = QColor(80, 220, 80)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(ICON_BTN_SIZE, ICON_BTN_SIZE)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip("Bookmark")
-        self.setStyleSheet(_icon_btn_ss())
+        self.setToolTip("Connect to Tor (Ctrl+Shift+T)")
+        self._state = "off"  # "off", "connecting", "active"
+        self._update_style()
+
+    def set_state(self, state):
+        """Set state: 'off', 'connecting', or 'active'."""
+        self._state = state
+        self._update_style()
+        self.update()
+
+    def _update_style(self):
+        if self._state == "active":
+            self.setStyleSheet(
+                f"QPushButton {{"
+                f"  min-width: {ICON_BTN_SIZE}px; max-width: {ICON_BTN_SIZE}px;"
+                f"  min-height: {ICON_BTN_SIZE}px; max-height: {ICON_BTN_SIZE}px;"
+                f"  background: rgba(187,134,252,0.20); color: #bb86fc;"
+                f"  border: 1px solid rgba(187,134,252,0.40); border-radius: {RADIUS}px;"
+                f"}}"
+                f"QPushButton:hover {{ background: rgba(187,134,252,0.30); }}"
+                f"QPushButton:pressed {{ padding-top: 1px; }}"
+            )
+            self.setToolTip("Tor connected — click to disconnect")
+        elif self._state == "connecting":
+            self.setStyleSheet(
+                f"QPushButton {{"
+                f"  min-width: {ICON_BTN_SIZE}px; max-width: {ICON_BTN_SIZE}px;"
+                f"  min-height: {ICON_BTN_SIZE}px; max-height: {ICON_BTN_SIZE}px;"
+                f"  background: rgba(220,180,50,0.15); color: rgba(220,180,50,0.90);"
+                f"  border: 1px solid rgba(220,180,50,0.30); border-radius: {RADIUS}px;"
+                f"}}"
+            )
+            self.setToolTip("Connecting to Tor...")
+        else:
+            self.setStyleSheet(_icon_btn_ss())
+            self.setToolTip("Connect to Tor (Ctrl+Shift+T)")
 
     def paintEvent(self, event):
         super().paintEvent(event)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(245, 245, 245, 200))
-        pen.setWidthF(1.4)
+
+        cx, cy = self.width() / 2, self.height() / 2
+
+        # Choose icon color based on state
+        if self._state == "active":
+            color = self._PURPLE
+        elif self._state == "connecting":
+            color = self._AMBER
+        else:
+            color = self._MUTED
+
+        # Draw onion icon — simplified Tor onion shape
+        # Outer bulb (ellipse)
+        pen = QPen(color)
+        pen.setWidthF(1.5)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        cx, cy, r = self.width() / 2, self.height() / 2, 6.5
-        ri = r * 0.40
-        pts = []
-        for i in range(10):
-            angle = math.radians(-90 + i * 36)
-            rad = r if i % 2 == 0 else ri
-            pts.append(QPointF(cx + rad * math.cos(angle), cy + rad * math.sin(angle)))
-        p.drawPolygon(QPolygonF(pts))
+        # Main onion body — slightly taller than wide
+        ox, oy = cx, cy + 0.5
+        rw, rh = 5.5, 7.0
+        p.drawEllipse(QRectF(ox - rw, oy - rh, rw * 2, rh * 2))
+
+        # Inner layer (smaller concentric ellipse)
+        pen.setWidthF(1.2)
+        p.setPen(pen)
+        rw2, rh2 = 3.2, 4.5
+        p.drawEllipse(QRectF(ox - rw2, oy - rh2 + 0.8, rw2 * 2, rh2 * 2))
+
+        # Inner core (small circle)
+        pen.setWidthF(1.0)
+        p.setPen(pen)
+        p.drawEllipse(QRectF(ox - 1.3, oy - 0.8, 2.6, 2.6))
+
+        # Stem/leaf on top
+        pen.setWidthF(1.4)
+        p.setPen(pen)
+        top_y = oy - rh
+        path = QPainterPath()
+        path.moveTo(ox, top_y)
+        path.cubicTo(ox + 2, top_y - 3.5, ox + 4.5, top_y - 2, ox + 3.5, top_y + 0.5)
+        p.drawPath(path)
+
+        # Badge dot (bottom-right) — green when active
+        if self._state == "active":
+            badge_r = 3.5
+            bx = self.width() - badge_r - 2
+            by = self.height() - badge_r - 2
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(self._GREEN)
+            p.drawEllipse(QRectF(bx - badge_r, by - badge_r, badge_r * 2, badge_r * 2))
+            # Dark outline for contrast
+            outline_pen = QPen(QColor(5, 5, 5))
+            outline_pen.setWidthF(1.5)
+            p.setPen(outline_pen)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawEllipse(QRectF(bx - badge_r, by - badge_r, badge_r * 2, badge_r * 2))
+
         p.end()
 
 
@@ -487,6 +577,7 @@ class TankoWebWidget(QWidget):
         QShortcut(QKeySequence("Ctrl+W"), self, self._shortcut_close_tab)
         QShortcut(QKeySequence("Ctrl+Tab"), self, self._shortcut_next_tab)
         QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, self._shortcut_prev_tab)
+        QShortcut(QKeySequence("Ctrl+Shift+T"), self, self._toggle_tor)
 
         # Create first tab — starts on home page
         self._create_tab()
@@ -679,22 +770,6 @@ class TankoWebWidget(QWidget):
         hub_btn.clicked.connect(self._open_hub)
         layout.addWidget(hub_btn)
 
-        # Tor toggle button
-        self._tor_btn = QPushButton("\U0001f9c5 TOR")  # 🧅
-        self._tor_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._tor_btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: rgba(140,140,140,0.10); color: rgba(200,200,200,0.50);"
-            f"  border: 1px solid rgba(140,140,140,0.20); border-radius: {RADIUS_SM}px;"
-            f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
-            f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
-            f"}}"
-            f"QPushButton:hover {{ background: rgba(140,140,140,0.18); color: rgba(200,200,200,0.80); }}"
-        )
-        self._tor_btn.setToolTip("Connect to Tor — bypass blocks and captchas")
-        self._tor_btn.clicked.connect(self._toggle_tor)
-        layout.addWidget(self._tor_btn)
-
         return row
 
     # ══════════════════════════════════════════════════════════════════════
@@ -827,8 +902,10 @@ class TankoWebWidget(QWidget):
         self._home_btn.clicked.connect(self._go_home)
         layout.addWidget(self._home_btn)
 
-        bk_btn = _StarButton()
-        layout.addWidget(bk_btn)
+        # Tor toggle — circular icon button matching Aspect browser nav-btn
+        self._tor_btn = _TorButton()
+        self._tor_btn.clicked.connect(self._toggle_tor)
+        layout.addWidget(self._tor_btn)
 
         hist_btn = _ClockButton()
         layout.addWidget(hist_btn)
@@ -1309,15 +1386,11 @@ class TankoWebWidget(QWidget):
         """Update Tor button appearance and set/clear proxy on profile."""
         active = status.get("active", False)
         connecting = status.get("connecting", False)
-        progress = status.get("bootstrapProgress", 0)
 
         if active:
             # Set SOCKS5 proxy on the tankoweb profile
             port = status.get("port", 0)
             if port:
-                # QWebEngineProfile proxy: use environment-style proxy config
-                # Qt reads proxy from QNetworkProxy — set it application-wide
-                # for this profile's network requests
                 from PySide6.QtNetwork import QNetworkProxy
                 proxy = QNetworkProxy(
                     QNetworkProxy.ProxyType.Socks5Proxy,
@@ -1325,46 +1398,16 @@ class TankoWebWidget(QWidget):
                 )
                 QNetworkProxy.setApplicationProxy(proxy)
                 print(f"[tor] SOCKS5 proxy set: 127.0.0.1:{port}")
-
-            self._tor_btn.setText("\U0001f7e2 TOR")  # 🟢
-            self._tor_btn.setStyleSheet(
-                f"QPushButton {{"
-                f"  background: rgba(80,200,80,0.15); color: rgba(80,220,80,0.90);"
-                f"  border: 1px solid rgba(80,200,80,0.35); border-radius: {RADIUS_SM}px;"
-                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
-                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
-                f"}}"
-                f"QPushButton:hover {{ background: rgba(80,200,80,0.25); }}"
-            )
-            self._tor_btn.setToolTip("Tor connected — click to disconnect")
+            self._tor_btn.set_state("active")
         elif connecting:
-            self._tor_btn.setText(f"\u231B TOR {progress}%")
-            self._tor_btn.setStyleSheet(
-                f"QPushButton {{"
-                f"  background: rgba(220,180,50,0.12); color: rgba(220,180,50,0.80);"
-                f"  border: 1px solid rgba(220,180,50,0.25); border-radius: {RADIUS_SM}px;"
-                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
-                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
-                f"}}"
-            )
-            self._tor_btn.setToolTip(f"Connecting to Tor... {progress}%")
+            self._tor_btn.set_state("connecting")
         else:
             # Clear proxy
             from PySide6.QtNetwork import QNetworkProxy
             QNetworkProxy.setApplicationProxy(
                 QNetworkProxy(QNetworkProxy.ProxyType.NoProxy)
             )
-            self._tor_btn.setText("\U0001f9c5 TOR")  # 🧅
-            self._tor_btn.setStyleSheet(
-                f"QPushButton {{"
-                f"  background: rgba(140,140,140,0.10); color: rgba(200,200,200,0.50);"
-                f"  border: 1px solid rgba(140,140,140,0.20); border-radius: {RADIUS_SM}px;"
-                f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
-                f"  letter-spacing: 1px; padding: 2px 10px; min-height: 18px;"
-                f"}}"
-                f"QPushButton:hover {{ background: rgba(140,140,140,0.18); color: rgba(200,200,200,0.80); }}"
-            )
-            self._tor_btn.setToolTip("Connect to Tor — bypass blocks and captchas")
+            self._tor_btn.set_state("off")
 
     # ══════════════════════════════════════════════════════════════════════
     # Hub tab — singleton tab for torrent search/downloads
