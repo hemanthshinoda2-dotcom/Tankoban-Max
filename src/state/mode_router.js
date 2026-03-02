@@ -1,6 +1,4 @@
 // Central mode routing for comics/videos/books.
-// Note: 'sources'/'browser' mode is no longer a renderer mode — Tankoweb
-// is opened via #tankWebBtn → openBrowserFromTopButton() → BrowserWidget overlay.
 (function () {
   'use strict';
 

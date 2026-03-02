@@ -10,7 +10,7 @@ Handles:
   - App lifecycle, single-instance lock (QLocalServer)
   - Window creation (frameless, maximized, dark background)
   - Section-based boot routing (?appSection= query parameter)
-  - QWebChannel bridge wiring (bridge.py — all 46 namespaces)
+  - QWebChannel bridge wiring (bridge.py)
   - Bridge Qt object injection (PlayerBridge, WebFindBridge, etc.)
   - DevTools policy
   - Quit cleanup (player shutdown, tor kill, flush writes)
@@ -221,7 +221,7 @@ class TankobanWindow(QMainWindow):
 
     QStackedWidget with two layers:
       index 0 = QWebEngineView  (existing renderer UI)
-      index 1 = QWidget          (mpv native render surface)
+      index 1 = MpvContainer    (mpv native render surface)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
@@ -254,18 +254,6 @@ class TankobanWindow(QMainWindow):
         self._profile.setPersistentStoragePath(
             os.path.join(storage.data_path(""), "WebEngine")
         )
-
-        # Browser tab profile — isolated session (replaces Electron partition="persist:webmode")
-        self._browser_profile = QWebEngineProfile("webmode", self)
-        self._browser_profile.setPersistentStoragePath(
-            os.path.join(storage.data_path(""), "WebEngine_browser")
-        )
-        # Allow home.html (file://) to load adjacent CSS/JS files
-        _bp_settings = self._browser_profile.settings()
-        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
-        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
-        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
-        _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
 
         self._web_page = TankobanWebPage(self._profile, self)
         self._web_view = QWebEngineView()
@@ -307,30 +295,6 @@ class TankobanWindow(QMainWindow):
         self._bridge.webBrowserActions.setPage(self._web_page)
         self._bridge.webData.setProfile(self._profile)
 
-        # --- Native Qt browser chrome (layer 2) ---
-        # Replaces the HTML-overlay approach. Each web tab is a proper QStackedWidget
-        # child — no HWND z-ordering conflicts, no setGeometry juggling.
-        from browser_widget import BrowserWidget
-        self._browser_widget = BrowserWidget(self._browser_profile, self)
-        self._stack.addWidget(self._browser_widget)  # index 2
-
-        # Wire browser tab manager to BrowserWidget (replaces overlay setup).
-        self._bridge.webTabManager.setup(self._browser_widget)
-
-        # Wire browser download handler through BrowserWidget's profile
-        self._browser_widget.profile.downloadRequested.connect(
-            self._bridge.webSources.handleDownloadRequested
-        )
-
-        # Wire Phase 2/3 bridge references into BrowserWidget
-        self._browser_widget.set_bridges(
-            torrent_search=self._bridge.torrentSearch,
-            torrent=self._bridge.webTorrent,
-            sources=self._bridge.webSources,
-            history=getattr(self._bridge, "webHistory", None),
-            bookmarks=getattr(self._bridge, "webBookmarks", None),
-        )
-
         # --- DevTools ---
         self._dev_tools = dev_tools
         self._dev_tools_view: QWebEngineView | None = None
@@ -355,27 +319,12 @@ class TankobanWindow(QMainWindow):
         else:
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
-        # Belt-and-suspenders: if launched in browser mode, activate the Qt browser
-        # from Python side in case JS routing fails (e.g. timing race with bridge shim).
-        if self._app_section == "browser":
-            QTimer.singleShot(400, self._python_activate_browser)
-
-    def _python_activate_browser(self):
-        """Force-activate BrowserWidget from Python side, bypassing JS routing."""
-        self.show_browser()
-        wtm = getattr(self._bridge, "webTabManager", None)
-        if wtm and not wtm._tabs:
-            wtm._create_tab_internal("", home=True)
 
     # --- Player widget switching ---
 
     def show_web_view(self):
         """Switch to the web UI layer."""
         self._stack.setCurrentIndex(0)
-
-    def show_browser(self):
-        """Switch to the native Qt browser layer."""
-        self._stack.setCurrentIndex(2)
 
     def show_player(self):
         """Switch to the mpv player layer and give keyboard focus to container."""
@@ -436,15 +385,7 @@ class TankobanWindow(QMainWindow):
         v.resize(v.width() - 1, v.height())
 
     def closeEvent(self, event):
-        """Shutdown player/tor/tabs and flush pending writes before quitting."""
-        try:
-            self._browser_widget.shutdown()
-        except Exception:
-            pass
-        try:
-            self._bridge.webTabManager.shutdown()
-        except Exception:
-            pass
+        """Shutdown player/tor and flush pending writes before quitting."""
         try:
             self._bridge.player.shutdown()
         except Exception:
@@ -587,10 +528,6 @@ def main():
 
     # --- App quit cleanup ---
     def _on_about_to_quit():
-        try:
-            win._bridge.webTabManager.shutdown()
-        except Exception:
-            pass
         try:
             win._bridge.player.shutdown()
         except Exception:
