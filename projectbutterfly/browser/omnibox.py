@@ -118,7 +118,7 @@ class _CompletionPopup(QWidget):
     item_selected = Signal(str)  # url
 
     def __init__(self, parent=None):
-        super().__init__(parent, Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
         self.setStyleSheet(f"""
             QWidget {{
                 background: {theme.BG_POPUP};
