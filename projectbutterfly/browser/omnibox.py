@@ -11,8 +11,8 @@ Features:
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QTimer, QPoint
-from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QKeyEvent
+from PySide6.QtCore import Qt, Signal, QTimer, QPoint, QRect
+from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QKeyEvent, QPen
 from PySide6.QtWidgets import (
     QLineEdit, QWidget, QVBoxLayout, QLabel, QSizePolicy,
 )
@@ -198,9 +198,15 @@ class Omnibox(QLineEdit):
         self._debounce_timer.setInterval(150)
         self._debounce_timer.timeout.connect(self._update_completions)
 
+        self._security = "none"  # "secure", "insecure", "none"
+        self._load_progress = 0  # 0-100, 0 = not loading
+        self._is_loading = False
+
         self.setObjectName("addressBar")
         self.setPlaceholderText("Search Google or type a URL")
         self.setFixedHeight(30)
+        # Left padding for security icon
+        self.setTextMargins(22, 0, 0, 0)
 
         self.textChanged.connect(self._on_text_changed)
         self.returnPressed.connect(self._on_submit)
@@ -271,3 +277,48 @@ class Omnibox(QLineEdit):
         # Delay hiding so click on popup registers
         QTimer.singleShot(200, self._popup.hide)
         super().focusOutEvent(event)
+
+    # -- Security icon + loading progress --
+
+    def set_security(self, secure: bool, url: str = ""):
+        """Update the security indicator (lock icon)."""
+        if not url or url.startswith("file://") or url.startswith("tanko-browser://"):
+            self._security = "none"
+        elif url.startswith("https://"):
+            self._security = "secure"
+        elif url.startswith("http://"):
+            self._security = "insecure"
+        else:
+            self._security = "none"
+        self.update()
+
+    def set_load_progress(self, loading: bool, progress: int = 0):
+        """Set the loading progress bar state (0-100)."""
+        self._is_loading = loading
+        self._load_progress = progress
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        h = self.height()
+
+        # Security icon (left side)
+        if self._security == "secure":
+            p.setPen(QColor(theme.TEXT_URL_SECURE))
+            p.setFont(QFont("Segoe UI", 11))
+            p.drawText(8, (h + 11) // 2, "\U0001f512")  # 🔒
+        elif self._security == "insecure":
+            p.setPen(QColor(theme.TEXT_SECONDARY))
+            p.setFont(QFont("Segoe UI", 10))
+            p.drawText(8, (h + 10) // 2, "\u24d8")  # ⓘ
+
+        # Loading progress bar (thin line at bottom)
+        if self._is_loading and self._load_progress > 0:
+            bar_w = int((self.width() - 4) * self._load_progress / 100)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QColor(theme.ACCENT))
+            p.drawRect(2, h - 2, bar_w, 2)
+
+        p.end()

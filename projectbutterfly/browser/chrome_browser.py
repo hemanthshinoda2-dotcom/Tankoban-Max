@@ -12,10 +12,11 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QKeySequence, QShortcut, QClipboard
+from PySide6.QtGui import QKeySequence, QShortcut, QClipboard, QPixmap, QImage
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QApplication,
+    QWidget, QVBoxLayout, QStackedWidget, QApplication, QFileDialog,
 )
+from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
     QWebEnginePage,
@@ -33,6 +34,7 @@ from .bookmarks_bar import BookmarksBar
 from .downloads_shelf import DownloadsShelf
 from .data_bridge import DataBridge
 from .context_menu import build_context_menu
+from .permission_bar import PermissionBar
 from .shortcuts import SHORTCUTS
 
 # ---------------------------------------------------------------------------
@@ -107,6 +109,11 @@ class ChromeBrowser(QWidget):
         # Find bar (hidden by default)
         self._find_bar = FindBar()
         layout.addWidget(self._find_bar)
+
+        # Permission bar (hidden, shows when site requests permission)
+        self._permission_bar = PermissionBar()
+        self._permission_bar.permission_decided.connect(self._on_permission_decided)
+        layout.addWidget(self._permission_bar)
 
         # Viewport — one QWebEngineView per tab, stacked
         self._viewport = QStackedWidget()
@@ -305,7 +312,7 @@ class ChromeBrowser(QWidget):
     def _on_tab_loading_changed(self, tab_id: str, loading: bool, progress: int):
         self._tab_bar.update_loading(tab_id, loading)
         if tab_id == self._tab_mgr.active_id:
-            self._nav_bar.set_loading(loading)
+            self._nav_bar.set_loading(loading, progress)
 
     # -----------------------------------------------------------------------
     # Page signal wiring
@@ -335,6 +342,11 @@ class ChromeBrowser(QWidget):
             lambda url, tid=tab_id: self._on_new_tab_requested(url)
         )
         page.internal_command.connect(self._on_internal_command)
+
+        # Permission prompts
+        page.permission_prompt.connect(
+            lambda origin, feature: self._permission_bar.show_permission(origin, feature)
+        )
 
         # Audio state
         page.recentlyAudibleChanged.connect(
@@ -542,6 +554,8 @@ class ChromeBrowser(QWidget):
             on_select_all=lambda: page.triggerAction(QWebEnginePage.WebAction.SelectAll),
             on_open_link_new_tab=lambda url: self.new_tab(url.toString()),
             on_copy_link=lambda url: QApplication.clipboard().setText(url.toString()),
+            on_save_image=lambda url: self._save_image(url),
+            on_copy_image=lambda url: self._copy_image(url),
             on_inspect=lambda: self.toggle_devtools(),
         )
 
@@ -667,6 +681,40 @@ class ChromeBrowser(QWidget):
             self._tab_bar.update_audio(tid, tab.audio_playing, tab.muted)
 
     # -----------------------------------------------------------------------
+    # Image actions (context menu)
+    # -----------------------------------------------------------------------
+
+    def _save_image(self, url: QUrl):
+        """Download an image from the given URL and save to file."""
+        suggested = url.fileName() or "image.png"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Image", suggested,
+            "Images (*.png *.jpg *.jpeg *.gif *.webp *.bmp);;All Files (*)",
+        )
+        if not path:
+            return
+        # Use the profile's download mechanism
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.view.page().download(url, path)
+
+    def _copy_image(self, url: QUrl):
+        """Copy an image from URL to clipboard."""
+        if not hasattr(self, '_net_mgr'):
+            self._net_mgr = QNetworkAccessManager(self)
+        reply = self._net_mgr.get(QNetworkRequest(url))
+        reply.finished.connect(lambda r=reply: self._on_image_downloaded(r))
+
+    def _on_image_downloaded(self, reply: QNetworkReply):
+        """Handle image download completion for clipboard copy."""
+        if reply.error() == QNetworkReply.NetworkError.NoError:
+            data = reply.readAll()
+            img = QImage()
+            if img.loadFromData(data):
+                QApplication.clipboard().setImage(img)
+        reply.deleteLater()
+
+    # -----------------------------------------------------------------------
     # Tab reorder + pinning
     # -----------------------------------------------------------------------
 
@@ -732,3 +780,46 @@ class ChromeBrowser(QWidget):
         win = self.window()
         if win.isFullScreen():
             win.showNormal()
+
+    # -----------------------------------------------------------------------
+    # Permission prompts
+    # -----------------------------------------------------------------------
+
+    def _on_permission_decided(self, origin, feature, granted):
+        """Handle user's decision on a permission prompt."""
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            page = tab.view.page()
+            policy = (
+                QWebEnginePage.PermissionPolicy.PermissionGrantedByUser
+                if granted else
+                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser
+            )
+            page.setFeaturePermission(origin, feature, policy)
+
+    # -----------------------------------------------------------------------
+    # Additional shortcuts
+    # -----------------------------------------------------------------------
+
+    def open_downloads(self):
+        """Toggle downloads shelf visibility."""
+        if self._downloads_shelf.isVisible():
+            self._downloads_shelf.setVisible(False)
+        else:
+            self._downloads_shelf.setVisible(True)
+
+    def open_clear_data(self):
+        """Open settings page (which has clear data button)."""
+        self.open_settings()
+
+    def print_page(self):
+        """Print the current page."""
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.view.page().printToPdf("page.pdf")
+
+    def view_source(self):
+        """View page source in a new tab."""
+        tab = self._tab_mgr.active_tab
+        if tab and tab.url and tab.url.startswith("http"):
+            self.new_tab(f"view-source:{tab.url}")

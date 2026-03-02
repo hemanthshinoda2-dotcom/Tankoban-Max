@@ -176,15 +176,17 @@ class NavBar(QWidget):
     # -- Public state setters --
 
     def set_url(self, url: str):
-        """Update the address bar text."""
+        """Update the address bar text and security indicator."""
         if not self._address.hasFocus():
             self._address.setText(url)
+        self._address.set_security(True, url)
 
-    def set_loading(self, loading: bool):
-        """Toggle reload/stop button icon."""
+    def set_loading(self, loading: bool, progress: int = 0):
+        """Toggle reload/stop button icon and omnibox progress bar."""
         self._loading = loading
         self._reload_btn.setText("\u2715" if loading else "\u27f3")  # ✕ or ⟳
         self._reload_btn.setToolTip("Stop" if loading else "Reload")
+        self._address.set_load_progress(loading, progress)
 
     def set_nav_state(self, can_back: bool, can_forward: bool):
         """Enable/disable back/forward buttons."""

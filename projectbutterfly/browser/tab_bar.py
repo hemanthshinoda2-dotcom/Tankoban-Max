@@ -79,6 +79,7 @@ class TabButton(QWidget):
 
     def set_title(self, title: str):
         self._title = title or "New Tab"
+        self.setToolTip(self._title)
         self.update()
 
     def set_icon(self, icon: QIcon | None):

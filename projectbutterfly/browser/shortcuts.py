@@ -30,4 +30,11 @@ SHORTCUTS = [
     ("Ctrl+-",          "zoom_out"),
     ("Ctrl+0",          "zoom_reset"),
     ("F12",             "toggle_devtools"),
+    ("Ctrl+Shift+I",    "toggle_devtools"),
+    ("Ctrl+J",          "open_downloads"),
+    ("Ctrl+Shift+Delete", "open_clear_data"),
+    ("Ctrl+P",          "print_page"),
+    ("Ctrl+U",          "view_source"),
+    ("Ctrl+G",          "focus_address_bar"),
+    ("Ctrl+Shift+J",    "toggle_devtools"),
 ]

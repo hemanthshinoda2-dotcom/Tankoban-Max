@@ -89,6 +89,7 @@ class ChromePage(QWebEnginePage):
 
     new_tab_requested = Signal(QUrl)
     internal_command = Signal(str, str)  # (command, params)
+    permission_prompt = Signal(object, object)  # (origin, feature)
 
     # Permissions auto-granted (safe defaults)
     _AUTO_GRANT = {
@@ -119,12 +120,8 @@ class ChromePage(QWebEnginePage):
                 QWebEnginePage.PermissionPolicy.PermissionGrantedByUser,
             )
         elif feature in self._PROMPTABLE:
-            # For now, auto-deny all sensitive permissions.
-            # A proper permission bar can be added later.
-            self.setFeaturePermission(
-                origin, feature,
-                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser,
-            )
+            # Show permission bar to let user decide
+            self.permission_prompt.emit(origin, feature)
         else:
             self.setFeaturePermission(
                 origin, feature,
