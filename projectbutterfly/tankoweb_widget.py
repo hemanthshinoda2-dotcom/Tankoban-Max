@@ -91,7 +91,6 @@ DEFAULT_SOURCES = [
     {"id": "annasarchive", "name": "Anna's Archive", "url": "https://annas-archive.org", "color": "#e74c3c", "builtIn": True},
     {"id": "oceanofpdf", "name": "OceanofPDF", "url": "https://oceanofpdf.com", "color": "#3498db", "builtIn": True},
     {"id": "getcomics", "name": "GetComics", "url": "https://getcomics.org", "color": "#2ecc71", "builtIn": True},
-    {"id": "zlibrary", "name": "Z-Library", "url": "https://z-lib.is", "color": "#f39c12", "builtIn": True},
     {"id": "nyaa", "name": "Nyaa", "url": "https://nyaa.si", "color": "#9b59b6", "builtIn": True},
     {"id": "libgen", "name": "Library Genesis", "url": "https://libgen.is", "color": "#1abc9c", "builtIn": True},
 ]
@@ -112,7 +111,7 @@ def _fixup_url(raw: str) -> str:
         return text
     if "." in text and " " not in text:
         return "https://" + text
-    return "https://www.google.com/search?q=" + text
+    return "https://yandex.com/search/?text=" + text
 
 
 # ---------------------------------------------------------------------------
@@ -326,20 +325,49 @@ class _TankoWebPage(QWebEnginePage):
 # _HomeWidget — Qt-native homepage (sources grid, search bar, recent tabs)
 # ═══════════════════════════════════════════════════════════════════════════
 
+class _FaviconCircle(QWidget):
+    """48x48 circle with the first letter of a source name, colored by source."""
+
+    def __init__(self, letter, color, parent=None):
+        super().__init__(parent)
+        self._letter = letter.upper() if letter else "?"
+        self._color = QColor(color)
+        self.setFixedSize(48, 48)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Filled circle with source color at low opacity
+        fill = QColor(self._color)
+        fill.setAlpha(40)
+        p.setBrush(fill)
+        p.setPen(QPen(self._color, 1.5))
+        p.drawEllipse(QRectF(2, 2, 44, 44))
+        # Letter
+        p.setPen(QPen(QColor(245, 245, 245, 220)))
+        font = p.font()
+        font.setFamily(FONT)
+        font.setPixelSize(18)
+        font.setWeight(600)
+        p.setFont(font)
+        p.drawText(QRectF(0, 0, 48, 48), Qt.AlignmentFlag.AlignCenter, self._letter)
+        p.end()
+
+
 class _HomeWidget(QScrollArea):
     """
-    Qt-native homepage shown when a tab has no URL loaded.
+    Chrome-style homepage: centered search pill + favicon grid.
 
-    Contains:
-    - Search bar (Google search or URL entry)
-    - SOURCES section — grid of source tiles
-    - "+ Add Source" tile
+    - Large centered search bar (Yandex)
+    - Source tiles as circles with first-letter favicons + name below
+    - "+ Add" tile at the end
     """
 
     def __init__(self, on_navigate, on_add_source, parent=None):
         super().__init__(parent)
-        self._on_navigate = on_navigate    # callback(url: str)
-        self._on_add_source = on_add_source  # callback() -> triggers add dialog
+        self._on_navigate = on_navigate
+        self._on_add_source = on_add_source
 
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
@@ -359,180 +387,148 @@ class _HomeWidget(QScrollArea):
         inner = QWidget()
         inner.setObjectName("homeInner")
         self._inner_layout = QVBoxLayout(inner)
-        self._inner_layout.setContentsMargins(24, 24, 24, 24)
+        self._inner_layout.setContentsMargins(0, 0, 0, 0)
         self._inner_layout.setSpacing(0)
 
-        # Search bar row
-        self._inner_layout.addWidget(self._build_search_bar())
-        self._inner_layout.addSpacing(28)
+        # Push content to vertical center
+        self._inner_layout.addStretch(3)
 
-        # SOURCES section header
-        self._inner_layout.addWidget(self._build_section_header("SOURCES"))
-        self._inner_layout.addSpacing(12)
+        # Centered search bar
+        self._inner_layout.addWidget(self._build_search_bar(), 0, Qt.AlignmentFlag.AlignCenter)
+        self._inner_layout.addSpacing(36)
 
-        # Sources grid — will be populated by refresh_sources()
-        self._sources_grid_widget = QWidget()
-        self._sources_grid_widget.setStyleSheet("background: transparent; border: none;")
-        self._sources_grid = QGridLayout(self._sources_grid_widget)
-        self._sources_grid.setContentsMargins(0, 0, 0, 0)
-        self._sources_grid.setSpacing(10)
-        self._inner_layout.addWidget(self._sources_grid_widget)
+        # Sources row — horizontally centered
+        self._sources_row = QWidget()
+        self._sources_row.setStyleSheet("background: transparent; border: none;")
+        self._sources_layout = QHBoxLayout(self._sources_row)
+        self._sources_layout.setContentsMargins(0, 0, 0, 0)
+        self._sources_layout.setSpacing(20)
+        self._inner_layout.addWidget(self._sources_row, 0, Qt.AlignmentFlag.AlignCenter)
 
-        self._inner_layout.addStretch()
+        self._inner_layout.addStretch(5)
         self.setWidget(inner)
 
     def _build_search_bar(self):
-        row = QWidget()
-        row.setStyleSheet("background: transparent; border: none;")
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
+        """Large centered search pill — like Chrome's new tab page."""
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Search the web or type a URL")
-        self._search_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._search_input.setPlaceholderText("Search Yandex or type a URL")
+        self._search_input.setFixedWidth(540)
+        self._search_input.setFixedHeight(44)
         self._search_input.setStyleSheet(
             f"QLineEdit {{"
             f"  background: {SURFACE}; color: {TEXT};"
-            f"  border: 1px solid {SURFACE_BORDER}; border-radius: {RADIUS}px;"
-            f"  padding: 0 14px; min-height: 38px;"
-            f"  font-family: '{FONT}'; font-size: 13px;"
+            f"  border: 1px solid {SURFACE_BORDER}; border-radius: 22px;"
+            f"  padding: 0 20px;"
+            f"  font-family: '{FONT}'; font-size: 14px;"
             f"  selection-background-color: rgba({ACCENT_RGB},0.3);"
             f"}}"
             f"QLineEdit:focus {{ border-color: rgba({ACCENT_RGB},0.35); }}"
         )
         self._search_input.returnPressed.connect(self._do_search)
-        layout.addWidget(self._search_input)
-
-        search_btn = QPushButton("Search")
-        search_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        search_btn.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: rgba({ACCENT_RGB},0.15); color: {TEXT};"
-            f"  border: 1px solid rgba({ACCENT_RGB},0.30); border-radius: {RADIUS}px;"
-            f"  font-family: '{FONT}'; font-size: 12px; font-weight: 600;"
-            f"  padding: 0 18px; min-height: 38px;"
-            f"}}"
-            f"QPushButton:hover {{ background: rgba({ACCENT_RGB},0.25); }}"
-        )
-        search_btn.clicked.connect(self._do_search)
-        layout.addWidget(search_btn)
-
-        return row
-
-    def _build_section_header(self, text):
-        header = QWidget()
-        header.setFixedHeight(20)
-        header.setStyleSheet("background: transparent; border: none;")
-        layout = QHBoxLayout(header)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-
-        label = QLabel(text)
-        label.setStyleSheet(
-            f"background: transparent; border: none;"
-            f"color: {TEXT_MUTED};"
-            f"font-family: '{FONT}'; font-size: 11px; font-weight: 700;"
-            f"letter-spacing: 0.10em;"
-        )
-        layout.addWidget(label)
-
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet(f"background: {SURFACE_BORDER}; border: none; max-height: 1px;")
-        line.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        layout.addWidget(line)
-
-        return header
+        return self._search_input
 
     def refresh_sources(self, sources):
-        """Rebuild the sources grid from a list of source dicts."""
-        # Clear existing tiles
-        while self._sources_grid.count():
-            item = self._sources_grid.takeAt(0)
+        """Rebuild the sources row from a list of source dicts."""
+        while self._sources_layout.count():
+            item = self._sources_layout.takeAt(0)
             w = item.widget()
             if w:
                 w.deleteLater()
 
-        cols = 3  # tiles per row
-        for i, src in enumerate(sources):
+        for src in sources:
             tile = self._build_source_tile(src)
-            self._sources_grid.addWidget(tile, i // cols, i % cols)
+            self._sources_layout.addWidget(tile)
 
-        # "+ Add Source" tile
-        add_tile = self._build_add_tile()
-        n = len(sources)
-        self._sources_grid.addWidget(add_tile, n // cols, n % cols)
+        # "+ Add" tile
+        self._sources_layout.addWidget(self._build_add_tile())
 
     def _build_source_tile(self, src):
-        tile = QPushButton()
-        tile.setCursor(Qt.CursorShape.PointingHandCursor)
-        tile.setFixedHeight(60)
-        tile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
+        """Vertical stack: favicon circle + name label."""
         color = src.get("color", "#888888")
         name = src.get("name", "")
         url = src.get("url", "")
-        # Show just the domain for the subtitle
-        domain = url.replace("https://", "").replace("http://", "").rstrip("/")
+        letter = name[0] if name else "?"
 
+        tile = QPushButton()
+        tile.setCursor(Qt.CursorShape.PointingHandCursor)
+        tile.setFixedSize(80, 80)
         tile.setStyleSheet(
             f"QPushButton {{"
-            f"  background: {SURFACE};"
-            f"  border: 1px solid {SURFACE_BORDER}; border-radius: 8px;"
-            f"  border-left: 4px solid {color};"
-            f"  text-align: left; padding: 8px 12px;"
-            f"  font-family: '{FONT}';"
+            f"  background: transparent; border: none; border-radius: 12px;"
             f"}}"
-            f"QPushButton:hover {{ background: {SURFACE_HOVER}; }}"
+            f"QPushButton:hover {{ background: {SURFACE}; }}"
         )
-
-        # Use two-line layout via rich text isn't great in QPushButton,
-        # so we use a custom widget inside. But for simplicity, use the
-        # button text with a line break via \n — QPushButton respects it
-        # if we set word wrap... Actually QPushButton doesn't support that.
-        # Instead, overlay a QWidget with labels on top of the button.
-        tile.setText("")
         tile.clicked.connect(lambda checked=False, u=url: self._on_navigate(u))
 
-        # Overlay layout
-        overlay = QVBoxLayout(tile)
-        overlay.setContentsMargins(12, 6, 12, 6)
-        overlay.setSpacing(2)
+        layout = QVBoxLayout(tile)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        name_label = QLabel(name)
-        name_label.setStyleSheet(
-            f"background: transparent; border: none; color: {TEXT};"
-            f"font-family: '{FONT}'; font-size: 13px; font-weight: 600;"
-        )
-        name_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        overlay.addWidget(name_label)
+        icon = _FaviconCircle(letter, color)
+        layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignCenter)
 
-        url_label = QLabel(domain)
-        url_label.setStyleSheet(
+        label = QLabel(name)
+        label.setStyleSheet(
             f"background: transparent; border: none; color: {TEXT_MUTED};"
-            f"font-family: '{FONT}'; font-size: 11px;"
+            f"font-family: '{FONT}'; font-size: 10px;"
         )
-        url_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        overlay.addWidget(url_label)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(label, 0, Qt.AlignmentFlag.AlignCenter)
 
         return tile
 
     def _build_add_tile(self):
-        tile = QPushButton("+ Add Source")
+        """The "+" circle for adding a new source."""
+        tile = QPushButton()
         tile.setCursor(Qt.CursorShape.PointingHandCursor)
-        tile.setFixedHeight(60)
-        tile.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        tile.setFixedSize(80, 80)
         tile.setStyleSheet(
             f"QPushButton {{"
-            f"  background: transparent;"
-            f"  border: 2px dashed {SURFACE_BORDER}; border-radius: 8px;"
-            f"  color: {TEXT_MUTED};"
-            f"  font-family: '{FONT}'; font-size: 12px;"
+            f"  background: transparent; border: none; border-radius: 12px;"
             f"}}"
-            f"QPushButton:hover {{ background: {SURFACE}; color: {TEXT}; }}"
+            f"QPushButton:hover {{ background: {SURFACE}; }}"
         )
         tile.clicked.connect(self._on_add_source)
+
+        layout = QVBoxLayout(tile)
+        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setSpacing(4)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # Circle with "+"
+        plus_circle = QWidget()
+        plus_circle.setFixedSize(48, 48)
+        plus_circle.setStyleSheet(
+            f"background: transparent;"
+            f"border: 2px dashed {SURFACE_BORDER};"
+            f"border-radius: 24px;"
+        )
+        plus_circle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+        plus_label = QLabel("+")
+        plus_label.setStyleSheet(
+            f"background: transparent; border: none; color: {TEXT_MUTED};"
+            f"font-family: '{FONT}'; font-size: 20px;"
+        )
+        plus_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        plus_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        plus_inner = QVBoxLayout(plus_circle)
+        plus_inner.setContentsMargins(0, 0, 0, 0)
+        plus_inner.addWidget(plus_label)
+
+        layout.addWidget(plus_circle, 0, Qt.AlignmentFlag.AlignCenter)
+
+        text = QLabel("Add")
+        text.setStyleSheet(
+            f"background: transparent; border: none; color: {TEXT_MUTED};"
+            f"font-family: '{FONT}'; font-size: 10px;"
+        )
+        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        text.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        layout.addWidget(text, 0, Qt.AlignmentFlag.AlignCenter)
+
         return tile
 
     def _do_search(self):
