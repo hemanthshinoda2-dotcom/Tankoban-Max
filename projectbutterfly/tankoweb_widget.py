@@ -17,6 +17,7 @@ import json
 import math
 import os
 import re
+import threading
 import urllib.parse
 
 from PySide6.QtCore import Qt, QUrl, QTimer, QRectF, QPointF, QSize
@@ -42,12 +43,26 @@ import storage
 _HOME_HTML_PATH = os.path.join(os.path.dirname(__file__), "data", "browser_home.html")
 _HOME_URL = QUrl.fromLocalFile(_HOME_HTML_PATH)
 
+# Hub page — torrent search/downloads loaded as a tab
+_HUB_HTML_PATH = os.path.join(os.path.dirname(__file__), "data", "browser_hub.html")
+_HUB_URL = QUrl.fromLocalFile(_HUB_HTML_PATH)
+
 def _is_home_url(url):
     """Check if a QUrl points to the home page."""
     if not url or url.isEmpty():
         return True
     s = url.toString()
     return s == "about:blank" or s.startswith("file:") and "browser_home.html" in s
+
+def _is_hub_url(url):
+    """Check if a QUrl points to the hub page."""
+    if not url or url.isEmpty():
+        return False
+    return "browser_hub.html" in url.toString()
+
+def _is_special_url(url):
+    """Check if a URL is home or hub (special pages with transparent background)."""
+    return _is_home_url(url) or _is_hub_url(url)
 
 # ---------------------------------------------------------------------------
 # Palette — ported from overhaul.css / web-browser.css tokens
@@ -336,24 +351,39 @@ class _TankoWebPage(QWebEnginePage):
         return self._tab_host.create_tab_and_return_page()
 
     def acceptNavigationRequest(self, url, nav_type, is_main_frame):
-        """Intercept tankoweb:// URLs from the home page."""
+        """Intercept tankoweb:// URLs from the home page and hub page."""
         if url.scheme() == "tankoweb":
             host = url.host()
+            params = urllib.parse.parse_qs(QUrl(url).query())
+
             if host == "navigate":
-                target = urllib.parse.unquote(
-                    QUrl(url).query().replace("url=", "", 1)
-                )
+                target = params.get("url", [""])[0]
                 if target:
                     self._tab_host._navigate_from_home(self, target)
             elif host == "search":
-                query = urllib.parse.unquote(
-                    QUrl(url).query().replace("q=", "", 1)
-                )
+                query = params.get("q", [""])[0]
                 if query:
                     real_url = _fixup_url(query)
                     self._tab_host._navigate_from_home(self, real_url)
             elif host == "add-source":
                 self._tab_host._add_source_dialog()
+            # Hub commands
+            elif host == "hub-search":
+                query = params.get("q", [""])[0]
+                source = params.get("source", ["all"])[0]
+                if query:
+                    self._tab_host._hub_search(query, source)
+            elif host == "hub-add-magnet":
+                uri = params.get("uri", [""])[0]
+                if uri:
+                    self._tab_host._hub_add_magnet(uri)
+            elif host.startswith("hub-torrent-"):
+                action = host.replace("hub-torrent-", "")
+                hash_ = params.get("hash", [""])[0]
+                if action and hash_:
+                    self._tab_host._hub_torrent_action(action, hash_)
+            elif host == "hub-clear-downloads":
+                self._tab_host._hub_clear_downloads()
             return False  # block the tankoweb:// navigation
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
@@ -524,6 +554,13 @@ class TankoWebWidget(QWidget):
     # ══════════════════════════════════════════════════════════════════════
 
     def _build_title_label(self):
+        row = QWidget()
+        row.setFixedHeight(20)
+        row.setStyleSheet("background: transparent; border: none;")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
         label = QLabel("TANKOBROWSER")
         label.setStyleSheet(
             f"background: transparent; border: none;"
@@ -533,8 +570,25 @@ class TankoWebWidget(QWidget):
             f"letter-spacing: 0.08em;"
             f"padding: 0 2px;"
         )
-        label.setFixedHeight(16)
-        return label
+        layout.addWidget(label)
+        layout.addStretch()
+
+        hub_btn = QPushButton("HUB")
+        hub_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        hub_btn.setStyleSheet(
+            f"QPushButton {{"
+            f"  background: rgba({ACCENT_RGB},0.10); color: rgba({ACCENT_RGB},0.70);"
+            f"  border: 1px solid rgba({ACCENT_RGB},0.25); border-radius: {RADIUS_SM}px;"
+            f"  font-family: '{FONT}'; font-size: 10px; font-weight: 700;"
+            f"  letter-spacing: 1.5px; padding: 2px 12px; min-height: 18px;"
+            f"}}"
+            f"QPushButton:hover {{ background: rgba({ACCENT_RGB},0.18); color: rgba({ACCENT_RGB},0.90); }}"
+        )
+        hub_btn.setToolTip("Tankoban Hub — Torrents & Search")
+        hub_btn.clicked.connect(self._open_hub)
+        layout.addWidget(hub_btn)
+
+        return row
 
     # ══════════════════════════════════════════════════════════════════════
     # Row 3: Tab row — dynamic tab pills + new-tab button
@@ -586,7 +640,7 @@ class TankoWebWidget(QWidget):
             pill_layout.setContentsMargins(0, 0, 0, 0)
             pill_layout.setSpacing(0)
 
-            title = tab["title"] or ("Home" if self._is_tab_on_home(tab) else "New Tab")
+            title = tab["title"] or ("Hub" if self._is_tab_on_hub(tab) else "Home" if self._is_tab_on_home(tab) else "New Tab")
             display = title if len(title) <= 20 else title[:18] + "\u2026"
             title_btn = QPushButton(display)
             title_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -720,6 +774,14 @@ class TankoWebWidget(QWidget):
         """Check if a tab is currently showing the home page."""
         return _is_home_url(tab["page"].url())
 
+    def _is_tab_on_hub(self, tab):
+        """Check if a tab is currently showing the hub page."""
+        return _is_hub_url(tab["page"].url())
+
+    def _is_tab_on_special(self, tab):
+        """Check if a tab is on a special page (home or hub)."""
+        return _is_special_url(tab["page"].url())
+
     def _load_home(self, view):
         """Load the home page HTML into a QWebEngineView, then inject sources."""
         view.load(_HOME_URL)
@@ -831,10 +893,10 @@ class TankoWebWidget(QWidget):
         tab = self._tabs[idx]
         self._view_stack.setCurrentWidget(tab["view"])
 
-        on_home = self._is_tab_on_home(tab)
-        self._update_viewport_style(on_home)
+        is_special = self._is_tab_on_special(tab)
+        self._update_viewport_style(is_special)
 
-        if on_home:
+        if is_special:
             self._address_bar.clear()
             self._nav_back_btn.setEnabled(False)
             self._nav_fwd_btn.setEnabled(False)
@@ -960,10 +1022,10 @@ class TankoWebWidget(QWidget):
     def _on_tab_url_changed(self, tab_idx, qurl):
         if tab_idx < len(self._tabs):
             tab = self._tabs[tab_idx]
-            on_home = _is_home_url(qurl)
-            tab["url"] = "" if on_home else qurl.toString()
+            is_special = _is_special_url(qurl)
+            tab["url"] = "" if is_special else qurl.toString()
         if tab_idx == self._active_idx:
-            if on_home:
+            if is_special:
                 self._address_bar.clear()
                 self._update_viewport_style(True)
             else:
@@ -975,6 +1037,8 @@ class TankoWebWidget(QWidget):
             tab = self._tabs[tab_idx]
             if self._is_tab_on_home(tab):
                 tab["title"] = ""
+            elif self._is_tab_on_hub(tab):
+                tab["title"] = "Hub"
             else:
                 tab["title"] = title
         if tab_idx == self._active_idx:
@@ -993,8 +1057,12 @@ class TankoWebWidget(QWidget):
             self._reload_btn.setToolTip("Reload")
 
         # Inject sources data into home page after it loads
-        if tab_idx < len(self._tabs) and self._is_tab_on_home(self._tabs[tab_idx]):
-            self._inject_sources_into_home(tab_idx)
+        if tab_idx < len(self._tabs):
+            tab = self._tabs[tab_idx]
+            if self._is_tab_on_home(tab):
+                self._inject_sources_into_home(tab_idx)
+            elif self._is_tab_on_hub(tab):
+                self._inject_hub_data(tab_idx)
 
     def _update_nav_state(self, tab_idx):
         if tab_idx != self._active_idx:
@@ -1064,6 +1132,176 @@ class TankoWebWidget(QWidget):
     def _shortcut_prev_tab(self):
         if len(self._tabs) > 1:
             self._switch_tab((self._active_idx - 1) % len(self._tabs))
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Hub tab — singleton tab for torrent search/downloads
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _open_hub(self):
+        """Open the Hub tab (singleton — switches to it if already open)."""
+        for i, tab in enumerate(self._tabs):
+            if self._is_tab_on_hub(tab):
+                self._switch_tab(i)
+                return
+        # Create new tab with hub URL
+        idx = self._create_tab(url=_HUB_URL.toString(), switch_to=True)
+        if idx is not None and idx < len(self._tabs):
+            self._tabs[idx]["title"] = "Hub"
+
+    def _inject_hub_data(self, tab_idx):
+        """After hub page loads, inject current torrent data and indexer list."""
+        if tab_idx < 0 or tab_idx >= len(self._tabs):
+            return
+        tab = self._tabs[tab_idx]
+        page = tab["page"]
+
+        # Start polling timer if not already running
+        if not hasattr(self, "_hub_poll_timer"):
+            self._hub_poll_timer = QTimer(self)
+            self._hub_poll_timer.timeout.connect(self._poll_hub_data)
+            self._hub_poll_timer.start(2000)
+
+        # Inject data immediately (don't wait for first poll)
+        self._fetch_and_push_hub_data()
+
+    def _poll_hub_data(self):
+        """Timer callback: fetch torrent data and push to any open Hub tab."""
+        # Only poll if a hub tab exists
+        has_hub = any(self._is_tab_on_hub(tab) for tab in self._tabs)
+        if not has_hub:
+            if hasattr(self, "_hub_poll_timer"):
+                self._hub_poll_timer.stop()
+                del self._hub_poll_timer
+            return
+        self._fetch_and_push_hub_data()
+
+    def _fetch_and_push_hub_data(self):
+        """Fetch torrent data in a background thread, then push to Hub JS."""
+        def _bg():
+            qbit = self._get_qbit()
+            prowlarr = self._get_prowlarr()
+            torrents = qbit.list_torrents() if qbit else []
+            indexers = prowlarr.list_indexers() if prowlarr else []
+            # Push on main thread
+            QTimer.singleShot(0, lambda: self._push_hub_data(torrents, indexers))
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _push_hub_data(self, torrents, indexers):
+        """Push torrent and indexer data to all open Hub tabs."""
+        torrents_json = json.dumps(torrents)
+        indexers_json = json.dumps(indexers)
+        for tab in self._tabs:
+            if self._is_tab_on_hub(tab):
+                tab["page"].runJavaScript(
+                    f"if(typeof updateTorrents==='function')updateTorrents({torrents_json});"
+                )
+                tab["page"].runJavaScript(
+                    f"if(typeof updateSources==='function')updateSources({indexers_json});"
+                )
+
+    def _get_qbit(self):
+        """Get the QBitClient from the parent TankobanWindow (if available)."""
+        try:
+            win = self.window()
+            return getattr(win, "_qbit", None)
+        except Exception:
+            return None
+
+    def _get_prowlarr(self):
+        """Get the ProwlarrClient from the parent TankobanWindow (if available)."""
+        try:
+            win = self.window()
+            return getattr(win, "_prowlarr", None)
+        except Exception:
+            return None
+
+    def _hub_search(self, query, source="all"):
+        """Run a Prowlarr search in background and push results to Hub."""
+        # Push loading state
+        for tab in self._tabs:
+            if self._is_tab_on_hub(tab):
+                tab["page"].runJavaScript("if(typeof setSearchLoading==='function')setSearchLoading(true);")
+
+        def _bg():
+            prowlarr = self._get_prowlarr()
+            if not prowlarr:
+                results = []
+            else:
+                indexer_ids = None
+                if source and source != "all":
+                    try:
+                        indexer_ids = [int(source)]
+                    except ValueError:
+                        pass
+                results = prowlarr.search(query, indexer_ids=indexer_ids)
+            QTimer.singleShot(0, lambda: self._push_search_results(results))
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _push_search_results(self, results):
+        """Push search results to all open Hub tabs."""
+        results_json = json.dumps(results)
+        for tab in self._tabs:
+            if self._is_tab_on_hub(tab):
+                tab["page"].runJavaScript(
+                    f"if(typeof updateSearchResults==='function')updateSearchResults({results_json});"
+                )
+                tab["page"].runJavaScript(
+                    f"if(typeof setSearchLoading==='function')setSearchLoading(false);"
+                )
+                tab["page"].runJavaScript(
+                    f"if(typeof setSearchResultCount==='function')setSearchResultCount({len(results)});"
+                )
+
+    def _hub_add_magnet(self, uri):
+        """Add a torrent via magnet URI in background."""
+        def _bg():
+            qbit = self._get_qbit()
+            if qbit:
+                qbit.add_magnet(uri)
+                # Refresh data after a short delay
+                import time
+                time.sleep(1)
+                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _hub_torrent_action(self, action, hash_):
+        """Pause/resume/delete a torrent in background."""
+        def _bg():
+            qbit = self._get_qbit()
+            if not qbit:
+                return
+            if action == "pause":
+                qbit.pause(hash_)
+            elif action == "resume":
+                qbit.resume(hash_)
+            elif action == "delete":
+                qbit.delete(hash_, delete_files=False)
+            import time
+            time.sleep(0.5)
+            QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+
+        threading.Thread(target=_bg, daemon=True).start()
+
+    def _hub_clear_downloads(self):
+        """Clear completed downloads."""
+        # For now, delete completed torrents from qBittorrent
+        def _bg():
+            qbit = self._get_qbit()
+            if not qbit:
+                return
+            torrents = qbit.list_torrents("completed")
+            if torrents:
+                hashes = [t.get("hash", "") for t in torrents if t.get("hash")]
+                if hashes:
+                    qbit.delete(hashes, delete_files=False)
+            import time
+            time.sleep(0.5)
+            QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+
+        threading.Thread(target=_bg, daemon=True).start()
 
     # ══════════════════════════════════════════════════════════════════════
     # Top bar actions
