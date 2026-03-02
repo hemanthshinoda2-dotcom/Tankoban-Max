@@ -862,13 +862,7 @@ class TankoWebWidget(QWidget):
 
     def _build_browser(self, root_layout):
         self._viewport_frame = QFrame(self)
-        self._viewport_frame.setStyleSheet(
-            f"QFrame {{"
-            f"  background: rgba(10,16,24,0.92);"
-            f"  border: 1px solid {SURFACE_BORDER2};"
-            f"  border-radius: {RADIUS_VIEWPORT}px;"
-            f"}}"
-        )
+        self._update_viewport_style(on_home=True)
         self._viewport_frame.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
@@ -885,6 +879,27 @@ class TankoWebWidget(QWidget):
         )
         frame_layout.addWidget(self._view_stack)
         root_layout.addWidget(self._viewport_frame, 1)
+
+    def _update_viewport_style(self, on_home):
+        """Toggle viewport frame between transparent (home) and opaque (web)."""
+        if on_home:
+            self._viewport_frame.setStyleSheet(
+                "QFrame { background: transparent; border: none; }"
+            )
+            effect = self._viewport_frame.graphicsEffect()
+            if effect:
+                effect.setEnabled(False)
+        else:
+            self._viewport_frame.setStyleSheet(
+                f"QFrame {{"
+                f"  background: rgba(10,16,24,0.92);"
+                f"  border: 1px solid {SURFACE_BORDER2};"
+                f"  border-radius: {RADIUS_VIEWPORT}px;"
+                f"}}"
+            )
+            effect = self._viewport_frame.graphicsEffect()
+            if effect:
+                effect.setEnabled(True)
 
     # ══════════════════════════════════════════════════════════════════════
     # Tab lifecycle
@@ -969,6 +984,7 @@ class TankoWebWidget(QWidget):
         # Flip to web view since content is coming
         self._tabs[idx]["on_home"] = False
         self._tabs[idx]["stack"].setCurrentIndex(1)
+        self._update_viewport_style(False)
         return self._tabs[idx]["page"]
 
     def _close_tab(self, idx):
@@ -1005,6 +1021,8 @@ class TankoWebWidget(QWidget):
         self._active_idx = idx
         tab = self._tabs[idx]
         self._view_stack.setCurrentWidget(tab["stack"])
+
+        self._update_viewport_style(tab["on_home"])
 
         if tab["on_home"]:
             self._address_bar.clear()
@@ -1068,6 +1086,7 @@ class TankoWebWidget(QWidget):
         tab["view"].load(QUrl(url))
 
         if tab_idx == self._active_idx:
+            self._update_viewport_style(False)
             self._address_bar.setText(url)
 
     def _go_home(self):
@@ -1080,6 +1099,7 @@ class TankoWebWidget(QWidget):
         tab["url"] = ""
         tab["stack"].setCurrentIndex(0)
         tab["home"].refresh_sources(self._sources)
+        self._update_viewport_style(True)
         self._address_bar.clear()
         self._nav_back_btn.setEnabled(False)
         self._nav_fwd_btn.setEnabled(False)
@@ -1178,6 +1198,7 @@ class TankoWebWidget(QWidget):
             if tab["on_home"]:
                 tab["on_home"] = False
                 tab["stack"].setCurrentIndex(1)
+                self._update_viewport_style(False)
             tab["view"].load(QUrl(url))
 
     def _reload_or_stop(self):
