@@ -878,9 +878,10 @@ class TankoWebWidget(QWidget):
             self._viewport_frame.setStyleSheet(
                 "QFrame { background: transparent; border: none; }"
             )
-            effect = self._viewport_frame.graphicsEffect()
-            if effect:
-                effect.setEnabled(False)
+            # Remove graphics effect entirely — even disabled, it reroutes
+            # event delivery through an off-screen pixmap path which breaks
+            # mouse events on child widgets (QScrollArea, QLineEdit, etc.)
+            self._viewport_frame.setGraphicsEffect(None)
         else:
             self._viewport_frame.setStyleSheet(
                 f"QFrame {{"
@@ -889,9 +890,7 @@ class TankoWebWidget(QWidget):
                 f"  border-radius: {RADIUS_VIEWPORT}px;"
                 f"}}"
             )
-            effect = self._viewport_frame.graphicsEffect()
-            if effect:
-                effect.setEnabled(True)
+            _apply_shadow(self._viewport_frame, blur=28, dy=10, color=QColor(0, 0, 0, 200))
 
     def _set_tab_home(self, tab, on_home):
         """Toggle a tab between home page and web view.
