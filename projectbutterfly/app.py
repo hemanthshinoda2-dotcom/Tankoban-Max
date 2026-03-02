@@ -260,6 +260,7 @@ class TankobanWindow(QMainWindow):
         self._browser_profile.setPersistentStoragePath(
             os.path.join(storage.data_path(""), "WebEngine_browser")
         )
+        # Allow home.html (file://) to load adjacent CSS/JS files
         _bp_settings = self._browser_profile.settings()
         _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         _bp_settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
@@ -364,7 +365,7 @@ class TankobanWindow(QMainWindow):
         self.show_browser()
         wtm = getattr(self._bridge, "webTabManager", None)
         if wtm and not wtm._tabs:
-            wtm._create_tab_internal("")
+            wtm._create_tab_internal("", home=True)
 
     # --- Player widget switching ---
 
@@ -429,38 +430,10 @@ class TankobanWindow(QMainWindow):
                 QTimer.singleShot(0, self._nudge_web_view)
 
     def _nudge_web_view(self):
-        """Force Chromium compositor to resume rendering after minimize/restore.
-
-        Nudges ALL QWebEngineViews (renderer, browser chrome, active tab)
-        because Chromium's GPU compositor freezes while the window is occluded
-        (QTBUG-56016 / QTBUG-50818).
-        """
-        # Nudge the main renderer
+        """Force Chromium compositor to resume rendering after minimize/restore."""
         v = self._web_view
         v.resize(v.width() + 1, v.height())
         v.resize(v.width() - 1, v.height())
-
-        # Nudge the browser chrome QWebEngineView
-        try:
-            cv = self._browser_widget._chrome_view
-            if cv and cv.isVisible():
-                cv.resize(cv.width() + 1, cv.height())
-                cv.resize(cv.width() - 1, cv.height())
-        except Exception:
-            pass
-
-        # Nudge the active browser tab's QWebEngineView
-        try:
-            bw = self._browser_widget
-            tid = bw._active_tab_id
-            tab = bw._tabs.get(tid)
-            if tab:
-                tv = tab.get("view")
-                if tv and tv.isVisible():
-                    tv.resize(tv.width() + 1, tv.height())
-                    tv.resize(tv.width() - 1, tv.height())
-        except Exception:
-            pass
 
     def closeEvent(self, event):
         """Shutdown player/tor/tabs and flush pending writes before quitting."""

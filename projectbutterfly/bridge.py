@@ -480,14 +480,23 @@ class ShellBridge(QObject):
     @Slot(str, result=str)
     def setAppTheme(self, theme="dark"):
         """Called from main renderer JS when user cycles theme. Persists to app_prefs.json
-        and pushes the new theme to the browser chrome."""
+        and pushes the new theme to all open home tabs in BrowserWidget."""
         try:
             clean = str(theme or "dark").strip().strip('"\'')
+            # Persist so home.html can read it on next load
             storage.write_json_sync(storage.data_path("app_prefs.json"), {"appTheme": clean})
-            # Re-skin the native Qt browser chrome
+            # Push to any open home tabs in the browser overlay
             bridge_root = self.parent()
             wtm = getattr(bridge_root, "webTabManager", None)
-            if wtm:
+            if wtm and hasattr(wtm, "_tabs"):
+                for tab in wtm._tabs.values():
+                    page = tab.get("page")
+                    if page and tab.get("home"):
+                        safe = clean.replace("'", "").replace("\\", "")
+                        page.runJavaScript(
+                            f"if(typeof window._tankwebApplyTheme==='function')window._tankwebApplyTheme('{safe}')"
+                        )
+                # Also re-skin the native Qt browser chrome
                 bw = getattr(wtm, "_bw", None)
                 if bw and hasattr(bw, "set_theme"):
                     bw.set_theme(clean)
@@ -497,7 +506,7 @@ class ShellBridge(QObject):
 
     @Slot(result=str)
     def getAppTheme(self):
-        """Retrieve the current app theme."""
+        """Called from home.html on load to retrieve the current app theme."""
         try:
             prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
             return json.dumps({"ok": True, "theme": prefs.get("appTheme", "dark")})
@@ -8962,7 +8971,7 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
 
         def createWindow(self, window_type):
             """Handle window.open / target=_blank — create a new tab."""
-            new_id = self._tab_manager._create_tab_internal("")
+            new_id = self._tab_manager._create_tab_internal("", home=False)
             if new_id and new_id in self._tab_manager._tabs:
                 try:
                     # Host-initiated tab creation path (popup/new-window).
@@ -9249,7 +9258,7 @@ class WebTabManagerBridge(QObject):
         """No-op: BrowserWidget manages visibility."""
         pass
 
-    def _create_tab_internal(self, url):
+    def _create_tab_internal(self, url, home=False):
         """
         Internal: creates QWebEnginePage + QWebEngineView, registers with BrowserWidget.
         Returns the tabId or "" on failure.
@@ -9277,27 +9286,57 @@ class WebTabManagerBridge(QObject):
         except Exception:
             pass
 
+        title = "Home" if home else "New Tab"
         self._tabs[tab_id] = {
             "view":    view,
             "page":    page,
-            "home":    False,
+            "home":    home,
             "url":     url or "",
-            "title":   "New Tab",
+            "title":   title,
             "icon":    "",
             "loading": False,
         }
         self._tab_order.append(tab_id)
 
-        # Register with BrowserWidget (adds to QStackedWidget + chrome tab strip)
-        self._bw.add_tab_view(tab_id, view, title="New Tab")
+        # Register with BrowserWidget (adds to QTabBar + QStackedWidget)
+        self._bw.add_tab_view(tab_id, view, title=title, home=home)
 
-        # Activate the new tab so the chrome & content stack show it
-        self._active_tab_id = tab_id
-        self._bw.set_active_tab_id(tab_id)
+        # For home tabs: attach the shared QWebChannel so home.html can call bridge APIs
+        if home:
+            root = self.parent()
+            if root and getattr(root, "_channel", None) and getattr(root, "_bridge_shim_combined", None):
+                page.setWebChannel(root._channel)
+                from PySide6.QtWebEngineCore import QWebEngineScript as _QWS
+                # Inject tab ID first so home.js knows which tab it is
+                id_scr = _QWS()
+                id_scr.setName(f"tanko_home_tab_id_{tab_id}")
+                id_scr.setSourceCode(f"window.__tankoHomeTabId = '{tab_id}';")
+                id_scr.setInjectionPoint(_QWS.InjectionPoint.DocumentCreation)
+                id_scr.setWorldId(_QWS.ScriptWorldId.MainWorld)
+                page.scripts().insert(id_scr)
+                # Inject qwebchannel.js + bridge shim (gives window.electronAPI + all APIs)
+                shim_scr = _QWS()
+                shim_scr.setName(f"tanko_home_bridge_shim_{tab_id}")
+                shim_scr.setSourceCode(root._bridge_shim_combined)
+                shim_scr.setInjectionPoint(_QWS.InjectionPoint.DocumentCreation)
+                shim_scr.setWorldId(_QWS.ScriptWorldId.MainWorld)
+                page.scripts().insert(shim_scr)
 
-        # Load URL if provided
-        if url:
-            from PySide6.QtCore import QUrl
+        # Load URL or home page
+        from PySide6.QtCore import QUrl
+        import os as _os
+        from pathlib import Path as _Path
+        if home:
+            # Use setHtml() with file:// base so adjacent CSS/JS resolve correctly.
+            # More reliable than load(QUrl.fromLocalFile()) in restricted profiles.
+            _home = _Path(_os.path.dirname(__file__)) / "data" / "home.html"
+            if _home.exists():
+                _html = _home.read_text(encoding="utf-8")
+                _base = QUrl.fromLocalFile(str(_home))
+                page.setHtml(_html, _base)
+            else:
+                page.setHtml("<h1 style='color:#ccc;font-family:sans-serif'>Home</h1>", QUrl())
+        elif url:
             page.load(QUrl(url))
 
         return tab_id
@@ -9374,8 +9413,9 @@ class WebTabManagerBridge(QObject):
         except Exception:
             opts = {}
         url  = str(opts.get("url",  "") or "").strip()
+        home = bool(opts.get("home", False))
 
-        tab_id = self._create_tab_internal(url)
+        tab_id = self._create_tab_internal(url, home=home)
         if not tab_id:
             return json.dumps({"ok": False, "error": "tab_create_failed"})
 
@@ -9384,7 +9424,7 @@ class WebTabManagerBridge(QObject):
             "tabId":  tab_id,
             "url":    url,
             "title":  self._tabs[tab_id]["title"],
-            "home":   False,
+            "home":   home,
             "source": "renderer",
         }
         return json.dumps(result)
@@ -9592,10 +9632,10 @@ class WebTabManagerBridge(QObject):
             bridge_root = self.parent()
             win = getattr(getattr(bridge_root, "window", None), "_win", None)
             if win and hasattr(win, "show_browser"):
-                win.show_browser()
-            # Auto-create a new tab if the browser has no tabs yet
+                win.show_browser()  # Direct call — no QTimer delay
+            # Auto-create a home tab if the browser has no tabs yet
             if not self._tabs:
-                self._create_tab_internal("")
+                self._create_tab_internal("", home=True)
         except Exception:
             pass
         return json.dumps({"ok": True})

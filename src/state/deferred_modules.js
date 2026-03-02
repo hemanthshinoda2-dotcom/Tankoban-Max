@@ -284,7 +284,7 @@
     const comicsBtn = document.getElementById('modeComicsBtn');
     const booksBtn = document.getElementById('modeBooksBtn');
     const videosBtn = document.getElementById('modeVideosBtn');
-    const webBtn = document.getElementById('modeWebBtn');
+    const sourcesBtn = document.getElementById('modeSourcesBtn');
 
     videosBtn?.addEventListener('click', async (e) => {
       try {
@@ -312,12 +312,28 @@
       if (typeof window.setMode === 'function') window.setMode('books');
     });
 
-    webBtn?.addEventListener('click', async (e) => {
+    sourcesBtn?.addEventListener('click', async (e) => {
       try {
         e.preventDefault();
         e.stopImmediatePropagation();
       } catch {}
-      if (typeof window.setMode === 'function') window.setMode('web');
+      if (typeof tanko.deferred.ensureWebModulesLoadedLegacy === 'function') {
+        await tanko.deferred.ensureWebModulesLoadedLegacy();
+      } else {
+        await ensureWebModulesLoaded();
+      }
+      try {
+        if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
+          await window.Tanko.modeRouter.setMode('sources');
+        } else if (typeof window.setMode === 'function') {
+          window.setMode('sources');
+        }
+      } catch {}
+      try {
+        if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
+          window.Tanko.sources.openSources();
+        }
+      } catch {}
     });
   }
 

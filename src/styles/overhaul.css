@@ -204,6 +204,20 @@ body{
   box-shadow: 0 10px 26px -18px rgba(var(--vx-accent-rgb), .55);
 }
 
+/* Keep Tankoweb launch control visually consistent with active mode buttons. */
+.topbar #tankWebBtn{
+  width: auto;
+  min-width: max-content;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(135deg, rgba(var(--vx-accent2-rgb), .30), rgba(var(--vx-accent-rgb), .22)) !important;
+  border-color: rgba(var(--vx-accent-rgb), .30) !important;
+  color: rgba(var(--chrome-rgb),.94) !important;
+  box-shadow: 0 10px 26px -18px rgba(var(--vx-accent-rgb), .55);
+}
+
 /* Buttons */
 .iconBtn,
 .topbar .iconBtn{
