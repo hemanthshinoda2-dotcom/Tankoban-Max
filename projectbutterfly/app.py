@@ -299,15 +299,14 @@ class TankobanWindow(QMainWindow):
         self._flaresolverr = FlareSolverrBridge(self._profile, parent=self)
         self._flaresolverr.start()
 
-        # --- Torrent services (qBittorrent + Prowlarr + Jackett) ---
-        self._qbit_mgr = torrent_service.create_qbit_manager()
-        self._prowlarr_mgr, self._prowlarr_api_key = torrent_service.create_prowlarr_manager()
-        self._qbit: torrent_service.QBitClient | None = None
-        self._prowlarr: torrent_service.ProwlarrClient | None = None
+        # --- Torrent search (Jackett only — user-installed, not bundled) ---
         self._jackett: torrent_service.JackettClient | None = None
-        # Start services in a background thread to avoid blocking UI
-        self._torrent_init_thread = threading.Thread(target=self._start_torrent_services, daemon=True)
+        # Detect Jackett in background thread to avoid blocking UI
+        self._torrent_init_thread = threading.Thread(target=self._detect_jackett, daemon=True)
         self._torrent_init_thread.start()
+
+        # --- Sources mode (QWebEngineView for browser_sources.html, lazy-created) ---
+        self._sources_view: QWebEngineView | None = None
 
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
@@ -379,215 +378,28 @@ class TankobanWindow(QMainWindow):
 
         self._stack.setCurrentWidget(self._tankoweb)
 
-    def show_tankoweb_hub(self):
-        """Switch to TankoWeb and immediately open the Hub (Sources) tab."""
-        self.show_tankoweb()
-        # Open hub tab after a brief delay to ensure widget is fully visible
-        QTimer.singleShot(100, self._tankoweb._open_hub)
-
-    def _start_torrent_services(self):
-        """Start qBittorrent, Prowlarr, and detect Jackett in background."""
-        try:
-            self._start_qbit()
-        except Exception as e:
-            print(f"[torrent] qBittorrent init error: {e}")
-
-        try:
-            self._start_prowlarr()
-        except Exception as e:
-            print(f"[torrent] Prowlarr init error: {e}")
-
-        try:
-            self._detect_jackett()
-        except Exception as e:
-            print(f"[torrent] Jackett detection error: {e}")
-
-    def _start_qbit(self):
-        # First check if qBittorrent WebUI is already running (user has it open)
-        existing_port = torrent_service._detect_running_qbit()
-        if existing_port:
-            base_url = f"http://127.0.0.1:{existing_port}"
-            self._qbit = torrent_service.QBitClient(base_url)
-            self._qbit.login()
-            print(f"[torrent] qBittorrent: using existing instance at {base_url}")
-            return
-
-        # Try launching bundled portable instance
-        if self._qbit_mgr.exe_path and self._qbit_mgr.start():
-            self._qbit = torrent_service.QBitClient(self._qbit_mgr.base_url)
-            self._qbit.login()
-            print(f"[torrent] qBittorrent ready at {self._qbit_mgr.base_url}")
-        else:
-            if not self._qbit_mgr.exe_path:
-                print("[torrent] qBittorrent: no bundled portable found in resources/qbittorrent/")
-                print("[torrent] qBittorrent: enable WebUI in your installed qBittorrent, or download portable version")
-            else:
-                print("[torrent] qBittorrent failed to start (will retry on Hub open)")
-
-    def _start_prowlarr(self):
-        # First check if Prowlarr is already running (e.g. as a Windows service)
-        existing = torrent_service._detect_running_prowlarr()
-        if existing:
-            port, _ = existing
-            base_url = f"http://127.0.0.1:{port}"
-            self._prowlarr = torrent_service.ProwlarrClient(base_url, self._prowlarr_api_key)
-            print(f"[torrent] Prowlarr: using existing instance at {base_url}")
-        elif self._prowlarr_mgr.start():
-            self._prowlarr = torrent_service.ProwlarrClient(
-                self._prowlarr_mgr.base_url, self._prowlarr_api_key
+    def show_sources_mode(self):
+        """Switch to the Sources mode (browser_sources.html in a dedicated view)."""
+        if self._sources_view is None:
+            from sources_widget import SourcesWidget
+            self._sources_view = SourcesWidget(
+                jackett_fn=lambda: self._jackett,
+                on_back=self.show_web_view,
+                parent=self,
             )
-            print(f"[torrent] Prowlarr ready at {self._prowlarr_mgr.base_url}")
-        else:
-            print("[torrent] Prowlarr failed to start (will retry on Hub open)")
-            return
-
-        # Auto-register FlareSolverr proxy in Prowlarr
-        if self._prowlarr and self._flaresolverr.port:
-            self._register_flaresolverr_in_prowlarr()
+            self._stack.addWidget(self._sources_view)
+        self._stack.setCurrentWidget(self._sources_view)
 
     def _detect_jackett(self):
         """Detect a running Jackett instance (not bundled, user-installed)."""
-        client = torrent_service.detect_jackett()
-        if client:
-            self._jackett = client
-        else:
-            print("[torrent] Jackett: not detected (install Jackett and start it to use)")
-
-    def _register_flaresolverr_in_prowlarr(self):
-        """Register our FlareSolverr bridge as an indexer proxy in Prowlarr."""
         try:
-            import urllib.request
-            base = self._prowlarr._base_url
-            headers = self._prowlarr._headers()
-            fs_url = self._flaresolverr.url
-
-            # Check if FlareSolverr proxy already exists
-            req = urllib.request.Request(
-                f"{base}/api/v1/indexerproxy",
-                headers=headers,
-            )
-            resp = urllib.request.urlopen(req, timeout=10)
-            proxies = json.loads(resp.read())
-
-            # Look for existing FlareSolverr proxy
-            for proxy in proxies:
-                if proxy.get("configContract") == "FlareSolverrSettings":
-                    # Check if URL matches
-                    fields = proxy.get("fields", [])
-                    for field in fields:
-                        if field.get("name") == "host" and field.get("value") == fs_url:
-                            print(f"[torrent] FlareSolverr proxy already registered in Prowlarr")
-                            self._apply_flaresolverr_tag(proxy.get("tags", []))
-                            return
-                    # URL doesn't match — update it
-                    proxy_id = proxy["id"]
-                    for field in fields:
-                        if field.get("name") == "host":
-                            field["value"] = fs_url
-                    proxy["fields"] = fields
-                    update_data = json.dumps(proxy).encode()
-                    update_req = urllib.request.Request(
-                        f"{base}/api/v1/indexerproxy/{proxy_id}",
-                        data=update_data,
-                        headers={**headers, "Content-Type": "application/json"},
-                        method="PUT",
-                    )
-                    urllib.request.urlopen(update_req, timeout=10)
-                    print(f"[torrent] Updated FlareSolverr proxy URL to {fs_url}")
-                    self._apply_flaresolverr_tag(proxy.get("tags", []))
-                    return
-
-            # No existing proxy — create one
-            # First ensure we have a "flaresolverr" tag
-            tag_id = self._ensure_prowlarr_tag("flaresolverr")
-
-            payload = {
-                "name": "FlareSolverr",
-                "configContract": "FlareSolverrSettings",
-                "implementation": "FlareSolverr",
-                "implementationName": "FlareSolverr",
-                "tags": [tag_id] if tag_id else [],
-                "fields": [
-                    {"name": "host", "value": fs_url},
-                    {"name": "requestTimeout", "value": 60},
-                ],
-            }
-            create_data = json.dumps(payload).encode()
-            create_req = urllib.request.Request(
-                f"{base}/api/v1/indexerproxy",
-                data=create_data,
-                headers={**headers, "Content-Type": "application/json"},
-                method="POST",
-            )
-            resp = urllib.request.urlopen(create_req, timeout=10)
-            result = json.loads(resp.read())
-            print(f"[torrent] Registered FlareSolverr proxy in Prowlarr (id={result.get('id')})")
-            self._apply_flaresolverr_tag(result.get("tags", []))
-
+            client = torrent_service.detect_jackett()
+            if client:
+                self._jackett = client
+            else:
+                print("[torrent] Jackett: not detected (install Jackett and start it to use)")
         except Exception as e:
-            print(f"[torrent] Failed to register FlareSolverr in Prowlarr: {e}")
-
-    def _ensure_prowlarr_tag(self, label):
-        """Ensure a tag exists in Prowlarr, return its ID."""
-        try:
-            import urllib.request
-            base = self._prowlarr._base_url
-            headers = self._prowlarr._headers()
-
-            # List existing tags
-            req = urllib.request.Request(f"{base}/api/v1/tag", headers=headers)
-            resp = urllib.request.urlopen(req, timeout=10)
-            tags = json.loads(resp.read())
-            for tag in tags:
-                if tag.get("label", "").lower() == label.lower():
-                    return tag["id"]
-
-            # Create tag
-            payload = json.dumps({"label": label}).encode()
-            create_req = urllib.request.Request(
-                f"{base}/api/v1/tag",
-                data=payload,
-                headers={**headers, "Content-Type": "application/json"},
-                method="POST",
-            )
-            resp = urllib.request.urlopen(create_req, timeout=10)
-            result = json.loads(resp.read())
-            return result.get("id")
-        except Exception as e:
-            print(f"[torrent] Failed to create tag '{label}': {e}")
-            return None
-
-    def _apply_flaresolverr_tag(self, proxy_tags):
-        """Apply the FlareSolverr tag to all indexers that don't have it."""
-        if not proxy_tags:
-            return
-        try:
-            import urllib.request
-            base = self._prowlarr._base_url
-            headers = self._prowlarr._headers()
-            tag_id = proxy_tags[0]
-
-            # List all indexers
-            req = urllib.request.Request(f"{base}/api/v1/indexer", headers=headers)
-            resp = urllib.request.urlopen(req, timeout=10)
-            indexers = json.loads(resp.read())
-
-            for indexer in indexers:
-                idx_tags = indexer.get("tags", [])
-                if tag_id not in idx_tags:
-                    idx_tags.append(tag_id)
-                    indexer["tags"] = idx_tags
-                    update_data = json.dumps(indexer).encode()
-                    update_req = urllib.request.Request(
-                        f"{base}/api/v1/indexer/{indexer['id']}",
-                        data=update_data,
-                        headers={**headers, "Content-Type": "application/json"},
-                        method="PUT",
-                    )
-                    urllib.request.urlopen(update_req, timeout=10)
-                    print(f"[torrent] Tagged indexer '{indexer.get('name', '?')}' with flaresolverr")
-        except Exception as e:
-            print(f"[torrent] Failed to tag indexers: {e}")
+            print(f"[torrent] Jackett detection error: {e}")
 
     def _tankoweb_window_action(self, action):
         if action == "minimize":
@@ -665,15 +477,6 @@ class TankobanWindow(QMainWindow):
         # Stop FlareSolverr bridge
         try:
             self._flaresolverr.stop()
-        except Exception:
-            pass
-        # Stop torrent services
-        try:
-            self._qbit_mgr.stop()
-        except Exception:
-            pass
-        try:
-            self._prowlarr_mgr.stop()
         except Exception:
             pass
         storage.flush_all_writes()

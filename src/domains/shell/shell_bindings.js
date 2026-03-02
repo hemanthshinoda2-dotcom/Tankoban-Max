@@ -1231,17 +1231,19 @@
     });
   }
 
-  // --- Sources button (opens TankoWeb Hub directly for torrent search/downloads) ---
-  var tankSourcesBtn = document.getElementById('tankSourcesBtn');
-  if (tankSourcesBtn) {
-    tankSourcesBtn.addEventListener('click', function (e) {
+  // --- Sources mode button (in modeSwitch bar alongside Comics/Books/Videos) ---
+  var modeSourcesBtn = document.getElementById('modeSourcesBtn');
+  if (modeSourcesBtn) {
+    modeSourcesBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
       try {
         if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openSourcesMode === 'function') {
           Tanko.api.shell.openSourcesMode();
+        } else if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
+          Tanko.modeRouter.setMode('sources');
         } else {
-          console.warn('[shell] openSourcesMode not available — bridge not ready or not in Butterfly mode');
+          console.warn('[shell] openSourcesMode not available — bridge not ready');
         }
       } catch (e) { console.error('[shell] openSourcesMode failed:', e); }
     });

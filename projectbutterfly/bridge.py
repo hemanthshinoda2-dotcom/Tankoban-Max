@@ -500,11 +500,11 @@ class ShellBridge(QObject):
 
     @Slot(result=str)
     def openSourcesMode(self):
-        """Open TankoWeb and immediately switch to the Hub (Sources) tab."""
+        """Switch to the Sources mode (browser_sources.html)."""
         try:
             win = self.parent().window._win
             if win:
-                win.show_tankoweb_hub()
+                win.show_sources_mode()
             return json.dumps(_ok())
         except Exception as e:
             return json.dumps(_err(str(e)))
