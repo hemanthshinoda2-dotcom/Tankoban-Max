@@ -501,12 +501,15 @@ class ShellBridge(QObject):
     @Slot(result=str)
     def openSourcesMode(self):
         """Switch to the Sources mode (browser_sources.html)."""
+        print("[bridge] openSourcesMode slot called")
         try:
             win = self.parent().window._win
+            print(f"[bridge] win={win}")
             if win:
                 win.show_sources_mode()
             return json.dumps(_ok())
         except Exception as e:
+            print(f"[bridge] openSourcesMode error: {e}")
             return json.dumps(_err(str(e)))
 
     @Slot(result=str)
