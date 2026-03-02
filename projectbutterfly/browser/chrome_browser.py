@@ -637,25 +637,44 @@ class ChromeBrowser(QWidget):
             pass
 
     def _handle_torrent_search(self, params: str):
-        """Handle torrent search from the torrents page."""
-        import urllib.parse, json
+        """Handle torrent search — runs direct scrapers in a background thread."""
+        import urllib.parse, json, threading
         parsed = urllib.parse.parse_qs(params)
         query = parsed.get("q", [""])[0]
         if not query:
             return
-        bridge = self._data_bridge._bridge if self._data_bridge else None
-        if not bridge or not hasattr(bridge, "torrentSearch"):
+
+        # Parse site filters from params (comma-separated)
+        sites_param = parsed.get("sites", [""])[0]
+        sites = set(sites_param.split(",")) if sites_param else None
+
+        # Remember which tab requested the search
+        tab = self._tab_mgr.active_tab
+        if not tab or not tab.view:
             return
-        try:
-            payload = json.dumps({"query": query, "limit": 60})
-            result = bridge.torrentSearch.query(payload)
-            tab = self._tab_mgr.active_tab
-            if tab and tab.view:
-                tab.view.page().runJavaScript(
-                    f"if(typeof setSearchResults==='function')setSearchResults({result});"
-                )
-        except Exception:
-            pass
+        tab_id = tab.id
+
+        def _run_search():
+            from .torrent_scrapers import search_all
+            try:
+                results = search_all(query, sites=sites, limit=60)
+                result_json = json.dumps({"results": results})
+            except Exception:
+                result_json = json.dumps({"results": [], "error": "Search failed"})
+
+            # Push results back to the tab on the main thread via QTimer
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: self._inject_search_results(tab_id, result_json))
+
+        threading.Thread(target=_run_search, daemon=True).start()
+
+    def _inject_search_results(self, tab_id: str, result_json: str):
+        """Inject search results into the torrents page (called on main thread)."""
+        tab = self._tab_mgr.get(tab_id)
+        if tab and tab.view:
+            tab.view.page().runJavaScript(
+                f"if(typeof setSearchResults==='function')setSearchResults({result_json});"
+            )
 
     def _handle_torrent_add(self, params: str):
         """Handle adding a magnet from the torrents page."""

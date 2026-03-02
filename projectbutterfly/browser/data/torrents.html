@@ -456,15 +456,16 @@
     searching = true;
     searchBtn.disabled = true;
     searchBtn.textContent = 'Searching...';
-    // Navigate to internal scheme — intercepted by Python
+    // Build URL with site filters
     const encoded = encodeURIComponent(q);
-    window.location.href = 'tanko-browser://torrent-search?q=' + encoded;
+    const sites = Array.from(activeSites).join(',');
+    window.location.href = 'tanko-browser://torrent-search?q=' + encoded + '&sites=' + sites;
     // Reset button after timeout (Python will call setSearchResults)
     setTimeout(() => {
       searching = false;
       searchBtn.disabled = false;
       searchBtn.textContent = 'Search';
-    }, 15000);
+    }, 20000);
   }
 
   function setSearchResults(data) {
