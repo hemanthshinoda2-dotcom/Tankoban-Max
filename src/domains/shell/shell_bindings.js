@@ -33,6 +33,9 @@
   }
 
   // Theme cycle: dark → light → nord → solarized → gruvbox → catppuccin → dark
+  var APP_THEME_MODE_KEY = 'appThemeMode';
+  var APP_THEME_PRESET_KEY = 'appThemePreset';
+  var APP_THEME_LEGACY_KEY = 'appTheme';
   var APP_THEMES = ['dark', 'light', 'nord', 'solarized', 'gruvbox', 'catppuccin'];
   var THEME_LABELS = { dark: 'Dark', light: 'Light', nord: 'Nord', solarized: 'Solarized', gruvbox: 'Gruvbox', catppuccin: 'Catppuccin' };
 
@@ -55,7 +58,7 @@
         document.documentElement.classList.add('sl-theme-dark');
       }
     } catch {}
-    try { localStorage.setItem('appTheme', t); } catch {}
+    try { localStorage.setItem(APP_THEME_MODE_KEY, t); } catch {}
     // Butterfly: push theme to home.html (isolated webmode profile — no shared localStorage)
     try {
       if (window.__tankoButterfly && window.electronAPI && window.electronAPI.shell) {
@@ -82,7 +85,14 @@
     applyAppTheme(APP_THEMES[(idx + 1) % APP_THEMES.length]);
   };
 
-  try { applyAppTheme(localStorage.getItem('appTheme') || 'dark'); } catch { applyAppTheme('dark'); }
+  try {
+    var savedModeTheme = localStorage.getItem(APP_THEME_MODE_KEY) || '';
+    if (!savedModeTheme) {
+      var legacyTheme = localStorage.getItem(APP_THEME_LEGACY_KEY) || '';
+      if (APP_THEMES.indexOf(legacyTheme) >= 0) savedModeTheme = legacyTheme;
+    }
+    applyAppTheme(savedModeTheme || 'dark');
+  } catch { applyAppTheme('dark'); }
 
   if (el.themeToggleBtn) {
     el.themeToggleBtn.addEventListener('click', (e) => {
@@ -884,7 +894,7 @@
       root.style.setProperty('--vx-accent', theme.accent);
       root.style.setProperty('--vx-accent-rgb', theme.accentRgb);
     } catch (e) {}
-    try { localStorage.setItem('appTheme', themeId); } catch (e) {}
+    try { localStorage.setItem(APP_THEME_PRESET_KEY, themeId); } catch (e) {}
     // Sync active swatch
     try {
       var swatches = document.querySelectorAll('.themeSwatch');
@@ -898,7 +908,15 @@
     var container = document.getElementById('appThemeSwatches');
     if (!container) return;
     var savedTheme = '';
-    try { savedTheme = localStorage.getItem('appTheme') || ''; } catch (e) {}
+    try {
+      savedTheme = localStorage.getItem(APP_THEME_PRESET_KEY) || '';
+      if (!savedTheme) {
+        var legacyPreset = localStorage.getItem(APP_THEME_LEGACY_KEY) || '';
+        for (var p = 0; p < THEME_PRESETS.length; p++) {
+          if (THEME_PRESETS[p].id === legacyPreset) { savedTheme = legacyPreset; break; }
+        }
+      }
+    } catch (e) {}
     var html = '';
     for (var i = 0; i < THEME_PRESETS.length; i++) {
       var t = THEME_PRESETS[i];
@@ -916,7 +934,13 @@
 
   // Restore saved theme on boot
   try {
-    var savedTheme = localStorage.getItem('appTheme');
+    var savedTheme = localStorage.getItem(APP_THEME_PRESET_KEY) || '';
+    if (!savedTheme) {
+      var legacyThemePreset = localStorage.getItem(APP_THEME_LEGACY_KEY) || '';
+      for (var lp = 0; lp < THEME_PRESETS.length; lp++) {
+        if (THEME_PRESETS[lp].id === legacyThemePreset) { savedTheme = legacyThemePreset; break; }
+      }
+    }
     if (savedTheme) applyTheme(savedTheme);
   } catch (e) {}
 
