@@ -141,32 +141,40 @@ def _pill_btn_ss(extra=""):
     )
 
 
-def _tab_ss(active=False):
-    """Tab pill matching .sourcesBrowserTab from web-browser.css."""
+def _tab_pill_ss(active=False):
+    """Container QWidget for a tab — has the glass tint, border, and radius."""
     bg = TAB_ACTIVE_BG if active else TAB_BG
     border = TAB_ACTIVE_BORDER if active else SURFACE_BORDER2
+    return (
+        f"background: {bg};"
+        f"border: 1px solid {border}; border-radius: {RADIUS_SM}px;"
+        f"min-height: 24px;"
+    )
+
+
+def _tab_title_ss(active=False):
+    """Flat label-button inside the tab pill — transparent, no border."""
     color = TEXT if active else TEXT_MUTED
     return (
         f"QPushButton {{"
-        f"  background: {bg}; color: {color};"
-        f"  border: 1px solid {border}; border-radius: {RADIUS_SM}px;"
+        f"  background: transparent; color: {color};"
+        f"  border: none;"
         f"  font-family: '{FONT}'; font-size: 11px;"
-        f"  padding: 3px 7px; min-width: 72px; max-width: 170px;"
-        f"  min-height: 24px;"
+        f"  padding: 3px 4px 3px 7px;"
         f"}}"
-        f"QPushButton:hover {{ background: rgba({ACCENT_RGB},0.08); }}"
+        f"QPushButton:hover {{ color: {TEXT}; }}"
     )
 
 
 def _tab_close_ss():
-    """Tiny × button inside a tab pill."""
+    """Tiny × button inside a tab pill — transparent, no border."""
     return (
         f"QPushButton {{"
         f"  background: transparent; color: {TEXT_MUTED};"
         f"  border: none; border-radius: 4px;"
         f"  font-family: '{FONT}'; font-size: 10px;"
         f"  min-width: 16px; max-width: 16px; min-height: 16px; max-height: 16px;"
-        f"  padding: 0; margin: 0 0 0 4px;"
+        f"  padding: 0; margin: 0 2px 0 0;"
         f"}}"
         f"QPushButton:hover {{ background: rgba(255,255,255,0.15); color: {TEXT}; }}"
     )
@@ -503,25 +511,27 @@ class TankoWebWidget(QWidget):
 
         # Insert tab pills before the stretch
         for i, tab in enumerate(self._tabs):
+            is_active = (i == self._active_idx)
+
+            # Pill container — has the glass tint/border/radius
             pill = QWidget()
-            pill.setStyleSheet("background: transparent; border: none;")
+            pill.setStyleSheet(_tab_pill_ss(active=is_active))
+            pill.setCursor(Qt.CursorShape.PointingHandCursor)
             pill_layout = QHBoxLayout(pill)
             pill_layout.setContentsMargins(0, 0, 0, 0)
             pill_layout.setSpacing(0)
 
-            is_active = (i == self._active_idx)
-
-            # Tab title button
+            # Tab title — flat transparent button inside the pill
             title = tab["title"] or "New Tab"
             display = title if len(title) <= 20 else title[:18] + "\u2026"
             title_btn = QPushButton(display)
             title_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            title_btn.setStyleSheet(_tab_ss(active=is_active))
-            idx = i  # capture for lambda
+            title_btn.setStyleSheet(_tab_title_ss(active=is_active))
+            idx = i
             title_btn.clicked.connect(lambda checked=False, x=idx: self._switch_tab(x))
             pill_layout.addWidget(title_btn)
 
-            # × close button (only if >1 tab)
+            # × close button inside the pill (only if >1 tab)
             if len(self._tabs) > 1:
                 close_btn = QPushButton("\u2715")
                 close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
