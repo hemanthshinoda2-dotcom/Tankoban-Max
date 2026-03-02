@@ -78,6 +78,7 @@
     shell: {
       revealPath: (...a) => ea.shell?.revealPath ? ea.shell.revealPath(...a) : ea.revealPath(...a),
       openWebMode: (...a) => ea.shell?.openWebMode ? ea.shell.openWebMode(...a) : Promise.resolve(),
+      openSourcesMode: (...a) => ea.shell?.openSourcesMode ? ea.shell.openSourcesMode(...a) : Promise.resolve(),
     },
 
     // ========================================
