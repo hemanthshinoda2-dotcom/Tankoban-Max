@@ -8,9 +8,10 @@ background skin, floating disconnected widgets, rounded browser viewport.
 Every chrome element (buttons, URL bar, tabs, Bookmark, History) is its
 own independent glass pill floating over the gradient — nothing is joined.
 
-Slice 4: Qt-native homepage with sources grid. Each tab has a two-layer
-QStackedWidget — index 0 is the Qt home page, index 1 is QWebEngineView.
-New tabs start on the home page. Navigating flips to the web view.
+Slice 4: Qt-native homepage with sources grid. Each tab has a plain
+QWidget container with both home and web view overlaid — visibility is
+toggled via setVisible() (not QStackedWidget, which breaks with native
+QWebEngineView on Windows). New tabs start on the home page.
 """
 
 import json
@@ -854,11 +855,11 @@ class TankoWebWidget(QWidget):
 
     def _build_browser(self, root_layout):
         self._viewport_frame = QFrame(self)
-        self._update_viewport_style(on_home=True)
         self._viewport_frame.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        _apply_shadow(self._viewport_frame, blur=28, dy=10, color=QColor(0, 0, 0, 200))
+        # Start on home — transparent background, no shadow effect
+        self._update_viewport_style(on_home=True)
 
         frame_layout = QVBoxLayout(self._viewport_frame)
         frame_layout.setContentsMargins(0, 0, 0, 0)
@@ -895,16 +896,20 @@ class TankoWebWidget(QWidget):
     def _set_tab_home(self, tab, on_home):
         """Toggle a tab between home page and web view.
 
-        QWebEngineView is a native widget that steals mouse events even when
-        hidden by QStackedWidget — explicit hide/show is required.
+        We avoid QStackedWidget for the per-tab home/web toggle because
+        QWebEngineView is a native widget that doesn't respect stacked
+        visibility on Windows. Instead we use explicit setVisible() on
+        both widgets directly.
         """
         tab["on_home"] = on_home
         if on_home:
-            tab["view"].hide()
-            tab["stack"].setCurrentIndex(0)
+            tab["view"].setVisible(False)
+            tab["home"].setVisible(True)
+            tab["home"].raise_()
         else:
-            tab["stack"].setCurrentIndex(1)
-            tab["view"].show()
+            tab["home"].setVisible(False)
+            tab["view"].setVisible(True)
+            tab["view"].raise_()
 
     # ══════════════════════════════════════════════════════════════════════
     # Tab lifecycle
@@ -927,9 +932,14 @@ class TankoWebWidget(QWidget):
         view.setPage(page)
         view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Per-tab stack: index 0 = home, index 1 = web view
-        tab_stack = QStackedWidget()
-        tab_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # Per-tab container: plain QWidget with both home and view overlaid.
+        # We use setVisible() to toggle — not QStackedWidget — because
+        # QWebEngineView is a native widget that ignores stacked visibility.
+        tab_container = QWidget()
+        tab_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        container_layout = QVBoxLayout(tab_container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
 
         idx = len(self._tabs)
 
@@ -939,13 +949,13 @@ class TankoWebWidget(QWidget):
         )
         home.refresh_sources(self._sources)
 
-        tab_stack.addWidget(home)     # index 0 = home
-        tab_stack.addWidget(view)     # index 1 = web view
+        container_layout.addWidget(home)
+        container_layout.addWidget(view)
 
         start_on_home = (url is None)
 
         self._tabs.append({
-            "stack": tab_stack,
+            "stack": tab_container,
             "home": home,
             "view": view,
             "page": page,
@@ -954,7 +964,7 @@ class TankoWebWidget(QWidget):
             "on_home": start_on_home,
         })
 
-        self._view_stack.addWidget(tab_stack)
+        self._view_stack.addWidget(tab_container)
 
         # Wire signals
         tab_idx = idx
