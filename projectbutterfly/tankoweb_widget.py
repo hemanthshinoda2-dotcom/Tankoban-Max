@@ -17,6 +17,7 @@ import re
 from PySide6.QtCore import Qt, QUrl, QTimer, QRectF, QPointF
 from PySide6.QtGui import (
     QPainter, QRadialGradient, QLinearGradient, QColor,
+    QPen, QPolygonF, QPainterPath,
 )
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel,
@@ -175,6 +176,78 @@ def _apply_shadow(widget, blur=22, dy=8, color=QColor(0, 0, 0, 180)):
     widget.setGraphicsEffect(fx)
 
 
+# ---------------------------------------------------------------------------
+# QPainter icon buttons — crisp vector icons at any DPI
+# ---------------------------------------------------------------------------
+
+class _StarButton(QPushButton):
+    """30x30 glass button with a QPainter-drawn 5-pointed star (bookmark)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(ICON_BTN_SIZE, ICON_BTN_SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Bookmark")
+        self.setStyleSheet(_icon_btn_ss())
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(245, 245, 245, 200))
+        pen.setWidthF(1.4)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        cx, cy, r = self.width() / 2, self.height() / 2, 6.5
+        ri = r * 0.40  # inner radius
+        pts = []
+        for i in range(10):
+            angle = math.radians(-90 + i * 36)
+            rad = r if i % 2 == 0 else ri
+            pts.append(QPointF(cx + rad * math.cos(angle), cy + rad * math.sin(angle)))
+        p.drawPolygon(QPolygonF(pts))
+        p.end()
+
+
+class _ClockButton(QPushButton):
+    """30x30 glass button with a QPainter-drawn clock + CCW arrow (history)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(ICON_BTN_SIZE, ICON_BTN_SIZE)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("History")
+        self.setStyleSheet(_icon_btn_ss())
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(245, 245, 245, 200))
+        pen.setWidthF(1.4)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        cx, cy, r = self.width() / 2, self.height() / 2, 6.5
+
+        # Clock circle (270° arc, gap at 8 o'clock for the arrow tail)
+        arc_rect = QRectF(cx - r, cy - r, r * 2, r * 2)
+        p.drawArc(arc_rect, 150 * 16, 300 * 16)  # startAngle, spanAngle in 1/16 deg
+
+        # Clock hands: 12 o'clock + 3 o'clock
+        p.drawLine(QPointF(cx, cy), QPointF(cx, cy - 4.5))
+        p.drawLine(QPointF(cx, cy), QPointF(cx + 3.5, cy))
+
+        # CCW arrow head at the gap (≈8 o'clock position)
+        ax = cx - r * math.cos(math.radians(30))
+        ay = cy + r * math.sin(math.radians(30))
+        p.drawLine(QPointF(ax, ay), QPointF(ax - 3, ay - 1.5))
+        p.drawLine(QPointF(ax, ay), QPointF(ax + 0.5, ay - 3.5))
+
+        p.end()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TankoWebWidget
 # ═══════════════════════════════════════════════════════════════════════════
@@ -294,6 +367,7 @@ class TankoWebWidget(QWidget):
 
     def _build_chrome_row(self):
         row = QWidget()
+        row.setMinimumHeight(ICON_BTN_SIZE)
         row.setFixedHeight(ICON_BTN_SIZE)
         row.setStyleSheet("background: transparent; border: none;")
 
@@ -354,6 +428,7 @@ class TankoWebWidget(QWidget):
 
     def _build_tab_row(self):
         row = QWidget()
+        row.setMinimumHeight(ICON_BTN_SIZE)
         row.setFixedHeight(ICON_BTN_SIZE)
         row.setStyleSheet("background: transparent; border: none;")
 
@@ -394,6 +469,7 @@ class TankoWebWidget(QWidget):
 
     def _build_nav_row(self):
         row = QWidget()
+        row.setMinimumHeight(ICON_BTN_SIZE + 6)
         row.setFixedHeight(ICON_BTN_SIZE + 6)  # min-height: 40px ≈ 30 + padding
         row.setStyleSheet("background: transparent; border: none;")
 
@@ -444,18 +520,12 @@ class TankoWebWidget(QWidget):
         go_btn.clicked.connect(self._navigate_to_input)
         layout.addWidget(go_btn)
 
-        # Bookmark — separate pill button, fixed width
-        bk_btn = QPushButton("Bookmark")
-        bk_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        bk_btn.setFixedWidth(70)
-        bk_btn.setStyleSheet(_pill_btn_ss("font-size: 11px;"))
+        # Bookmark — 30x30 glass icon with QPainter star
+        bk_btn = _StarButton()
         layout.addWidget(bk_btn)
 
-        # History — separate pill button, fixed width
-        hist_btn = QPushButton("History")
-        hist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        hist_btn.setFixedWidth(70)
-        hist_btn.setStyleSheet(_pill_btn_ss("font-size: 11px;"))
+        # History — 30x30 glass icon with QPainter clock-arrow
+        hist_btn = _ClockButton()
         layout.addWidget(hist_btn)
 
         return row
