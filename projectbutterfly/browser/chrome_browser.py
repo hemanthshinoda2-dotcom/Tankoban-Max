@@ -30,6 +30,7 @@ from .nav_bar import NavBar
 from .browser_page import ChromePage, inject_antibot_script
 from .find_bar import FindBar
 from .bookmarks_bar import BookmarksBar
+from .downloads_shelf import DownloadsShelf
 from .data_bridge import DataBridge
 from .context_menu import build_context_menu
 from .shortcuts import SHORTCUTS
@@ -112,11 +113,16 @@ class ChromeBrowser(QWidget):
         self._viewport.setStyleSheet(f"background: {theme.BG_VIEWPORT};")
         layout.addWidget(self._viewport, 1)
 
+        # Downloads shelf (hidden, shows when download starts)
+        self._downloads_shelf = DownloadsShelf()
+        layout.addWidget(self._downloads_shelf)
+
         # -- Wire signals --
         self._wire_tab_manager()
         self._wire_tab_bar()
         self._wire_nav_bar()
         self._wire_find_bar()
+        self._wire_downloads()
         self._bind_shortcuts()
 
         # -- Open initial tab --
@@ -154,6 +160,15 @@ class ChromeBrowser(QWidget):
 
     def _wire_find_bar(self):
         self._find_bar.closed.connect(self._on_find_closed)
+
+    def _wire_downloads(self):
+        self._profile.downloadRequested.connect(self._on_download_requested)
+
+    def _on_download_requested(self, download):
+        """Handle a new download from the web engine."""
+        # Accept with default path (user's Downloads folder)
+        download.accept()
+        self._downloads_shelf.add_download(download)
 
     def _bind_shortcuts(self):
         for key_seq, method_name in SHORTCUTS:
