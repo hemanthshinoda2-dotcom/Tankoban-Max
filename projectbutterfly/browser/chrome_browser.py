@@ -410,7 +410,7 @@ class ChromeBrowser(QWidget):
             view.load(QUrl.fromLocalFile(str(_NEWTAB_HTML)))
         else:
             view.setHtml(
-                "<html><body style='background:#202124;color:#e8eaed;"
+                "<html><body style='background:#050505;color:rgba(245,245,245,0.92);"
                 "font-family:sans-serif;display:flex;align-items:center;"
                 "justify-content:center;height:100vh'>"
                 "<h1>New Tab</h1></body></html>"

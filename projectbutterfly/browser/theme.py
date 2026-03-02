@@ -1,37 +1,38 @@
 """
-Chrome-like browser dark theme constants and stylesheet helpers.
+Tankoban glass-tint browser theme constants and stylesheet helpers.
 
-Mirrors Chrome's dark mode palette with Tankoban accent touches.
+Warm brown/amber/gold palette matching the main Tankoban app aesthetic.
+Semi-transparent dark backgrounds with muted gold accents and beveled borders.
 """
 
 # ---------------------------------------------------------------------------
-# Color palette (Chrome dark mode)
+# Color palette (Tankoban glass — dark)
 # ---------------------------------------------------------------------------
 
-BG_TITLEBAR = "#202124"       # Tab bar / title bar background
-BG_TOOLBAR = "#35363a"        # Nav bar background
-BG_TAB_ACTIVE = "#35363a"     # Active tab matches toolbar
-BG_TAB_INACTIVE = "#202124"   # Inactive tabs match title bar
-BG_TAB_HOVER = "#2a2b2f"      # Tab hover state
-BG_VIEWPORT = "#1a1a1a"       # Browser viewport background
-BG_POPUP = "#2d2e30"          # Dropdown/popup background
-BG_INPUT = "#202124"          # Address bar input background
+BG_TITLEBAR = "#0a0a0a"       # Tab bar / title bar — deep black
+BG_TOOLBAR = "#121110"         # Nav bar — warm-tinted dark
+BG_TAB_ACTIVE = "#1c1812"     # Active tab — warm dark tint
+BG_TAB_INACTIVE = "#0a0a0a"   # Inactive tabs — matches title bar
+BG_TAB_HOVER = "#161310"      # Tab hover — subtle warm lift
+BG_VIEWPORT = "#050505"       # Browser viewport — deepest black
+BG_POPUP = "#141210"          # Dropdown/popup — warm dark
+BG_INPUT = "#0c0b09"          # Address bar input — near-black warm
 
-TEXT_PRIMARY = "#e8eaed"       # Primary text
-TEXT_SECONDARY = "#9aa0a6"     # Secondary / placeholder text
-TEXT_URL_SECURE = "#81c995"    # HTTPS green
-TEXT_URL_DOMAIN = "#e8eaed"    # Domain part of URL
+TEXT_PRIMARY = "rgba(245,245,245,0.92)"    # Primary text (ink)
+TEXT_SECONDARY = "rgba(245,245,245,0.55)"  # Secondary / placeholder
+TEXT_URL_SECURE = "#81c995"    # HTTPS green (keep)
+TEXT_URL_DOMAIN = "rgba(245,245,245,0.92)" # Domain part of URL
 
-BORDER_COLOR = "#3c4043"       # Subtle borders
-BORDER_TAB = "#48494c"         # Tab separator
+BORDER_COLOR = "rgba(199,167,107,0.18)"    # Warm gold borders
+BORDER_TAB = "rgba(199,167,107,0.12)"      # Tab separator — subtler
 
-ACCENT = "#8ab4f8"             # Chrome blue accent (links, focus ring)
-ACCENT_HOVER = "#aecbfa"       # Lighter accent hover
+ACCENT = "#c7a76b"             # Muted gold accent (links, focus ring)
+ACCENT_HOVER = "#d4b87a"       # Lighter gold hover
 
-CLOSE_HOVER = "#e64a19"        # Tab close button hover
-CLOSE_BG = "rgba(255,255,255,0.08)"
+CLOSE_HOVER = "#c95a3a"        # Tab close button hover — warm red
+CLOSE_BG = "rgba(199,167,107,0.08)"
 
-LOADING_COLOR = "#8ab4f8"      # Tab loading indicator
+LOADING_COLOR = "#c7a76b"      # Tab loading indicator — gold
 
 # ---------------------------------------------------------------------------
 # Dimensions
@@ -71,10 +72,10 @@ NAV_BAR_STYLE = f"""
         font-family: 'Segoe UI', sans-serif;
     }}
     QPushButton:hover {{
-        background: rgba(255,255,255,0.08);
+        background: rgba(199,167,107,0.10);
     }}
     QPushButton:pressed {{
-        background: rgba(255,255,255,0.12);
+        background: rgba(199,167,107,0.16);
     }}
     QPushButton:disabled {{
         color: {TEXT_SECONDARY};
@@ -126,11 +127,11 @@ FIND_BAR_STYLE = f"""
         font-size: 13px;
     }}
     QPushButton:hover {{
-        background: rgba(255,255,255,0.08);
+        background: rgba(199,167,107,0.10);
     }}
 """
 
-# Tankoban-style window control buttons (matches player_ui.py TopStrip)
+# Tankoban-style window control buttons (beveled gradient, warm highlight)
 WINDOW_BTN_STYLE = """
     QPushButton {
         background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -191,7 +192,7 @@ CONTEXT_MENU_STYLE = f"""
         padding: 6px 32px 6px 16px;
     }}
     QMenu::item:selected {{
-        background: rgba(255,255,255,0.08);
+        background: rgba(199,167,107,0.12);
     }}
     QMenu::item:disabled {{
         color: {TEXT_SECONDARY};

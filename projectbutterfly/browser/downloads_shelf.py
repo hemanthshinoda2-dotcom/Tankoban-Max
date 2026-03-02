@@ -84,7 +84,7 @@ class DownloadItem(QWidget):
         # Background
         bg = QColor(theme.BG_POPUP)
         if self._hovered:
-            bg = QColor("rgba(255,255,255,0.08)")
+            bg = QColor("rgba(199,167,107,0.10)")
         p.setPen(QPen(QColor(theme.BORDER_COLOR), 1))
         p.setBrush(bg)
         p.drawRoundedRect(1, 1, w - 2, h - 2, 6, 6)
@@ -238,7 +238,7 @@ class DownloadsShelf(QWidget):
                 font-size: 14px;
             }}
             QPushButton:hover {{
-                background: rgba(255,255,255,0.08);
+                background: rgba(199,167,107,0.10);
                 color: {theme.TEXT_PRIMARY};
             }}
         """)

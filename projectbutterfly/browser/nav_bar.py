@@ -200,7 +200,7 @@ class NavBar(QWidget):
                 padding: 6px 32px 6px 12px;
             }}
             QMenu::item:selected {{
-                background: rgba(255,255,255,0.08);
+                background: rgba(199,167,107,0.12);
             }}
             QMenu::separator {{
                 height: 1px;
@@ -245,7 +245,7 @@ class _LibraryButton(QPushButton):
         # Hover background
         if self._hovered:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor("rgba(255,255,255,0.08)"))
+            p.setBrush(QColor("rgba(199,167,107,0.10)"))
             p.drawRoundedRect(0, 0, w, h, 4, 4)
 
         color = QColor(theme.TEXT_PRIMARY if self._hovered else theme.TEXT_SECONDARY)

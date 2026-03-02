@@ -45,7 +45,7 @@ class BookmarkPill(QPushButton):
                 text-align: left;
             }}
             QPushButton:hover {{
-                background: rgba(255,255,255,0.08);
+                background: rgba(199,167,107,0.10);
                 color: {theme.TEXT_PRIMARY};
             }}
         """)

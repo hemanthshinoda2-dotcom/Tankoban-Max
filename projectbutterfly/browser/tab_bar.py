@@ -209,7 +209,7 @@ class TabButton(QWidget):
                 font-family: 'Segoe UI', sans-serif;
             }}
             QMenu::item {{ padding: 6px 32px 6px 12px; }}
-            QMenu::item:selected {{ background: rgba(255,255,255,0.08); }}
+            QMenu::item:selected {{ background: rgba(199,167,107,0.12); }}
             QMenu::separator {{ height: 1px; background: {theme.BORDER_COLOR}; margin: 4px 8px; }}
         """)
 
@@ -358,7 +358,7 @@ class TabBar(QWidget):
                 font-family: 'Segoe UI', sans-serif;
             }}
             QPushButton:hover {{
-                background: rgba(255,255,255,0.08);
+                background: rgba(199,167,107,0.10);
                 color: {theme.TEXT_PRIMARY};
             }}
         """)
