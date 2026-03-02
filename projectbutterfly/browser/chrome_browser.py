@@ -351,8 +351,8 @@ class ChromeBrowser(QWidget):
         self._tab_bar.set_active(tab_id)
         self._tab_bar.ensure_visible(tab_id)
 
-        # Update nav bar
-        self._nav_bar.set_url(tab.url)
+        # Update nav bar (hide internal page URLs)
+        self._nav_bar.set_url(self._display_url(tab.url))
         self._nav_bar.set_loading(tab.loading)
         self._nav_bar.set_nav_state(tab.can_go_back, tab.can_go_forward)
         self._nav_bar.set_bookmarked(self._data_bridge.is_bookmarked(tab.url))
@@ -420,9 +420,9 @@ class ChromeBrowser(QWidget):
         url_str = url.toString()
         self._tab_mgr.update_url(tab_id, url_str)
 
-        # Update nav bar if this is the active tab
+        # Update nav bar if this is the active tab (hide internal page URLs)
         if tab_id == self._tab_mgr.active_id:
-            self._nav_bar.set_url(url_str)
+            self._nav_bar.set_url(self._display_url(url_str))
             self._nav_bar.set_bookmarked(self._data_bridge.is_bookmarked(url_str))
 
         # Update nav state
@@ -519,8 +519,18 @@ class ChromeBrowser(QWidget):
 
     _SETTINGS_HTML = _HERE / "data" / "settings.html"
     _HISTORY_HTML = _HERE / "data" / "history.html"
-
     _TORRENTS_HTML = _HERE / "data" / "torrents.html"
+
+    # Internal pages whose file:// URLs should be hidden from the omnibox
+    _INTERNAL_PAGE_NAMES = {"newtab.html", "settings.html", "history.html", "torrents.html"}
+
+    @staticmethod
+    def _display_url(url: str) -> str:
+        """Return the URL to show in the omnibox. Internal pages show empty."""
+        for name in ChromeBrowser._INTERNAL_PAGE_NAMES:
+            if name in url:
+                return ""
+        return url
 
     def _on_internal_command(self, command: str, params: str):
         """Handle tanko-browser:// URLs."""
