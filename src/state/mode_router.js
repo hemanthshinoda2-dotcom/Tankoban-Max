@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  const MODES = new Set(['comics', 'videos', 'books', 'sources']);
+  const MODES = new Set(['comics', 'videos', 'books']);
 
   window.Tanko = window.Tanko || {};
   const tanko = window.Tanko;
@@ -27,11 +27,9 @@
     const comics = qs('modeComicsBtn');
     const videos = qs('modeVideosBtn');
     const books = qs('modeBooksBtn');
-    const sources = qs('modeSourcesBtn');
     if (comics) comics.classList.toggle('active', m === 'comics');
     if (videos) videos.classList.toggle('active', m === 'videos');
     if (books) books.classList.toggle('active', m === 'books');
-    if (sources) sources.classList.toggle('active', m === 'sources');
   }
 
   function applyFallbackViewState(mode) {

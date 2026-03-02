@@ -45,9 +45,9 @@ from tor_proxy import TorProxy
 _HOME_HTML_PATH = os.path.join(os.path.dirname(__file__), "data", "browser_home.html")
 _HOME_URL = QUrl.fromLocalFile(_HOME_HTML_PATH)
 
-# Hub page — torrent search/downloads loaded as a tab
-_HUB_HTML_PATH = os.path.join(os.path.dirname(__file__), "data", "browser_hub.html")
-_HUB_URL = QUrl.fromLocalFile(_HUB_HTML_PATH)
+# Hub — qBittorrent Web UI loaded as a tab
+_QBIT_DEFAULT_PORT = 8080
+_QBIT_PORTS = [8080, 8081, 9090]
 
 def _is_home_url(url):
     """Check if a QUrl points to the home page."""
@@ -57,14 +57,18 @@ def _is_home_url(url):
     return s == "about:blank" or s.startswith("file:") and "browser_home.html" in s
 
 def _is_hub_url(url):
-    """Check if a QUrl points to the hub page."""
+    """Check if a QUrl points to the qBittorrent Web UI."""
     if not url or url.isEmpty():
         return False
-    return "browser_hub.html" in url.toString()
+    s = url.toString()
+    for port in _QBIT_PORTS:
+        if f"127.0.0.1:{port}" in s:
+            return True
+    return False
 
 def _is_special_url(url):
-    """Check if a URL is home or hub (special pages with transparent background)."""
-    return _is_home_url(url) or _is_hub_url(url)
+    """Check if a URL is the home page (special page with transparent background)."""
+    return _is_home_url(url)
 
 # ---------------------------------------------------------------------------
 # Palette — ported from overhaul.css / web-browser.css tokens
@@ -459,24 +463,6 @@ class _TankoWebPage(QWebEnginePage):
                     self._tab_host._navigate_from_home(self, real_url)
             elif host == "add-source":
                 self._tab_host._add_source_dialog()
-            # Hub commands
-            elif host == "hub-search":
-                query = params.get("q", [""])[0]
-                source = params.get("source", ["all"])[0]
-                provider = params.get("provider", ["prowlarr"])[0]
-                if query:
-                    self._tab_host._hub_search(query, source, provider)
-            elif host == "hub-add-magnet":
-                uri = params.get("uri", [""])[0]
-                if uri:
-                    self._tab_host._hub_add_magnet(uri)
-            elif host.startswith("hub-torrent-"):
-                action = host.replace("hub-torrent-", "")
-                hash_ = params.get("hash", [""])[0]
-                if action and hash_:
-                    self._tab_host._hub_torrent_action(action, hash_)
-            elif host == "hub-clear-downloads":
-                self._tab_host._hub_clear_downloads()
             elif host == "open-url":
                 target = params.get("url", [""])[0]
                 if target:
@@ -767,7 +753,7 @@ class TankoWebWidget(QWidget):
             f"}}"
             f"QPushButton:hover {{ background: rgba({ACCENT_RGB},0.18); color: rgba({ACCENT_RGB},0.90); }}"
         )
-        hub_btn.setToolTip("Tankoban Hub — Torrents & Search")
+        hub_btn.setToolTip("qBittorrent Web UI")
         hub_btn.clicked.connect(self._open_hub)
         layout.addWidget(hub_btn)
 
@@ -1263,7 +1249,7 @@ class TankoWebWidget(QWidget):
             if self._is_tab_on_home(tab):
                 self._inject_sources_into_home(tab_idx)
             elif self._is_tab_on_hub(tab):
-                self._inject_hub_data(tab_idx)
+                pass  # qBit Web UI handles itself
 
     def _update_nav_state(self, tab_idx):
         if tab_idx != self._active_idx:
@@ -1415,353 +1401,32 @@ class TankoWebWidget(QWidget):
     # ══════════════════════════════════════════════════════════════════════
 
     def _open_hub(self):
-        """Open the Hub tab (singleton — switches to it if already open)."""
+        """Open the Hub tab (qBittorrent Web UI — singleton)."""
         for i, tab in enumerate(self._tabs):
             if self._is_tab_on_hub(tab):
                 self._switch_tab(i)
                 return
-        # Create new tab with hub URL
-        idx = self._create_tab(url=_HUB_URL.toString(), switch_to=True)
+        # Detect qBit port (quick check on main thread — localhost is instant)
+        port = self._detect_qbit_port()
+        if port:
+            url = f"http://127.0.0.1:{port}"
+        else:
+            url = f"http://127.0.0.1:{_QBIT_DEFAULT_PORT}"
+        idx = self._create_tab(url=url, switch_to=True)
         if idx is not None and idx < len(self._tabs):
             self._tabs[idx]["title"] = "Hub"
 
-    def _inject_hub_data(self, tab_idx):
-        """After hub page loads, inject current torrent data and indexer list."""
-        if tab_idx < 0 or tab_idx >= len(self._tabs):
-            return
+    def _detect_qbit_port(self):
+        """Quick localhost port check for qBittorrent WebUI."""
+        import torrent_service
+        return torrent_service._detect_running_qbit()
 
-        # Start polling timer if not already running
-        if not hasattr(self, "_hub_poll_timer"):
-            self._hub_poll_timer = QTimer(self)
-            self._hub_poll_timer.timeout.connect(self._poll_hub_data)
-            self._hub_poll_timer.start(5000)  # 5s interval, not 2s
-            self._hub_poll_busy = False
+    # (Hub data injection/polling/search removed — qBit Web UI handles itself)
 
-        # Inject data immediately (don't wait for first poll)
-        self._fetch_and_push_hub_data()
 
-    def _poll_hub_data(self):
-        """Timer callback: fetch torrent data only when Hub is the active tab."""
-        # Only poll if the ACTIVE tab is the Hub (not just any tab)
-        if self._active_idx < 0 or self._active_idx >= len(self._tabs):
-            return
-        if not self._is_tab_on_hub(self._tabs[self._active_idx]):
-            return
-        # Don't pile up threads — skip if the last poll is still running
-        if getattr(self, "_hub_poll_busy", False):
-            return
-        self._fetch_and_push_hub_data()
-
-    def _fetch_and_push_hub_data(self):
-        """Fetch torrent data in a background thread, then push to Hub JS."""
-        # Cache references on the main thread
-        qbit = self._get_qbit()
-        prowlarr = self._get_prowlarr()
-        jackett = self._get_jackett()
-
-        # Nothing to poll — skip entirely
-        if not qbit and not prowlarr and not jackett:
-            return
-
-        self._hub_poll_busy = True
-
-        def _bg():
-            try:
-                torrents = qbit.list_torrents() if qbit else []
-                indexers = prowlarr.list_indexers() if prowlarr else []
-                jackett_indexers = jackett.list_indexers() if jackett else []
-                QTimer.singleShot(0, lambda: self._push_hub_data(
-                    torrents, indexers, jackett_indexers,
-                    prowlarr_ok=prowlarr is not None,
-                    jackett_ok=jackett is not None,
-                ))
-            except Exception as e:
-                print(f"[hub] Poll error: {e}")
-            finally:
-                self._hub_poll_busy = False
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    def _push_hub_data(self, torrents, indexers, jackett_indexers=None,
-                       prowlarr_ok=False, jackett_ok=False):
-        """Push torrent and indexer data to all open Hub tabs."""
-        torrents_json = json.dumps(torrents)
-        indexers_json = json.dumps(indexers)
-        jackett_indexers_json = json.dumps(jackett_indexers or [])
-        # Get Prowlarr URL for the "Configure Indexers" button
-        prowlarr_url = ""
-        jackett_url = ""
-        try:
-            win = self.window()
-            mgr = getattr(win, "_prowlarr_mgr", None)
-            if mgr and mgr.base_url:
-                prowlarr_url = mgr.base_url
-            else:
-                prowlarr = self._get_prowlarr()
-                if prowlarr and hasattr(prowlarr, "_base"):
-                    prowlarr_url = prowlarr._base
-            jackett = self._get_jackett()
-            if jackett and hasattr(jackett, "_base"):
-                jackett_url = jackett._base
-        except Exception:
-            pass
-        for tab in self._tabs:
-            if self._is_tab_on_hub(tab):
-                tab["page"].runJavaScript(
-                    f"if(typeof updateTorrents==='function')updateTorrents({torrents_json});"
-                )
-                tab["page"].runJavaScript(
-                    f"if(typeof updateSources==='function')updateSources({indexers_json});"
-                )
-                tab["page"].runJavaScript(
-                    f"if(typeof updateJackettSources==='function')updateJackettSources({jackett_indexers_json});"
-                )
-                # Push provider availability
-                tab["page"].runJavaScript(
-                    f"if(typeof setProviderStatus==='function'){{"
-                    f"setProviderStatus('prowlarr',{'true' if prowlarr_ok else 'false'});"
-                    f"setProviderStatus('jackett',{'true' if jackett_ok else 'false'});"
-                    f"}}"
-                )
-                if prowlarr_url:
-                    tab["page"].runJavaScript(
-                        f"if(typeof setProwlarrUrl==='function')setProwlarrUrl({json.dumps(prowlarr_url)});"
-                    )
-                if jackett_url:
-                    tab["page"].runJavaScript(
-                        f"if(typeof setJackettUrl==='function')setJackettUrl({json.dumps(jackett_url)});"
-                    )
-
-    def _get_qbit(self):
-        """Get the QBitClient from the parent TankobanWindow (if available)."""
-        try:
-            win = self.window()
-            return getattr(win, "_qbit", None)
-        except Exception:
-            return None
-
-    def _get_prowlarr(self):
-        """Get the ProwlarrClient from the parent TankobanWindow (if available)."""
-        try:
-            win = self.window()
-            return getattr(win, "_prowlarr", None)
-        except Exception:
-            return None
-
-    def _get_jackett(self):
-        """Get the JackettClient from the parent TankobanWindow (if available)."""
-        try:
-            win = self.window()
-            return getattr(win, "_jackett", None)
-        except Exception:
-            return None
-
-    def _hub_search(self, query, source="all", provider="prowlarr"):
-        """Run a search via Prowlarr or Jackett in background and push results to Hub."""
-        # Push loading state
-        for tab in self._tabs:
-            if self._is_tab_on_hub(tab):
-                tab["page"].runJavaScript("if(typeof setSearchLoading==='function')setSearchLoading(true);")
-
-        if provider == "jackett":
-            self._hub_search_jackett(query, source)
-        else:
-            self._hub_search_prowlarr(query, source)
-
-    def _hub_search_prowlarr(self, query, source="all"):
-        """Run a Prowlarr search in background."""
-        prowlarr = self._get_prowlarr()
-        if not prowlarr:
-            print("[hub] Prowlarr not available")
-            self._push_search_results([])
-            return
-
-        indexer_ids = None
-        if source and source != "all":
-            try:
-                indexer_ids = [int(source)]
-            except ValueError:
-                pass
-
-        def _bg():
-            try:
-                results, status = prowlarr.search_with_status(query, indexer_ids=indexer_ids)
-                print(f"[hub] Prowlarr search returned {len(results)} results (status={status})")
-
-                if status == "cf_blocked":
-                    print(f"[hub] Search blocked by Cloudflare, attempting solve...")
-                    QTimer.singleShot(0, lambda: self._start_cf_solve(query, source, indexer_ids))
-                    return
-
-                QTimer.singleShot(0, lambda: self._push_search_results(results))
-            except Exception as e:
-                print(f"[hub] Prowlarr search error: {e}")
-                QTimer.singleShot(0, lambda: self._push_search_results([]))
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    def _hub_search_jackett(self, query, source="all"):
-        """Run a Jackett search in background."""
-        jackett = self._get_jackett()
-        if not jackett:
-            print("[hub] Jackett not available")
-            self._push_search_results([])
-            return
-
-        indexer = source if source and source != "all" else "all"
-
-        def _bg():
-            try:
-                results, status = jackett.search_with_status(query, indexer=indexer)
-                print(f"[hub] Jackett search returned {len(results)} results (status={status})")
-
-                if status == "cf_blocked":
-                    print(f"[hub] Jackett search blocked by Cloudflare")
-                    # CF solve for Jackett — use the indexer URL directly
-                    QTimer.singleShot(0, lambda: self._start_cf_solve(query, source, None))
-                    return
-
-                QTimer.singleShot(0, lambda: self._push_search_results(results))
-            except Exception as e:
-                print(f"[hub] Jackett search error: {e}")
-                QTimer.singleShot(0, lambda: self._push_search_results([]))
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    def _start_cf_solve(self, query, source, indexer_ids):
-        """Trigger CF solver for blocked indexers, then retry search."""
-        prowlarr = self._get_prowlarr()
-        if not prowlarr:
-            self._push_search_results([])
-            return
-
-        # Find the base URL of the indexer that's likely blocked
-        solve_url = None
-        if indexer_ids:
-            indexers = prowlarr.list_indexers()
-            for ix in indexers:
-                if ix["id"] in indexer_ids and ix.get("baseUrl"):
-                    solve_url = ix["baseUrl"]
-                    break
-        if not solve_url:
-            # Try all enabled indexers' base URLs
-            indexers = prowlarr.list_indexers()
-            for ix in indexers:
-                if ix.get("enabled") and ix.get("baseUrl"):
-                    solve_url = ix["baseUrl"]
-                    break
-
-        if not solve_url:
-            print("[hub] No indexer URL found for CF solving")
-            self._push_search_results([])
-            return
-
-        self._cf_pending_search = (query, source)
-
-        if not self._cf_solver:
-            self._cf_solver = CfSolver(self._profile, parent=self)
-            self._cf_solver.solved.connect(self._on_cf_solved)
-            self._cf_solver.failed.connect(self._on_cf_failed)
-
-        # Push a status message to Hub
-        for tab in self._tabs:
-            if self._is_tab_on_hub(tab):
-                tab["page"].runJavaScript(
-                    "if(typeof setSearchLoading==='function')setSearchLoading(true,'Solving Cloudflare challenge...');"
-                )
-
-        self._cf_solver.solve(solve_url)
-
-    def _on_cf_solved(self, url):
-        """CF challenge solved — retry the pending search."""
-        print(f"[hub] CF solved for {url}, retrying search...")
-        pending = self._cf_pending_search
-        self._cf_pending_search = None
-        if pending:
-            query, source = pending
-            self._hub_search(query, source)
-
-    def _on_cf_failed(self, url, reason):
-        """CF solve failed — show empty results."""
-        print(f"[hub] CF solve failed for {url}: {reason}")
-        self._cf_pending_search = None
-        self._push_search_results([])
-
-    def _push_search_results(self, results):
-        """Push search results to all open Hub tabs."""
-        results_json = json.dumps(results)
-        for tab in self._tabs:
-            if self._is_tab_on_hub(tab):
-                tab["page"].runJavaScript(
-                    f"if(typeof updateSearchResults==='function')updateSearchResults({results_json});"
-                )
-                tab["page"].runJavaScript(
-                    f"if(typeof setSearchLoading==='function')setSearchLoading(false);"
-                )
-                tab["page"].runJavaScript(
-                    f"if(typeof setSearchResultCount==='function')setSearchResultCount({len(results)});"
-                )
-
-    def _hub_add_magnet(self, uri):
-        """Add a torrent via magnet URI in background."""
-        qbit = self._get_qbit()
-        if not qbit:
-            print("[hub] qBittorrent not available for adding magnet")
-            return
-
-        def _bg():
-            try:
-                qbit.add_magnet(uri)
-                import time
-                time.sleep(1)
-                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
-            except Exception as e:
-                print(f"[hub] Add magnet error: {e}")
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    def _hub_torrent_action(self, action, hash_):
-        """Pause/resume/delete a torrent in background."""
-        qbit = self._get_qbit()
-        if not qbit:
-            return
-
-        def _bg():
-            try:
-                if action == "pause":
-                    qbit.pause(hash_)
-                elif action == "resume":
-                    qbit.resume(hash_)
-                elif action == "delete":
-                    qbit.delete(hash_, delete_files=False)
-                import time
-                time.sleep(0.5)
-                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
-            except Exception as e:
-                print(f"[hub] Torrent action error: {e}")
-
-        threading.Thread(target=_bg, daemon=True).start()
-
-    def _hub_clear_downloads(self):
-        """Clear completed downloads."""
-        qbit = self._get_qbit()
-        if not qbit:
-            return
-
-        def _bg():
-            try:
-                torrents = qbit.list_torrents("completed")
-                if torrents:
-                    hashes = [t.get("hash", "") for t in torrents if t.get("hash")]
-                    if hashes:
-                        qbit.delete(hashes, delete_files=False)
-                import time
-                time.sleep(0.5)
-                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
-            except Exception as e:
-                print(f"[hub] Clear downloads error: {e}")
-
-        threading.Thread(target=_bg, daemon=True).start()
+    # The old _push_hub_data, _hub_search*, _hub_add_magnet, _hub_torrent_action,
+    # _hub_clear_downloads, _get_qbit, _get_prowlarr, _get_jackett, CF solver
+    # methods have been removed. qBittorrent's own Web UI handles everything.
 
     # ══════════════════════════════════════════════════════════════════════
     # Top bar actions

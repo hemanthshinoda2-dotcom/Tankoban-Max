@@ -499,20 +499,6 @@ class ShellBridge(QObject):
             return json.dumps(_err(str(e)))
 
     @Slot(result=str)
-    def openSourcesMode(self):
-        """Switch to the Sources mode (browser_sources.html)."""
-        print("[bridge] openSourcesMode slot called")
-        try:
-            win = self.parent().window._win
-            print(f"[bridge] win={win}")
-            if win:
-                win.show_sources_mode()
-            return json.dumps(_ok())
-        except Exception as e:
-            print(f"[bridge] openSourcesMode error: {e}")
-            return json.dumps(_err(str(e)))
-
-    @Slot(result=str)
     def getAppTheme(self):
         """Retrieve the current app theme from app_prefs.json."""
         try:
@@ -9379,7 +9365,6 @@ BRIDGE_SHIM_JS = r"""
         revealPath:  wrap(b.shell.revealPath, b.shell),
         openPath:    wrap(b.shell.openPath, b.shell),
         openWebMode: wrap(b.shell.openWebMode, b.shell),
-        openSourcesMode: wrap(b.shell.openSourcesMode, b.shell),
       },
 
       // clipboard

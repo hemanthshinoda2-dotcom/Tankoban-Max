@@ -305,9 +305,6 @@ class TankobanWindow(QMainWindow):
         self._torrent_init_thread = threading.Thread(target=self._detect_jackett, daemon=True)
         self._torrent_init_thread.start()
 
-        # --- Sources mode (QWebEngineView for browser_sources.html, lazy-created) ---
-        self._sources_view: QWebEngineView | None = None
-
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
             self._mpv_container.get_render_widget(),
@@ -377,22 +374,6 @@ class TankobanWindow(QMainWindow):
             self._stack.addWidget(self._tankoweb)  # index 2
 
         self._stack.setCurrentWidget(self._tankoweb)
-
-    def show_sources_mode(self):
-        """Switch to the Sources mode (qBittorrent Web UI)."""
-        print("[app] show_sources_mode() called")
-        if self._sources_view is None:
-            try:
-                from sources_widget import SourcesWidget
-                self._sources_view = SourcesWidget(parent=self)
-                self._stack.addWidget(self._sources_view)
-                print(f"[app] SourcesWidget created, stack count={self._stack.count()}")
-            except Exception as e:
-                print(f"[app] SourcesWidget creation FAILED: {e}")
-                import traceback; traceback.print_exc()
-                return
-        self._stack.setCurrentWidget(self._sources_view)
-        print(f"[app] stack current index={self._stack.currentIndex()}")
 
     def _detect_jackett(self):
         """Detect a running Jackett instance (not bundled, user-installed)."""

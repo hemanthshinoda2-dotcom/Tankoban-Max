@@ -1231,25 +1231,6 @@
     });
   }
 
-  // --- Sources mode button (in modeSwitch bar alongside Comics/Books/Videos) ---
-  var modeSourcesBtn = document.getElementById('modeSourcesBtn');
-  if (modeSourcesBtn) {
-    modeSourcesBtn.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        // Sync the mode router so the active button state (white tint) updates
-        if (window.Tanko && window.Tanko.modeRouter) {
-          Tanko.modeRouter.setMode('sources');
-        }
-        // Call the Python bridge to show the Sources widget
-        if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openSourcesMode === 'function') {
-          Tanko.api.shell.openSourcesMode();
-        } else {
-          console.warn('[shell] openSourcesMode not available — bridge not ready');
-        }
-      } catch (e) { console.error('[shell] openSourcesMode failed:', e); }
-    });
-  }
+
 
 })();
