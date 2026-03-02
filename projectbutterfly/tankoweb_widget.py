@@ -8,16 +8,16 @@ background skin, floating disconnected widgets, rounded browser viewport.
 Every chrome element (buttons, URL bar, tabs, Bookmark, History) is its
 own independent glass pill floating over the gradient — nothing is joined.
 
-Slice 4: Qt-native homepage with sources grid. Each tab has a plain
-QWidget container with both home and web view overlaid — visibility is
-toggled via setVisible() (not QStackedWidget, which breaks with native
-QWebEngineView on Windows). New tabs start on the home page.
+Slice 4: Homepage is an HTML file loaded inside QWebEngineView itself.
+No Qt overlay widgets — avoids native widget z-order issues on Windows.
+The home page communicates with Qt via tankoweb:// URL scheme interception.
 """
 
 import json
 import math
 import os
 import re
+import urllib.parse
 
 from PySide6.QtCore import Qt, QUrl, QTimer, QRectF, QPointF, QSize
 from PySide6.QtGui import (
@@ -27,7 +27,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel,
     QSizePolicy, QGraphicsDropShadowEffect, QFrame, QStackedWidget,
-    QScrollArea, QGridLayout, QInputDialog,
+    QInputDialog,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
@@ -35,6 +35,19 @@ from PySide6.QtWebEngineCore import (
 )
 
 import storage
+
+# ---------------------------------------------------------------------------
+# Home page — loaded inside QWebEngineView as an HTML file
+# ---------------------------------------------------------------------------
+_HOME_HTML_PATH = os.path.join(os.path.dirname(__file__), "data", "browser_home.html")
+_HOME_URL = QUrl.fromLocalFile(_HOME_HTML_PATH)
+
+def _is_home_url(url):
+    """Check if a QUrl points to the home page."""
+    if not url or url.isEmpty():
+        return True
+    s = url.toString()
+    return s == "about:blank" or s.startswith("file:") and "browser_home.html" in s
 
 # ---------------------------------------------------------------------------
 # Palette — ported from overhaul.css / web-browser.css tokens
@@ -312,7 +325,8 @@ class _ClockButton(QPushButton):
 # ---------------------------------------------------------------------------
 
 class _TankoWebPage(QWebEnginePage):
-    """QWebEnginePage subclass that routes _blank links to a new tab."""
+    """QWebEnginePage subclass that routes _blank links to a new tab
+    and intercepts tankoweb:// scheme for home page communication."""
 
     def __init__(self, profile, tab_host, parent=None):
         super().__init__(profile, parent)
@@ -321,218 +335,27 @@ class _TankoWebPage(QWebEnginePage):
     def createWindow(self, window_type):
         return self._tab_host.create_tab_and_return_page()
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-# _HomeWidget — Qt-native homepage (sources grid, search bar, recent tabs)
-# ═══════════════════════════════════════════════════════════════════════════
-
-class _FaviconCircle(QWidget):
-    """48x48 neutral glass circle with the first letter of a source name."""
-
-    def __init__(self, letter, parent=None):
-        super().__init__(parent)
-        self._letter = letter.upper() if letter else "?"
-        self.setFixedSize(48, 48)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # Neutral glass circle
-        p.setBrush(QColor(255, 255, 255, 15))
-        p.setPen(QPen(QColor(255, 255, 255, 30), 1.0))
-        p.drawEllipse(QRectF(2, 2, 44, 44))
-        # Letter
-        p.setPen(QPen(QColor(245, 245, 245, 180)))
-        font = p.font()
-        font.setFamily(FONT)
-        font.setPixelSize(18)
-        font.setWeight(600)
-        p.setFont(font)
-        p.drawText(QRectF(0, 0, 48, 48), Qt.AlignmentFlag.AlignCenter, self._letter)
-        p.end()
-
-
-class _HomeWidget(QScrollArea):
-    """
-    Chrome-style homepage: centered search pill + favicon grid.
-
-    - Large centered search bar (Yandex)
-    - Source tiles as circles with first-letter favicons + name below
-    - "+ Add" tile at the end
-    """
-
-    def __init__(self, on_navigate, on_add_source, parent=None):
-        super().__init__(parent)
-        self._on_navigate = on_navigate
-        self._on_add_source = on_add_source
-
-        self.setWidgetResizable(True)
-        self.setFrameShape(QFrame.Shape.NoFrame)
-        self.setStyleSheet(
-            "QScrollArea { background: transparent; border: none; }"
-            "QWidget#homeInner { background: transparent; }"
-            f"QScrollBar:vertical {{"
-            f"  background: transparent; width: 8px; margin: 0;"
-            f"}}"
-            f"QScrollBar::handle:vertical {{"
-            f"  background: rgba(255,255,255,0.12); border-radius: 4px; min-height: 30px;"
-            f"}}"
-            f"QScrollBar::handle:vertical:hover {{ background: rgba(255,255,255,0.20); }}"
-            f"QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}"
-        )
-
-        inner = QWidget()
-        inner.setObjectName("homeInner")
-        self._inner_layout = QVBoxLayout(inner)
-        self._inner_layout.setContentsMargins(0, 0, 0, 0)
-        self._inner_layout.setSpacing(0)
-
-        # Push content to vertical center
-        self._inner_layout.addStretch(3)
-
-        # Centered search bar
-        self._inner_layout.addWidget(self._build_search_bar(), 0, Qt.AlignmentFlag.AlignCenter)
-        self._inner_layout.addSpacing(36)
-
-        # Sources row — horizontally centered
-        self._sources_row = QWidget()
-        self._sources_row.setStyleSheet("background: transparent; border: none;")
-        self._sources_layout = QHBoxLayout(self._sources_row)
-        self._sources_layout.setContentsMargins(0, 0, 0, 0)
-        self._sources_layout.setSpacing(20)
-        self._inner_layout.addWidget(self._sources_row, 0, Qt.AlignmentFlag.AlignCenter)
-
-        self._inner_layout.addStretch(5)
-        self.setWidget(inner)
-
-    def _build_search_bar(self):
-        """Large centered search pill — like Chrome's new tab page."""
-        self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Search Yandex or type a URL")
-        self._search_input.setFixedWidth(540)
-        self._search_input.setFixedHeight(44)
-        self._search_input.setStyleSheet(
-            f"QLineEdit {{"
-            f"  background: {SURFACE}; color: {TEXT};"
-            f"  border: 1px solid {SURFACE_BORDER}; border-radius: 22px;"
-            f"  padding: 0 20px;"
-            f"  font-family: '{FONT}'; font-size: 14px;"
-            f"  selection-background-color: rgba({ACCENT_RGB},0.3);"
-            f"}}"
-            f"QLineEdit:focus {{ border-color: rgba({ACCENT_RGB},0.35); }}"
-        )
-        self._search_input.returnPressed.connect(self._do_search)
-        return self._search_input
-
-    def refresh_sources(self, sources):
-        """Rebuild the sources row from a list of source dicts."""
-        while self._sources_layout.count():
-            item = self._sources_layout.takeAt(0)
-            w = item.widget()
-            if w:
-                w.deleteLater()
-
-        for src in sources:
-            tile = self._build_source_tile(src)
-            self._sources_layout.addWidget(tile)
-
-        # "+ Add" tile
-        self._sources_layout.addWidget(self._build_add_tile())
-
-    def _build_source_tile(self, src):
-        """Vertical stack: favicon circle + name label."""
-        name = src.get("name", "")
-        url = src.get("url", "")
-        letter = name[0] if name else "?"
-
-        tile = QPushButton()
-        tile.setCursor(Qt.CursorShape.PointingHandCursor)
-        tile.setFixedSize(80, 80)
-        tile.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: transparent; border: none; border-radius: 12px;"
-            f"}}"
-            f"QPushButton:hover {{ background: {SURFACE}; }}"
-        )
-        tile.clicked.connect(lambda checked=False, u=url: self._on_navigate(u))
-
-        layout = QVBoxLayout(tile)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(4)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        icon = _FaviconCircle(letter)
-        layout.addWidget(icon, 0, Qt.AlignmentFlag.AlignCenter)
-
-        label = QLabel(name)
-        label.setStyleSheet(
-            f"background: transparent; border: none; color: {TEXT_MUTED};"
-            f"font-family: '{FONT}'; font-size: 10px;"
-        )
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        layout.addWidget(label, 0, Qt.AlignmentFlag.AlignCenter)
-
-        return tile
-
-    def _build_add_tile(self):
-        """The "+" circle for adding a new source."""
-        tile = QPushButton()
-        tile.setCursor(Qt.CursorShape.PointingHandCursor)
-        tile.setFixedSize(80, 80)
-        tile.setStyleSheet(
-            f"QPushButton {{"
-            f"  background: transparent; border: none; border-radius: 12px;"
-            f"}}"
-            f"QPushButton:hover {{ background: {SURFACE}; }}"
-        )
-        tile.clicked.connect(self._on_add_source)
-
-        layout = QVBoxLayout(tile)
-        layout.setContentsMargins(0, 4, 0, 4)
-        layout.setSpacing(4)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        # Circle with "+"
-        plus_circle = QWidget()
-        plus_circle.setFixedSize(48, 48)
-        plus_circle.setStyleSheet(
-            f"background: transparent;"
-            f"border: 2px dashed {SURFACE_BORDER};"
-            f"border-radius: 24px;"
-        )
-        plus_circle.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-
-        plus_label = QLabel("+")
-        plus_label.setStyleSheet(
-            f"background: transparent; border: none; color: {TEXT_MUTED};"
-            f"font-family: '{FONT}'; font-size: 20px;"
-        )
-        plus_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        plus_label.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        plus_inner = QVBoxLayout(plus_circle)
-        plus_inner.setContentsMargins(0, 0, 0, 0)
-        plus_inner.addWidget(plus_label)
-
-        layout.addWidget(plus_circle, 0, Qt.AlignmentFlag.AlignCenter)
-
-        text = QLabel("Add")
-        text.setStyleSheet(
-            f"background: transparent; border: none; color: {TEXT_MUTED};"
-            f"font-family: '{FONT}'; font-size: 10px;"
-        )
-        text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        text.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-        layout.addWidget(text, 0, Qt.AlignmentFlag.AlignCenter)
-
-        return tile
-
-    def _do_search(self):
-        text = self._search_input.text().strip()
-        if text:
-            url = _fixup_url(text)
-            self._on_navigate(url)
+    def acceptNavigationRequest(self, url, nav_type, is_main_frame):
+        """Intercept tankoweb:// URLs from the home page."""
+        if url.scheme() == "tankoweb":
+            host = url.host()
+            if host == "navigate":
+                target = urllib.parse.unquote(
+                    QUrl(url).query().replace("url=", "", 1)
+                )
+                if target:
+                    self._tab_host._navigate_from_home(self, target)
+            elif host == "search":
+                query = urllib.parse.unquote(
+                    QUrl(url).query().replace("q=", "", 1)
+                )
+                if query:
+                    real_url = _fixup_url(query)
+                    self._tab_host._navigate_from_home(self, real_url)
+            elif host == "add-source":
+                self._tab_host._add_source_dialog()
+            return False  # block the tankoweb:// navigation
+        return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -557,7 +380,7 @@ class TankoWebWidget(QWidget):
         self._on_window_action = on_window_action
 
         # Tab state
-        # Each tab: {"stack", "home", "view", "page", "title", "url", "on_home"}
+        # Each tab: {"view", "page", "title", "url"}
         self._tabs = []
         self._active_idx = -1
 
@@ -763,7 +586,7 @@ class TankoWebWidget(QWidget):
             pill_layout.setContentsMargins(0, 0, 0, 0)
             pill_layout.setSpacing(0)
 
-            title = tab["title"] or ("Home" if tab["on_home"] else "New Tab")
+            title = tab["title"] or ("Home" if self._is_tab_on_home(tab) else "New Tab")
             display = title if len(title) <= 20 else title[:18] + "\u2026"
             title_btn = QPushButton(display)
             title_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -893,23 +716,23 @@ class TankoWebWidget(QWidget):
             )
             _apply_shadow(self._viewport_frame, blur=28, dy=10, color=QColor(0, 0, 0, 200))
 
-    def _set_tab_home(self, tab, on_home):
-        """Toggle a tab between home page and web view.
+    def _is_tab_on_home(self, tab):
+        """Check if a tab is currently showing the home page."""
+        return _is_home_url(tab["page"].url())
 
-        We avoid QStackedWidget for the per-tab home/web toggle because
-        QWebEngineView is a native widget that doesn't respect stacked
-        visibility on Windows. Instead we use explicit setVisible() on
-        both widgets directly.
-        """
-        tab["on_home"] = on_home
-        if on_home:
-            tab["view"].setVisible(False)
-            tab["home"].setVisible(True)
-            tab["home"].raise_()
-        else:
-            tab["home"].setVisible(False)
-            tab["view"].setVisible(True)
-            tab["view"].raise_()
+    def _load_home(self, view):
+        """Load the home page HTML into a QWebEngineView, then inject sources."""
+        view.load(_HOME_URL)
+
+    def _inject_sources_into_home(self, tab_idx):
+        """After home page loads, inject the sources data via JS."""
+        if tab_idx < 0 or tab_idx >= len(self._tabs):
+            return
+        tab = self._tabs[tab_idx]
+        sources_json = json.dumps(self._sources)
+        tab["view"].page().runJavaScript(
+            f"if(typeof renderSources==='function')renderSources({sources_json});"
+        )
 
     # ══════════════════════════════════════════════════════════════════════
     # Tab lifecycle
@@ -932,39 +755,16 @@ class TankoWebWidget(QWidget):
         view.setPage(page)
         view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        # Per-tab container: plain QWidget with both home and view overlaid.
-        # We use setVisible() to toggle — not QStackedWidget — because
-        # QWebEngineView is a native widget that ignores stacked visibility.
-        tab_container = QWidget()
-        tab_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        container_layout = QVBoxLayout(tab_container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(0)
-
         idx = len(self._tabs)
 
-        home = _HomeWidget(
-            on_navigate=lambda u, i=idx: self._home_navigate(i, u),
-            on_add_source=self._add_source_dialog,
-        )
-        home.refresh_sources(self._sources)
-
-        container_layout.addWidget(home)
-        container_layout.addWidget(view)
-
-        start_on_home = (url is None)
-
         self._tabs.append({
-            "stack": tab_container,
-            "home": home,
             "view": view,
             "page": page,
-            "title": "" if not start_on_home else "",
+            "title": "",
             "url": url or "",
-            "on_home": start_on_home,
         })
 
-        self._view_stack.addWidget(tab_container)
+        self._view_stack.addWidget(view)
 
         # Wire signals
         tab_idx = idx
@@ -978,12 +778,10 @@ class TankoWebWidget(QWidget):
         fwd_action = page.action(QWebEnginePage.WebAction.Forward)
         fwd_action.changed.connect(lambda i=tab_idx: self._update_nav_state(i))
 
-        tab_data = self._tabs[idx]
-        if start_on_home:
-            self._set_tab_home(tab_data, True)
-        else:
-            self._set_tab_home(tab_data, False)
+        if url:
             view.load(QUrl(url))
+        else:
+            self._load_home(view)
 
         if switch_to:
             self._switch_tab(idx)
@@ -997,8 +795,6 @@ class TankoWebWidget(QWidget):
         if len(self._tabs) >= MAX_TABS:
             return None
         idx = self._create_tab(url=None, switch_to=True)
-        # Flip to web view since content is coming
-        self._set_tab_home(self._tabs[idx], False)
         self._update_viewport_style(False)
         return self._tabs[idx]["page"]
 
@@ -1012,11 +808,9 @@ class TankoWebWidget(QWidget):
             idx = 0
 
         tab = self._tabs.pop(idx)
-        self._view_stack.removeWidget(tab["stack"])
+        self._view_stack.removeWidget(tab["view"])
         tab["view"].deleteLater()
         tab["page"].deleteLater()
-        tab["home"].deleteLater()
-        tab["stack"].deleteLater()
 
         self._rewire_tab_signals()
 
@@ -1035,11 +829,12 @@ class TankoWebWidget(QWidget):
             return
         self._active_idx = idx
         tab = self._tabs[idx]
-        self._view_stack.setCurrentWidget(tab["stack"])
+        self._view_stack.setCurrentWidget(tab["view"])
 
-        self._update_viewport_style(tab["on_home"])
+        on_home = self._is_tab_on_home(tab)
+        self._update_viewport_style(on_home)
 
-        if tab["on_home"]:
+        if on_home:
             self._address_bar.clear()
             self._nav_back_btn.setEnabled(False)
             self._nav_fwd_btn.setEnabled(False)
@@ -1083,20 +878,27 @@ class TankoWebWidget(QWidget):
             back_action.changed.connect(lambda x=idx: self._update_nav_state(x))
             fwd_action.changed.connect(lambda x=idx: self._update_nav_state(x))
 
-        # Also update home widget navigate callbacks
-        for i, tab in enumerate(self._tabs):
-            tab["home"]._on_navigate = lambda u, x=i: self._home_navigate(x, u)
-
     # ══════════════════════════════════════════════════════════════════════
     # Home page interaction
     # ══════════════════════════════════════════════════════════════════════
+
+    def _navigate_from_home(self, page, url):
+        """Called by _TankoWebPage when user clicks a source or searches from home."""
+        # Find which tab owns this page
+        tab_idx = -1
+        for i, tab in enumerate(self._tabs):
+            if tab["page"] is page:
+                tab_idx = i
+                break
+        if tab_idx < 0:
+            return
+        self._home_navigate(tab_idx, url)
 
     def _home_navigate(self, tab_idx, url):
         """Called when user clicks a source tile or searches from the home page."""
         if tab_idx < 0 or tab_idx >= len(self._tabs):
             return
         tab = self._tabs[tab_idx]
-        self._set_tab_home(tab, False)
         tab["view"].load(QUrl(url))
 
         if tab_idx == self._active_idx:
@@ -1108,10 +910,9 @@ class TankoWebWidget(QWidget):
         if self._active_idx < 0 or self._active_idx >= len(self._tabs):
             return
         tab = self._tabs[self._active_idx]
-        self._set_tab_home(tab, True)
         tab["title"] = ""
         tab["url"] = ""
-        tab["home"].refresh_sources(self._sources)
+        self._load_home(tab["view"])
         self._update_viewport_style(True)
         self._address_bar.clear()
         self._nav_back_btn.setEnabled(False)
@@ -1147,9 +948,10 @@ class TankoWebWidget(QWidget):
         self._sources.append(new_source)
         _write_sources(self._sources)
 
-        # Refresh all home widgets
-        for tab in self._tabs:
-            tab["home"].refresh_sources(self._sources)
+        # Refresh any tabs currently showing the home page
+        for i, tab in enumerate(self._tabs):
+            if self._is_tab_on_home(tab):
+                self._load_home(tab["view"])
 
     # ══════════════════════════════════════════════════════════════════════
     # Tab signal handlers
@@ -1157,13 +959,24 @@ class TankoWebWidget(QWidget):
 
     def _on_tab_url_changed(self, tab_idx, qurl):
         if tab_idx < len(self._tabs):
-            self._tabs[tab_idx]["url"] = qurl.toString()
+            tab = self._tabs[tab_idx]
+            on_home = _is_home_url(qurl)
+            tab["url"] = "" if on_home else qurl.toString()
         if tab_idx == self._active_idx:
-            self._address_bar.setText(qurl.toString())
+            if on_home:
+                self._address_bar.clear()
+                self._update_viewport_style(True)
+            else:
+                self._address_bar.setText(qurl.toString())
+                self._update_viewport_style(False)
 
     def _on_tab_title_changed(self, tab_idx, title):
         if tab_idx < len(self._tabs):
-            self._tabs[tab_idx]["title"] = title
+            tab = self._tabs[tab_idx]
+            if self._is_tab_on_home(tab):
+                tab["title"] = ""
+            else:
+                tab["title"] = title
         if tab_idx == self._active_idx:
             self._rebuild_tab_pills()
 
@@ -1178,6 +991,10 @@ class TankoWebWidget(QWidget):
             self._is_loading = False
             self._reload_btn.setText("\u27F3")
             self._reload_btn.setToolTip("Reload")
+
+        # Inject sources data into home page after it loads
+        if tab_idx < len(self._tabs) and self._is_tab_on_home(self._tabs[tab_idx]):
+            self._inject_sources_into_home(tab_idx)
 
     def _update_nav_state(self, tab_idx):
         if tab_idx != self._active_idx:
@@ -1208,9 +1025,7 @@ class TankoWebWidget(QWidget):
         url = _fixup_url(text)
         if self._active_idx >= 0 and self._active_idx < len(self._tabs):
             tab = self._tabs[self._active_idx]
-            if tab["on_home"]:
-                self._set_tab_home(tab, False)
-                self._update_viewport_style(False)
+            self._update_viewport_style(False)
             tab["view"].load(QUrl(url))
 
     def _reload_or_stop(self):
