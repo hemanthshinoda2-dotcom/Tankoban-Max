@@ -8,7 +8,8 @@ background skin, floating disconnected widgets, rounded browser viewport.
 Every chrome element (buttons, URL bar, tabs, Bookmark, History) is its
 own independent glass pill floating over the gradient — nothing is joined.
 
-Slice 2.5: Glass skin + floating chrome + proper URL bar.
+Slice 3: Multi-tab browsing with dynamic tab pills, keyboard shortcuts,
+and createWindow override for target=_blank links.
 """
 
 import math
@@ -17,11 +18,11 @@ import re
 from PySide6.QtCore import Qt, QUrl, QTimer, QRectF, QPointF
 from PySide6.QtGui import (
     QPainter, QRadialGradient, QLinearGradient, QColor,
-    QPen, QPolygonF, QPainterPath,
+    QPen, QPolygonF, QPainterPath, QShortcut, QKeySequence,
 )
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLineEdit, QLabel,
-    QSizePolicy, QGraphicsDropShadowEffect, QFrame,
+    QSizePolicy, QGraphicsDropShadowEffect, QFrame, QStackedWidget,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import (
@@ -81,6 +82,9 @@ HOME_URL = "https://www.google.com"
 SIDE_MARGIN = 12
 BOTTOM_MARGIN = 12
 
+# Tab limits
+MAX_TABS = 20
+
 
 # ---------------------------------------------------------------------------
 # URL fixup
@@ -123,7 +127,7 @@ def _icon_btn_ss(extra=""):
 
 
 def _pill_btn_ss(extra=""):
-    """Pill-shaped text button (Bookmark, History, ← Library)."""
+    """Pill-shaped text button (← Library)."""
     return (
         f"QPushButton {{"
         f"  background: {SURFACE}; color: {TEXT};"
@@ -151,6 +155,20 @@ def _tab_ss(active=False):
         f"  min-height: 24px;"
         f"}}"
         f"QPushButton:hover {{ background: rgba({ACCENT_RGB},0.08); }}"
+    )
+
+
+def _tab_close_ss():
+    """Tiny × button inside a tab pill."""
+    return (
+        f"QPushButton {{"
+        f"  background: transparent; color: {TEXT_MUTED};"
+        f"  border: none; border-radius: 4px;"
+        f"  font-family: '{FONT}'; font-size: 10px;"
+        f"  min-width: 16px; max-width: 16px; min-height: 16px; max-height: 16px;"
+        f"  padding: 0; margin: 0 0 0 4px;"
+        f"}}"
+        f"QPushButton:hover {{ background: rgba(255,255,255,0.15); color: {TEXT}; }}"
     )
 
 
@@ -248,6 +266,22 @@ class _ClockButton(QPushButton):
         p.end()
 
 
+# ---------------------------------------------------------------------------
+# Custom QWebEnginePage — intercepts target=_blank to open in new tab
+# ---------------------------------------------------------------------------
+
+class _TankoWebPage(QWebEnginePage):
+    """QWebEnginePage subclass that routes _blank links to a new tab."""
+
+    def __init__(self, profile, tab_host, parent=None):
+        super().__init__(profile, parent)
+        self._tab_host = tab_host  # TankoWebWidget instance
+
+    def createWindow(self, window_type):
+        """Override: instead of opening a new window, create a new tab."""
+        return self._tab_host.create_tab_and_return_page()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # TankoWebWidget
 # ═══════════════════════════════════════════════════════════════════════════
@@ -269,6 +303,16 @@ class TankoWebWidget(QWidget):
         self._on_back = on_back
         self._on_window_action = on_window_action
 
+        # Tab state
+        self._tabs = []       # list of {"view", "page", "title", "url"}
+        self._active_idx = -1
+
+        # Shared profile for all tabs
+        self._profile = QWebEngineProfile("tankoweb", self)
+        cache_path = storage.data_path("TankowebEngine")
+        self._profile.setCachePath(cache_path)
+        self._profile.setPersistentStoragePath(cache_path)
+
         # Background animation
         self._bg_phase = 0.0
         self._bg_timer = QTimer(self)
@@ -283,39 +327,32 @@ class TankoWebWidget(QWidget):
 
         # Row 1: ← Library (left)  ...stretch...  — □ ✕ (right)
         root.addWidget(self._build_chrome_row())
-        root.addSpacing(12)  # 12px below chrome row
+        root.addSpacing(12)
 
         # Row 2: TANKOBROWSER label
         root.addWidget(self._build_title_label())
-        root.addSpacing(12)  # 12px below title
+        root.addSpacing(12)
 
-        # Row 3: Tab row (individual tab pills + new-tab btn)
-        root.addWidget(self._build_tab_row())
-        root.addSpacing(6)  # gap between tabs and nav
+        # Row 3: Tab row (dynamic tab pills + new-tab btn)
+        self._tab_row = self._build_tab_row()
+        root.addWidget(self._tab_row)
+        root.addSpacing(6)
 
-        # Row 4: Nav row — each element is a separate glass pill
+        # Row 4: Nav row
         root.addWidget(self._build_nav_row())
-        root.addSpacing(8)  # margin-bottom: 8px from .sourcesBrowserTopBar
+        root.addSpacing(8)
 
-        # Row 5: Browser viewport
+        # Row 5: Browser viewport with QStackedWidget for tab views
         self._build_browser(root)
 
-        # Wire page signals
-        self._page.urlChanged.connect(self._on_url_changed)
-        self._page.titleChanged.connect(self._on_title_changed)
-        self._page.loadStarted.connect(self._on_load_started)
-        self._page.loadFinished.connect(self._on_load_finished)
+        # Keyboard shortcuts
+        QShortcut(QKeySequence("Ctrl+T"), self, self._shortcut_new_tab)
+        QShortcut(QKeySequence("Ctrl+W"), self, self._shortcut_close_tab)
+        QShortcut(QKeySequence("Ctrl+Tab"), self, self._shortcut_next_tab)
+        QShortcut(QKeySequence("Ctrl+Shift+Tab"), self, self._shortcut_prev_tab)
 
-        back_action = self._page.action(QWebEnginePage.WebAction.Back)
-        back_action.changed.connect(
-            lambda: self._nav_back_btn.setEnabled(back_action.isEnabled())
-        )
-        fwd_action = self._page.action(QWebEnginePage.WebAction.Forward)
-        fwd_action.changed.connect(
-            lambda: self._nav_fwd_btn.setEnabled(fwd_action.isEnabled())
-        )
-
-        self._view.load(QUrl(HOME_URL))
+        # Create first tab
+        self._create_tab(HOME_URL)
 
     # ══════════════════════════════════════════════════════════════════════
     # Background painting — animated gradient skin (ports .bgFx)
@@ -422,8 +459,7 @@ class TankoWebWidget(QWidget):
         return label
 
     # ══════════════════════════════════════════════════════════════════════
-    # Row 3: Tab row — individual tab pills + new-tab button
-    # Each tab is its own disconnected glass pill.
+    # Row 3: Tab row — dynamic tab pills + new-tab button
     # ══════════════════════════════════════════════════════════════════════
 
     def _build_tab_row(self):
@@ -434,20 +470,15 @@ class TankoWebWidget(QWidget):
 
         self._tab_layout = QHBoxLayout(row)
         self._tab_layout.setContentsMargins(0, 0, 0, 0)
-        self._tab_layout.setSpacing(6)  # gap: 6px from .sourcesBrowserTabList
+        self._tab_layout.setSpacing(6)
 
-        # Initial tab (will be updated by title signal)
-        self._tab_btn = QPushButton("Google")
-        self._tab_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._tab_btn.setStyleSheet(_tab_ss(active=True))
-        self._tab_layout.addWidget(self._tab_btn)
-
+        # Stretch to push + button to the right
         self._tab_layout.addStretch()
 
         # + New tab button — 28x28 glass icon
-        new_tab_btn = QPushButton("+")
-        new_tab_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_tab_btn.setStyleSheet(
+        self._new_tab_btn = QPushButton("+")
+        self._new_tab_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._new_tab_btn.setStyleSheet(
             f"QPushButton {{"
             f"  min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;"
             f"  background: {SURFACE}; color: {TEXT_MUTED};"
@@ -456,46 +487,83 @@ class TankoWebWidget(QWidget):
             f"}}"
             f"QPushButton:hover {{ color: {TEXT}; background: {SURFACE_HOVER}; }}"
         )
-        self._tab_layout.addWidget(new_tab_btn)
+        self._new_tab_btn.clicked.connect(lambda: self._create_tab(HOME_URL))
+        self._tab_layout.addWidget(self._new_tab_btn)
 
         return row
 
+    def _rebuild_tab_pills(self):
+        """Clear and rebuild all tab pill buttons to match self._tabs."""
+        # Remove everything except the stretch and + button (last 2 items)
+        while self._tab_layout.count() > 2:
+            item = self._tab_layout.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
+
+        # Insert tab pills before the stretch
+        for i, tab in enumerate(self._tabs):
+            pill = QWidget()
+            pill.setStyleSheet("background: transparent; border: none;")
+            pill_layout = QHBoxLayout(pill)
+            pill_layout.setContentsMargins(0, 0, 0, 0)
+            pill_layout.setSpacing(0)
+
+            is_active = (i == self._active_idx)
+
+            # Tab title button
+            title = tab["title"] or "New Tab"
+            display = title if len(title) <= 20 else title[:18] + "\u2026"
+            title_btn = QPushButton(display)
+            title_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            title_btn.setStyleSheet(_tab_ss(active=is_active))
+            idx = i  # capture for lambda
+            title_btn.clicked.connect(lambda checked=False, x=idx: self._switch_tab(x))
+            pill_layout.addWidget(title_btn)
+
+            # × close button (only if >1 tab)
+            if len(self._tabs) > 1:
+                close_btn = QPushButton("\u2715")
+                close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                close_btn.setStyleSheet(_tab_close_ss())
+                close_btn.clicked.connect(lambda checked=False, x=idx: self._close_tab(x))
+                pill_layout.addWidget(close_btn)
+
+            self._tab_layout.insertWidget(i, pill)
+
     # ══════════════════════════════════════════════════════════════════════
     # Row 4: Nav row — EVERY element is a separate glass widget
-    # [◀] [▶] [↻]  [═══ url ═══]  [▶] [Bookmark] [History]
-    #  ↑    ↑   ↑       ↑          ↑       ↑          ↑
-    #  each one has its own border, radius, background
     # ══════════════════════════════════════════════════════════════════════
 
     def _build_nav_row(self):
         row = QWidget()
         row.setMinimumHeight(ICON_BTN_SIZE + 6)
-        row.setFixedHeight(ICON_BTN_SIZE + 6)  # min-height: 40px ≈ 30 + padding
+        row.setFixedHeight(ICON_BTN_SIZE + 6)
         row.setStyleSheet("background: transparent; border: none;")
 
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)  # gap: 6px from .sourcesBrowserTopBar
+        layout.setSpacing(6)
 
-        # ◀ Back — separate 30x30 glass icon button
+        # ◀ Back
         self._nav_back_btn = QPushButton("\u25C0")
         self._nav_back_btn.setEnabled(False)
         self._nav_back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._nav_back_btn.setStyleSheet(_icon_btn_ss())
         self._nav_back_btn.setToolTip("Back")
-        self._nav_back_btn.clicked.connect(lambda: self._view.back())
+        self._nav_back_btn.clicked.connect(self._nav_back)
         layout.addWidget(self._nav_back_btn)
 
-        # ▶ Forward — separate 30x30 glass icon button
+        # ▶ Forward
         self._nav_fwd_btn = QPushButton("\u25B6")
         self._nav_fwd_btn.setEnabled(False)
         self._nav_fwd_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._nav_fwd_btn.setStyleSheet(_icon_btn_ss())
         self._nav_fwd_btn.setToolTip("Forward")
-        self._nav_fwd_btn.clicked.connect(lambda: self._view.forward())
+        self._nav_fwd_btn.clicked.connect(self._nav_forward)
         layout.addWidget(self._nav_fwd_btn)
 
-        # ↻ Reload/Stop — separate 30x30 glass icon button
+        # ↻ Reload/Stop
         self._reload_btn = QPushButton("\u27F3")
         self._reload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reload_btn.setStyleSheet(_icon_btn_ss())
@@ -504,7 +572,7 @@ class TankoWebWidget(QWidget):
         self._is_loading = False
         layout.addWidget(self._reload_btn)
 
-        # URL bar — separate glass pill, flex: 1, max-width: 520px
+        # URL bar
         self._address_bar = QLineEdit()
         self._address_bar.setPlaceholderText("Search or enter URL")
         self._address_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -512,7 +580,7 @@ class TankoWebWidget(QWidget):
         self._address_bar.returnPressed.connect(self._navigate_to_input)
         layout.addWidget(self._address_bar)
 
-        # ▶ Go button — separate 30x30 glass icon button
+        # ▶ Go
         go_btn = QPushButton("\u25B6")
         go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         go_btn.setStyleSheet(_icon_btn_ss())
@@ -520,18 +588,18 @@ class TankoWebWidget(QWidget):
         go_btn.clicked.connect(self._navigate_to_input)
         layout.addWidget(go_btn)
 
-        # Bookmark — 30x30 glass icon with QPainter star
+        # Bookmark — star icon
         bk_btn = _StarButton()
         layout.addWidget(bk_btn)
 
-        # History — 30x30 glass icon with QPainter clock-arrow
+        # History — clock icon
         hist_btn = _ClockButton()
         layout.addWidget(hist_btn)
 
         return row
 
     # ══════════════════════════════════════════════════════════════════════
-    # Row 5: Browser viewport — rounded, with space for skin
+    # Row 5: Browser viewport — QStackedWidget for multiple tab views
     # ══════════════════════════════════════════════════════════════════════
 
     def _build_browser(self, root_layout):
@@ -552,65 +620,243 @@ class TankoWebWidget(QWidget):
         frame_layout.setContentsMargins(0, 0, 0, 0)
         frame_layout.setSpacing(0)
 
-        # QWebEngineView with isolated profile
-        self._profile = QWebEngineProfile("tankoweb", self)
-        cache_path = storage.data_path("TankowebEngine")
-        self._profile.setCachePath(cache_path)
-        self._profile.setPersistentStoragePath(cache_path)
+        # QStackedWidget holds one QWebEngineView per tab
+        self._view_stack = QStackedWidget()
+        self._view_stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        frame_layout.addWidget(self._view_stack)
+        root_layout.addWidget(self._viewport_frame, 1)
 
-        self._page = QWebEnginePage(self._profile, self)
-        self._page.setBackgroundColor(QColor(10, 16, 24))
+    # ══════════════════════════════════════════════════════════════════════
+    # Tab lifecycle
+    # ══════════════════════════════════════════════════════════════════════
 
-        s = self._page.settings()
+    def _create_tab(self, url=None, switch_to=True):
+        """Create a new tab, optionally loading a URL. Returns the tab index."""
+        if len(self._tabs) >= MAX_TABS:
+            return self._active_idx
+
+        page = _TankoWebPage(self._profile, self, self)
+        page.setBackgroundColor(QColor(10, 16, 24))
+
+        s = page.settings()
         s.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         s.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
 
-        self._view = QWebEngineView(self)
-        self._view.setPage(self._page)
-        self._view.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        view = QWebEngineView(self)
+        view.setPage(page)
+        view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-        frame_layout.addWidget(self._view)
-        root_layout.addWidget(self._viewport_frame, 1)  # stretch=1: fill all remaining space
+        idx = len(self._tabs)
+        self._tabs.append({
+            "view": view,
+            "page": page,
+            "title": "",
+            "url": url or HOME_URL,
+        })
+
+        self._view_stack.addWidget(view)
+
+        # Wire signals for this tab
+        tab_idx = idx  # capture
+        page.urlChanged.connect(lambda qurl, i=tab_idx: self._on_tab_url_changed(i, qurl))
+        page.titleChanged.connect(lambda title, i=tab_idx: self._on_tab_title_changed(i, title))
+        page.loadStarted.connect(lambda i=tab_idx: self._on_tab_load_started(i))
+        page.loadFinished.connect(lambda ok, i=tab_idx: self._on_tab_load_finished(i, ok))
+
+        # Wire nav button state for this tab
+        back_action = page.action(QWebEnginePage.WebAction.Back)
+        back_action.changed.connect(lambda i=tab_idx: self._update_nav_state(i))
+        fwd_action = page.action(QWebEnginePage.WebAction.Forward)
+        fwd_action.changed.connect(lambda i=tab_idx: self._update_nav_state(i))
+
+        if url:
+            view.load(QUrl(url))
+
+        if switch_to:
+            self._switch_tab(idx)
+        else:
+            self._rebuild_tab_pills()
+
+        return idx
+
+    def create_tab_and_return_page(self):
+        """Called by _TankoWebPage.createWindow — creates tab and returns its page."""
+        if len(self._tabs) >= MAX_TABS:
+            return None
+        idx = self._create_tab(url=None, switch_to=True)
+        return self._tabs[idx]["page"]
+
+    def _close_tab(self, idx):
+        """Close tab at index. If last tab, create a fresh one first."""
+        if idx < 0 or idx >= len(self._tabs):
+            return
+
+        if len(self._tabs) == 1:
+            # Last tab: create replacement before closing
+            self._create_tab(HOME_URL, switch_to=False)
+            idx = 0  # close the original (now at 0)
+
+        tab = self._tabs.pop(idx)
+        self._view_stack.removeWidget(tab["view"])
+        tab["view"].deleteLater()
+        tab["page"].deleteLater()
+
+        # Fix signal closures: we need to rewire since indices shifted
+        # Simplest approach: disconnect all and reconnect
+        self._rewire_tab_signals()
+
+        # Adjust active index
+        if self._active_idx >= len(self._tabs):
+            self._active_idx = len(self._tabs) - 1
+        elif self._active_idx > idx:
+            self._active_idx -= 1
+        elif self._active_idx == idx:
+            self._active_idx = min(idx, len(self._tabs) - 1)
+
+        self._switch_tab(self._active_idx)
+
+    def _switch_tab(self, idx):
+        """Activate tab at index."""
+        if idx < 0 or idx >= len(self._tabs):
+            return
+        self._active_idx = idx
+        tab = self._tabs[idx]
+        self._view_stack.setCurrentWidget(tab["view"])
+
+        # Sync address bar and nav state
+        url = tab["page"].url()
+        if url and url.toString() and url.toString() != "about:blank":
+            self._address_bar.setText(url.toString())
+        else:
+            self._address_bar.clear()
+
+        self._update_nav_state(idx)
+        self._rebuild_tab_pills()
+
+    def _rewire_tab_signals(self):
+        """Rewire all tab signals after an index shift (tab close)."""
+        for i, tab in enumerate(self._tabs):
+            page = tab["page"]
+            # Disconnect old signals — use blockSignals briefly during rewire
+            try:
+                page.urlChanged.disconnect()
+                page.titleChanged.disconnect()
+                page.loadStarted.disconnect()
+                page.loadFinished.disconnect()
+            except RuntimeError:
+                pass  # already disconnected
+
+            idx = i
+            page.urlChanged.connect(lambda qurl, x=idx: self._on_tab_url_changed(x, qurl))
+            page.titleChanged.connect(lambda title, x=idx: self._on_tab_title_changed(x, title))
+            page.loadStarted.connect(lambda x=idx: self._on_tab_load_started(x))
+            page.loadFinished.connect(lambda ok, x=idx: self._on_tab_load_finished(x, ok))
+
+            back_action = page.action(QWebEnginePage.WebAction.Back)
+            fwd_action = page.action(QWebEnginePage.WebAction.Forward)
+            try:
+                back_action.changed.disconnect()
+                fwd_action.changed.disconnect()
+            except RuntimeError:
+                pass
+            back_action.changed.connect(lambda x=idx: self._update_nav_state(x))
+            fwd_action.changed.connect(lambda x=idx: self._update_nav_state(x))
 
     # ══════════════════════════════════════════════════════════════════════
-    # Navigation actions
+    # Tab signal handlers
     # ══════════════════════════════════════════════════════════════════════
+
+    def _on_tab_url_changed(self, tab_idx, qurl):
+        if tab_idx < len(self._tabs):
+            self._tabs[tab_idx]["url"] = qurl.toString()
+        if tab_idx == self._active_idx:
+            self._address_bar.setText(qurl.toString())
+
+    def _on_tab_title_changed(self, tab_idx, title):
+        if tab_idx < len(self._tabs):
+            self._tabs[tab_idx]["title"] = title
+        if tab_idx == self._active_idx:
+            self._rebuild_tab_pills()
+
+    def _on_tab_load_started(self, tab_idx):
+        if tab_idx == self._active_idx:
+            self._is_loading = True
+            self._reload_btn.setText("\u2715")
+            self._reload_btn.setToolTip("Stop")
+
+    def _on_tab_load_finished(self, tab_idx, ok):
+        if tab_idx == self._active_idx:
+            self._is_loading = False
+            self._reload_btn.setText("\u27F3")
+            self._reload_btn.setToolTip("Reload")
+
+    def _update_nav_state(self, tab_idx):
+        """Update back/forward button enabled state for the given tab."""
+        if tab_idx != self._active_idx:
+            return
+        if tab_idx < len(self._tabs):
+            page = self._tabs[tab_idx]["page"]
+            self._nav_back_btn.setEnabled(
+                page.action(QWebEnginePage.WebAction.Back).isEnabled()
+            )
+            self._nav_fwd_btn.setEnabled(
+                page.action(QWebEnginePage.WebAction.Forward).isEnabled()
+            )
+
+    # ══════════════════════════════════════════════════════════════════════
+    # Navigation actions — operate on active tab
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _active_view(self):
+        if 0 <= self._active_idx < len(self._tabs):
+            return self._tabs[self._active_idx]["view"]
+        return None
 
     def _navigate_to_input(self):
-        url = _fixup_url(self._address_bar.text())
-        self._view.load(QUrl(url))
+        view = self._active_view()
+        if view:
+            url = _fixup_url(self._address_bar.text())
+            view.load(QUrl(url))
 
     def _reload_or_stop(self):
+        view = self._active_view()
+        if not view:
+            return
         if self._is_loading:
-            self._view.stop()
+            view.stop()
         else:
-            self._view.reload()
+            view.reload()
+
+    def _nav_back(self):
+        view = self._active_view()
+        if view:
+            view.back()
+
+    def _nav_forward(self):
+        view = self._active_view()
+        if view:
+            view.forward()
 
     # ══════════════════════════════════════════════════════════════════════
-    # Page signals
+    # Keyboard shortcuts
     # ══════════════════════════════════════════════════════════════════════
 
-    def _on_url_changed(self, url: QUrl):
-        self._address_bar.setText(url.toString())
+    def _shortcut_new_tab(self):
+        self._create_tab(HOME_URL)
 
-    def _on_title_changed(self, title: str):
-        if title:
-            # Truncate for tab display (max-width: 170px ≈ ~20 chars)
-            display = title if len(title) <= 22 else title[:20] + "\u2026"
-            self._tab_btn.setText(display)
+    def _shortcut_close_tab(self):
+        self._close_tab(self._active_idx)
 
-    def _on_load_started(self):
-        self._is_loading = True
-        self._reload_btn.setText("\u2715")
-        self._reload_btn.setToolTip("Stop")
+    def _shortcut_next_tab(self):
+        if len(self._tabs) > 1:
+            self._switch_tab((self._active_idx + 1) % len(self._tabs))
 
-    def _on_load_finished(self, ok: bool):
-        self._is_loading = False
-        self._reload_btn.setText("\u27F3")
-        self._reload_btn.setToolTip("Reload")
+    def _shortcut_prev_tab(self):
+        if len(self._tabs) > 1:
+            self._switch_tab((self._active_idx - 1) % len(self._tabs))
 
     # ══════════════════════════════════════════════════════════════════════
     # Top bar actions
