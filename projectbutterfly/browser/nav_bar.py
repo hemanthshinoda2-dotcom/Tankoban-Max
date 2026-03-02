@@ -84,6 +84,7 @@ class NavBar(QWidget):
     history_clicked = Signal()
     settings_clicked = Signal()
     bookmarks_bar_toggled = Signal()
+    bookmark_toggled = Signal()  # toggle bookmark on current page
 
     def __init__(self, data_bridge: DataBridge | None = None, parent=None):
         super().__init__(parent)
@@ -130,8 +131,16 @@ class NavBar(QWidget):
 
         layout.addSpacing(4)
 
+        # -- Bookmark star --
+        self._star_btn = self._nav_button("\u2606", "Bookmark this page (Ctrl+D)")  # ☆
+        self._star_btn.setStyleSheet("font-size: 20px;")
+        self._star_btn.clicked.connect(self.bookmark_toggled.emit)
+        self._bookmarked = False
+        layout.addWidget(self._star_btn)
+
         # -- Home button --
         self._home_btn = self._nav_button("\u2302", "Home")  # ⌂
+        self._home_btn.setStyleSheet("font-size: 22px;")
         self._home_btn.clicked.connect(self.home_clicked.emit)
         layout.addWidget(self._home_btn)
 
@@ -139,6 +148,7 @@ class NavBar(QWidget):
 
         # -- Three-dot menu --
         self._menu_btn = self._nav_button("\u22ee", "Menu")  # ⋮
+        self._menu_btn.setStyleSheet("font-size: 22px;")
         self._menu_btn.clicked.connect(self._show_menu)
         layout.addWidget(self._menu_btn)
 
@@ -177,6 +187,18 @@ class NavBar(QWidget):
         """Enable/disable back/forward buttons."""
         self._back_btn.setEnabled(can_back)
         self._fwd_btn.setEnabled(can_forward)
+
+    def set_bookmarked(self, bookmarked: bool):
+        """Update the star icon to filled/unfilled."""
+        self._bookmarked = bookmarked
+        if bookmarked:
+            self._star_btn.setText("\u2605")  # ★ filled
+            self._star_btn.setToolTip("Remove bookmark (Ctrl+D)")
+            self._star_btn.setStyleSheet(f"color: {theme.ACCENT};")
+        else:
+            self._star_btn.setText("\u2606")  # ☆ outline
+            self._star_btn.setToolTip("Bookmark this page (Ctrl+D)")
+            self._star_btn.setStyleSheet("")
 
     def focus_address_bar(self):
         """Focus and select all text in the address bar (Ctrl+L behavior)."""

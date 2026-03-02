@@ -29,6 +29,9 @@ class TabData:
     can_go_back: bool = False
     can_go_forward: bool = False
     pinned: bool = False
+    audio_playing: bool = False
+    muted: bool = False
+    zoom_factor: float = 1.0
 
 
 class TabManager(QObject):
@@ -48,6 +51,7 @@ class TabManager(QObject):
     tab_url_changed = Signal(str, str)    # (tab_id, url)
     tab_icon_changed = Signal(str, object)  # (tab_id, QIcon)
     tab_loading_changed = Signal(str, bool, int)  # (tab_id, loading, progress)
+    tab_audio_changed = Signal(str, bool, bool)   # (tab_id, audio_playing, muted)
 
     MAX_TABS = 30
 

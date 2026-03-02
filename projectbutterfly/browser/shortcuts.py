@@ -24,4 +24,10 @@ SHORTCUTS = [
     ("Ctrl+Shift+B",    "toggle_bookmarks_bar"),
     ("Ctrl+H",          "open_history"),
     ("F11",             "toggle_fullscreen"),
+    ("Ctrl+D",          "toggle_bookmark"),
+    ("Ctrl++",          "zoom_in"),
+    ("Ctrl+=",          "zoom_in"),
+    ("Ctrl+-",          "zoom_out"),
+    ("Ctrl+0",          "zoom_reset"),
+    ("F12",             "toggle_devtools"),
 ]

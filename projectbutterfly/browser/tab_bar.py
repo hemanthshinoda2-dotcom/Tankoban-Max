@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, Signal, QSize, QPoint, QMimeData
 from PySide6.QtGui import QIcon, QPainter, QColor, QFont, QFontMetrics, QPen, QDrag
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QMenu,
+    QStyleOption, QStyle,
 )
 
 from . import theme
@@ -48,6 +49,10 @@ class TabButton(QWidget):
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setAcceptDrops(True)
+        # Prevent parent stylesheet background from bleeding through
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setAutoFillBackground(False)
+        self.setStyleSheet("background: transparent;")
 
     @property
     def active(self) -> bool:
@@ -92,7 +97,7 @@ class TabButton(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
-        # Background
+        # Background — plain flat rectangle, no effects
         if self._active:
             bg = QColor(theme.BG_TAB_ACTIVE)
         elif self._hovered:
@@ -100,24 +105,9 @@ class TabButton(QWidget):
         else:
             bg = QColor(theme.BG_TAB_INACTIVE)
 
-        # Draw rounded-top rectangle
-        radius = 8
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(bg)
-        p.drawRoundedRect(0, 0, w, h + radius, radius, radius)
-        # Fill bottom corners to make them square (tab sits flush on toolbar)
-        p.drawRect(0, h - radius, w, radius)
-
-        # Active tab: gold accent line at the top
-        if self._active:
-            p.setPen(QPen(QColor(theme.ACCENT), 2))
-            p.drawLine(4, 1, w - 4, 1)
-
-        # Subtle border on active/hovered tabs
-        if self._active or self._hovered:
-            p.setPen(QPen(QColor(theme.BORDER_TAB), 1))
-            p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(0, 0, w, h + radius, radius, radius)
+        p.drawRect(0, 0, w, h)
 
         # Loading indicator (thin line at bottom)
         if self._loading:
