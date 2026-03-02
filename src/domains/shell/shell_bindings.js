@@ -1213,4 +1213,12 @@
   try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
   try { if (typeof syncLibraryFullscreenBtn === 'function') syncLibraryFullscreenBtn().catch(()=>{}); } catch {}
 
+  // --- Web mode button (opens Qt-native TankoWeb panel via bridge) ---
+  var modeWebBtn = document.getElementById('modeWebBtn');
+  if (modeWebBtn && window.Tanko && window.Tanko.api && window.Tanko.api.shell) {
+    modeWebBtn.addEventListener('click', function () {
+      try { Tanko.api.shell.openWebMode(); } catch (e) { console.error('[shell] openWebMode failed:', e); }
+    });
+  }
+
 })();

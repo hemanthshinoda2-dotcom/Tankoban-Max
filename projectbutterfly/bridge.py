@@ -488,6 +488,17 @@ class ShellBridge(QObject):
         return json.dumps(_ok())
 
     @Slot(result=str)
+    def openWebMode(self):
+        """Open the Qt-native TankoWeb panel (stack index 2)."""
+        try:
+            win = self.parent().window._win
+            if win:
+                win.show_tankoweb()
+            return json.dumps(_ok())
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+
+    @Slot(result=str)
     def getAppTheme(self):
         """Retrieve the current app theme from app_prefs.json."""
         try:
@@ -9351,8 +9362,9 @@ BRIDGE_SHIM_JS = r"""
 
       // shell
       shell: {
-        revealPath: wrap(b.shell.revealPath, b.shell),
-        openPath:   wrap(b.shell.openPath, b.shell),
+        revealPath:  wrap(b.shell.revealPath, b.shell),
+        openPath:    wrap(b.shell.openPath, b.shell),
+        openWebMode: wrap(b.shell.openWebMode, b.shell),
       },
 
       // clipboard

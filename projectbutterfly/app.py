@@ -32,6 +32,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngin
 import storage
 import bridge as bridge_module
 from player_ui import MpvContainer
+from tankoweb_widget import TankoWebWidget
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -219,9 +220,10 @@ class TankobanWindow(QMainWindow):
     """
     Main application window.
 
-    QStackedWidget with two layers:
+    QStackedWidget with three layers:
       index 0 = QWebEngineView  (existing renderer UI)
       index 1 = MpvContainer    (mpv native render surface)
+      index 2 = TankoWebWidget  (Qt-native Web mode, lazy-created)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
@@ -277,6 +279,9 @@ class TankobanWindow(QMainWindow):
         # No covering overlay — controls are raised above the native HWND.
         self._mpv_container = MpvContainer(self._bridge.player, self)
         self._stack.addWidget(self._mpv_container)  # index 1
+
+        # --- TankoWebWidget (layer 2, lazy-created) ---
+        self._tankoweb: TankoWebWidget | None = None
 
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
@@ -334,6 +339,27 @@ class TankobanWindow(QMainWindow):
             self._mpv_container._show_controls()
         except Exception:
             pass
+
+    # --- TankoWeb mode switching ---
+
+    def show_tankoweb(self):
+        """Switch to the Qt-native Web mode panel (lazy-creates on first call)."""
+        if self._tankoweb is None:
+            self._tankoweb = TankoWebWidget(
+                on_back=self.show_web_view,
+                on_window_action=self._tankoweb_window_action,
+            )
+            self._stack.addWidget(self._tankoweb)  # index 2
+
+        self._stack.setCurrentWidget(self._tankoweb)
+
+    def _tankoweb_window_action(self, action):
+        if action == "minimize":
+            self.showMinimized()
+        elif action == "maximize":
+            self.toggle_fullscreen()
+        elif action == "close":
+            self.close()
 
     # --- DevTools ---
 
