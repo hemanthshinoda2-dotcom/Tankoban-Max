@@ -108,6 +108,17 @@ class TabButton(QWidget):
         # Fill bottom corners to make them square (tab sits flush on toolbar)
         p.drawRect(0, h - radius, w, radius)
 
+        # Active tab: gold accent line at the top
+        if self._active:
+            p.setPen(QPen(QColor(theme.ACCENT), 2))
+            p.drawLine(4, 1, w - 4, 1)
+
+        # Subtle border on active/hovered tabs
+        if self._active or self._hovered:
+            p.setPen(QPen(QColor(theme.BORDER_TAB), 1))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(0, 0, w, h + radius, radius, radius)
+
         # Loading indicator (thin line at bottom)
         if self._loading:
             p.setPen(QPen(QColor(theme.LOADING_COLOR), 2))
@@ -339,12 +350,8 @@ class TabBar(QWidget):
         self._tab_layout = QHBoxLayout(self._tab_container)
         self._tab_layout.setContentsMargins(0, 0, 0, 0)
         self._tab_layout.setSpacing(1)
-        self._tab_layout.addStretch()
 
-        self._scroll.setWidget(self._tab_container)
-        outer.addWidget(self._scroll, 1)
-
-        # New tab button — sits right after the tab scroll area
+        # New tab button — inside the tab layout, right after tabs
         self._new_btn = QPushButton("+")
         self._new_btn.setFixedSize(28, 28)
         self._new_btn.setStyleSheet(f"""
@@ -364,7 +371,12 @@ class TabBar(QWidget):
         """)
         self._new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._new_btn.clicked.connect(self.new_tab_clicked.emit)
-        outer.addWidget(self._new_btn)
+        self._tab_layout.addWidget(self._new_btn)
+
+        self._tab_layout.addStretch()
+
+        self._scroll.setWidget(self._tab_container)
+        outer.addWidget(self._scroll, 1)
 
         # Stretch pushes window controls to the far right
         outer.addStretch()
@@ -408,9 +420,10 @@ class TabBar(QWidget):
 
         self._buttons[tab_id] = btn
 
-        # Insert before the stretch
-        count = self._tab_layout.count()
-        insert_at = min(index, count - 1) if index >= 0 else count - 1
+        # Insert before the + button (which sits before stretch)
+        # Layout order: [tab0, tab1, ..., +btn, stretch]
+        new_btn_idx = self._tab_layout.indexOf(self._new_btn)
+        insert_at = min(index, new_btn_idx) if index >= 0 else new_btn_idx
         self._tab_layout.insertWidget(insert_at, btn)
 
         self._recalc_tab_widths()

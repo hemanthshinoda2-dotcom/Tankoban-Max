@@ -11,9 +11,9 @@ Semi-transparent dark backgrounds with muted gold accents and beveled borders.
 
 BG_TITLEBAR = "#0a0a0a"       # Tab bar / title bar — deep black
 BG_TOOLBAR = "#121110"         # Nav bar — warm-tinted dark
-BG_TAB_ACTIVE = "#1c1812"     # Active tab — warm dark tint
+BG_TAB_ACTIVE = "#2a2218"     # Active tab — clearly warm, visible
 BG_TAB_INACTIVE = "#0a0a0a"   # Inactive tabs — matches title bar
-BG_TAB_HOVER = "#161310"      # Tab hover — subtle warm lift
+BG_TAB_HOVER = "#1a1610"      # Tab hover — subtle warm lift
 BG_VIEWPORT = "#050505"       # Browser viewport — deepest black
 BG_POPUP = "#141210"          # Dropdown/popup — warm dark
 BG_INPUT = "#0c0b09"          # Address bar input — near-black warm

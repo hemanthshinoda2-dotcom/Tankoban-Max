@@ -229,11 +229,12 @@ class _LibraryButton(QPushButton):
     """
     Custom-painted library icon button — three book spines with a shelf line.
     Clicking navigates back to the main Tankoban library.
+    Uses gold accent color to be clearly visible.
     """
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(32, 32)
+        self.setFixedSize(36, 32)
         self._hovered = False
         self.setMouseTracking(True)
 
@@ -242,32 +243,36 @@ class _LibraryButton(QPushButton):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
-        # Hover background
+        # Background — subtle gold tint always, brighter on hover
+        p.setPen(Qt.PenStyle.NoPen)
         if self._hovered:
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QColor("rgba(199,167,107,0.10)"))
-            p.drawRoundedRect(0, 0, w, h, 4, 4)
+            p.setBrush(QColor("rgba(199,167,107,0.16)"))
+        else:
+            p.setBrush(QColor("rgba(199,167,107,0.06)"))
+        p.drawRoundedRect(0, 0, w, h, 6, 6)
 
-        color = QColor(theme.TEXT_PRIMARY if self._hovered else theme.TEXT_SECONDARY)
-        pen = QPen(color, 1.5)
+        # Icon color — gold accent always visible
+        color = QColor(theme.ACCENT if self._hovered else theme.ACCENT)
+        pen = QPen(color, 1.8)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # Draw three book spines (vertical rectangles)
-        base_y = 8
-        book_h = 16
+        # Draw three book spines (vertical rectangles), centered in 36px
+        cx = w // 2  # 18
+        base_y = 7
+        book_h = 17
         shelf_y = base_y + book_h
 
-        # Book 1 (left, slightly tilted)
-        p.drawRect(9, base_y, 4, book_h)
+        # Book 1 (left)
+        p.drawRect(cx - 9, base_y, 5, book_h)
         # Book 2 (center, taller)
-        p.drawRect(14, base_y - 1, 4, book_h + 1)
+        p.drawRect(cx - 3, base_y - 1, 5, book_h + 1)
         # Book 3 (right)
-        p.drawRect(19, base_y + 1, 4, book_h - 1)
+        p.drawRect(cx + 3, base_y + 1, 5, book_h - 1)
 
         # Shelf line
-        p.drawLine(7, shelf_y, 25, shelf_y)
+        p.drawLine(cx - 11, shelf_y, cx + 10, shelf_y)
 
         p.end()
 
