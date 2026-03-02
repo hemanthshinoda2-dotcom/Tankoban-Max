@@ -111,7 +111,7 @@ def _icon_btn_ss(extra=""):
         f"  min-height: {ICON_BTN_SIZE}px; max-height: {ICON_BTN_SIZE}px;"
         f"  background: {SURFACE}; color: {TEXT};"
         f"  border: 1px solid {SURFACE_BORDER}; border-radius: {RADIUS}px;"
-        f"  font-family: '{FONT}'; font-size: 12px;"
+        f"  font-family: '{FONT}'; font-size: 14px;"
         f"  {extra}"
         f"}}"
         f"QPushButton:hover {{ background: {SURFACE_HOVER};"
@@ -210,11 +210,11 @@ class TankoWebWidget(QWidget):
 
         # Row 1: ← Library (left)  ...stretch...  — □ ✕ (right)
         root.addWidget(self._build_chrome_row())
-        root.addSpacing(6)  # panelTitleRow is 12px below topbar, ~6px here
+        root.addSpacing(12)  # 12px below chrome row
 
         # Row 2: TANKOBROWSER label
         root.addWidget(self._build_title_label())
-        root.addSpacing(4)
+        root.addSpacing(12)  # 12px below title
 
         # Row 3: Tab row (individual tab pills + new-tab btn)
         root.addWidget(self._build_tab_row())
@@ -432,7 +432,6 @@ class TankoWebWidget(QWidget):
         self._address_bar = QLineEdit()
         self._address_bar.setPlaceholderText("Search or enter URL")
         self._address_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self._address_bar.setMaximumWidth(520)
         self._address_bar.setStyleSheet(_omni_ss())
         self._address_bar.returnPressed.connect(self._navigate_to_input)
         layout.addWidget(self._address_bar)
@@ -445,15 +444,17 @@ class TankoWebWidget(QWidget):
         go_btn.clicked.connect(self._navigate_to_input)
         layout.addWidget(go_btn)
 
-        # Bookmark — separate pill button
+        # Bookmark — separate pill button, fixed width
         bk_btn = QPushButton("Bookmark")
         bk_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        bk_btn.setFixedWidth(70)
         bk_btn.setStyleSheet(_pill_btn_ss("font-size: 11px;"))
         layout.addWidget(bk_btn)
 
-        # History — separate pill button
+        # History — separate pill button, fixed width
         hist_btn = QPushButton("History")
         hist_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        hist_btn.setFixedWidth(70)
         hist_btn.setStyleSheet(_pill_btn_ss("font-size: 11px;"))
         layout.addWidget(hist_btn)
 
