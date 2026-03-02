@@ -1214,10 +1214,18 @@
   try { if (typeof syncLibraryFullscreenBtn === 'function') syncLibraryFullscreenBtn().catch(()=>{}); } catch {}
 
   // --- Web mode button (opens Qt-native TankoWeb panel via bridge) ---
+  // Note: Tanko.api.shell is set asynchronously by the QWebChannel shim,
+  // so we check at click-time rather than registration-time.
   var modeWebBtn = document.getElementById('modeWebBtn');
-  if (modeWebBtn && window.Tanko && window.Tanko.api && window.Tanko.api.shell) {
+  if (modeWebBtn) {
     modeWebBtn.addEventListener('click', function () {
-      try { Tanko.api.shell.openWebMode(); } catch (e) { console.error('[shell] openWebMode failed:', e); }
+      try {
+        if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openWebMode === 'function') {
+          Tanko.api.shell.openWebMode();
+        } else {
+          console.warn('[shell] openWebMode not available — bridge not ready or not in Butterfly mode');
+        }
+      } catch (e) { console.error('[shell] openWebMode failed:', e); }
     });
   }
 
