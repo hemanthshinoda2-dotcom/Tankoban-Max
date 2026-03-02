@@ -234,49 +234,43 @@ class FlareSolverrBridge(QObject):
 
     def _on_solved(self, url, req):
         """Called on main thread when CF challenge is solved."""
-        # Collect all cookies from the profile's cookie store
-        req.cookies = []
         req.user_agent = (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/131.0.0.0 Safari/537.36"
         )
 
-        # Get cookies for the target domain
         parsed = urlparse(url)
         domain = parsed.hostname or ""
 
-        # Use the profile's cookie store to get all cookies
-        # We need to collect them asynchronously via cookieAdded
+        # Collect cookies asynchronously via loadAllCookies + cookieAdded
         store = self._profile.cookieStore()
         collected = []
 
+        def _domain_match(cookie_domain, target):
+            """Check if a cookie domain matches the target (handles leading dots)."""
+            cd = cookie_domain.lstrip(".")
+            td = target.lstrip(".")
+            return cd == td or td.endswith("." + cd) or cd.endswith("." + td)
+
         def on_cookie(cookie):
             c_domain = bytes(cookie.domain()).decode("utf-8", errors="replace")
-            c_name = bytes(cookie.name()).decode("utf-8", errors="replace")
-            c_value = bytes(cookie.value()).decode("utf-8", errors="replace")
-            c_path = bytes(cookie.path()).decode("utf-8", errors="replace")
-            c_secure = cookie.isSecure()
-            c_httponly = cookie.isHttpOnly()
-
-            # Only include cookies for the target domain
-            if domain in c_domain or c_domain in domain:
-                collected.append({
-                    "name": c_name,
-                    "value": c_value,
-                    "domain": c_domain,
-                    "path": c_path,
-                    "secure": c_secure,
-                    "httpOnly": c_httponly,
-                    "sameSite": "None",
-                    "expiry": -1,
-                })
+            if not _domain_match(c_domain, domain):
+                return
+            collected.append({
+                "name": bytes(cookie.name()).decode("utf-8", errors="replace"),
+                "value": bytes(cookie.value()).decode("utf-8", errors="replace"),
+                "domain": c_domain,
+                "path": bytes(cookie.path()).decode("utf-8", errors="replace"),
+                "secure": cookie.isSecure(),
+                "httpOnly": cookie.isHttpOnly(),
+                "sameSite": "None",
+                "expiry": -1,
+            })
 
         store.cookieAdded.connect(on_cookie)
-        # loadAllCookies() triggers cookieAdded for each stored cookie
         store.loadAllCookies()
 
-        # Give it a moment to collect, then finalize
         def finalize():
             try:
                 store.cookieAdded.disconnect(on_cookie)
