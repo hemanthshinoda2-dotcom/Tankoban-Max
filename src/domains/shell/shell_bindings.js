@@ -1231,4 +1231,20 @@
     });
   }
 
+  // --- Sources button (opens TankoWeb Hub directly for torrent search/downloads) ---
+  var tankSourcesBtn = document.getElementById('tankSourcesBtn');
+  if (tankSourcesBtn) {
+    tankSourcesBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openSourcesMode === 'function') {
+          Tanko.api.shell.openSourcesMode();
+        } else {
+          console.warn('[shell] openSourcesMode not available — bridge not ready or not in Butterfly mode');
+        }
+      } catch (e) { console.error('[shell] openSourcesMode failed:', e); }
+    });
+  }
+
 })();

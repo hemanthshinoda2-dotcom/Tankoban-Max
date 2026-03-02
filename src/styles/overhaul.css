@@ -218,6 +218,20 @@ body{
   box-shadow: 0 10px 26px -18px rgba(var(--vx-accent-rgb), .55);
 }
 
+/* Sources button — pill style matching Web button, gold accent for torrent/sources. */
+.topbar #tankSourcesBtn{
+  width: auto;
+  min-width: max-content;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(135deg, rgba(199,167,107, .25), rgba(199,167,107, .15)) !important;
+  border-color: rgba(199,167,107, .30) !important;
+  color: rgba(199,167,107,.92) !important;
+  box-shadow: 0 10px 26px -18px rgba(199,167,107, .45);
+}
+
 /* Buttons */
 .iconBtn,
 .topbar .iconBtn{
@@ -1381,8 +1395,9 @@ code, pre, .mono{
   -webkit-app-region: no-drag;
 }
 
-/* WEB-LAUNCH-FIX: ensure the Web button always receives clicks in frameless mode */
-#webHubToggleBtn{
+/* WEB-LAUNCH-FIX: ensure the Web/Sources buttons always receive clicks in frameless mode */
+#webHubToggleBtn,
+#tankSourcesBtn{
   -webkit-app-region: no-drag !important;
   pointer-events: auto;
   position: relative;

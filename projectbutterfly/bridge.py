@@ -499,6 +499,17 @@ class ShellBridge(QObject):
             return json.dumps(_err(str(e)))
 
     @Slot(result=str)
+    def openSourcesMode(self):
+        """Open TankoWeb and immediately switch to the Hub (Sources) tab."""
+        try:
+            win = self.parent().window._win
+            if win:
+                win.show_tankoweb_hub()
+            return json.dumps(_ok())
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+
+    @Slot(result=str)
     def getAppTheme(self):
         """Retrieve the current app theme from app_prefs.json."""
         try:
@@ -9365,6 +9376,7 @@ BRIDGE_SHIM_JS = r"""
         revealPath:  wrap(b.shell.revealPath, b.shell),
         openPath:    wrap(b.shell.openPath, b.shell),
         openWebMode: wrap(b.shell.openWebMode, b.shell),
+        openSourcesMode: wrap(b.shell.openSourcesMode, b.shell),
       },
 
       // clipboard

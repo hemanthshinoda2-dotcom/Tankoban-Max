@@ -379,6 +379,12 @@ class TankobanWindow(QMainWindow):
 
         self._stack.setCurrentWidget(self._tankoweb)
 
+    def show_tankoweb_hub(self):
+        """Switch to TankoWeb and immediately open the Hub (Sources) tab."""
+        self.show_tankoweb()
+        # Open hub tab after a brief delay to ensure widget is fully visible
+        QTimer.singleShot(100, self._tankoweb._open_hub)
+
     def _start_torrent_services(self):
         """Start qBittorrent, Prowlarr, and detect Jackett in background."""
         try:

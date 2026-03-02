@@ -139,6 +139,19 @@ body[data-app-theme="light"] .topbar #tankWebBtn{
   box-shadow: 0 4px 12px -6px rgba(var(--vx-accent-rgb), .30) !important;
 }
 
+body[data-app-theme="light"] .topbar #tankSourcesBtn{
+  width: auto;
+  min-width: max-content;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  background: linear-gradient(135deg, rgba(199,167,107, .18), rgba(199,167,107, .10)) !important;
+  border-color: rgba(199,167,107, .22) !important;
+  color: rgba(140,110,60,.90) !important;
+  box-shadow: 0 4px 12px -6px rgba(199,167,107, .25) !important;
+}
+
 body[data-app-theme="light"] .btn{
   border: 1px solid rgba(var(--vx-accent-rgb), .25) !important;
   background: linear-gradient(135deg, rgba(var(--vx-accent2-rgb), .12), rgba(var(--vx-accent-rgb), .08)) !important;
