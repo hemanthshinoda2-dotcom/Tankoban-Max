@@ -262,6 +262,7 @@ Enforce these rules during future refactors:
 
 ## 10. AI Conduct
 1. Disagree with the user when it's valid. Push back on requests that would introduce bugs, break architecture, or waste effort.
+2. Commit immediately after every logical change. Never hold uncommitted work across multiple edits. Small atomic commits are mandatory.
 
 ## 11. AI Change Procedure
 When modifying code:
