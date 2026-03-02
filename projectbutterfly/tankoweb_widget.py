@@ -893,6 +893,20 @@ class TankoWebWidget(QWidget):
             if effect:
                 effect.setEnabled(True)
 
+    def _set_tab_home(self, tab, on_home):
+        """Toggle a tab between home page and web view.
+
+        QWebEngineView is a native widget that steals mouse events even when
+        hidden by QStackedWidget — explicit hide/show is required.
+        """
+        tab["on_home"] = on_home
+        if on_home:
+            tab["view"].hide()
+            tab["stack"].setCurrentIndex(0)
+        else:
+            tab["stack"].setCurrentIndex(1)
+            tab["view"].show()
+
     # ══════════════════════════════════════════════════════════════════════
     # Tab lifecycle
     # ══════════════════════════════════════════════════════════════════════
@@ -955,10 +969,11 @@ class TankoWebWidget(QWidget):
         fwd_action = page.action(QWebEnginePage.WebAction.Forward)
         fwd_action.changed.connect(lambda i=tab_idx: self._update_nav_state(i))
 
+        tab_data = self._tabs[idx]
         if start_on_home:
-            tab_stack.setCurrentIndex(0)
+            self._set_tab_home(tab_data, True)
         else:
-            tab_stack.setCurrentIndex(1)
+            self._set_tab_home(tab_data, False)
             view.load(QUrl(url))
 
         if switch_to:
@@ -974,8 +989,7 @@ class TankoWebWidget(QWidget):
             return None
         idx = self._create_tab(url=None, switch_to=True)
         # Flip to web view since content is coming
-        self._tabs[idx]["on_home"] = False
-        self._tabs[idx]["stack"].setCurrentIndex(1)
+        self._set_tab_home(self._tabs[idx], False)
         self._update_viewport_style(False)
         return self._tabs[idx]["page"]
 
@@ -1073,8 +1087,7 @@ class TankoWebWidget(QWidget):
         if tab_idx < 0 or tab_idx >= len(self._tabs):
             return
         tab = self._tabs[tab_idx]
-        tab["on_home"] = False
-        tab["stack"].setCurrentIndex(1)
+        self._set_tab_home(tab, False)
         tab["view"].load(QUrl(url))
 
         if tab_idx == self._active_idx:
@@ -1086,10 +1099,9 @@ class TankoWebWidget(QWidget):
         if self._active_idx < 0 or self._active_idx >= len(self._tabs):
             return
         tab = self._tabs[self._active_idx]
-        tab["on_home"] = True
+        self._set_tab_home(tab, True)
         tab["title"] = ""
         tab["url"] = ""
-        tab["stack"].setCurrentIndex(0)
         tab["home"].refresh_sources(self._sources)
         self._update_viewport_style(True)
         self._address_bar.clear()
@@ -1188,8 +1200,7 @@ class TankoWebWidget(QWidget):
         if self._active_idx >= 0 and self._active_idx < len(self._tabs):
             tab = self._tabs[self._active_idx]
             if tab["on_home"]:
-                tab["on_home"] = False
-                tab["stack"].setCurrentIndex(1)
+                self._set_tab_home(tab, False)
                 self._update_viewport_style(False)
             tab["view"].load(QUrl(url))
 
