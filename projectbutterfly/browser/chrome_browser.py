@@ -154,6 +154,10 @@ class ChromeBrowser(QWidget):
         nav.reload_clicked.connect(self.reload_active)
         nav.stop_clicked.connect(self._stop_active)
         nav.home_clicked.connect(self._go_home)
+        nav.new_tab_clicked.connect(self.new_tab)
+        nav.history_clicked.connect(self.open_history)
+        nav.settings_clicked.connect(self.open_settings)
+        nav.bookmarks_bar_toggled.connect(self.toggle_bookmarks_bar)
         nav.minimize_clicked.connect(lambda: self._window_action("minimize"))
         nav.maximize_clicked.connect(lambda: self._window_action("maximize"))
         nav.close_clicked.connect(lambda: self._window_action("close"))
@@ -314,6 +318,7 @@ class ChromeBrowser(QWidget):
         page.new_tab_requested.connect(
             lambda url, tid=tab_id: self._on_new_tab_requested(url)
         )
+        page.internal_command.connect(self._on_internal_command)
 
         # Context menu
         view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -398,6 +403,75 @@ class ChromeBrowser(QWidget):
                 "justify-content:center;height:100vh'>"
                 "<h1>New Tab</h1></body></html>"
             )
+
+    # -----------------------------------------------------------------------
+    # Internal pages (tanko-browser:// scheme)
+    # -----------------------------------------------------------------------
+
+    _SETTINGS_HTML = _HERE / "data" / "settings.html"
+    _HISTORY_HTML = _HERE / "data" / "history.html"
+
+    def _on_internal_command(self, command: str, params: str):
+        """Handle tanko-browser:// URLs."""
+        if command == "settings":
+            self.open_settings()
+        elif command == "history":
+            self.open_history()
+        elif command == "clear-data":
+            self._clear_browsing_data()
+        elif command == "history-clear":
+            self._clear_history()
+        elif command == "history-delete":
+            self._delete_history_entry(params)
+
+    def open_settings(self):
+        """Open settings in a new tab."""
+        if self._SETTINGS_HTML.exists():
+            self.new_tab(QUrl.fromLocalFile(str(self._SETTINGS_HTML)).toString())
+
+    def open_history(self):
+        """Open history page in a new tab, inject data after load."""
+        if not self._HISTORY_HTML.exists():
+            return
+        self.new_tab(QUrl.fromLocalFile(str(self._HISTORY_HTML)).toString())
+        # Inject history data after the page loads
+        import json
+        from PySide6.QtCore import QTimer
+        def _inject():
+            tab = self._tab_mgr.active_tab
+            if tab and tab.view:
+                entries = self._data_bridge._get_history_raw()
+                # Sort by visitedAt descending
+                entries = sorted(entries, key=lambda e: e.get("visitedAt", 0), reverse=True)
+                js = f"if(typeof setHistoryData==='function')setHistoryData({json.dumps(entries[:500])});"
+                tab.view.page().runJavaScript(js)
+        QTimer.singleShot(500, _inject)
+
+    def _clear_browsing_data(self):
+        """Clear browsing data (history, cache, cookies)."""
+        self._profile.clearHttpCache()
+        self._clear_history()
+
+    def _clear_history(self):
+        """Clear all history entries."""
+        h = self._data_bridge._history
+        if h:
+            cache = h._ensure_cache()
+            cache["entries"] = []
+            h._write()
+
+    def _delete_history_entry(self, params: str):
+        """Delete a single history entry by ID."""
+        import urllib.parse
+        parsed = urllib.parse.parse_qs(params)
+        entry_id = parsed.get("id", [""])[0]
+        if not entry_id:
+            return
+        h = self._data_bridge._history
+        if h:
+            cache = h._ensure_cache()
+            cache["entries"] = [e for e in cache["entries"] if e.get("id") != entry_id]
+            h._write()
 
     # -----------------------------------------------------------------------
     # Find bar

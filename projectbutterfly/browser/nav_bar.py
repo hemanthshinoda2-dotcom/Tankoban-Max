@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy,
+    QWidget, QHBoxLayout, QLineEdit, QPushButton, QSizePolicy, QMenu,
 )
 
 from . import theme
@@ -74,6 +74,10 @@ class NavBar(QWidget):
     reload_clicked = Signal()
     stop_clicked = Signal()
     home_clicked = Signal()
+    new_tab_clicked = Signal()
+    history_clicked = Signal()
+    settings_clicked = Signal()
+    bookmarks_bar_toggled = Signal()
     minimize_clicked = Signal()
     maximize_clicked = Signal()
     close_clicked = Signal()
@@ -118,7 +122,14 @@ class NavBar(QWidget):
         self._home_btn.clicked.connect(self.home_clicked.emit)
         layout.addWidget(self._home_btn)
 
-        layout.addSpacing(12)
+        layout.addSpacing(4)
+
+        # -- Three-dot menu --
+        self._menu_btn = self._nav_button("\u22ee", "Menu")  # ⋮
+        self._menu_btn.clicked.connect(self._show_menu)
+        layout.addWidget(self._menu_btn)
+
+        layout.addSpacing(8)
 
         # -- Window controls --
         self._min_btn = self._window_button("\u2014", "Minimize")  # —
@@ -194,3 +205,40 @@ class NavBar(QWidget):
         """Focus and select all text in the address bar (Ctrl+L behavior)."""
         self._address.setFocus()
         self._address.selectAll()
+
+    def _show_menu(self):
+        """Show three-dot dropdown menu."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background: {theme.BG_POPUP};
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid {theme.BORDER_COLOR};
+                border-radius: 8px;
+                padding: 4px 0;
+                font-family: 'Segoe UI', sans-serif;
+                font-size: 13px;
+            }}
+            QMenu::item {{
+                padding: 6px 32px 6px 12px;
+            }}
+            QMenu::item:selected {{
+                background: rgba(255,255,255,0.08);
+            }}
+            QMenu::separator {{
+                height: 1px;
+                background: {theme.BORDER_COLOR};
+                margin: 4px 8px;
+            }}
+        """)
+
+        menu.addAction("New tab\tCtrl+T", self.new_tab_clicked.emit)
+        menu.addSeparator()
+        menu.addAction("History\tCtrl+H", self.history_clicked.emit)
+        menu.addAction("Bookmarks bar\tCtrl+Shift+B", self.bookmarks_bar_toggled.emit)
+        menu.addSeparator()
+        menu.addAction("Settings", self.settings_clicked.emit)
+
+        # Show below the menu button
+        pos = self._menu_btn.mapToGlobal(self._menu_btn.rect().bottomLeft())
+        menu.exec(pos)

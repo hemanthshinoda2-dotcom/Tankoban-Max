@@ -87,6 +87,7 @@ class ChromePage(QWebEnginePage):
     """
 
     new_tab_requested = Signal(QUrl)
+    internal_command = Signal(str, str)  # (command, params)
 
     def __init__(self, profile: QWebEngineProfile, tab_id: str, parent=None):
         super().__init__(profile, parent)
@@ -106,8 +107,10 @@ class ChromePage(QWebEnginePage):
         scheme = url.scheme()
 
         if scheme == "tanko-browser":
-            # Internal commands — handled by the browser widget
-            # Don't navigate, just emit a signal or handle inline
+            # Internal commands — emit signal for browser to handle
+            host = url.host()
+            query = url.query() or ""
+            self.internal_command.emit(host, query)
             return False
 
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)

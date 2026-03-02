@@ -22,4 +22,5 @@ SHORTCUTS = [
     ("Alt+Right",       "go_forward"),
     ("Ctrl+Shift+T",    "reopen_closed_tab"),
     ("Ctrl+Shift+B",    "toggle_bookmarks_bar"),
+    ("Ctrl+H",          "open_history"),
 ]

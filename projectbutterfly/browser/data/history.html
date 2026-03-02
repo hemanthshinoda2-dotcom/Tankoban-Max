@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>History</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #202124;
+    color: #e8eaed;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 40px;
+    max-width: 800px;
+    margin: 0 auto;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 400;
+    margin-bottom: 24px;
+  }
+
+  .search-bar {
+    width: 100%;
+    height: 40px;
+    background: #303134;
+    border: 1px solid #5f6368;
+    border-radius: 20px;
+    color: #e8eaed;
+    font-size: 14px;
+    padding: 0 20px;
+    outline: none;
+    margin-bottom: 24px;
+    transition: border-color 0.2s;
+  }
+  .search-bar:focus {
+    border-color: #8ab4f8;
+  }
+  .search-bar::placeholder { color: #9aa0a6; }
+
+  .date-group {
+    margin-bottom: 24px;
+  }
+
+  .date-header {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8ab4f8;
+    padding: 8px 0;
+    border-bottom: 1px solid #3c4043;
+    margin-bottom: 4px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+    gap: 12px;
+  }
+  .history-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .history-time {
+    font-size: 12px;
+    color: #9aa0a6;
+    min-width: 50px;
+    flex-shrink: 0;
+  }
+
+  .history-title {
+    font-size: 14px;
+    color: #e8eaed;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .history-url {
+    font-size: 12px;
+    color: #9aa0a6;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+  }
+
+  .history-delete {
+    opacity: 0;
+    background: transparent;
+    border: none;
+    color: #9aa0a6;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: opacity 0.15s;
+  }
+  .history-item:hover .history-delete { opacity: 1; }
+  .history-delete:hover { color: #f28b82; background: rgba(242,139,130,0.1); }
+
+  .empty-state {
+    text-align: center;
+    color: #9aa0a6;
+    padding: 60px 0;
+    font-size: 15px;
+  }
+
+  .clear-all {
+    background: transparent;
+    color: #f28b82;
+    border: 1px solid #f28b82;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    float: right;
+    margin-top: -48px;
+    transition: background 0.15s;
+  }
+  .clear-all:hover { background: rgba(242,139,130,0.1); }
+</style>
+</head>
+<body>
+
+<h1>History</h1>
+<button class="clear-all" onclick="clearAll()">Clear all history</button>
+
+<input type="text" class="search-bar" placeholder="Search history" id="searchInput" autofocus>
+
+<div id="historyList"></div>
+
+<script>
+  // History data will be injected by Python via runJavaScript
+  let _historyData = [];
+
+  function renderHistory(entries) {
+    const list = document.getElementById('historyList');
+    const query = document.getElementById('searchInput').value.trim().toLowerCase();
+
+    // Filter
+    let filtered = entries;
+    if (query) {
+      filtered = entries.filter(e =>
+        (e.title || '').toLowerCase().includes(query) ||
+        (e.url || '').toLowerCase().includes(query)
+      );
+    }
+
+    if (filtered.length === 0) {
+      list.innerHTML = '<div class="empty-state">No history found</div>';
+      return;
+    }
+
+    // Group by date
+    const groups = {};
+    for (const entry of filtered) {
+      const d = new Date(entry.visitedAt || 0);
+      const key = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      if (!groups[key]) groups[key] = [];
+      groups[key].push({ ...entry, time: d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) });
+    }
+
+    let html = '';
+    for (const [date, items] of Object.entries(groups)) {
+      html += `<div class="date-group">`;
+      html += `<div class="date-header">${date}</div>`;
+      for (const item of items) {
+        const title = item.title || item.url || 'Untitled';
+        const url = (item.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+        html += `
+          <div class="history-item" onclick="navigate('${item.url.replace(/'/g, "\\'")}')">
+            <span class="history-time">${item.time}</span>
+            <span class="history-title">${escapeHtml(title)}</span>
+            <span class="history-url">${escapeHtml(url)}</span>
+            <button class="history-delete" onclick="event.stopPropagation(); deleteEntry('${(item.id || '').replace(/'/g, "\\'")}')">×</button>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    list.innerHTML = html;
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function navigate(url) {
+    if (url) window.location.href = url;
+  }
+
+  function deleteEntry(id) {
+    _historyData = _historyData.filter(e => e.id !== id);
+    renderHistory(_historyData);
+    window.location.href = 'tanko-browser://history-delete?id=' + encodeURIComponent(id);
+  }
+
+  function clearAll() {
+    if (confirm('Clear all browsing history? This cannot be undone.')) {
+      _historyData = [];
+      renderHistory([]);
+      window.location.href = 'tanko-browser://history-clear';
+    }
+  }
+
+  // Called by Python to inject data
+  function setHistoryData(data) {
+    _historyData = data;
+    renderHistory(data);
+  }
+
+  // Search filter
+  document.getElementById('searchInput').addEventListener('input', () => {
+    renderHistory(_historyData);
+  });
+</script>
+
+</body>
+</html>
