@@ -72,7 +72,7 @@
   /* -- Shortcuts grid -- */
   .shortcuts {
     display: grid;
-    grid-template-columns: repeat(4, 112px);
+    grid-template-columns: repeat(3, 112px);
     gap: 16px;
     margin-top: 40px;
   }
@@ -136,21 +136,38 @@
 </div>
 
 <div class="shortcuts" id="shortcuts">
-  <a class="shortcut" href="https://yandex.com" data-url="https://yandex.com">
-    <div class="shortcut-icon">Y</div>
-    <div class="shortcut-label">Yandex</div>
+  <a class="shortcut" href="tanko-browser://torrents" data-url="tanko-browser://torrents">
+    <div class="shortcut-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17a1 1 0 001 1h6a1 1 0 001-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7z"/>
+        <path d="M9 21h6"/>
+        <path d="M10 17v4"/>
+        <path d="M14 17v4"/>
+      </svg>
+    </div>
+    <div class="shortcut-label">Torrents</div>
   </a>
-  <a class="shortcut" href="https://www.youtube.com" data-url="https://www.youtube.com">
-    <div class="shortcut-icon">&#9654;</div>
-    <div class="shortcut-label">YouTube</div>
+  <a class="shortcut" href="tanko-browser://books" data-url="tanko-browser://books">
+    <div class="shortcut-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+        <line x1="9" y1="7" x2="16" y2="7"/>
+        <line x1="9" y1="11" x2="14" y2="11"/>
+      </svg>
+    </div>
+    <div class="shortcut-label">Books</div>
   </a>
-  <a class="shortcut" href="https://github.com" data-url="https://github.com">
-    <div class="shortcut-icon">&#10216;&#10217;</div>
-    <div class="shortcut-label">GitHub</div>
-  </a>
-  <a class="shortcut" href="https://reddit.com" data-url="https://reddit.com">
-    <div class="shortcut-icon">R</div>
-    <div class="shortcut-label">Reddit</div>
+  <a class="shortcut" href="tanko-browser://comics" data-url="tanko-browser://comics">
+    <div class="shortcut-icon">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8ab4f8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="12" y1="3" x2="12" y2="21"/>
+        <line x1="3" y1="12" x2="12" y2="12"/>
+        <line x1="12" y1="9" x2="21" y2="9"/>
+      </svg>
+    </div>
+    <div class="shortcut-label">Comics</div>
   </a>
 </div>
 
@@ -176,6 +193,11 @@
       const url = el.getAttribute('data-url') || el.href;
       if (url) window.location.href = url;
     });
+  });
+
+  // Make SVG icons non-interactive so clicks pass through to the shortcut
+  document.querySelectorAll('.shortcut-icon svg').forEach(svg => {
+    svg.style.pointerEvents = 'none';
   });
 </script>
 

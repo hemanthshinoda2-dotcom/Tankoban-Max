@@ -518,6 +518,8 @@ class ChromeBrowser(QWidget):
     _SETTINGS_HTML = _HERE / "data" / "settings.html"
     _HISTORY_HTML = _HERE / "data" / "history.html"
 
+    _TORRENTS_HTML = _HERE / "data" / "torrents.html"
+
     def _on_internal_command(self, command: str, params: str):
         """Handle tanko-browser:// URLs."""
         if command == "settings":
@@ -530,6 +532,18 @@ class ChromeBrowser(QWidget):
             self._clear_history()
         elif command == "history-delete":
             self._delete_history_entry(params)
+        elif command == "torrents":
+            self.open_torrents()
+        elif command == "books":
+            self._open_placeholder("Books", "Stacks-like book discovery — coming soon.")
+        elif command == "comics":
+            self._open_placeholder("Comics", "Comic downloader (Suwayomi / WeebCentral) — coming soon.")
+        elif command == "torrent-search":
+            self._handle_torrent_search(params)
+        elif command == "torrent-add":
+            self._handle_torrent_add(params)
+        elif command == "torrent-action":
+            self._handle_torrent_action(params)
 
     def open_settings(self):
         """Open settings in a new tab."""
@@ -579,6 +593,130 @@ class ChromeBrowser(QWidget):
             cache = h._ensure_cache()
             cache["entries"] = [e for e in cache["entries"] if e.get("id") != entry_id]
             h._write()
+
+    # -----------------------------------------------------------------------
+    # Torrents page
+    # -----------------------------------------------------------------------
+
+    def open_torrents(self):
+        """Open the torrent search + manager page."""
+        if self._TORRENTS_HTML.exists():
+            self.new_tab(QUrl.fromLocalFile(str(self._TORRENTS_HTML)).toString())
+            # Start torrent progress polling for this tab
+            self._start_torrent_polling()
+
+    def _start_torrent_polling(self):
+        """Start polling torrent progress and pushing updates to the active tab."""
+        if hasattr(self, '_torrent_timer') and self._torrent_timer.isActive():
+            return
+        from PySide6.QtCore import QTimer
+        self._torrent_timer = QTimer(self)
+        self._torrent_timer.setInterval(1500)
+        self._torrent_timer.timeout.connect(self._push_torrent_updates)
+        self._torrent_timer.start()
+
+    def _push_torrent_updates(self):
+        """Push torrent download progress to the active tab if it's the torrents page."""
+        tab = self._tab_mgr.active_tab
+        if not tab or not tab.view:
+            return
+        url = tab.url or ""
+        # Only push to the torrents page
+        if "torrents.html" not in url and "tanko-browser://torrents" not in url:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        import json
+        try:
+            result = bridge.webTorrent.list()
+            tab.view.page().runJavaScript(
+                f"if(typeof updateTorrents==='function')updateTorrents({result});"
+            )
+        except Exception:
+            pass
+
+    def _handle_torrent_search(self, params: str):
+        """Handle torrent search from the torrents page."""
+        import urllib.parse, json
+        parsed = urllib.parse.parse_qs(params)
+        query = parsed.get("q", [""])[0]
+        if not query:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "torrentSearch"):
+            return
+        try:
+            payload = json.dumps({"query": query, "limit": 60})
+            result = bridge.torrentSearch.query(payload)
+            tab = self._tab_mgr.active_tab
+            if tab and tab.view:
+                tab.view.page().runJavaScript(
+                    f"if(typeof setSearchResults==='function')setSearchResults({result});"
+                )
+        except Exception:
+            pass
+
+    def _handle_torrent_add(self, params: str):
+        """Handle adding a magnet from the torrents page."""
+        import urllib.parse, json
+        parsed = urllib.parse.parse_qs(params)
+        magnet = parsed.get("magnet", [""])[0]
+        if not magnet:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        try:
+            payload = json.dumps({"magnetUri": magnet})
+            bridge.webTorrent.startMagnet(payload)
+        except Exception:
+            pass
+
+    def _handle_torrent_action(self, params: str):
+        """Handle torrent actions (pause/resume/remove) from the torrents page."""
+        import urllib.parse, json
+        parsed = urllib.parse.parse_qs(params)
+        action = parsed.get("action", [""])[0]
+        torrent_id = parsed.get("id", [""])[0]
+        if not action or not torrent_id:
+            return
+        bridge = self._data_bridge._bridge if self._data_bridge else None
+        if not bridge or not hasattr(bridge, "webTorrent"):
+            return
+        try:
+            payload = json.dumps({"id": torrent_id})
+            if action == "pause":
+                bridge.webTorrent.pause(payload)
+            elif action == "resume":
+                bridge.webTorrent.resume(payload)
+            elif action == "remove":
+                delete_files = parsed.get("deleteFiles", ["false"])[0] == "true"
+                payload = json.dumps({"id": torrent_id, "deleteFiles": delete_files})
+                bridge.webTorrent.remove(payload)
+        except Exception:
+            pass
+
+    # -----------------------------------------------------------------------
+    # Placeholder pages (Books, Comics — coming soon)
+    # -----------------------------------------------------------------------
+
+    def _open_placeholder(self, title: str, description: str):
+        """Open a placeholder page for features not yet implemented."""
+        tab = self._tab_mgr.active_tab
+        if not tab or not tab.view:
+            self.new_tab()
+            tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.view.setHtml(f"""
+                <html><body style="background:#202124;color:#e8eaed;
+                font-family:'Segoe UI',system-ui,sans-serif;display:flex;
+                flex-direction:column;align-items:center;justify-content:center;
+                height:100vh;text-align:center">
+                <h1 style="font-size:36px;font-weight:300;margin-bottom:16px">{title}</h1>
+                <p style="color:#9aa0a6;font-size:16px">{description}</p>
+                </body></html>
+            """)
 
     # -----------------------------------------------------------------------
     # Find bar
