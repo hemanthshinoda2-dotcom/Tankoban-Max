@@ -35,6 +35,7 @@ import bridge as bridge_module
 from player_ui import MpvContainer
 from tankoweb_widget import TankoWebWidget
 import torrent_service
+from flaresolverr_bridge import FlareSolverrBridge
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -285,6 +286,12 @@ class TankobanWindow(QMainWindow):
         # --- TankoWebWidget (layer 2, lazy-created) ---
         self._tankoweb: TankoWebWidget | None = None
 
+        # --- FlareSolverr bridge (Cloudflare solver for Prowlarr) ---
+        # Must be created on main thread (uses QWebEngineProfile).
+        # Uses same profile as browser tabs so cookies are shared.
+        self._flaresolverr = FlareSolverrBridge(self._profile, parent=self)
+        self._flaresolverr.start()
+
         # --- Torrent services (qBittorrent + Prowlarr as background subprocesses) ---
         self._qbit_mgr = torrent_service.create_qbit_manager()
         self._prowlarr_mgr, self._prowlarr_api_key = torrent_service.create_prowlarr_manager()
@@ -406,15 +413,154 @@ class TankobanWindow(QMainWindow):
             base_url = f"http://127.0.0.1:{port}"
             self._prowlarr = torrent_service.ProwlarrClient(base_url, self._prowlarr_api_key)
             print(f"[torrent] Prowlarr: using existing instance at {base_url}")
-            return
-
-        if self._prowlarr_mgr.start():
+        elif self._prowlarr_mgr.start():
             self._prowlarr = torrent_service.ProwlarrClient(
                 self._prowlarr_mgr.base_url, self._prowlarr_api_key
             )
             print(f"[torrent] Prowlarr ready at {self._prowlarr_mgr.base_url}")
         else:
             print("[torrent] Prowlarr failed to start (will retry on Hub open)")
+            return
+
+        # Auto-register FlareSolverr proxy in Prowlarr
+        if self._prowlarr and self._flaresolverr.port:
+            self._register_flaresolverr_in_prowlarr()
+
+    def _register_flaresolverr_in_prowlarr(self):
+        """Register our FlareSolverr bridge as an indexer proxy in Prowlarr."""
+        try:
+            import urllib.request
+            base = self._prowlarr._base_url
+            headers = self._prowlarr._headers()
+            fs_url = self._flaresolverr.url
+
+            # Check if FlareSolverr proxy already exists
+            req = urllib.request.Request(
+                f"{base}/api/v1/indexerproxy",
+                headers=headers,
+            )
+            resp = urllib.request.urlopen(req, timeout=10)
+            proxies = json.loads(resp.read())
+
+            # Look for existing FlareSolverr proxy
+            for proxy in proxies:
+                if proxy.get("configContract") == "FlareSolverrSettings":
+                    # Check if URL matches
+                    fields = proxy.get("fields", [])
+                    for field in fields:
+                        if field.get("name") == "host" and field.get("value") == fs_url:
+                            print(f"[torrent] FlareSolverr proxy already registered in Prowlarr")
+                            self._apply_flaresolverr_tag(proxy.get("tags", []))
+                            return
+                    # URL doesn't match — update it
+                    proxy_id = proxy["id"]
+                    for field in fields:
+                        if field.get("name") == "host":
+                            field["value"] = fs_url
+                    proxy["fields"] = fields
+                    update_data = json.dumps(proxy).encode()
+                    update_req = urllib.request.Request(
+                        f"{base}/api/v1/indexerproxy/{proxy_id}",
+                        data=update_data,
+                        headers={**headers, "Content-Type": "application/json"},
+                        method="PUT",
+                    )
+                    urllib.request.urlopen(update_req, timeout=10)
+                    print(f"[torrent] Updated FlareSolverr proxy URL to {fs_url}")
+                    self._apply_flaresolverr_tag(proxy.get("tags", []))
+                    return
+
+            # No existing proxy — create one
+            # First ensure we have a "flaresolverr" tag
+            tag_id = self._ensure_prowlarr_tag("flaresolverr")
+
+            payload = {
+                "name": "FlareSolverr",
+                "configContract": "FlareSolverrSettings",
+                "implementation": "FlareSolverr",
+                "implementationName": "FlareSolverr",
+                "tags": [tag_id] if tag_id else [],
+                "fields": [
+                    {"name": "host", "value": fs_url},
+                    {"name": "requestTimeout", "value": 60},
+                ],
+            }
+            create_data = json.dumps(payload).encode()
+            create_req = urllib.request.Request(
+                f"{base}/api/v1/indexerproxy",
+                data=create_data,
+                headers={**headers, "Content-Type": "application/json"},
+                method="POST",
+            )
+            resp = urllib.request.urlopen(create_req, timeout=10)
+            result = json.loads(resp.read())
+            print(f"[torrent] Registered FlareSolverr proxy in Prowlarr (id={result.get('id')})")
+            self._apply_flaresolverr_tag(result.get("tags", []))
+
+        except Exception as e:
+            print(f"[torrent] Failed to register FlareSolverr in Prowlarr: {e}")
+
+    def _ensure_prowlarr_tag(self, label):
+        """Ensure a tag exists in Prowlarr, return its ID."""
+        try:
+            import urllib.request
+            base = self._prowlarr._base_url
+            headers = self._prowlarr._headers()
+
+            # List existing tags
+            req = urllib.request.Request(f"{base}/api/v1/tag", headers=headers)
+            resp = urllib.request.urlopen(req, timeout=10)
+            tags = json.loads(resp.read())
+            for tag in tags:
+                if tag.get("label", "").lower() == label.lower():
+                    return tag["id"]
+
+            # Create tag
+            payload = json.dumps({"label": label}).encode()
+            create_req = urllib.request.Request(
+                f"{base}/api/v1/tag",
+                data=payload,
+                headers={**headers, "Content-Type": "application/json"},
+                method="POST",
+            )
+            resp = urllib.request.urlopen(create_req, timeout=10)
+            result = json.loads(resp.read())
+            return result.get("id")
+        except Exception as e:
+            print(f"[torrent] Failed to create tag '{label}': {e}")
+            return None
+
+    def _apply_flaresolverr_tag(self, proxy_tags):
+        """Apply the FlareSolverr tag to all indexers that don't have it."""
+        if not proxy_tags:
+            return
+        try:
+            import urllib.request
+            base = self._prowlarr._base_url
+            headers = self._prowlarr._headers()
+            tag_id = proxy_tags[0]
+
+            # List all indexers
+            req = urllib.request.Request(f"{base}/api/v1/indexer", headers=headers)
+            resp = urllib.request.urlopen(req, timeout=10)
+            indexers = json.loads(resp.read())
+
+            for indexer in indexers:
+                idx_tags = indexer.get("tags", [])
+                if tag_id not in idx_tags:
+                    idx_tags.append(tag_id)
+                    indexer["tags"] = idx_tags
+                    update_data = json.dumps(indexer).encode()
+                    update_req = urllib.request.Request(
+                        f"{base}/api/v1/indexer/{indexer['id']}",
+                        data=update_data,
+                        headers={**headers, "Content-Type": "application/json"},
+                        method="PUT",
+                    )
+                    urllib.request.urlopen(update_req, timeout=10)
+                    print(f"[torrent] Tagged indexer '{indexer.get('name', '?')}' with flaresolverr")
+        except Exception as e:
+            print(f"[torrent] Failed to tag indexers: {e}")
 
     def _tankoweb_window_action(self, action):
         if action == "minimize":
@@ -481,6 +627,11 @@ class TankobanWindow(QMainWindow):
             pass
         try:
             self._bridge.torProxy.forceKill()
+        except Exception:
+            pass
+        # Stop FlareSolverr bridge
+        try:
+            self._flaresolverr.stop()
         except Exception:
             pass
         # Stop torrent services
@@ -641,6 +792,10 @@ def main():
             pass
         try:
             win._bridge.torProxy.forceKill()
+        except Exception:
+            pass
+        try:
+            win._flaresolverr.stop()
         except Exception:
             pass
         try:
