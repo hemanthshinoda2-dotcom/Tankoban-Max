@@ -84,14 +84,52 @@ class ChromePage(QWebEnginePage):
 
     Signals:
         new_tab_requested(QUrl): Emitted when a popup/new-window is requested.
+        permission_requested(QUrl, Feature): Emitted when a page requests a permission.
     """
 
     new_tab_requested = Signal(QUrl)
     internal_command = Signal(str, str)  # (command, params)
 
+    # Permissions auto-granted (safe defaults)
+    _AUTO_GRANT = {
+        QWebEnginePage.Feature.Notifications,
+    }
+    # Permissions that need user prompt
+    _PROMPTABLE = {
+        QWebEnginePage.Feature.Geolocation,
+        QWebEnginePage.Feature.MediaAudioCapture,
+        QWebEnginePage.Feature.MediaVideoCapture,
+        QWebEnginePage.Feature.MediaAudioVideoCapture,
+        QWebEnginePage.Feature.DesktopVideoCapture,
+        QWebEnginePage.Feature.DesktopAudioVideoCapture,
+    }
+
     def __init__(self, profile: QWebEngineProfile, tab_id: str, parent=None):
         super().__init__(profile, parent)
         self.tab_id = tab_id
+
+        # Wire permission requests
+        self.featurePermissionRequested.connect(self._on_permission_requested)
+
+    def _on_permission_requested(self, origin: QUrl, feature):
+        """Handle permission requests from web pages."""
+        if feature in self._AUTO_GRANT:
+            self.setFeaturePermission(
+                origin, feature,
+                QWebEnginePage.PermissionPolicy.PermissionGrantedByUser,
+            )
+        elif feature in self._PROMPTABLE:
+            # For now, auto-deny all sensitive permissions.
+            # A proper permission bar can be added later.
+            self.setFeaturePermission(
+                origin, feature,
+                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser,
+            )
+        else:
+            self.setFeaturePermission(
+                origin, feature,
+                QWebEnginePage.PermissionPolicy.PermissionDeniedByUser,
+            )
 
     def createWindow(self, window_type):
         """
@@ -114,6 +152,15 @@ class ChromePage(QWebEnginePage):
             return False
 
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+    def certificateError(self, error):
+        """Accept certificate errors for local development, reject for production."""
+        # Accept only for localhost / local files
+        url = error.url()
+        if url.host() in ("localhost", "127.0.0.1", ""):
+            error.acceptCertificate()
+            return True
+        return False
 
     def javaScriptConsoleMessage(self, level, message, line, source):
         """Optionally log JS console messages for debugging."""

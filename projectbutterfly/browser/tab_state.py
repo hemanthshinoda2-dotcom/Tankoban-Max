@@ -28,6 +28,7 @@ class TabData:
     progress: int = 0
     can_go_back: bool = False
     can_go_forward: bool = False
+    pinned: bool = False
 
 
 class TabManager(QObject):
@@ -179,3 +180,26 @@ class TabManager(QObject):
         if tab:
             tab.can_go_back = can_back
             tab.can_go_forward = can_forward
+
+    def reorder(self, source_id: str, target_id: str):
+        """Move source tab to the position of target tab."""
+        src_idx = self.index_of(source_id)
+        tgt_idx = self.index_of(target_id)
+        if src_idx < 0 or tgt_idx < 0 or src_idx == tgt_idx:
+            return
+        tab = self._tabs.pop(src_idx)
+        self._tabs.insert(tgt_idx, tab)
+
+    def set_pinned(self, tab_id: str, pinned: bool):
+        """Pin or unpin a tab. Pinned tabs move to the front."""
+        tab = self.get(tab_id)
+        if not tab or tab.pinned == pinned:
+            return
+        tab.pinned = pinned
+        if pinned:
+            # Move to the end of pinned tabs
+            idx = self.index_of(tab_id)
+            self._tabs.pop(idx)
+            pin_count = sum(1 for t in self._tabs if t.pinned)
+            self._tabs.insert(pin_count, tab)
+        return tab

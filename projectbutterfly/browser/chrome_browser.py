@@ -145,6 +145,8 @@ class ChromeBrowser(QWidget):
         self._tab_bar.tab_clicked.connect(self._tab_mgr.activate)
         self._tab_bar.tab_close_clicked.connect(self._close_tab)
         self._tab_bar.new_tab_clicked.connect(self.new_tab)
+        self._tab_bar.tab_reorder_requested.connect(self._on_tab_reorder)
+        self._tab_bar.tab_pin_requested.connect(self._on_tab_pin)
 
     def _wire_nav_bar(self):
         nav = self._nav_bar
@@ -201,6 +203,9 @@ class ChromeBrowser(QWidget):
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
+
+        # Fullscreen requests
+        page.fullScreenRequested.connect(self._on_fullscreen_requested)
 
         tab.view = view
 
@@ -533,8 +538,11 @@ class ChromeBrowser(QWidget):
         self._nav_bar.focus_address_bar()
 
     def on_escape(self):
-        """Escape key: close find bar, or defocus address bar."""
-        if self._find_bar.isVisible():
+        """Escape key: exit fullscreen, close find bar, or defocus address bar."""
+        win = self.window()
+        if win.isFullScreen():
+            self._exit_fullscreen()
+        elif self._find_bar.isVisible():
             self._find_bar.hide_bar()
         else:
             tab = self._tab_mgr.active_tab
@@ -544,3 +552,70 @@ class ChromeBrowser(QWidget):
     def toggle_bookmarks_bar(self):
         """Toggle bookmarks bar visibility (Ctrl+Shift+B)."""
         self._bookmarks_bar.toggle()
+
+    # -----------------------------------------------------------------------
+    # Tab reorder + pinning
+    # -----------------------------------------------------------------------
+
+    def _on_tab_reorder(self, source_id: str, target_id: str):
+        """Handle drag-drop reorder from tab bar."""
+        self._tab_mgr.reorder(source_id, target_id)
+        self._tab_bar.reorder_tab(source_id, target_id)
+
+    def _on_tab_pin(self, tab_id: str, pin: bool):
+        """Handle pin/unpin request from tab context menu."""
+        if pin:
+            self.pin_tab(tab_id)
+        else:
+            self.unpin_tab(tab_id)
+
+    def pin_tab(self, tab_id: str):
+        """Pin a tab."""
+        tab = self._tab_mgr.set_pinned(tab_id, True)
+        if tab:
+            self._tab_bar.set_pinned(tab_id, True)
+
+    def unpin_tab(self, tab_id: str):
+        """Unpin a tab."""
+        tab = self._tab_mgr.set_pinned(tab_id, False)
+        if tab:
+            self._tab_bar.set_pinned(tab_id, False)
+
+    # -----------------------------------------------------------------------
+    # Fullscreen
+    # -----------------------------------------------------------------------
+
+    def _on_fullscreen_requested(self, request):
+        """Handle page-initiated fullscreen (e.g. video player)."""
+        request.accept()
+        if request.toggleOn():
+            self._enter_fullscreen()
+        else:
+            self._exit_fullscreen()
+
+    def toggle_fullscreen(self):
+        """F11 toggle fullscreen."""
+        win = self.window()
+        if win.isFullScreen():
+            self._exit_fullscreen()
+        else:
+            self._enter_fullscreen()
+
+    def _enter_fullscreen(self):
+        self._tab_bar.hide()
+        self._nav_bar.hide()
+        self._bookmarks_bar.hide()
+        self._find_bar.hide()
+        self._downloads_shelf.hide()
+        win = self.window()
+        if not win.isFullScreen():
+            win.showFullScreen()
+
+    def _exit_fullscreen(self):
+        self._tab_bar.show()
+        self._nav_bar.show()
+        # Bookmarks bar only shows if it was visible before
+        # Downloads shelf only shows if there are downloads
+        win = self.window()
+        if win.isFullScreen():
+            win.showNormal()

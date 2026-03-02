@@ -11,10 +11,10 @@ Renders a horizontal strip of tabs with:
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QIcon, QPainter, QColor, QFont, QFontMetrics, QPen
+from PySide6.QtCore import Qt, Signal, QSize, QPoint, QMimeData
+from PySide6.QtGui import QIcon, QPainter, QColor, QFont, QFontMetrics, QPen, QDrag
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy,
+    QWidget, QHBoxLayout, QPushButton, QScrollArea, QSizePolicy, QMenu,
 )
 
 from . import theme
@@ -25,8 +25,11 @@ class TabButton(QWidget):
 
     clicked = Signal(str)        # tab_id
     close_clicked = Signal(str)  # tab_id
+    drag_started = Signal(str)   # tab_id
 
-    def __init__(self, tab_id: str, title: str = "New Tab", parent=None):
+    DRAG_THRESHOLD = 8  # px before drag starts
+
+    def __init__(self, tab_id: str, title: str = "New Tab", pinned: bool = False, parent=None):
         super().__init__(parent)
         self.tab_id = tab_id
         self._title = title
@@ -35,13 +38,16 @@ class TabButton(QWidget):
         self._loading = False
         self._hovered = False
         self._close_hovered = False
+        self._pinned = pinned
+        self._drag_start_pos: QPoint | None = None
 
         self.setFixedHeight(theme.TAB_HEIGHT)
-        self.setMinimumWidth(theme.TAB_MIN_WIDTH)
-        self.setMaximumWidth(theme.TAB_MAX_WIDTH)
+        self.setMinimumWidth(theme.TAB_PIN_WIDTH if pinned else theme.TAB_MIN_WIDTH)
+        self.setMaximumWidth(theme.TAB_PIN_WIDTH if pinned else theme.TAB_MAX_WIDTH)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAcceptDrops(True)
 
     @property
     def active(self) -> bool:
@@ -52,6 +58,17 @@ class TabButton(QWidget):
         if self._active != val:
             self._active = val
             self.update()
+
+    @property
+    def pinned(self) -> bool:
+        return self._pinned
+
+    @pinned.setter
+    def pinned(self, val: bool):
+        self._pinned = val
+        self.setMinimumWidth(theme.TAB_PIN_WIDTH if val else theme.TAB_MIN_WIDTH)
+        self.setMaximumWidth(theme.TAB_PIN_WIDTH if val else theme.TAB_MAX_WIDTH)
+        self.update()
 
     def set_title(self, title: str):
         self._title = title or "New Tab"
@@ -97,6 +114,21 @@ class TabButton(QWidget):
             p.drawLine(4, h - 1, w - 4, h - 1)
 
         # Favicon
+        if self._pinned:
+            # Pinned: center icon only
+            icon_size = 16
+            ix = (w - icon_size) // 2
+            iy = (h - icon_size) // 2
+            if self._icon and not self._icon.isNull():
+                self._icon.paint(p, ix, iy, icon_size, icon_size)
+            else:
+                # Draw a small dot as placeholder
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor(theme.TEXT_SECONDARY))
+                p.drawEllipse(ix + 4, iy + 4, 8, 8)
+            p.end()
+            return
+
         x_offset = 10
         if self._icon and not self._icon.isNull():
             icon_size = 16
@@ -152,18 +184,98 @@ class TabButton(QWidget):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            if self._in_close(event.pos()):
+            if not self._pinned and self._in_close(event.pos()):
                 self.close_clicked.emit(self.tab_id)
             else:
+                self._drag_start_pos = event.pos()
                 self.clicked.emit(self.tab_id)
         elif event.button() == Qt.MouseButton.MiddleButton:
-            self.close_clicked.emit(self.tab_id)
+            if not self._pinned:
+                self.close_clicked.emit(self.tab_id)
+        elif event.button() == Qt.MouseButton.RightButton:
+            self._show_tab_context_menu(event.globalPos())
+
+    def _show_tab_context_menu(self, global_pos):
+        """Show right-click context menu on the tab."""
+        menu = QMenu(self)
+        menu.setStyleSheet(f"""
+            QMenu {{
+                background: {theme.BG_POPUP};
+                color: {theme.TEXT_PRIMARY};
+                border: 1px solid {theme.BORDER_COLOR};
+                border-radius: 8px;
+                padding: 4px 0;
+                font-size: 13px;
+                font-family: 'Segoe UI', sans-serif;
+            }}
+            QMenu::item {{ padding: 6px 32px 6px 12px; }}
+            QMenu::item:selected {{ background: rgba(255,255,255,0.08); }}
+            QMenu::separator {{ height: 1px; background: {theme.BORDER_COLOR}; margin: 4px 8px; }}
+        """)
+
+        if self._pinned:
+            menu.addAction("Unpin tab", lambda: self._emit_pin(False))
+        else:
+            menu.addAction("Pin tab", lambda: self._emit_pin(True))
+
+        menu.addSeparator()
+
+        if not self._pinned:
+            menu.addAction("Close tab", lambda: self.close_clicked.emit(self.tab_id))
+
+        menu.exec(global_pos)
+
+    def _emit_pin(self, pin: bool):
+        parent = self.parent()
+        while parent and not isinstance(parent, TabBar):
+            parent = parent.parent()
+        if parent:
+            parent.tab_pin_requested.emit(self.tab_id, pin)
 
     def mouseMoveEvent(self, event):
-        was_close = self._close_hovered
-        self._close_hovered = self._in_close(event.pos())
-        if was_close != self._close_hovered:
-            self.update()
+        # Drag detection
+        if self._drag_start_pos and event.buttons() & Qt.MouseButton.LeftButton:
+            delta = event.pos() - self._drag_start_pos
+            if delta.manhattanLength() >= self.DRAG_THRESHOLD:
+                self._start_drag()
+                return
+
+        if not self._pinned:
+            was_close = self._close_hovered
+            self._close_hovered = self._in_close(event.pos())
+            if was_close != self._close_hovered:
+                self.update()
+
+    def mouseReleaseEvent(self, event):
+        self._drag_start_pos = None
+
+    def _start_drag(self):
+        """Initiate a tab drag operation."""
+        self._drag_start_pos = None
+        drag = QDrag(self)
+        mime = QMimeData()
+        mime.setData("application/x-tanko-tab-id", self.tab_id.encode())
+        drag.setMimeData(mime)
+        drag.exec(Qt.DropAction.MoveAction)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat("application/x-tanko-tab-id"):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat("application/x-tanko-tab-id"):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        source_id = event.mimeData().data("application/x-tanko-tab-id").data().decode()
+        if source_id != self.tab_id:
+            # Emit to TabBar which handles reorder
+            parent = self.parent()
+            while parent and not isinstance(parent, TabBar):
+                parent = parent.parent()
+            if parent:
+                parent.tab_reorder_requested.emit(source_id, self.tab_id)
+        event.acceptProposedAction()
 
     def enterEvent(self, event):
         self._hovered = True
@@ -172,6 +284,7 @@ class TabButton(QWidget):
     def leaveEvent(self, event):
         self._hovered = False
         self._close_hovered = False
+        self._drag_start_pos = None
         self.update()
 
 
@@ -188,6 +301,8 @@ class TabBar(QWidget):
     tab_clicked = Signal(str)
     tab_close_clicked = Signal(str)
     new_tab_clicked = Signal()
+    tab_reorder_requested = Signal(str, str)  # (source_tab_id, target_tab_id)
+    tab_pin_requested = Signal(str, bool)     # (tab_id, pin)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -243,9 +358,9 @@ class TabBar(QWidget):
         self._new_btn.clicked.connect(self.new_tab_clicked.emit)
         outer.addWidget(self._new_btn)
 
-    def add_tab(self, tab_id: str, title: str, index: int = -1):
+    def add_tab(self, tab_id: str, title: str, index: int = -1, pinned: bool = False):
         """Add a tab button at the given index."""
-        btn = TabButton(tab_id, title)
+        btn = TabButton(tab_id, title, pinned=pinned)
         btn.clicked.connect(self.tab_clicked.emit)
         btn.close_clicked.connect(self.tab_close_clicked.emit)
 
@@ -288,13 +403,23 @@ class TabBar(QWidget):
 
     def _recalc_tab_widths(self):
         """Distribute tab widths evenly within min/max constraints."""
-        n = len(self._buttons)
-        if n == 0:
+        if not self._buttons:
             return
-        avail = self._scroll.width() - 8
-        per_tab = max(theme.TAB_MIN_WIDTH, min(theme.TAB_MAX_WIDTH, avail // n))
-        for btn in self._buttons.values():
-            btn.setFixedWidth(per_tab)
+
+        pinned = [b for b in self._buttons.values() if b.pinned]
+        unpinned = [b for b in self._buttons.values() if not b.pinned]
+
+        # Pinned tabs get fixed width
+        pinned_total = len(pinned) * theme.TAB_PIN_WIDTH
+        for btn in pinned:
+            btn.setFixedWidth(theme.TAB_PIN_WIDTH)
+
+        # Unpinned share remaining space
+        if unpinned:
+            avail = self._scroll.width() - 8 - pinned_total
+            per_tab = max(theme.TAB_MIN_WIDTH, min(theme.TAB_MAX_WIDTH, avail // len(unpinned)))
+            for btn in unpinned:
+                btn.setFixedWidth(per_tab)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -305,3 +430,26 @@ class TabBar(QWidget):
         btn = self._buttons.get(tab_id)
         if btn:
             self._scroll.ensureWidgetVisible(btn, 50, 0)
+
+    def reorder_tab(self, source_id: str, target_id: str):
+        """Move source tab to the position of target tab in the layout."""
+        src_btn = self._buttons.get(source_id)
+        tgt_btn = self._buttons.get(target_id)
+        if not src_btn or not tgt_btn:
+            return
+
+        # Find target index in layout
+        tgt_idx = self._tab_layout.indexOf(tgt_btn)
+        if tgt_idx < 0:
+            return
+
+        # Remove source and re-insert at target position
+        self._tab_layout.removeWidget(src_btn)
+        self._tab_layout.insertWidget(tgt_idx, src_btn)
+
+    def set_pinned(self, tab_id: str, pinned: bool):
+        """Update a tab's pinned visual state."""
+        btn = self._buttons.get(tab_id)
+        if btn:
+            btn.pinned = pinned
+            self._recalc_tab_widths()
