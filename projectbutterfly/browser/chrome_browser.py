@@ -147,6 +147,8 @@ class ChromeBrowser(QWidget):
         self._tab_bar.new_tab_clicked.connect(self.new_tab)
         self._tab_bar.tab_reorder_requested.connect(self._on_tab_reorder)
         self._tab_bar.tab_pin_requested.connect(self._on_tab_pin)
+        self._tab_bar.tab_duplicate_requested.connect(self.duplicate_tab)
+        self._tab_bar.tab_mute_requested.connect(self.toggle_mute_tab)
         # Window controls live in the tab bar now
         self._tab_bar.minimize_clicked.connect(lambda: self._window_action("minimize"))
         self._tab_bar.maximize_clicked.connect(lambda: self._window_action("maximize"))
@@ -165,6 +167,7 @@ class ChromeBrowser(QWidget):
         nav.settings_clicked.connect(self.open_settings)
         nav.bookmarks_bar_toggled.connect(self.toggle_bookmarks_bar)
         nav.library_clicked.connect(self._go_to_library)
+        nav.bookmark_toggled.connect(self.toggle_bookmark)
 
     def _go_to_library(self):
         """Navigate back to the main Tankoban library."""
@@ -294,6 +297,7 @@ class ChromeBrowser(QWidget):
         self._nav_bar.set_url(tab.url)
         self._nav_bar.set_loading(tab.loading)
         self._nav_bar.set_nav_state(tab.can_go_back, tab.can_go_forward)
+        self._nav_bar.set_bookmarked(self._data_bridge.is_bookmarked(tab.url))
 
         # Update find bar page reference
         self._find_bar.set_page(tab.view.page())
@@ -332,6 +336,11 @@ class ChromeBrowser(QWidget):
         )
         page.internal_command.connect(self._on_internal_command)
 
+        # Audio state
+        page.recentlyAudibleChanged.connect(
+            lambda audible, tid=tab_id: self._on_audio_changed(tid, audible)
+        )
+
         # Context menu
         view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         view.customContextMenuRequested.connect(
@@ -345,6 +354,7 @@ class ChromeBrowser(QWidget):
         # Update nav bar if this is the active tab
         if tab_id == self._tab_mgr.active_id:
             self._nav_bar.set_url(url_str)
+            self._nav_bar.set_bookmarked(self._data_bridge.is_bookmarked(url_str))
 
         # Update nav state
         tab = self._tab_mgr.get(tab_id)
@@ -365,6 +375,13 @@ class ChromeBrowser(QWidget):
             tab = self._tab_mgr.get(tab_id)
             if tab and tab.url and tab.url.startswith("http"):
                 self._data_bridge.add_history_entry(tab.url, tab.title)
+
+    def _on_audio_changed(self, tab_id: str, audible: bool):
+        tab = self._tab_mgr.get(tab_id)
+        if tab:
+            tab.audio_playing = audible
+            self._tab_mgr.tab_audio_changed.emit(tab_id, audible, tab.muted)
+            self._tab_bar.update_audio(tab_id, audible, tab.muted)
 
     def _on_new_tab_requested(self, url: QUrl):
         url_str = url.toString() if url and not url.isEmpty() else None
@@ -410,7 +427,7 @@ class ChromeBrowser(QWidget):
             view.load(QUrl.fromLocalFile(str(_NEWTAB_HTML)))
         else:
             view.setHtml(
-                "<html><body style='background:#050505;color:rgba(245,245,245,0.92);"
+                "<html><body style='background:#202124;color:#e8eaed;"
                 "font-family:sans-serif;display:flex;align-items:center;"
                 "justify-content:center;height:100vh'>"
                 "<h1>New Tab</h1></body></html>"
@@ -525,6 +542,7 @@ class ChromeBrowser(QWidget):
             on_select_all=lambda: page.triggerAction(QWebEnginePage.WebAction.SelectAll),
             on_open_link_new_tab=lambda url: self.new_tab(url.toString()),
             on_copy_link=lambda url: QApplication.clipboard().setText(url.toString()),
+            on_inspect=lambda: self.toggle_devtools(),
         )
 
         menu.exec(view.mapToGlobal(pos))
@@ -559,6 +577,94 @@ class ChromeBrowser(QWidget):
     def toggle_bookmarks_bar(self):
         """Toggle bookmarks bar visibility (Ctrl+Shift+B)."""
         self._bookmarks_bar.toggle()
+
+    # -----------------------------------------------------------------------
+    # Bookmark star (Ctrl+D)
+    # -----------------------------------------------------------------------
+
+    def toggle_bookmark(self):
+        """Toggle bookmark on the current page."""
+        tab = self._tab_mgr.active_tab
+        if not tab or not tab.url or not tab.url.startswith("http"):
+            return
+        if self._data_bridge.is_bookmarked(tab.url):
+            self._data_bridge.remove_bookmark(tab.url)
+            self._nav_bar.set_bookmarked(False)
+        else:
+            self._data_bridge.add_bookmark(tab.url, tab.title)
+            self._nav_bar.set_bookmarked(True)
+
+    # -----------------------------------------------------------------------
+    # Zoom (Ctrl+Plus/Minus/0)
+    # -----------------------------------------------------------------------
+
+    def zoom_in(self):
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.zoom_factor = min(5.0, tab.zoom_factor + 0.1)
+            tab.view.setZoomFactor(tab.zoom_factor)
+
+    def zoom_out(self):
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.zoom_factor = max(0.25, tab.zoom_factor - 0.1)
+            tab.view.setZoomFactor(tab.zoom_factor)
+
+    def zoom_reset(self):
+        tab = self._tab_mgr.active_tab
+        if tab and tab.view:
+            tab.zoom_factor = 1.0
+            tab.view.setZoomFactor(1.0)
+
+    # -----------------------------------------------------------------------
+    # DevTools (F12)
+    # -----------------------------------------------------------------------
+
+    def toggle_devtools(self):
+        """Open Chromium DevTools for the active tab."""
+        tab = self._tab_mgr.active_tab
+        if not tab or not tab.view:
+            return
+        page = tab.view.page()
+        # If devtools page already exists, close it
+        if hasattr(page, '_devtools_view') and page._devtools_view:
+            page._devtools_view.close()
+            page._devtools_view = None
+            return
+        # Create a new view for devtools
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        devtools = QWebEngineView()
+        devtools.setWindowTitle(f"DevTools — {tab.title}")
+        devtools.resize(900, 600)
+        page.setDevToolsPage(devtools.page())
+        page._devtools_view = devtools
+        devtools.show()
+
+    # -----------------------------------------------------------------------
+    # Duplicate tab
+    # -----------------------------------------------------------------------
+
+    def duplicate_tab(self, tab_id: str | None = None):
+        """Duplicate a tab by creating a new tab with the same URL."""
+        tid = tab_id or self._tab_mgr.active_id
+        tab = self._tab_mgr.get(tid) if tid else None
+        if tab and tab.url:
+            self.new_tab(tab.url)
+
+    # -----------------------------------------------------------------------
+    # Mute tab
+    # -----------------------------------------------------------------------
+
+    def toggle_mute_tab(self, tab_id: str | None = None):
+        """Mute/unmute a tab."""
+        tid = tab_id or self._tab_mgr.active_id
+        tab = self._tab_mgr.get(tid) if tid else None
+        if tab and tab.view:
+            page = tab.view.page()
+            tab.muted = not tab.muted
+            page.setAudioMuted(tab.muted)
+            self._tab_mgr.tab_audio_changed.emit(tid, tab.audio_playing, tab.muted)
+            self._tab_bar.update_audio(tid, tab.audio_playing, tab.muted)
 
     # -----------------------------------------------------------------------
     # Tab reorder + pinning

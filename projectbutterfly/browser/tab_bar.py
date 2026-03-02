@@ -40,6 +40,8 @@ class TabButton(QWidget):
         self._hovered = False
         self._close_hovered = False
         self._pinned = pinned
+        self._audio_playing = False
+        self._muted = False
         self._drag_start_pos: QPoint | None = None
 
         self.setFixedHeight(theme.TAB_HEIGHT)
@@ -87,6 +89,11 @@ class TabButton(QWidget):
         self._loading = loading
         self.update()
 
+    def set_audio(self, playing: bool, muted: bool):
+        self._audio_playing = playing
+        self._muted = muted
+        self.update()
+
     def sizeHint(self) -> QSize:
         return QSize(180, theme.TAB_HEIGHT)
 
@@ -97,7 +104,7 @@ class TabButton(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
-        # Background — plain flat rectangle, no effects
+        # Background — Chrome-style rounded top
         if self._active:
             bg = QColor(theme.BG_TAB_ACTIVE)
         elif self._hovered:
@@ -105,9 +112,12 @@ class TabButton(QWidget):
         else:
             bg = QColor(theme.BG_TAB_INACTIVE)
 
+        radius = 8
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(bg)
-        p.drawRect(0, 0, w, h)
+        p.drawRoundedRect(0, 0, w, h + radius, radius, radius)
+        # Square off bottom corners so tab sits flush against toolbar
+        p.drawRect(0, h - radius, w, radius)
 
         # Loading indicator (thin line at bottom)
         if self._loading:
@@ -150,6 +160,16 @@ class TabButton(QWidget):
             elided = fm.elidedText(self._title, Qt.TextElideMode.ElideRight, avail_w)
             text_y = (h + fm.ascent() - fm.descent()) // 2
             p.drawText(x_offset, text_y, elided)
+
+        # Audio indicator (speaker icon before close button)
+        if self._audio_playing or self._muted:
+            speaker_font = QFont("Segoe UI", 8)
+            p.setFont(speaker_font)
+            p.setPen(QColor(theme.TEXT_SECONDARY))
+            icon_text = "\U0001f507" if self._muted else "\U0001f50a"  # 🔇 or 🔊
+            sx = w - 40
+            sy = (h + QFontMetrics(speaker_font).ascent() - QFontMetrics(speaker_font).descent()) // 2
+            p.drawText(sx, sy, icon_text)
 
         # Close button (x)
         close_size = theme.TAB_CLOSE_SIZE
@@ -219,6 +239,12 @@ class TabButton(QWidget):
         else:
             menu.addAction("Pin tab", lambda: self._emit_pin(True))
 
+        menu.addAction("Duplicate tab", lambda: self._emit_to_bar("tab_duplicate_requested", self.tab_id))
+
+        if self._audio_playing or self._muted:
+            mute_label = "Unmute tab" if self._muted else "Mute tab"
+            menu.addAction(mute_label, lambda: self._emit_to_bar("tab_mute_requested", self.tab_id))
+
         menu.addSeparator()
 
         if not self._pinned:
@@ -226,12 +252,21 @@ class TabButton(QWidget):
 
         menu.exec(global_pos)
 
-    def _emit_pin(self, pin: bool):
+    def _find_tab_bar(self):
         parent = self.parent()
         while parent and not isinstance(parent, TabBar):
             parent = parent.parent()
-        if parent:
-            parent.tab_pin_requested.emit(self.tab_id, pin)
+        return parent
+
+    def _emit_pin(self, pin: bool):
+        bar = self._find_tab_bar()
+        if bar:
+            bar.tab_pin_requested.emit(self.tab_id, pin)
+
+    def _emit_to_bar(self, signal_name: str, *args):
+        bar = self._find_tab_bar()
+        if bar:
+            getattr(bar, signal_name).emit(*args)
 
     def mouseMoveEvent(self, event):
         # Drag detection
@@ -309,6 +344,8 @@ class TabBar(QWidget):
     new_tab_clicked = Signal()
     tab_reorder_requested = Signal(str, str)  # (source_tab_id, target_tab_id)
     tab_pin_requested = Signal(str, bool)     # (tab_id, pin)
+    tab_duplicate_requested = Signal(str)     # tab_id
+    tab_mute_requested = Signal(str)          # tab_id
     minimize_clicked = Signal()
     maximize_clicked = Signal()
     close_clicked = Signal()
@@ -436,6 +473,11 @@ class TabBar(QWidget):
         btn = self._buttons.get(tab_id)
         if btn:
             btn.set_loading(loading)
+
+    def update_audio(self, tab_id: str, playing: bool, muted: bool):
+        btn = self._buttons.get(tab_id)
+        if btn:
+            btn.set_audio(playing, muted)
 
     def _recalc_tab_widths(self):
         """Distribute tab widths evenly within min/max constraints."""

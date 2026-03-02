@@ -7,8 +7,8 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    background: #050505;
-    color: rgba(245,245,245,0.92);
+    background: #202124;
+    color: #e8eaed;
     font-family: 'Segoe UI', system-ui, sans-serif;
     padding: 40px;
     max-width: 720px;
@@ -19,12 +19,12 @@
     font-size: 28px;
     font-weight: 400;
     margin-bottom: 32px;
-    color: rgba(245,245,245,0.92);
+    color: #e8eaed;
   }
 
   .section {
-    background: #121110;
-    border: 1px solid rgba(199,167,107,0.12);
+    background: #292a2d;
+    border: 1px solid #3c4043;
     border-radius: 12px;
     padding: 20px 24px;
     margin-bottom: 16px;
@@ -33,7 +33,7 @@
   .section-title {
     font-size: 14px;
     font-weight: 600;
-    color: #c7a76b;
+    color: #8ab4f8;
     margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -44,24 +44,24 @@
     align-items: center;
     justify-content: space-between;
     padding: 10px 0;
-    border-bottom: 1px solid rgba(199,167,107,0.10);
+    border-bottom: 1px solid #3c4043;
   }
   .setting-row:last-child { border-bottom: none; }
 
   .setting-label {
     font-size: 14px;
-    color: rgba(245,245,245,0.92);
+    color: #e8eaed;
   }
   .setting-desc {
     font-size: 12px;
-    color: rgba(245,245,245,0.55);
+    color: #9aa0a6;
     margin-top: 2px;
   }
 
   select, input[type="text"] {
-    background: #0c0b09;
-    color: rgba(245,245,245,0.92);
-    border: 1px solid rgba(199,167,107,0.18);
+    background: #202124;
+    color: #e8eaed;
+    border: 1px solid #5f6368;
     border-radius: 6px;
     padding: 6px 12px;
     font-size: 13px;
@@ -69,7 +69,7 @@
     outline: none;
   }
   select:focus, input[type="text"]:focus {
-    border-color: #c7a76b;
+    border-color: #8ab4f8;
   }
 
   /* Toggle switch */
@@ -77,12 +77,12 @@
     position: relative;
     width: 40px;
     height: 20px;
-    background: rgba(245,245,245,0.20);
+    background: rgba(255,255,255,0.20);
     border-radius: 10px;
     cursor: pointer;
     transition: background 0.2s;
   }
-  .toggle.on { background: #c7a76b; }
+  .toggle.on { background: #8ab4f8; }
   .toggle::after {
     content: '';
     position: absolute;
@@ -97,22 +97,22 @@
   .toggle.on::after { transform: translateX(20px); }
 
   .btn {
-    background: #121110;
-    color: rgba(245,245,245,0.92);
-    border: 1px solid rgba(199,167,107,0.18);
+    background: #292a2d;
+    color: #e8eaed;
+    border: 1px solid #5f6368;
     border-radius: 6px;
     padding: 8px 20px;
     font-size: 13px;
     cursor: pointer;
     transition: background 0.15s;
   }
-  .btn:hover { background: rgba(199,167,107,0.10); }
-  .btn-danger { color: #c95a3a; border-color: rgba(201,90,58,0.40); }
-  .btn-danger:hover { background: rgba(201,90,58,0.10); }
+  .btn:hover { background: rgba(255,255,255,0.08); }
+  .btn-danger { color: #ea4335; border-color: rgba(234,67,53,0.40); }
+  .btn-danger:hover { background: rgba(234,67,53,0.10); }
 
   .version {
     text-align: center;
-    color: rgba(245,245,245,0.30);
+    color: #5f6368;
     font-size: 12px;
     margin-top: 32px;
   }
@@ -186,7 +186,6 @@
 
   function clearData() {
     if (confirm('Clear all browsing data? This cannot be undone.')) {
-      // Signal to Python via URL scheme
       window.location.href = 'tanko-browser://clear-data';
     }
   }
