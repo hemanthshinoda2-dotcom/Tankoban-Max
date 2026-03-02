@@ -1213,12 +1213,14 @@
   try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
   try { if (typeof syncLibraryFullscreenBtn === 'function') syncLibraryFullscreenBtn().catch(()=>{}); } catch {}
 
-  // --- Web mode button (opens Qt-native TankoWeb panel via bridge) ---
+  // --- Tankoweb button (globe icon in tbLeft, opens Qt-native TankoWeb panel via bridge) ---
   // Note: Tanko.api.shell is set asynchronously by the QWebChannel shim,
   // so we check at click-time rather than registration-time.
-  var modeWebBtn = document.getElementById('modeWebBtn');
-  if (modeWebBtn) {
-    modeWebBtn.addEventListener('click', function () {
+  var tankWebBtn = document.getElementById('tankWebBtn');
+  if (tankWebBtn) {
+    tankWebBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
       try {
         if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openWebMode === 'function') {
           Tanko.api.shell.openWebMode();
