@@ -3,6 +3,15 @@ setlocal
 
 cd /d "%~dp0"
 
+:: Ensure torrent dependencies (qBittorrent + Prowlarr) are downloaded
+if not exist "resources\qbittorrent\qbittorrent.exe" (
+  echo [butterfly] Downloading torrent dependencies...
+  powershell -ExecutionPolicy Bypass -File "scripts\windows\ensure_torrent_deps.ps1"
+) else if not exist "resources\prowlarr\Prowlarr.exe" (
+  echo [butterfly] Downloading torrent dependencies...
+  powershell -ExecutionPolicy Bypass -File "scripts\windows\ensure_torrent_deps.ps1"
+)
+
 set "PYTHON_EXE="
 if exist ".venv\Scripts\python.exe" set "PYTHON_EXE=.venv\Scripts\python.exe"
 if not defined PYTHON_EXE if exist "venv\Scripts\python.exe" set "PYTHON_EXE=venv\Scripts\python.exe"
