@@ -379,16 +379,12 @@ class TankobanWindow(QMainWindow):
         self._stack.setCurrentWidget(self._tankoweb)
 
     def show_sources_mode(self):
-        """Switch to the Sources mode (browser_sources.html in a dedicated view)."""
+        """Switch to the Sources mode (qBittorrent Web UI)."""
         print("[app] show_sources_mode() called")
         if self._sources_view is None:
             try:
                 from sources_widget import SourcesWidget
-                self._sources_view = SourcesWidget(
-                    jackett_fn=lambda: self._jackett,
-                    on_back=self.show_web_view,
-                    parent=self,
-                )
+                self._sources_view = SourcesWidget(parent=self)
                 self._stack.addWidget(self._sources_view)
                 print(f"[app] SourcesWidget created, stack count={self._stack.count()}")
             except Exception as e:

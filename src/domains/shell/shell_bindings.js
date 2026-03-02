@@ -1238,10 +1238,13 @@
       e.preventDefault();
       e.stopPropagation();
       try {
+        // Sync the mode router so the active button state (white tint) updates
+        if (window.Tanko && window.Tanko.modeRouter) {
+          Tanko.modeRouter.setMode('sources');
+        }
+        // Call the Python bridge to show the Sources widget
         if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openSourcesMode === 'function') {
           Tanko.api.shell.openSourcesMode();
-        } else if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
-          Tanko.modeRouter.setMode('sources');
         } else {
           console.warn('[shell] openSourcesMode not available — bridge not ready');
         }
