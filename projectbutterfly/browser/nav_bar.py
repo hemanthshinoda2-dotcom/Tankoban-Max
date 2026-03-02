@@ -145,7 +145,7 @@ class NavBar(QWidget):
     def _nav_button(self, text: str, tooltip: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setToolTip(tooltip)
-        btn.setFixedSize(32, 32)
+        btn.setFixedSize(36, 32)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         return btn
 
