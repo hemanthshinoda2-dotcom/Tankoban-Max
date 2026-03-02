@@ -109,15 +109,18 @@ class NavBar(QWidget):
 
         # -- Back / Forward --
         self._back_btn = self._nav_button("\u2190", "Back")  # ←
+        self._back_btn.setStyleSheet("font-size: 22px;")
         self._back_btn.clicked.connect(self.back_clicked.emit)
         layout.addWidget(self._back_btn)
 
         self._fwd_btn = self._nav_button("\u2192", "Forward")  # →
+        self._fwd_btn.setStyleSheet("font-size: 22px;")
         self._fwd_btn.clicked.connect(self.forward_clicked.emit)
         layout.addWidget(self._fwd_btn)
 
         # -- Reload / Stop --
         self._reload_btn = self._nav_button("\u27f3", "Reload")  # ⟳
+        self._reload_btn.setStyleSheet("font-size: 22px;")
         self._reload_btn.clicked.connect(self._on_reload_stop)
         layout.addWidget(self._reload_btn)
 
