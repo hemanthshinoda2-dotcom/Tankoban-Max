@@ -33,7 +33,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngin
 import storage
 import bridge as bridge_module
 from player_ui import MpvContainer
-from tankoweb_widget import TankoWebWidget
+from browser import ChromeBrowser
 import torrent_service
 from flaresolverr_bridge import FlareSolverrBridge
 
@@ -226,7 +226,7 @@ class TankobanWindow(QMainWindow):
     QStackedWidget with three layers:
       index 0 = QWebEngineView  (existing renderer UI)
       index 1 = MpvContainer    (mpv native render surface)
-      index 2 = TankoWebWidget  (Qt-native Web mode, lazy-created)
+      index 2 = ChromeBrowser   (Chrome-like browser, lazy-created)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
@@ -290,8 +290,8 @@ class TankobanWindow(QMainWindow):
         self._mpv_container = MpvContainer(self._bridge.player, self)
         self._stack.addWidget(self._mpv_container)  # index 1
 
-        # --- TankoWebWidget (layer 2, lazy-created) ---
-        self._tankoweb: TankoWebWidget | None = None
+        # --- ChromeBrowser (layer 2, lazy-created) ---
+        self._tankoweb: ChromeBrowser | None = None
 
         # --- FlareSolverr bridge (Cloudflare solver for Prowlarr) ---
         # Must be created on main thread (uses QWebEngineProfile).
@@ -365,9 +365,10 @@ class TankobanWindow(QMainWindow):
     # --- TankoWeb mode switching ---
 
     def show_tankoweb(self):
-        """Switch to the Qt-native Web mode panel (lazy-creates on first call)."""
+        """Switch to the Chrome-like browser panel (lazy-creates on first call)."""
         if self._tankoweb is None:
-            self._tankoweb = TankoWebWidget(
+            self._tankoweb = ChromeBrowser(
+                profile=self._profile,
                 on_back=self.show_web_view,
                 on_window_action=self._tankoweb_window_action,
             )
@@ -451,12 +452,6 @@ class TankobanWindow(QMainWindow):
             pass
         try:
             self._bridge.torProxy.forceKill()
-        except Exception:
-            pass
-        # Stop Tor proxy (if running via TankoWeb)
-        try:
-            if self._tankoweb:
-                self._tankoweb._tor.force_kill()
         except Exception:
             pass
         # Stop FlareSolverr bridge
@@ -620,14 +615,6 @@ def main():
             pass
         try:
             win._flaresolverr.stop()
-        except Exception:
-            pass
-        try:
-            win._qbit_mgr.stop()
-        except Exception:
-            pass
-        try:
-            win._prowlarr_mgr.stop()
         except Exception:
             pass
         storage.flush_all_writes()
