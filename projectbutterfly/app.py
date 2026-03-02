@@ -20,6 +20,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, QTimer
@@ -33,6 +34,7 @@ import storage
 import bridge as bridge_module
 from player_ui import MpvContainer
 from tankoweb_widget import TankoWebWidget
+import torrent_service
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -283,6 +285,15 @@ class TankobanWindow(QMainWindow):
         # --- TankoWebWidget (layer 2, lazy-created) ---
         self._tankoweb: TankoWebWidget | None = None
 
+        # --- Torrent services (qBittorrent + Prowlarr as background subprocesses) ---
+        self._qbit_mgr = torrent_service.create_qbit_manager()
+        self._prowlarr_mgr, self._prowlarr_api_key = torrent_service.create_prowlarr_manager()
+        self._qbit: torrent_service.QBitClient | None = None
+        self._prowlarr: torrent_service.ProwlarrClient | None = None
+        # Start services in a background thread to avoid blocking UI
+        self._torrent_init_thread = threading.Thread(target=self._start_torrent_services, daemon=True)
+        self._torrent_init_thread.start()
+
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
             self._mpv_container.get_render_widget(),
@@ -353,6 +364,25 @@ class TankobanWindow(QMainWindow):
 
         self._stack.setCurrentWidget(self._tankoweb)
 
+    def _start_torrent_services(self):
+        """Start qBittorrent and Prowlarr in background (runs on a daemon thread)."""
+        # Start qBittorrent
+        if self._qbit_mgr.start():
+            self._qbit = torrent_service.QBitClient(self._qbit_mgr.base_url)
+            self._qbit.login()
+            print(f"[torrent] qBittorrent ready at {self._qbit_mgr.base_url}")
+        else:
+            print("[torrent] qBittorrent failed to start (will retry on Hub open)")
+
+        # Start Prowlarr
+        if self._prowlarr_mgr.start():
+            self._prowlarr = torrent_service.ProwlarrClient(
+                self._prowlarr_mgr.base_url, self._prowlarr_api_key
+            )
+            print(f"[torrent] Prowlarr ready at {self._prowlarr_mgr.base_url}")
+        else:
+            print("[torrent] Prowlarr failed to start (will retry on Hub open)")
+
     def _tankoweb_window_action(self, action):
         if action == "minimize":
             self.showMinimized()
@@ -411,13 +441,22 @@ class TankobanWindow(QMainWindow):
         v.resize(v.width() - 1, v.height())
 
     def closeEvent(self, event):
-        """Shutdown player/tor and flush pending writes before quitting."""
+        """Shutdown player/tor/torrent services and flush pending writes before quitting."""
         try:
             self._bridge.player.shutdown()
         except Exception:
             pass
         try:
             self._bridge.torProxy.forceKill()
+        except Exception:
+            pass
+        # Stop torrent services
+        try:
+            self._qbit_mgr.stop()
+        except Exception:
+            pass
+        try:
+            self._prowlarr_mgr.stop()
         except Exception:
             pass
         storage.flush_all_writes()
@@ -560,6 +599,14 @@ def main():
             pass
         try:
             win._bridge.torProxy.forceKill()
+        except Exception:
+            pass
+        try:
+            win._qbit_mgr.stop()
+        except Exception:
+            pass
+        try:
+            win._prowlarr_mgr.stop()
         except Exception:
             pass
         storage.flush_all_writes()
