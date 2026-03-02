@@ -55,9 +55,9 @@ class _CompletionItem(QWidget):
 
         # Background
         if self._selected:
-            p.fillRect(0, 0, w, h, QColor("rgba(199,167,107,0.16)"))
+            p.fillRect(0, 0, w, h, QColor("rgba(255,255,255,0.12)"))
         elif self._hovered:
-            p.fillRect(0, 0, w, h, QColor("rgba(199,167,107,0.08)"))
+            p.fillRect(0, 0, w, h, QColor("rgba(255,255,255,0.06)"))
 
         # Type indicator
         is_bookmark = self._data.get("type") == "bookmark"

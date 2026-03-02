@@ -1,38 +1,35 @@
 """
-Tankoban glass-tint browser theme constants and stylesheet helpers.
-
-Warm brown/amber/gold palette matching the main Tankoban app aesthetic.
-Semi-transparent dark backgrounds with muted gold accents and beveled borders.
+Chrome dark mode browser theme — matches Google Chrome's dark color scheme.
 """
 
 # ---------------------------------------------------------------------------
-# Color palette (Tankoban glass — dark)
+# Color palette (Chrome dark mode)
 # ---------------------------------------------------------------------------
 
-BG_TITLEBAR = "#0a0a0a"       # Tab bar / title bar — deep black
-BG_TOOLBAR = "#121110"         # Nav bar — warm-tinted dark
-BG_TAB_ACTIVE = "#484848"     # Active tab — clearly lighter gray
-BG_TAB_INACTIVE = "#0a0a0a"   # Inactive tabs — matches title bar
-BG_TAB_HOVER = "#252525"      # Tab hover — neutral lift
-BG_VIEWPORT = "#050505"       # Browser viewport — deepest black
-BG_POPUP = "#141210"          # Dropdown/popup — warm dark
-BG_INPUT = "#0c0b09"          # Address bar input — near-black warm
+BG_TITLEBAR = "#202124"        # Tab bar / title bar
+BG_TOOLBAR = "#292a2d"         # Nav bar / toolbar
+BG_TAB_ACTIVE = "#292a2d"     # Active tab — same as toolbar (Chrome style)
+BG_TAB_INACTIVE = "#202124"   # Inactive tabs — same as title bar
+BG_TAB_HOVER = "#35363a"      # Tab hover
+BG_VIEWPORT = "#202124"       # Browser viewport
+BG_POPUP = "#292a2d"          # Dropdown/popup
+BG_INPUT = "#202124"          # Address bar input
 
-TEXT_PRIMARY = "rgba(245,245,245,0.92)"    # Primary text (ink)
-TEXT_SECONDARY = "rgba(245,245,245,0.55)"  # Secondary / placeholder
-TEXT_URL_SECURE = "#81c995"    # HTTPS green (keep)
-TEXT_URL_DOMAIN = "rgba(245,245,245,0.92)" # Domain part of URL
+TEXT_PRIMARY = "#e8eaed"       # Primary text
+TEXT_SECONDARY = "#9aa0a6"     # Secondary / placeholder
+TEXT_URL_SECURE = "#81c995"    # HTTPS green
+TEXT_URL_DOMAIN = "#e8eaed"    # Domain part of URL
 
-BORDER_COLOR = "rgba(199,167,107,0.18)"    # Warm gold borders
-BORDER_TAB = "rgba(199,167,107,0.12)"      # Tab separator — subtler
+BORDER_COLOR = "#3c4043"       # Borders
+BORDER_TAB = "#3c4043"         # Tab separator
 
-ACCENT = "#c7a76b"             # Muted gold accent (links, focus ring)
-ACCENT_HOVER = "#d4b87a"       # Lighter gold hover
+ACCENT = "#8ab4f8"             # Chrome blue accent
+ACCENT_HOVER = "#aecbfa"       # Lighter blue hover
 
-CLOSE_HOVER = "#c95a3a"        # Tab close button hover — warm red
-CLOSE_BG = "rgba(199,167,107,0.08)"
+CLOSE_HOVER = "#ea4335"        # Tab close button hover — red
+CLOSE_BG = "rgba(255,255,255,0.08)"
 
-LOADING_COLOR = "#c7a76b"      # Tab loading indicator — gold
+LOADING_COLOR = "#8ab4f8"      # Tab loading indicator — blue
 
 # ---------------------------------------------------------------------------
 # Dimensions
@@ -72,10 +69,10 @@ NAV_BAR_STYLE = f"""
         font-family: 'Segoe UI', sans-serif;
     }}
     QPushButton:hover {{
-        background: rgba(199,167,107,0.10);
+        background: rgba(255,255,255,0.08);
     }}
     QPushButton:pressed {{
-        background: rgba(199,167,107,0.16);
+        background: rgba(255,255,255,0.12);
     }}
     QPushButton:disabled {{
         color: {TEXT_SECONDARY};
@@ -127,55 +124,43 @@ FIND_BAR_STYLE = f"""
         font-size: 13px;
     }}
     QPushButton:hover {{
-        background: rgba(199,167,107,0.10);
+        background: rgba(255,255,255,0.08);
     }}
 """
 
-# Tankoban-style window control buttons (beveled gradient, warm highlight)
-WINDOW_BTN_STYLE = """
-    QPushButton {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 rgba(78,78,78,0.98),
-            stop:0.5 rgba(50,50,50,0.98),
-            stop:1 rgba(28,28,28,0.98));
-        border: 1px solid rgba(0,0,0,0.75);
-        border-top-color: rgba(130,130,130,0.65);
-        border-radius: 3px;
-        padding: 2px 6px;
-        color: rgba(245,245,245,0.96);
-        font-size: 11px;
-        font-weight: 600;
-        min-width: 22px;
-    }
-    QPushButton:hover {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 rgba(98,98,98,0.98),
-            stop:0.5 rgba(62,62,62,0.98),
-            stop:1 rgba(34,34,34,0.98));
-    }
+# Chrome-style window control buttons (flat, simple)
+WINDOW_BTN_STYLE = f"""
+    QPushButton {{
+        background: transparent;
+        border: none;
+        border-radius: 0px;
+        padding: 0px;
+        color: {TEXT_SECONDARY};
+        font-size: 13px;
+        min-width: 46px;
+        min-height: 34px;
+    }}
+    QPushButton:hover {{
+        background: rgba(255,255,255,0.08);
+        color: {TEXT_PRIMARY};
+    }}
 """
 
-WINDOW_CLOSE_BTN_STYLE = """
-    QPushButton {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 rgba(78,78,78,0.98),
-            stop:0.5 rgba(50,50,50,0.98),
-            stop:1 rgba(28,28,28,0.98));
-        border: 1px solid rgba(0,0,0,0.75);
-        border-top-color: rgba(130,130,130,0.65);
-        border-radius: 3px;
-        padding: 2px 6px;
-        color: rgba(245,245,245,0.96);
-        font-size: 11px;
-        font-weight: 600;
-        min-width: 22px;
-    }
-    QPushButton:hover {
-        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-            stop:0 rgba(180,60,60,0.98),
-            stop:0.5 rgba(160,40,40,0.98),
-            stop:1 rgba(130,20,20,0.98));
-    }
+WINDOW_CLOSE_BTN_STYLE = f"""
+    QPushButton {{
+        background: transparent;
+        border: none;
+        border-radius: 0px;
+        padding: 0px;
+        color: {TEXT_SECONDARY};
+        font-size: 13px;
+        min-width: 46px;
+        min-height: 34px;
+    }}
+    QPushButton:hover {{
+        background: #ea4335;
+        color: #ffffff;
+    }}
 """
 
 CONTEXT_MENU_STYLE = f"""
@@ -192,7 +177,7 @@ CONTEXT_MENU_STYLE = f"""
         padding: 6px 32px 6px 16px;
     }}
     QMenu::item:selected {{
-        background: rgba(199,167,107,0.12);
+        background: rgba(255,255,255,0.08);
     }}
     QMenu::item:disabled {{
         color: {TEXT_SECONDARY};

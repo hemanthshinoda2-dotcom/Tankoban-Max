@@ -210,7 +210,7 @@ class TabButton(QWidget):
                 font-family: 'Segoe UI', sans-serif;
             }}
             QMenu::item {{ padding: 6px 32px 6px 12px; }}
-            QMenu::item:selected {{ background: rgba(199,167,107,0.12); }}
+            QMenu::item:selected {{ background: rgba(255,255,255,0.08); }}
             QMenu::separator {{ height: 1px; background: {theme.BORDER_COLOR}; margin: 4px 8px; }}
         """)
 
@@ -355,7 +355,7 @@ class TabBar(QWidget):
                 font-family: 'Segoe UI', sans-serif;
             }}
             QPushButton:hover {{
-                background: rgba(199,167,107,0.10);
+                background: rgba(255,255,255,0.08);
                 color: {theme.TEXT_PRIMARY};
             }}
         """)
@@ -371,25 +371,16 @@ class TabBar(QWidget):
         # Stretch pushes window controls to the far right
         outer.addStretch()
 
-        # Window controls — Tankoban gradient style
-        outer.addSpacing(8)
-
-        self._min_btn = self._window_button("\u2014", "Minimize")  # —
+        # Window controls — Chrome style (flat, full height)
+        self._min_btn = self._window_button("\u2012", "Minimize")  # ‒
         self._min_btn.clicked.connect(self.minimize_clicked.emit)
         outer.addWidget(self._min_btn)
 
-        outer.addSpacing(2)
-
-        self._max_btn = self._window_button("\u25a2", "Maximize")  # ▢
+        self._max_btn = self._window_button("\u25fb", "Maximize")  # ◻
         self._max_btn.clicked.connect(self.maximize_clicked.emit)
         outer.addWidget(self._max_btn)
 
-        outer.addSpacing(2)
-
-        self._close_btn = QPushButton("\u2715")  # ✕
-        self._close_btn.setToolTip("Close")
-        self._close_btn.setFixedSize(28, 28)
-        self._close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._close_btn = self._window_button("\u2715", "Close")  # ✕
         self._close_btn.setStyleSheet(theme.WINDOW_CLOSE_BTN_STYLE)
         self._close_btn.clicked.connect(self.close_clicked.emit)
         outer.addWidget(self._close_btn)
@@ -397,7 +388,7 @@ class TabBar(QWidget):
     def _window_button(self, text: str, tooltip: str) -> QPushButton:
         btn = QPushButton(text)
         btn.setToolTip(tooltip)
-        btn.setFixedSize(28, 28)
+        btn.setFixedSize(46, theme.TAB_HEIGHT)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setStyleSheet(theme.WINDOW_BTN_STYLE)
         return btn

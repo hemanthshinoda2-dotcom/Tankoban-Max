@@ -222,7 +222,7 @@ class NavBar(QWidget):
                 padding: 6px 32px 6px 12px;
             }}
             QMenu::item:selected {{
-                background: rgba(199,167,107,0.12);
+                background: rgba(255,255,255,0.08);
             }}
             QMenu::separator {{
                 height: 1px;
@@ -265,16 +265,16 @@ class _LibraryButton(QPushButton):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         w, h = self.width(), self.height()
 
-        # Background — subtle gold tint always, brighter on hover
+        # Background — subtle on hover
         p.setPen(Qt.PenStyle.NoPen)
         if self._hovered:
-            p.setBrush(QColor("rgba(199,167,107,0.16)"))
+            p.setBrush(QColor("rgba(255,255,255,0.08)"))
         else:
-            p.setBrush(QColor("rgba(199,167,107,0.06)"))
+            p.setBrush(QColor("transparent"))
         p.drawRoundedRect(0, 0, w, h, 6, 6)
 
-        # Icon color — gold accent always visible
-        color = QColor(theme.ACCENT if self._hovered else theme.ACCENT)
+        # Icon color
+        color = QColor(theme.TEXT_PRIMARY if self._hovered else theme.TEXT_SECONDARY)
         pen = QPen(color, 1.8)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
