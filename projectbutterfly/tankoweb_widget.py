@@ -717,6 +717,8 @@ class TankoWebWidget(QWidget):
         self._address_bar.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._address_bar.setStyleSheet(_omni_ss())
         self._address_bar.returnPressed.connect(self._navigate_to_input)
+        self._address_bar_full_url = ""  # store full URL separately
+        self._address_bar.installEventFilter(self)
         layout.addWidget(self._address_bar)
 
         go_btn = QPushButton("\u25B6")
@@ -929,8 +931,9 @@ class TankoWebWidget(QWidget):
         else:
             url = tab["page"].url()
             if url and url.toString() and url.toString() != "about:blank":
-                self._address_bar.setText(url.toString())
+                self._set_address_bar_url(url.toString())
             else:
+                self._address_bar_full_url = ""
                 self._address_bar.clear()
             self._update_nav_state(idx)
 
@@ -993,7 +996,7 @@ class TankoWebWidget(QWidget):
 
         if tab_idx == self._active_idx:
             self._update_viewport_style(False)
-            self._address_bar.setText(url)
+            self._set_address_bar_url(url)
 
     def _go_home(self):
         """Return active tab to the home page."""
@@ -1054,10 +1057,11 @@ class TankoWebWidget(QWidget):
             tab["url"] = "" if is_special else qurl.toString()
         if tab_idx == self._active_idx:
             if is_special:
+                self._address_bar_full_url = ""
                 self._address_bar.clear()
                 self._update_viewport_style(True)
             else:
-                self._address_bar.setText(qurl.toString())
+                self._set_address_bar_url(qurl.toString())
                 self._update_viewport_style(False)
 
     def _on_tab_title_changed(self, tab_idx, title):
@@ -1113,6 +1117,43 @@ class TankoWebWidget(QWidget):
             return self._tabs[self._active_idx]["view"]
         return None
 
+    def _set_address_bar_url(self, full_url):
+        """Show a clean domain in the address bar, storing the full URL."""
+        self._address_bar_full_url = full_url
+        if not full_url:
+            self._address_bar.clear()
+            return
+        if self._address_bar.hasFocus():
+            # User is editing — show full URL
+            self._address_bar.setText(full_url)
+        else:
+            # Show clean domain only
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(full_url)
+                domain = parsed.hostname or full_url
+                # Strip www. prefix
+                if domain.startswith("www."):
+                    domain = domain[4:]
+                self._address_bar.setText(domain)
+            except Exception:
+                self._address_bar.setText(full_url)
+
+    def eventFilter(self, obj, event):
+        """Show full URL when address bar gains focus, clean domain when it loses focus."""
+        from PySide6.QtCore import QEvent
+        if obj is self._address_bar:
+            if event.type() == QEvent.Type.FocusIn:
+                # Show full URL for editing
+                if self._address_bar_full_url:
+                    self._address_bar.setText(self._address_bar_full_url)
+                    self._address_bar.selectAll()
+            elif event.type() == QEvent.Type.FocusOut:
+                # Show clean domain
+                if self._address_bar_full_url:
+                    self._set_address_bar_url(self._address_bar_full_url)
+        return super().eventFilter(obj, event)
+
     def _navigate_to_input(self):
         text = self._address_bar.text().strip()
         if not text:
@@ -1123,6 +1164,7 @@ class TankoWebWidget(QWidget):
             tab = self._tabs[self._active_idx]
             self._update_viewport_style(False)
             tab["view"].load(QUrl(url))
+            self._address_bar.clearFocus()
 
     def _reload_or_stop(self):
         view = self._active_view()
