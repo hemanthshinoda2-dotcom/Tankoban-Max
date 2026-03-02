@@ -97,6 +97,15 @@ class NavBar(QWidget):
         layout.setContentsMargins(8, 4, 8, 4)
         layout.setSpacing(2)
 
+        # -- Library button (leftmost, before back/forward) --
+        self._library_btn = _LibraryButton()
+        self._library_btn.setToolTip("Back to Library")
+        self._library_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._library_btn.clicked.connect(self.library_clicked.emit)
+        layout.addWidget(self._library_btn)
+
+        layout.addSpacing(4)
+
         # -- Back / Forward --
         self._back_btn = self._nav_button("\u2190", "Back")  # ←
         self._back_btn.clicked.connect(self.back_clicked.emit)
@@ -132,15 +141,6 @@ class NavBar(QWidget):
         self._menu_btn = self._nav_button("\u22ee", "Menu")  # ⋮
         self._menu_btn.clicked.connect(self._show_menu)
         layout.addWidget(self._menu_btn)
-
-        layout.addSpacing(4)
-
-        # -- Library button (painted SVG-style icon) --
-        self._library_btn = _LibraryButton()
-        self._library_btn.setToolTip("Back to Library")
-        self._library_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._library_btn.clicked.connect(self.library_clicked.emit)
-        layout.addWidget(self._library_btn)
 
     def _nav_button(self, text: str, tooltip: str) -> QPushButton:
         btn = QPushButton(text)
