@@ -12,26 +12,29 @@ if "%NEED_TORRENT_DEPS%"=="1" (
   powershell -ExecutionPolicy Bypass -File "scripts\windows\ensure_torrent_deps.ps1" || echo [butterfly] Torrent deps download failed, continuing anyway...
 )
 
+:: Reset ERRORLEVEL so the powershell exit code doesn't pollute later checks
+cmd /c "exit /b 0"
+
 set "PYTHON_EXE="
 if exist ".venv\Scripts\python.exe" set "PYTHON_EXE=.venv\Scripts\python.exe"
 if not defined PYTHON_EXE if exist "venv\Scripts\python.exe" set "PYTHON_EXE=venv\Scripts\python.exe"
 
-if not defined PYTHON_EXE (
-  where py >nul 2>nul
-  if %ERRORLEVEL% EQU 0 (
-    py -3 "projectbutterfly\app.py" %*
-    exit /b %ERRORLEVEL%
-  )
+if defined PYTHON_EXE goto :run_python
 
-  where python >nul 2>nul
-  if %ERRORLEVEL% EQU 0 (
-    python "projectbutterfly\app.py" %*
-    exit /b %ERRORLEVEL%
-  )
-
-  echo [butterfly] Python was not found. Install Python 3 or create a local venv.
-  exit /b 1
+:: No venv found — try system Python via 'py' or 'python'
+where py >nul 2>nul && (
+  py -3 "projectbutterfly\app.py" %*
+  exit /b
 )
 
+where python >nul 2>nul && (
+  python "projectbutterfly\app.py" %*
+  exit /b
+)
+
+echo [butterfly] Python was not found. Install Python 3 or create a local venv.
+exit /b 1
+
+:run_python
 "%PYTHON_EXE%" "projectbutterfly\app.py" %*
-exit /b %ERRORLEVEL%
+exit /b

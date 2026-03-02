@@ -36,6 +36,7 @@ from PySide6.QtWebEngineCore import (
 )
 
 import storage
+from cf_solver import CfSolver
 
 # ---------------------------------------------------------------------------
 # Home page — loaded inside QWebEngineView as an HTML file
@@ -384,6 +385,15 @@ class _TankoWebPage(QWebEnginePage):
                     self._tab_host._hub_torrent_action(action, hash_)
             elif host == "hub-clear-downloads":
                 self._tab_host._hub_clear_downloads()
+            elif host == "open-url":
+                target = params.get("url", [""])[0]
+                if target:
+                    self._tab_host._open_in_new_tab(target)
+            elif host == "open-external":
+                target = params.get("url", [""])[0]
+                if target:
+                    import webbrowser
+                    webbrowser.open(target)
             return False  # block the tankoweb:// navigation
         return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
@@ -423,11 +433,15 @@ class TankoWebWidget(QWidget):
         self._profile.setCachePath(cache_path)
         self._profile.setPersistentStoragePath(cache_path)
 
-        # Background animation
+        # CF solver (lazy — created on first use, shares profile for cookies)
+        self._cf_solver = None
+        self._cf_pending_search = None  # (query, source) to retry after solve
+
+        # Background animation — very slow drift, pauses when not needed
         self._bg_phase = 0.0
         self._bg_timer = QTimer(self)
         self._bg_timer.timeout.connect(self._tick_bg)
-        self._bg_timer.start(60)
+        self._bg_timer.start(500)  # repaint every 500ms (was 60ms — 8x less CPU)
 
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
 
@@ -469,10 +483,12 @@ class TankoWebWidget(QWidget):
     # ══════════════════════════════════════════════════════════════════════
 
     def _tick_bg(self):
-        self._bg_phase += 0.003
+        self._bg_phase += 0.005
         if self._bg_phase > 2.0:
             self._bg_phase -= 2.0
-        self.update()
+        # Only repaint the chrome areas (top ~120px), not the entire widget
+        # The web view covers most of the window — no need to repaint under it
+        self.update(0, 0, self.width(), 140)
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -756,10 +772,10 @@ class TankoWebWidget(QWidget):
             self._viewport_frame.setStyleSheet(
                 "QFrame { background: transparent; border: none; }"
             )
-            # Remove graphics effect entirely — even disabled, it reroutes
-            # event delivery through an off-screen pixmap path which breaks
-            # mouse events on child widgets (QScrollArea, QLineEdit, etc.)
             self._viewport_frame.setGraphicsEffect(None)
+            # Resume background animation for special pages (gradient visible)
+            if hasattr(self, "_bg_timer"):
+                self._bg_timer.start(500)
         else:
             self._viewport_frame.setStyleSheet(
                 f"QFrame {{"
@@ -768,7 +784,13 @@ class TankoWebWidget(QWidget):
                 f"  border-radius: {RADIUS_VIEWPORT}px;"
                 f"}}"
             )
-            _apply_shadow(self._viewport_frame, blur=28, dy=10, color=QColor(0, 0, 0, 200))
+            # NEVER use QGraphicsDropShadowEffect on a frame containing
+            # QWebEngineView — it forces offscreen pixmap rendering of the
+            # entire web view on every frame, destroying performance.
+            self._viewport_frame.setGraphicsEffect(None)
+            # Stop background animation — gradient is invisible under websites
+            if hasattr(self, "_bg_timer"):
+                self._bg_timer.stop()
 
     def _is_tab_on_home(self, tab):
         """Check if a tab is currently showing the home page."""
@@ -812,6 +834,8 @@ class TankoWebWidget(QWidget):
         s.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         s.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
         s.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
+        s.setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
 
         view = QWebEngineView(self)
         view.setPage(page)
@@ -943,6 +967,10 @@ class TankoWebWidget(QWidget):
     # ══════════════════════════════════════════════════════════════════════
     # Home page interaction
     # ══════════════════════════════════════════════════════════════════════
+
+    def _open_in_new_tab(self, url):
+        """Open a URL in a new tab."""
+        self._create_tab(url=url, switch_to=True)
 
     def _navigate_from_home(self, page, url):
         """Called by _TankoWebPage when user clicks a source or searches from home."""
@@ -1152,38 +1180,50 @@ class TankoWebWidget(QWidget):
         """After hub page loads, inject current torrent data and indexer list."""
         if tab_idx < 0 or tab_idx >= len(self._tabs):
             return
-        tab = self._tabs[tab_idx]
-        page = tab["page"]
 
         # Start polling timer if not already running
         if not hasattr(self, "_hub_poll_timer"):
             self._hub_poll_timer = QTimer(self)
             self._hub_poll_timer.timeout.connect(self._poll_hub_data)
-            self._hub_poll_timer.start(2000)
+            self._hub_poll_timer.start(5000)  # 5s interval, not 2s
+            self._hub_poll_busy = False
 
         # Inject data immediately (don't wait for first poll)
         self._fetch_and_push_hub_data()
 
     def _poll_hub_data(self):
-        """Timer callback: fetch torrent data and push to any open Hub tab."""
-        # Only poll if a hub tab exists
-        has_hub = any(self._is_tab_on_hub(tab) for tab in self._tabs)
-        if not has_hub:
-            if hasattr(self, "_hub_poll_timer"):
-                self._hub_poll_timer.stop()
-                del self._hub_poll_timer
+        """Timer callback: fetch torrent data only when Hub is the active tab."""
+        # Only poll if the ACTIVE tab is the Hub (not just any tab)
+        if self._active_idx < 0 or self._active_idx >= len(self._tabs):
+            return
+        if not self._is_tab_on_hub(self._tabs[self._active_idx]):
+            return
+        # Don't pile up threads — skip if the last poll is still running
+        if getattr(self, "_hub_poll_busy", False):
             return
         self._fetch_and_push_hub_data()
 
     def _fetch_and_push_hub_data(self):
         """Fetch torrent data in a background thread, then push to Hub JS."""
+        # Cache references on the main thread
+        qbit = self._get_qbit()
+        prowlarr = self._get_prowlarr()
+
+        # Nothing to poll — skip entirely
+        if not qbit and not prowlarr:
+            return
+
+        self._hub_poll_busy = True
+
         def _bg():
-            qbit = self._get_qbit()
-            prowlarr = self._get_prowlarr()
-            torrents = qbit.list_torrents() if qbit else []
-            indexers = prowlarr.list_indexers() if prowlarr else []
-            # Push on main thread
-            QTimer.singleShot(0, lambda: self._push_hub_data(torrents, indexers))
+            try:
+                torrents = qbit.list_torrents() if qbit else []
+                indexers = prowlarr.list_indexers() if prowlarr else []
+                QTimer.singleShot(0, lambda: self._push_hub_data(torrents, indexers))
+            except Exception as e:
+                print(f"[hub] Poll error: {e}")
+            finally:
+                self._hub_poll_busy = False
 
         threading.Thread(target=_bg, daemon=True).start()
 
@@ -1191,6 +1231,20 @@ class TankoWebWidget(QWidget):
         """Push torrent and indexer data to all open Hub tabs."""
         torrents_json = json.dumps(torrents)
         indexers_json = json.dumps(indexers)
+        # Get Prowlarr URL for the "Configure Indexers" button
+        prowlarr_url = ""
+        try:
+            win = self.window()
+            mgr = getattr(win, "_prowlarr_mgr", None)
+            if mgr and mgr.base_url:
+                prowlarr_url = mgr.base_url
+            else:
+                # Check for existing instance on default port
+                prowlarr = self._get_prowlarr()
+                if prowlarr and hasattr(prowlarr, "_base"):
+                    prowlarr_url = prowlarr._base
+        except Exception:
+            pass
         for tab in self._tabs:
             if self._is_tab_on_hub(tab):
                 tab["page"].runJavaScript(
@@ -1199,6 +1253,12 @@ class TankoWebWidget(QWidget):
                 tab["page"].runJavaScript(
                     f"if(typeof updateSources==='function')updateSources({indexers_json});"
                 )
+                if prowlarr_url:
+                    tab["page"].runJavaScript(
+                        f"if(typeof setProwlarrUrl==='function')setProwlarrUrl({json.dumps(prowlarr_url)});"
+                    )
+                else:
+                    print("[hub] WARNING: No Prowlarr URL to push to Hub")
 
     def _get_qbit(self):
         """Get the QBitClient from the parent TankobanWindow (if available)."""
@@ -1223,21 +1283,95 @@ class TankoWebWidget(QWidget):
             if self._is_tab_on_hub(tab):
                 tab["page"].runJavaScript("if(typeof setSearchLoading==='function')setSearchLoading(true);")
 
+        # Cache references on the main thread before spawning background work
+        prowlarr = self._get_prowlarr()
+        if not prowlarr:
+            print("[hub] Prowlarr not available")
+            self._push_search_results([])
+            return
+
+        indexer_ids = None
+        if source and source != "all":
+            try:
+                indexer_ids = [int(source)]
+            except ValueError:
+                pass
+
         def _bg():
-            prowlarr = self._get_prowlarr()
-            if not prowlarr:
-                results = []
-            else:
-                indexer_ids = None
-                if source and source != "all":
-                    try:
-                        indexer_ids = [int(source)]
-                    except ValueError:
-                        pass
-                results = prowlarr.search(query, indexer_ids=indexer_ids)
-            QTimer.singleShot(0, lambda: self._push_search_results(results))
+            try:
+                results, status = prowlarr.search_with_status(query, indexer_ids=indexer_ids)
+                print(f"[hub] Search returned {len(results)} results (status={status})")
+
+                if status == "cf_blocked":
+                    print(f"[hub] Search blocked by Cloudflare, attempting solve...")
+                    QTimer.singleShot(0, lambda: self._start_cf_solve(query, source, indexer_ids))
+                    return
+
+                QTimer.singleShot(0, lambda: self._push_search_results(results))
+            except Exception as e:
+                print(f"[hub] Search error: {e}")
+                QTimer.singleShot(0, lambda: self._push_search_results([]))
 
         threading.Thread(target=_bg, daemon=True).start()
+
+    def _start_cf_solve(self, query, source, indexer_ids):
+        """Trigger CF solver for blocked indexers, then retry search."""
+        prowlarr = self._get_prowlarr()
+        if not prowlarr:
+            self._push_search_results([])
+            return
+
+        # Find the base URL of the indexer that's likely blocked
+        solve_url = None
+        if indexer_ids:
+            indexers = prowlarr.list_indexers()
+            for ix in indexers:
+                if ix["id"] in indexer_ids and ix.get("baseUrl"):
+                    solve_url = ix["baseUrl"]
+                    break
+        if not solve_url:
+            # Try all enabled indexers' base URLs
+            indexers = prowlarr.list_indexers()
+            for ix in indexers:
+                if ix.get("enabled") and ix.get("baseUrl"):
+                    solve_url = ix["baseUrl"]
+                    break
+
+        if not solve_url:
+            print("[hub] No indexer URL found for CF solving")
+            self._push_search_results([])
+            return
+
+        self._cf_pending_search = (query, source)
+
+        if not self._cf_solver:
+            self._cf_solver = CfSolver(self._profile, parent=self)
+            self._cf_solver.solved.connect(self._on_cf_solved)
+            self._cf_solver.failed.connect(self._on_cf_failed)
+
+        # Push a status message to Hub
+        for tab in self._tabs:
+            if self._is_tab_on_hub(tab):
+                tab["page"].runJavaScript(
+                    "if(typeof setSearchLoading==='function')setSearchLoading(true,'Solving Cloudflare challenge...');"
+                )
+
+        self._cf_solver.solve(solve_url)
+
+    def _on_cf_solved(self, url):
+        """CF challenge solved — retry the pending search."""
+        print(f"[hub] CF solved for {url}, retrying search...")
+        pending = self._cf_pending_search
+        self._cf_pending_search = None
+        if pending:
+            query, source = pending
+            self._hub_search(query, source)
+
+    def _on_cf_failed(self, url, reason):
+        """CF solve failed — show empty results."""
+        print(f"[hub] CF solve failed for {url}: {reason}")
+        self._cf_pending_search = None
+        self._push_search_results([])
 
     def _push_search_results(self, results):
         """Push search results to all open Hub tabs."""
@@ -1256,50 +1390,62 @@ class TankoWebWidget(QWidget):
 
     def _hub_add_magnet(self, uri):
         """Add a torrent via magnet URI in background."""
+        qbit = self._get_qbit()
+        if not qbit:
+            print("[hub] qBittorrent not available for adding magnet")
+            return
+
         def _bg():
-            qbit = self._get_qbit()
-            if qbit:
+            try:
                 qbit.add_magnet(uri)
-                # Refresh data after a short delay
                 import time
                 time.sleep(1)
                 QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+            except Exception as e:
+                print(f"[hub] Add magnet error: {e}")
 
         threading.Thread(target=_bg, daemon=True).start()
 
     def _hub_torrent_action(self, action, hash_):
         """Pause/resume/delete a torrent in background."""
+        qbit = self._get_qbit()
+        if not qbit:
+            return
+
         def _bg():
-            qbit = self._get_qbit()
-            if not qbit:
-                return
-            if action == "pause":
-                qbit.pause(hash_)
-            elif action == "resume":
-                qbit.resume(hash_)
-            elif action == "delete":
-                qbit.delete(hash_, delete_files=False)
-            import time
-            time.sleep(0.5)
-            QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+            try:
+                if action == "pause":
+                    qbit.pause(hash_)
+                elif action == "resume":
+                    qbit.resume(hash_)
+                elif action == "delete":
+                    qbit.delete(hash_, delete_files=False)
+                import time
+                time.sleep(0.5)
+                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+            except Exception as e:
+                print(f"[hub] Torrent action error: {e}")
 
         threading.Thread(target=_bg, daemon=True).start()
 
     def _hub_clear_downloads(self):
         """Clear completed downloads."""
-        # For now, delete completed torrents from qBittorrent
+        qbit = self._get_qbit()
+        if not qbit:
+            return
+
         def _bg():
-            qbit = self._get_qbit()
-            if not qbit:
-                return
-            torrents = qbit.list_torrents("completed")
-            if torrents:
-                hashes = [t.get("hash", "") for t in torrents if t.get("hash")]
-                if hashes:
-                    qbit.delete(hashes, delete_files=False)
-            import time
-            time.sleep(0.5)
-            QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+            try:
+                torrents = qbit.list_torrents("completed")
+                if torrents:
+                    hashes = [t.get("hash", "") for t in torrents if t.get("hash")]
+                    if hashes:
+                        qbit.delete(hashes, delete_files=False)
+                import time
+                time.sleep(0.5)
+                QTimer.singleShot(0, lambda: self._fetch_and_push_hub_data())
+            except Exception as e:
+                print(f"[hub] Clear downloads error: {e}")
 
         threading.Thread(target=_bg, daemon=True).start()
 

@@ -231,6 +231,7 @@ tbody tr:hover { background: rgba(255,255,255,0.03); }
         <option value="all">All Sources</option>
       </select>
       <button class="btn btn-gold" id="searchBtn">Search</button>
+      <button class="btn" id="configIndexersBtn" title="Configure indexers in Prowlarr">&#9881; Indexers</button>
     </div>
   </div>
   <div id="searchStatus" class="search-status"></div>
@@ -486,6 +487,23 @@ function _doSearch() {
 document.getElementById('searchBtn').addEventListener('click', _doSearch);
 document.getElementById('searchInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') _doSearch();
+});
+
+/* Configure Indexers — opens Prowlarr web UI in a new tab */
+var _prowlarrUrl = '';
+function setProwlarrUrl(url) {
+  _prowlarrUrl = url;
+  /* Update button visual to show it's ready */
+  var btn = document.getElementById('configIndexersBtn');
+  if (btn && url) btn.style.opacity = '1';
+}
+document.getElementById('configIndexersBtn').addEventListener('click', function() {
+  var url = _prowlarrUrl;
+  if (!url) {
+    /* Fallback: try common Prowlarr ports */
+    url = 'http://127.0.0.1:9696';
+  }
+  window.location.href = 'tankoweb://open-url?url=' + encodeURIComponent(url);
 });
 
 /* Magnet button clicks (delegated) */

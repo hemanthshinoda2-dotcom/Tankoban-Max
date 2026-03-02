@@ -13,6 +13,7 @@ Classes:
 import json
 import os
 import random
+import shutil
 import socket
 import string
 import subprocess
@@ -168,13 +169,20 @@ class SubprocessManager:
             health_url = self._health_url_fn(self._port)
             deadline = time.monotonic() + HEALTH_TIMEOUT_S
             while time.monotonic() < deadline:
-                if self._process and self._process.poll() is not None:
-                    print(f"[torrent] {self.name}: process exited prematurely (code {self._process.returncode})")
+                poll = self._process.poll() if self._process else None
+                if poll is not None and poll != 0:
+                    # Non-zero exit = real failure
+                    print(f"[torrent] {self.name}: process exited with error (code {poll})")
                     return False
                 status, _ = _http_get(health_url, timeout=2)
                 if 200 <= status < 400:
                     print(f"[torrent] {self.name}: healthy")
                     return True
+                if poll == 0:
+                    # Process exited cleanly (e.g. single-instance handoff) but
+                    # health not reachable — no point waiting further
+                    print(f"[torrent] {self.name}: process exited (code 0) and health not reachable")
+                    return False
                 time.sleep(HEALTH_POLL_INTERVAL_S)
             print(f"[torrent] {self.name}: health check timed out after {HEALTH_TIMEOUT_S}s")
             return False
@@ -420,6 +428,16 @@ class ProwlarrClient:
         Search for torrents via Prowlarr.
         Returns normalized results: [{title, sizeBytes, seeders, magnetUri, sourceName, ...}]
         """
+        results, _ = self.search_with_status(query, indexer_ids, categories, limit)
+        return results
+
+    def search_with_status(self, query: str, indexer_ids: list[int] | None = None,
+                           categories: list[int] | None = None,
+                           limit: int = 40) -> tuple[list[dict], str]:
+        """
+        Search with status info.  Returns (results, status_str).
+        status_str is "ok", "cf_blocked", or "error".
+        """
         params = {"query": query, "limit": str(limit), "type": "search"}
         if indexer_ids:
             params["indexerIds"] = ",".join(str(i) for i in indexer_ids)
@@ -427,14 +445,21 @@ class ProwlarrClient:
             params["categories"] = ",".join(str(c) for c in categories)
 
         qs = urllib.parse.urlencode(params)
-        status, body = _http_get(self._url(f"/api/v1/search?{qs}"), self._headers())
+        status, body = _http_get(self._url(f"/api/v1/search?{qs}"), self._headers(),
+                                 timeout=30)
+        if status == 403 or (status == 200 and "cf_clearance" in body.lower()):
+            return [], "cf_blocked"
         if status != 200:
-            return []
+            # Check body for CF indicators
+            body_lower = body.lower()
+            if "cloudflare" in body_lower or "cf-ray" in body_lower:
+                return [], "cf_blocked"
+            return [], "error"
 
         try:
             raw = json.loads(body)
         except json.JSONDecodeError:
-            return []
+            return [], "error"
 
         results = []
         for item in raw:
@@ -457,17 +482,30 @@ class ProwlarrClient:
             result["magnetUri"] = mag
             results.append(result)
 
-        return results
+        return results, "ok"
 
     def list_indexers(self) -> list[dict]:
-        """Get list of configured indexers."""
+        """Get list of configured indexers with base URLs."""
         status, body = _http_get(self._url("/api/v1/indexer"), self._headers())
         if status != 200:
             return []
         try:
             raw = json.loads(body)
-            return [{"id": ix.get("id"), "name": ix.get("name", ""),
-                      "enabled": ix.get("enable", False)} for ix in raw]
+            results = []
+            for ix in raw:
+                # Extract baseUrl from fields array
+                base_url = ""
+                for field in ix.get("fields", []):
+                    if field.get("name") == "baseUrl":
+                        base_url = field.get("value", "")
+                        break
+                results.append({
+                    "id": ix.get("id"),
+                    "name": ix.get("name", ""),
+                    "enabled": ix.get("enable", False),
+                    "baseUrl": base_url,
+                })
+            return results
         except (json.JSONDecodeError, TypeError):
             return []
 
@@ -600,41 +638,75 @@ def seed_prowlarr_config() -> str:
 # Factory: create managers for qBittorrent and Prowlarr
 # ---------------------------------------------------------------------------
 
-def find_qbit_exe() -> str:
-    """Locate the qBittorrent executable."""
-    # Check bundled resources first
+def find_qbit_exe() -> str | None:
+    """
+    Locate the qBittorrent executable. Returns None if not found.
+
+    ONLY uses the bundled portable version in resources/.
+    System-installed qBittorrent is a GUI single-instance app that can't
+    run headlessly, so we never launch it — we only detect its WebUI
+    if the user already has it running with WebUI enabled.
+    """
     bundled = _RESOURCES / "qbittorrent" / "qbittorrent.exe"
+    if bundled.is_file():
+        return str(bundled)
+    return None
+
+
+def find_prowlarr_exe() -> str | None:
+    """Locate the Prowlarr executable. Returns None if not found."""
+    bundled = _RESOURCES / "prowlarr" / "Prowlarr.exe"
     if bundled.is_file():
         return str(bundled)
 
     # Check common install locations on Windows
     if sys.platform == "win32":
+        candidates = []
         for base in [
             os.environ.get("PROGRAMFILES", "C:\\Program Files"),
             os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)"),
             os.environ.get("LOCALAPPDATA", ""),
+            os.environ.get("PROGRAMDATA", "C:\\ProgramData"),
         ]:
             if not base:
                 continue
-            candidate = os.path.join(base, "qBittorrent", "qbittorrent.exe")
+            candidates.append(os.path.join(base, "Prowlarr", "Prowlarr.exe"))
+            candidates.append(os.path.join(base, "Prowlarr", "bin", "Prowlarr.exe"))
+
+        for candidate in candidates:
             if os.path.isfile(candidate):
+                print(f"[torrent] Found Prowlarr at {candidate}")
                 return candidate
 
-    # Fallback: hope it's on PATH
-    return "qbittorrent"
+    found = shutil.which("Prowlarr")
+    if found:
+        return found
+    return None
 
 
-def find_prowlarr_exe() -> str:
-    """Locate the Prowlarr executable."""
-    bundled = _RESOURCES / "prowlarr" / "Prowlarr.exe"
-    if bundled.is_file():
-        return str(bundled)
-    return "Prowlarr"
+def _detect_running_qbit() -> int | None:
+    """Check if qBittorrent WebUI is already running on a known port."""
+    for port in [8080, 8081, 9090]:
+        status, _ = _http_get(f"http://127.0.0.1:{port}/api/v2/app/version", timeout=1)
+        if 200 <= status < 400:
+            return port
+    return None
+
+
+def _detect_running_prowlarr() -> tuple[int, str] | None:
+    """Check if Prowlarr is already running on a known port. Returns (port, api_key_if_known)."""
+    for port in [9696, 9697]:
+        status, _ = _http_get(f"http://127.0.0.1:{port}/ping", timeout=1)
+        if 200 <= status < 400:
+            return port, ""
+    return None
 
 
 def create_qbit_manager() -> SubprocessManager:
     """Create a SubprocessManager for qBittorrent."""
     exe = find_qbit_exe()
+    if not exe:
+        print("[torrent] qBittorrent: not found on system")
     profile_dir = _qbit_profile_dir()
 
     def args_fn(port: int) -> list[str]:
@@ -649,7 +721,7 @@ def create_qbit_manager() -> SubprocessManager:
 
     return SubprocessManager(
         name="qBittorrent",
-        exe_path=exe,
+        exe_path=exe or "",
         args_fn=args_fn,
         health_url_fn=health_fn,
         port_range=QBIT_PORT_RANGE,
@@ -662,6 +734,8 @@ def create_prowlarr_manager() -> tuple[SubprocessManager, str]:
     Returns (manager, api_key).
     """
     exe = find_prowlarr_exe()
+    if not exe:
+        print("[torrent] Prowlarr: not found on system")
     data_dir = _prowlarr_data_dir()
     api_key = seed_prowlarr_config()
 
@@ -683,7 +757,8 @@ def create_prowlarr_manager() -> tuple[SubprocessManager, str]:
         return [f"-data={data_dir}", f"-port={port}", "-nobrowser"]
 
     def health_fn(port: int) -> str:
-        return f"http://127.0.0.1:{port}/api/v1/health"
+        # /ping doesn't require API key auth, unlike /api/v1/health
+        return f"http://127.0.0.1:{port}/ping"
 
     mgr = SubprocessManager(
         name="Prowlarr",

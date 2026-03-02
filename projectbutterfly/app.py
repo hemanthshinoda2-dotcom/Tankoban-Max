@@ -366,15 +366,48 @@ class TankobanWindow(QMainWindow):
 
     def _start_torrent_services(self):
         """Start qBittorrent and Prowlarr in background (runs on a daemon thread)."""
-        # Start qBittorrent
-        if self._qbit_mgr.start():
+        try:
+            self._start_qbit()
+        except Exception as e:
+            print(f"[torrent] qBittorrent init error: {e}")
+
+        try:
+            self._start_prowlarr()
+        except Exception as e:
+            print(f"[torrent] Prowlarr init error: {e}")
+
+    def _start_qbit(self):
+        # First check if qBittorrent WebUI is already running (user has it open)
+        existing_port = torrent_service._detect_running_qbit()
+        if existing_port:
+            base_url = f"http://127.0.0.1:{existing_port}"
+            self._qbit = torrent_service.QBitClient(base_url)
+            self._qbit.login()
+            print(f"[torrent] qBittorrent: using existing instance at {base_url}")
+            return
+
+        # Try launching bundled portable instance
+        if self._qbit_mgr.exe_path and self._qbit_mgr.start():
             self._qbit = torrent_service.QBitClient(self._qbit_mgr.base_url)
             self._qbit.login()
             print(f"[torrent] qBittorrent ready at {self._qbit_mgr.base_url}")
         else:
-            print("[torrent] qBittorrent failed to start (will retry on Hub open)")
+            if not self._qbit_mgr.exe_path:
+                print("[torrent] qBittorrent: no bundled portable found in resources/qbittorrent/")
+                print("[torrent] qBittorrent: enable WebUI in your installed qBittorrent, or download portable version")
+            else:
+                print("[torrent] qBittorrent failed to start (will retry on Hub open)")
 
-        # Start Prowlarr
+    def _start_prowlarr(self):
+        # First check if Prowlarr is already running (e.g. as a Windows service)
+        existing = torrent_service._detect_running_prowlarr()
+        if existing:
+            port, _ = existing
+            base_url = f"http://127.0.0.1:{port}"
+            self._prowlarr = torrent_service.ProwlarrClient(base_url, self._prowlarr_api_key)
+            print(f"[torrent] Prowlarr: using existing instance at {base_url}")
+            return
+
         if self._prowlarr_mgr.start():
             self._prowlarr = torrent_service.ProwlarrClient(
                 self._prowlarr_mgr.base_url, self._prowlarr_api_key
@@ -553,6 +586,15 @@ def main():
         app_section = normalize_section(os.environ.get("TANKOBAN_APP_SECTION", ""))
 
     dev_tools = args.dev_tools or os.environ.get("TANKOBAN_DEVTOOLS") == "1"
+
+    # Enable GPU-accelerated rendering in Chromium (QWebEngineView).
+    # These must be set BEFORE QApplication is created.
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join([
+        "--enable-gpu-rasterization",
+        "--enable-zero-copy",
+        "--enable-native-gpu-memory-buffers",
+        "--ignore-gpu-blocklist",
+    ])
 
     # Init Qt app
     app = QApplication(sys.argv)
