@@ -277,6 +277,9 @@ class ChromeBrowser(QWidget):
 
         tab.view = view
 
+        # Set the createWindow callback so target=_blank links work
+        page._create_window_callback = self._create_tab_page
+
         # Wire page signals to tab manager
         self._wire_page_signals(tab.id, page, view)
 
@@ -456,6 +459,33 @@ class ChromeBrowser(QWidget):
         """Show link URL in status bar when hovering on the active tab."""
         if tab_id == self._tab_mgr.active_id:
             self._status_bar.show_url(url)
+
+    def _create_tab_page(self) -> ChromePage:
+        """Create a new tab and return its QWebEnginePage.
+
+        Called by ChromePage.createWindow() so Chromium can load the
+        target URL directly into the returned page.
+        """
+        tab = TabData()
+        view = QWebEngineView()
+        page = ChromePage(self._profile, tab.id, self)
+        page.setBackgroundColor(QColor(32, 33, 36))
+        view.setPage(page)
+
+        settings = view.settings()
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True)
+
+        page.fullScreenRequested.connect(self._on_fullscreen_requested)
+        page._create_window_callback = self._create_tab_page
+
+        tab.view = view
+        self._wire_page_signals(tab.id, page, view)
+        self._tab_mgr.add(tab, activate=True)
+
+        return page
 
     def _on_new_tab_requested(self, url: QUrl):
         url_str = url.toString() if url and not url.isEmpty() else None

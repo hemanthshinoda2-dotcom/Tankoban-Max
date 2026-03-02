@@ -376,6 +376,7 @@ class ChromePage(QWebEnginePage):
     def __init__(self, profile: QWebEngineProfile, tab_id: str, parent=None):
         super().__init__(profile, parent)
         self.tab_id = tab_id
+        self._create_window_callback = None  # set by ChromeBrowser
 
         # Wire permission requests
         self.featurePermissionRequested.connect(self._on_permission_requested)
@@ -409,28 +410,30 @@ class ChromePage(QWebEnginePage):
         """
         Called by Chromium when JS opens a new window (target=_blank, window.open).
 
+        Must return a QWebEnginePage for Chromium to load the target URL into.
+        Returning None discards the navigation entirely.
+
         Smart popup blocking:
         - WebBrowserTab / WebBrowserBackgroundTab → likely user-triggered (link click),
           always allowed.
         - WebDialog → sometimes legitimate (auth flows, popups), allow but flag.
         - If the requesting page's domain is a known ad network, block it.
         """
-        # Legitimate link clicks create tabs
-        if window_type in (
+        # For dialogs/popups, check if the source page is an ad domain
+        if window_type not in (
             QWebEnginePage.WebWindowType.WebBrowserTab,
             QWebEnginePage.WebWindowType.WebBrowserBackgroundTab,
         ):
-            self.new_tab_requested.emit(QUrl())
-            return None
+            current_host = self.url().host().lower() if self.url() else ""
+            for ad_domain in self._AD_POPUP_DOMAINS:
+                if current_host == ad_domain or current_host.endswith("." + ad_domain):
+                    return None  # Block ad popup
 
-        # For dialogs/popups, check if the source page is an ad domain
-        current_host = self.url().host().lower() if self.url() else ""
-        for ad_domain in self._AD_POPUP_DOMAINS:
-            if current_host == ad_domain or current_host.endswith("." + ad_domain):
-                # Block — this is an ad popup
-                return None
+        # Create a new tab and return its page so Chromium loads the URL into it
+        if self._create_window_callback:
+            return self._create_window_callback()
 
-        # Allow — likely a legitimate popup (auth window, etc.)
+        # Fallback — signal-based (URL won't be captured)
         self.new_tab_requested.emit(QUrl())
         return None
 

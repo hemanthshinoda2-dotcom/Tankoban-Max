@@ -31,7 +31,7 @@ ENGINES = {
     },
 }
 
-_current_engine = "yandex"
+_current_engine = "google"
 
 
 def set_default(engine_id: str):
@@ -48,17 +48,17 @@ def get_default_id() -> str:
 
 def get_engine_name() -> str:
     """Get the display name of the current search engine."""
-    return ENGINES.get(_current_engine, ENGINES["yandex"])["name"]
+    return ENGINES.get(_current_engine, ENGINES["google"])["name"]
 
 
 def get_search_url(query: str) -> str:
     """Build a search URL for the given query using the current engine."""
     from PySide6.QtCore import QUrl
-    engine = ENGINES.get(_current_engine, ENGINES["yandex"])
+    engine = ENGINES.get(_current_engine, ENGINES["google"])
     encoded = QUrl.toPercentEncoding(query).data().decode()
     return engine["search_url"].format(encoded)
 
 
 def get_home_url() -> str:
     """Get the homepage URL for the current engine."""
-    return ENGINES.get(_current_engine, ENGINES["yandex"])["home_url"]
+    return ENGINES.get(_current_engine, ENGINES["google"])["home_url"]

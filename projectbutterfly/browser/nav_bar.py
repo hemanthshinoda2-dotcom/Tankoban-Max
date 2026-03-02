@@ -178,6 +178,7 @@ class NavBar(QWidget):
         """Update the address bar text and security indicator."""
         if not self._address.hasFocus():
             self._address.setText(url)
+            self._address.setCursorPosition(0)
         self._address.set_security(True, url)
 
     def set_loading(self, loading: bool, progress: int = 0):
