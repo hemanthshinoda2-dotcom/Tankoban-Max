@@ -126,6 +126,8 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.next_clicked.connect(self._on_hud_next)
         self.bottom_hud.mode_clicked.connect(self.toggle_control_mode)
         self.bottom_hud.seek_commit.connect(self._on_hud_seek_commit)
+        self.bottom_hud.prev_vol_clicked.connect(self._on_hud_prev_vol)
+        self.bottom_hud.next_vol_clicked.connect(self._on_hud_next_vol)
         self.manual_scroller.drag_progress.connect(self._on_manual_scroller_drag_progress)
 
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -248,6 +250,24 @@ class ComicReaderWidget(QWidget):
             return
         self.next_page()
 
+    def _on_hud_prev_vol(self):
+        siblings = self._find_sibling_volumes()
+        cur = os.path.normcase(os.path.abspath(self.state.book_path)) if self.state.book_path else ""
+        for i, p in enumerate(siblings):
+            if os.path.normcase(p) == cur and i > 0:
+                self.close_book()
+                self.open_book(siblings[i - 1])
+                return
+
+    def _on_hud_next_vol(self):
+        siblings = self._find_sibling_volumes()
+        cur = os.path.normcase(os.path.abspath(self.state.book_path)) if self.state.book_path else ""
+        for i, p in enumerate(siblings):
+            if os.path.normcase(p) == cur and i < len(siblings) - 1:
+                self.close_book()
+                self.open_book(siblings[i + 1])
+                return
+
     def _on_hud_play_pause(self):
         mode = self.get_control_mode()
         if mode == "autoFlip":
@@ -294,6 +314,34 @@ class ComicReaderWidget(QWidget):
         self.state.settings["gutter_shadow_strength"] = max(0.0, min(1.0, float(value)))
         self.canvas.update()
         self._emit_progress_changed()
+
+    def _save_current_page(self):
+        """Export the current page image to a file."""
+        if not self.state.pages:
+            return
+        entry = self._get_cache_entry(self.state.page_index)
+        if entry is None or entry.pixmap is None:
+            return
+        from PySide6.QtWidgets import QFileDialog
+        name = os.path.basename(self.state.book_path) if self.state.book_path else "page"
+        name = os.path.splitext(name)[0]
+        default_name = f"{name}_page{self.state.page_index + 1}.png"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Page Image", default_name,
+            "PNG (*.png);;JPEG (*.jpg);;WebP (*.webp)"
+        )
+        if not path:
+            return
+        entry.pixmap.save(path)
+
+    def _copy_current_page_to_clipboard(self):
+        """Copy the current page image to the system clipboard."""
+        if not self.state.pages:
+            return
+        entry = self._get_cache_entry(self.state.page_index)
+        if entry is None or entry.pixmap is None:
+            return
+        QApplication.clipboard().setPixmap(entry.pixmap)
 
     def _open_goto_page_dialog(self):
         if not self.state.pages:
@@ -466,6 +514,18 @@ class ComicReaderWidget(QWidget):
 
         menu.addSeparator()
 
+        save_page = QAction("Save current page...", self)
+        save_page.triggered.connect(self._save_current_page)
+        save_page.setEnabled(bool(self.state.pages))
+        menu.addAction(save_page)
+
+        copy_page = QAction("Copy current page to clipboard", self)
+        copy_page.triggered.connect(self._copy_current_page_to_clipboard)
+        copy_page.setEnabled(bool(self.state.pages))
+        menu.addAction(copy_page)
+
+        menu.addSeparator()
+
         cur_page = int(self.state.page_index)
         b_action = QAction(
             "Remove bookmark" if self._is_bookmarked(cur_page) else "Bookmark this page",
@@ -522,6 +582,21 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.set_mode(self.get_control_mode())
         playing = bool(self.get_control_mode() == "autoFlip" and self._auto_flip_timer.isActive() and not self._auto_flip_paused)
         self.bottom_hud.set_playing(playing)
+
+        self.bottom_hud.slider.set_bookmarks(self._bookmarks)
+
+        has_prev_vol = False
+        has_next_vol = False
+        if self.state.book_path:
+            siblings = self._find_sibling_volumes()
+            cur = os.path.normcase(os.path.abspath(self.state.book_path))
+            for i, p in enumerate(siblings):
+                if os.path.normcase(p) == cur:
+                    has_prev_vol = i > 0
+                    has_next_vol = i < len(siblings) - 1
+                    break
+        self.bottom_hud.prev_vol_btn.setEnabled(has_prev_vol)
+        self.bottom_hud.next_vol_btn.setEnabled(has_next_vol)
 
         self.manual_scroller.set_progress(self._progress01_for_scroller())
         visible = bool(self.state.pages)

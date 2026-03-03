@@ -695,6 +695,20 @@ class MegaSettingsOverlay(QWidget):
 
     def _build_file_sub(self):
         self._show_sub("file", "File")
+
+        save_opt = _MegaOption("Save current page...", parent=self._sub_list_inner)
+        save_opt.clicked.connect(self._action_save_page)
+        self._sub_list_layout.addWidget(save_opt)
+
+        copy_img = _MegaOption("Copy current page to clipboard", parent=self._sub_list_inner)
+        copy_img.clicked.connect(self._action_copy_page_image)
+        self._sub_list_layout.addWidget(copy_img)
+
+        sep = _MegaOption("", parent=self._sub_list_inner)
+        sep.setEnabled(False)
+        sep.setFixedHeight(1)
+        self._sub_list_layout.addWidget(sep)
+
         copy_opt = _MegaOption("Copy volume path", parent=self._sub_list_inner)
         copy_opt.clicked.connect(self._action_copy_path)
         self._sub_list_layout.addWidget(copy_opt)
@@ -821,6 +835,18 @@ class MegaSettingsOverlay(QWidget):
         r = self._reader
         if r is not None:
             r._open_volume_nav()
+
+    def _action_save_page(self):
+        self.close()
+        r = self._reader
+        if r is not None:
+            r._save_current_page()
+
+    def _action_copy_page_image(self):
+        r = self._reader
+        if r is not None:
+            r._copy_current_page_to_clipboard()
+        self.close()
 
     def _action_copy_path(self):
         r = self._reader

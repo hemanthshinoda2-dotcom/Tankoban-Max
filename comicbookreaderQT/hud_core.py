@@ -91,11 +91,142 @@ class TopBar(QFrame):
         super().leaveEvent(event)
 
 
+class BookmarkScrubBar(QWidget):
+    """Custom scrub bar that draws bookmark marks on the track."""
+    value_changed = Signal(int)
+    slider_pressed = Signal()
+    slider_released = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._min = 0
+        self._max = 0
+        self._value = 0
+        self._dragging = False
+        self._bookmarks: set[int] = set()
+        self.setFixedHeight(18)
+        self.setMouseTracking(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def setRange(self, lo: int, hi: int):
+        self._min = int(lo)
+        self._max = max(self._min, int(hi))
+        self._value = max(self._min, min(self._max, self._value))
+        self.update()
+
+    def setValue(self, val: int):
+        v = max(self._min, min(self._max, int(val)))
+        if v != self._value:
+            self._value = v
+            self.update()
+
+    def value(self):
+        return self._value
+
+    def minimum(self):
+        return self._min
+
+    def maximum(self):
+        return self._max
+
+    def isSliderDown(self):
+        return self._dragging
+
+    def blockSignals(self, block: bool):
+        old = super().blockSignals(block)
+        return old
+
+    def set_bookmarks(self, bookmarks: set[int]):
+        self._bookmarks = set(bookmarks)
+        self.update()
+
+    def _pos_to_value(self, x: float) -> int:
+        margin = 8
+        usable = max(1, self.width() - 2 * margin)
+        frac = max(0.0, min(1.0, (float(x) - margin) / usable))
+        span = max(1, self._max - self._min)
+        return int(self._min + frac * span + 0.5)
+
+    def _value_to_x(self, val: int) -> float:
+        margin = 8
+        usable = max(1, self.width() - 2 * margin)
+        span = max(1, self._max - self._min)
+        frac = float(val - self._min) / span
+        return margin + frac * usable
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._dragging = True
+            self.slider_pressed.emit()
+            val = self._pos_to_value(event.position().x())
+            if val != self._value:
+                self._value = val
+                self.value_changed.emit(self._value)
+                self.update()
+            event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._dragging:
+            val = self._pos_to_value(event.position().x())
+            if val != self._value:
+                self._value = val
+                self.value_changed.emit(self._value)
+                self.update()
+            event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._dragging:
+            self._dragging = False
+            val = self._pos_to_value(event.position().x())
+            self._value = val
+            self.slider_released.emit()
+            self.update()
+            event.accept()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+        margin = 8
+        cy = self.height() // 2
+        track_h = 4
+        track_r = 2
+
+        # track background
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 34))
+        painter.drawRoundedRect(margin, cy - track_h // 2, self.width() - 2 * margin, track_h, track_r, track_r)
+
+        # filled portion
+        handle_x = self._value_to_x(self._value)
+        fill_w = max(0, int(handle_x) - margin)
+        if fill_w > 0:
+            painter.setBrush(QColor(255, 255, 255, 160))
+            painter.drawRoundedRect(margin, cy - track_h // 2, fill_w, track_h, track_r, track_r)
+
+        # bookmark marks
+        if self._bookmarks and self._max > self._min:
+            painter.setBrush(QColor(199, 167, 107, 200))
+            for bm in self._bookmarks:
+                if self._min <= bm <= self._max:
+                    bx = self._value_to_x(bm)
+                    painter.drawRoundedRect(int(bx) - 1, cy - 5, 3, 10, 1, 1)
+
+        # handle
+        handle_r = 7
+        painter.setBrush(QColor(255, 255, 255, 255))
+        painter.drawEllipse(int(handle_x) - handle_r, cy - handle_r, handle_r * 2, handle_r * 2)
+
+        painter.end()
+
+
 class BottomHud(QFrame):
     prev_clicked = Signal()
     play_clicked = Signal()
     next_clicked = Signal()
     mode_clicked = Signal()
+    prev_vol_clicked = Signal()
+    next_vol_clicked = Signal()
     seek_preview = Signal(int)
     seek_commit = Signal(int)
     scrub_drag_changed = Signal(bool)
@@ -121,6 +252,23 @@ class BottomHud(QFrame):
             QPushButton.hudBtn:hover {
               background: rgba(255,255,255,44);
             }
+            QPushButton.hudVolBtn {
+              color: #b8b8b8;
+              background: rgba(255,255,255,14);
+              border: 1px solid rgba(255,255,255,36);
+              border-radius: 8px;
+              padding: 3px 8px;
+              font-size: 11px;
+              min-height: 20px;
+            }
+            QPushButton.hudVolBtn:hover {
+              background: rgba(255,255,255,30);
+              color: #ffffff;
+            }
+            QPushButton.hudVolBtn:disabled {
+              color: rgba(255,255,255,30);
+              border-color: rgba(255,255,255,14);
+            }
             QLabel#pageText {
               color: #d6d6d6;
               font-size: 12px;
@@ -129,37 +277,26 @@ class BottomHud(QFrame):
               color: #b8b8b8;
               font-size: 11px;
             }
-            QSlider::groove:horizontal {
-              background: rgba(255,255,255,34);
-              height: 4px;
-              border-radius: 2px;
-            }
-            QSlider::handle:horizontal {
-              background: #ffffff;
-              width: 14px;
-              margin: -5px 0;
-              border-radius: 7px;
-            }
-            QSlider::sub-page:horizontal {
-              background: rgba(255,255,255,160);
-              border-radius: 2px;
-            }
             """
         )
         outer = QVBoxLayout(self)
         outer.setContentsMargins(12, 8, 12, 10)
         outer.setSpacing(8)
 
-        self.slider = QSlider(Qt.Orientation.Horizontal, self)
-        self.slider.setRange(0, 0)
-        self.slider.valueChanged.connect(self._on_slider_value_changed)
-        self.slider.sliderPressed.connect(self._on_slider_pressed)
-        self.slider.sliderReleased.connect(self._on_slider_released)
+        self.slider = BookmarkScrubBar(self)
+        self.slider.value_changed.connect(self._on_slider_value_changed)
+        self.slider.slider_pressed.connect(self._on_slider_pressed)
+        self.slider.slider_released.connect(self._on_slider_released)
         outer.addWidget(self.slider, 0)
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(8)
+
+        self.prev_vol_btn = QPushButton("\u25C0 Vol", self)
+        self.prev_vol_btn.setProperty("class", "hudVolBtn")
+        self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
+        row.addWidget(self.prev_vol_btn, 0)
 
         self.prev_btn = QPushButton("Prev", self)
         self.prev_btn.setProperty("class", "hudBtn")
@@ -175,6 +312,11 @@ class BottomHud(QFrame):
         self.next_btn.setProperty("class", "hudBtn")
         self.next_btn.clicked.connect(self.next_clicked.emit)
         row.addWidget(self.next_btn, 0)
+
+        self.next_vol_btn = QPushButton("Vol \u25B6", self)
+        self.next_vol_btn.setProperty("class", "hudVolBtn")
+        self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
+        row.addWidget(self.next_vol_btn, 0)
 
         self.mode_btn = QPushButton("Mode", self)
         self.mode_btn.setProperty("class", "hudBtn")
