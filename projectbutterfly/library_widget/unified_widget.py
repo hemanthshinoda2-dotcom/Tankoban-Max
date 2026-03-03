@@ -6,10 +6,11 @@ import os
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter, QStackedWidget
 
 from constants import MediaKind, BG_COLOR, TEXT_PRIMARY
 from data_provider import MediaDataProvider
+from detail_view import DetailView
 from home_view import HomeView
 from sidebar_widget import SidebarWidget
 from media_adapter import adapter_for
@@ -49,9 +50,19 @@ class UnifiedLibraryWidget(QWidget):
         self._sidebar.filter_changed.connect(self._on_filter_changed)
         self._splitter.addWidget(self._sidebar)
 
+        # Stacked widget: home (0) and detail (1)
+        self._stack = QStackedWidget()
+
         self._home_view = HomeView()
         self._home_view.set_item_label(self._adapter.item_label)
-        self._splitter.addWidget(self._home_view)
+        self._home_view.card_clicked.connect(self._on_card_clicked)
+        self._stack.addWidget(self._home_view)
+
+        self._detail_view = DetailView()
+        self._detail_view.back_clicked.connect(self._go_home)
+        self._stack.addWidget(self._detail_view)
+
+        self._splitter.addWidget(self._stack)
 
         self._splitter.setStretchFactor(0, 0)  # sidebar: fixed
         self._splitter.setStretchFactor(1, 1)  # grid: stretch
@@ -104,3 +115,20 @@ class UnifiedLibraryWidget(QWidget):
             self._header.setText(
                 f"  Library — {self._kind.capitalize()} ({total} {self._adapter.series_label})"
             )
+
+    def _on_card_clicked(self, series_id: str):
+        """Navigate to detail view for the clicked series."""
+        series = next((s for s in self._all_series if s.get("id") == series_id), None)
+        if not series:
+            return
+        items = self._adapter.items_for_series(self._provider.items, series_id)
+        # Sort items by title
+        items.sort(key=lambda it: it.get("title", "").lower())
+        self._detail_view.set_items(items, series.get("name", "Unknown"))
+        self._stack.setCurrentIndex(1)
+        self._header.setText(f"  {series.get('name', 'Unknown')} — {len(items)} {self._adapter.item_label}")
+
+    def _go_home(self):
+        """Navigate back to the home grid."""
+        self._stack.setCurrentIndex(0)
+        self._apply_filter()
