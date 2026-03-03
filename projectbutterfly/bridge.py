@@ -10770,6 +10770,18 @@ class WebTabManagerBridge(QObject):
     def _apply_viewport_bounds(self):
         x, y, w, h = self._viewport_rect
         visible = bool(self._viewport_visible and w > 4 and h > 4)
+        parent_widget = self._host_container or self._host_view
+        origin_x = 0
+        origin_y = 0
+        try:
+            if parent_widget and self._host_view and parent_widget is not self._host_view:
+                from PySide6.QtCore import QPoint
+                mapped = self._host_view.mapTo(parent_widget, QPoint(0, 0))
+                origin_x = int(mapped.x())
+                origin_y = int(mapped.y())
+        except Exception:
+            origin_x = 0
+            origin_y = 0
         if self._active_tab_id and self._active_tab_id not in self._tabs:
             self._active_tab_id = ""
         if not self._active_tab_id and self._tab_order:
@@ -10785,7 +10797,7 @@ class WebTabManagerBridge(QObject):
                 view.hide()
                 continue
             try:
-                view.setGeometry(int(x), int(y), int(w), int(h))
+                view.setGeometry(int(origin_x + x), int(origin_y + y), int(w), int(h))
                 view.show()
                 view.raise_()
             except Exception:
@@ -11501,6 +11513,9 @@ BRIDGE_SHIM_JS = r"""
         openPath:    wrap(b.shell.openPath, b.shell),
         openWebMode: wrap(b.shell.openWebMode, b.shell),
         openSourcesMode: wrap(b.shell.openSourcesMode, b.shell),
+        setAppTheme: wrap(b.shell.setAppTheme, b.shell),
+        setAppThemePreset: wrap(b.shell.setAppThemePreset, b.shell),
+        getAppTheme: wrap(b.shell.getAppTheme, b.shell),
       },
 
       // clipboard
