@@ -94,6 +94,7 @@ body:not(.inPlayer){
     radial-gradient(900px 700px at 85% 20%, rgba(var(--vx-accent-rgb), .18), transparent 55%),
     radial-gradient(1100px 900px at 50% 85%, rgba(251,113,133,.12), transparent 60%),
     linear-gradient(180deg, var(--vx-bg0) 0%, var(--vx-bg1) 100%);
+  filter: saturate(120%);
   transform: translateZ(0);
   animation: vxBgDrift 18s ease-in-out infinite alternate;
 }
@@ -116,8 +117,8 @@ body:not(.inPlayer){
 }
 
 @keyframes vxBgDrift{
-  0%{ transform: scale(1) translate3d(0,0,0); }
-  100%{ transform: scale(1.03) translate3d(0,-10px,0); }
+  0%{ transform: scale(1) translate3d(0,0,0); filter: saturate(118%) hue-rotate(0deg); }
+  100%{ transform: scale(1.03) translate3d(0,-10px,0); filter: saturate(130%) hue-rotate(6deg); }
 }
 
 @media (prefers-reduced-motion: reduce){
@@ -161,7 +162,9 @@ body{
   top: 0; left: 0; right: 0;
   height: var(--lib-topbar-h);
   padding: 6px 12px;
-  background: rgba(10,12,20,.88) !important;
+  background: rgba(10,12,20,.52) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(145%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(145%);
   border-bottom: 1px solid rgba(var(--chrome-rgb),.10) !important;
   box-shadow: 0 14px 40px -22px rgba(0,0,0,.85), 0 1px 0 rgba(var(--chrome-rgb),.06) inset;
 }
@@ -261,7 +264,9 @@ body{
 
 /* Library shell */
 .libSidebar{
-  background: rgba(10,12,20,.88) !important;
+  background: rgba(10,12,20,.46) !important;
+  backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%);
+  -webkit-backdrop-filter: blur(calc(var(--vx-blur) - 3px)) saturate(145%);
   border-right: 1px solid rgba(var(--chrome-rgb),.10) !important;
 }
 
@@ -582,7 +587,9 @@ body[data-tile-density="compact"] #continueRow .contCover{
 
 /* Search dropdown */
 .searchResults{
-  background: rgba(10,12,20,.94) !important;
+  background: rgba(10,12,20,.86) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(160%);
   border: 1px solid rgba(var(--chrome-rgb),.12) !important;
   box-shadow: 0 26px 70px -40px rgba(0,0,0,.92);
 }
@@ -660,7 +667,9 @@ body[data-tile-density="compact"] #libraryView{
 }
 
 .volTableHead{
-  background: rgba(10,12,20,.90) !important;
+  background: rgba(10,12,20,.72) !important;
+  backdrop-filter: blur(calc(var(--vx-blur) - 2px));
+  -webkit-backdrop-filter: blur(calc(var(--vx-blur) - 2px));
   border-bottom: 1px solid rgba(var(--chrome-rgb),.10) !important;
 }
 
@@ -678,7 +687,9 @@ body[data-tile-density="compact"] #libraryView{
 .settingsOverlay,
 .keysOverlay,
 .videoPrompt{
-  background: rgba(0,0,0,.82) !important;
+  background: rgba(0,0,0,.55) !important;
+  backdrop-filter: blur(calc(var(--vx-blur) + 2px)) saturate(130%);
+  -webkit-backdrop-filter: blur(calc(var(--vx-blur) + 2px)) saturate(130%);
 }
 
 .settingsCard,
@@ -714,9 +725,11 @@ body[data-tile-density="compact"] #libraryView{
 
 /* Toast */
 .toast{
-  background: rgba(10,12,20,.92) !important;
+  background: rgba(10,12,20,.78) !important;
   border: 1px solid rgba(var(--chrome-rgb),.14) !important;
   border-radius: 999px !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(140%);
   box-shadow: 0 22px 70px -52px rgba(0,0,0,.98);
 }
 
@@ -729,12 +742,16 @@ body.inPlayer{
 }
 
 .playerBar{
-  background: rgba(10,12,20,.88) !important;
+  background: rgba(10,12,20,.44) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(140%);
   border-bottom: 1px solid rgba(var(--chrome-rgb),.10) !important;
 }
 
 .playerFooter{
-  background: rgba(10,12,20,.88) !important;
+  background: rgba(10,12,20,.46) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(140%);
   border-top: 1px solid rgba(var(--chrome-rgb),.10) !important;
 }
 
@@ -780,14 +797,18 @@ body.inPlayer{
 ------------------*/
 
 .videoPlayerBar{
-  background: rgba(10,12,20,.88) !important;
+  background: rgba(10,12,20,.44) !important;
   border-bottom: 1px solid rgba(var(--chrome-rgb),.10) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(140%);
 }
 
 .videoHud{
-  background: rgba(10,12,20,.85) !important;
+  background: rgba(10,12,20,.34) !important;
   border: 1px solid rgba(var(--chrome-rgb),.10) !important;
   border-radius: var(--vx-radius-lg) !important;
+  backdrop-filter: blur(var(--vx-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--vx-blur)) saturate(140%);
   box-shadow: 0 34px 86px -62px rgba(0,0,0,.98);
 }
 
@@ -1105,7 +1126,9 @@ code, pre, .mono{
 .videoAnchoredPopover {
   position: fixed;
   z-index: 10000;
-  background: rgba(28, 28, 32, 0.97);
+  background: rgba(28, 28, 32, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 12px;
@@ -1416,7 +1439,9 @@ code, pre, .mono{
    ============================================= */
 
 .glass-overlay{
-  background: rgba(0,0,0,.82);
+  backdrop-filter: blur(40px) saturate(145%);
+  -webkit-backdrop-filter: blur(40px) saturate(145%);
+  background: rgba(0,0,0,.55);
   border-radius: 14px;
   border: 1px solid rgba(var(--chrome-rgb),.12);
   box-shadow: 0 20px 50px -20px rgba(0,0,0,.75);
@@ -1426,7 +1451,9 @@ code, pre, .mono{
 .settingsCard,
 .webDlPanel,
 #contextMenu{
-  background: rgba(0,0,0,.82) !important;
+  backdrop-filter: blur(40px) saturate(145%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(145%) !important;
+  background: rgba(0,0,0,.55) !important;
   border: 1px solid rgba(var(--chrome-rgb),.12) !important;
   box-shadow: 0 20px 50px -20px rgba(0,0,0,.75);
 }
