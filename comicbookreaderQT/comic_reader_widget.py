@@ -2,10 +2,11 @@ import os
 import base64
 import hashlib
 import subprocess
+import time
 
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QApplication, QInputDialog, QMenu, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QWidget
 
 from archive_session import ArchiveSessionManager
 from bitmap_cache import BitmapCache
@@ -27,6 +28,7 @@ from state_machine import (
     uses_vertical_scroll,
 )
 from end_overlay import EndOfVolumeOverlay
+from goto_page_overlay import GotoPageOverlay
 from loupe_widget import LoupeWidget
 from volume_nav_overlay import VolumeNavOverlay
 
@@ -103,16 +105,20 @@ class ComicReaderWidget(QWidget):
 
         self.mega_settings_overlay = MegaSettingsOverlay(self)
         self.volume_nav_overlay = VolumeNavOverlay(self)
+        self.goto_page_overlay = GotoPageOverlay(self)
         self.loupe = LoupeWidget(self)
         self.end_overlay = EndOfVolumeOverlay(self)
         self.mega_settings_overlay.hide()
         self.volume_nav_overlay.hide()
+        self.goto_page_overlay.hide()
         self.loupe.hide()
         self.end_overlay.hide()
 
         self.end_overlay.next_volume.connect(self._on_end_next_volume)
         self.end_overlay.replay.connect(self._on_end_replay)
         self.end_overlay.go_back.connect(self._on_end_back)
+        self.volume_nav_overlay.volume_selected.connect(self._on_volume_nav_selected)
+        self.goto_page_overlay.page_selected.connect(lambda idx: self.go_to_page(idx, keep_scroll=False))
 
         self.top_bar.back_clicked.connect(self._on_hud_back_clicked)
         self.bottom_hud.prev_clicked.connect(self._on_hud_prev)
@@ -292,19 +298,56 @@ class ComicReaderWidget(QWidget):
     def _open_goto_page_dialog(self):
         if not self.state.pages:
             return
-        total = len(self.state.pages)
-        value, ok = QInputDialog.getInt(
-            self,
-            "Go to page",
-            f"Page (1-{total})",
-            int(self.state.page_index) + 1,
-            1,
-            total,
-            1,
-        )
-        if not ok:
+        self._close_other_overlays("goto")
+        self.goto_page_overlay.setGeometry(self.rect())
+        self.goto_page_overlay.open(int(self.state.page_index), len(self.state.pages))
+
+    def _open_volume_nav(self):
+        if not self.state.book_path:
             return
-        self.go_to_page(int(value) - 1, keep_scroll=False)
+        self._close_other_overlays("volnav")
+        siblings = self._find_sibling_volumes()
+        if not siblings:
+            return
+        current_path = os.path.abspath(self.state.book_path)
+        books = []
+        for path in siblings:
+            name = os.path.splitext(os.path.basename(path))[0]
+            is_current = os.path.normcase(path) == os.path.normcase(current_path)
+            bid = self._book_id_for_path(path)
+            saved = self._load_saved_progress(bid)
+            progress_page = None
+            time_ago = ""
+            if saved:
+                progress_page = saved.get("page_index")
+                updated_at = saved.get("updated_at")
+                if updated_at:
+                    from volume_nav_overlay import _format_time_ago
+                    time_ago = _format_time_ago(updated_at)
+            books.append({
+                "path": path,
+                "name": name,
+                "is_current": is_current,
+                "progress_page": progress_page,
+                "time_ago": time_ago,
+            })
+        self.volume_nav_overlay.setGeometry(self.rect())
+        self.volume_nav_overlay.open(books)
+
+    def _on_volume_nav_selected(self, path: str):
+        if path:
+            self.close_book()
+            self.open_book(path)
+
+    def _close_other_overlays(self, keep: str = ""):
+        if keep != "mega" and self.mega_settings_overlay.is_open():
+            self.mega_settings_overlay.close()
+        if keep != "volnav" and self.volume_nav_overlay.is_open():
+            self.volume_nav_overlay.close()
+        if keep != "goto" and self.goto_page_overlay.is_open():
+            self.goto_page_overlay.close()
+        if keep != "end" and self.end_overlay.is_open():
+            self.end_overlay.hide_overlay()
 
     def _copy_volume_path(self):
         if not self.state.book_path:
@@ -333,7 +376,16 @@ class ComicReaderWidget(QWidget):
             return
         menu = QMenu(self)
 
-        go_to_page = QAction("Go to page...", self)
+        settings_action = QAction("Settings  (S)", self)
+        settings_action.triggered.connect(self._open_mega_settings)
+        menu.addAction(settings_action)
+
+        volumes_action = QAction("Volumes  (O)", self)
+        volumes_action.triggered.connect(self._open_volume_nav)
+        volumes_action.setEnabled(bool(self.state.book_path))
+        menu.addAction(volumes_action)
+
+        go_to_page = QAction("Go to page...  (G)", self)
         go_to_page.triggered.connect(self._open_goto_page_dialog)
         menu.addAction(go_to_page)
 
@@ -533,6 +585,7 @@ class ComicReaderWidget(QWidget):
             "y_max": float(self.state.y_max),
             "settings": dict(self.state.settings),
             "page_count": int(len(self.state.pages)),
+            "updated_at": time.time(),
             "book_path": self.state.book_path,
             "book_meta": dict(self._book_meta or {}),
             "known_spread_indices": sorted(int(i) for i in self.state.known_spread_indices),
@@ -692,8 +745,9 @@ class ComicReaderWidget(QWidget):
             self._set_flip_pan(self.state.x, self.state.y, redraw=False)
         self._update_hud_geometry()
         self._update_hud_state()
-        if self.end_overlay.isVisible():
-            self.end_overlay.setGeometry(self.rect())
+        for overlay in (self.end_overlay, self.mega_settings_overlay, self.volume_nav_overlay, self.goto_page_overlay):
+            if overlay.isVisible():
+                overlay.setGeometry(self.rect())
         self.canvas.update()
 
     def closeEvent(self, event):
@@ -1303,6 +1357,11 @@ class ComicReaderWidget(QWidget):
         self.canvas.update()
         self._emit_progress_changed()
 
+    def _open_mega_settings(self):
+        self._close_other_overlays("mega")
+        self.mega_settings_overlay.setGeometry(self.rect())
+        self.mega_settings_overlay.open()
+
     def toggle_loupe(self):
         enabled = not self.loupe.isVisible()
         self.loupe.setVisible(enabled)
@@ -1544,6 +1603,19 @@ class ComicReaderWidget(QWidget):
 
     def keyPressEvent(self, event):
         self.hud.note_activity()
+        # Route to active overlay first
+        if self.mega_settings_overlay.is_open():
+            self.mega_settings_overlay.keyPressEvent(event)
+            event.accept()
+            return
+        if self.volume_nav_overlay.is_open():
+            self.volume_nav_overlay.keyPressEvent(event)
+            event.accept()
+            return
+        if self.goto_page_overlay.is_open():
+            self.goto_page_overlay.keyPressEvent(event)
+            event.accept()
+            return
         if self.end_overlay.is_open():
             self.end_overlay.keyPressEvent(event)
             event.accept()

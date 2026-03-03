@@ -27,6 +27,15 @@ class KeyboardRouter:
         if key == Qt.Key.Key_L:
             w.toggle_loupe()
             return True
+        if key == Qt.Key.Key_S:
+            w._open_mega_settings()
+            return True
+        if key == Qt.Key.Key_O:
+            w._open_volume_nav()
+            return True
+        if key == Qt.Key.Key_G:
+            w._open_goto_page_dialog()
+            return True
 
         if key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
             mode = w.get_control_mode()

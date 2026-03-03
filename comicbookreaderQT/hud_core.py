@@ -369,12 +369,10 @@ class HudController(QObject):
             return True
         if self.hover_hud:
             return True
-        mega = getattr(self.reader, "mega_settings_overlay", None)
-        if mega is not None and mega.isVisible():
-            return True
-        vol = getattr(self.reader, "volume_nav_overlay", None)
-        if vol is not None and vol.isVisible():
-            return True
+        for attr in ("mega_settings_overlay", "volume_nav_overlay", "goto_page_overlay"):
+            overlay = getattr(self.reader, attr, None)
+            if overlay is not None and overlay.isVisible():
+                return True
         return False
 
     def _on_hover_changed(self, hovering: bool):
