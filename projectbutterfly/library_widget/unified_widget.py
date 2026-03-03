@@ -100,6 +100,7 @@ class UnifiedLibraryWidget(QWidget):
         self._detail_view = DetailView()
         self._detail_view.set_columns(self._adapter.detail_columns)
         self._detail_view.back_clicked.connect(self._go_home)
+        self._detail_view.preview_requested.connect(self._on_preview_requested)
         self._stack.addWidget(self._detail_view)
 
         self._splitter.addWidget(self._stack)
@@ -320,9 +321,19 @@ class UnifiedLibraryWidget(QWidget):
                     f"cont:{item_id}", path, item_id,
                 )
 
+    def _on_preview_requested(self, key: str, item_path: str, item_id: str):
+        """Handle preview pane thumbnail request from detail view."""
+        self._thumb_provider.request_thumb(key, item_path, item_id)
+
     def _on_thumb_ready(self, series_id: str, px: QPixmap):
-        """Apply a loaded thumbnail to the matching card or continue tile."""
-        # Check continue tiles first
+        """Apply a loaded thumbnail to the matching card, tile, or preview."""
+        # Detail preview pane
+        if series_id.startswith("detail:"):
+            item_id = series_id[7:]
+            self._detail_view.set_preview_pixmap(item_id, px)
+            return
+
+        # Continue tiles
         if series_id.startswith("cont:"):
             item_id = series_id[5:]
             for tile in self._home_view.tiles:

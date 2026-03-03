@@ -34,7 +34,33 @@ class HomeView(QScrollArea):
         super().__init__(parent)
         self.setWidgetResizable(True)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setStyleSheet(f"QScrollArea {{ background-color: {BG_COLOR}; border: none; }}")
+        self.setStyleSheet(f"""
+            QScrollArea {{
+                background-color: {BG_COLOR};
+                border: none;
+            }}
+            QScrollBar:vertical {{
+                background-color: #0f0f23;
+                width: 10px;
+                margin: 0;
+                border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: #2a3a5e;
+                border-radius: 4px;
+                min-height: 30px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: #3a5a8e;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
+        """)
 
         self._container = QWidget()
         self._container.setStyleSheet(f"background-color: {BG_COLOR};")

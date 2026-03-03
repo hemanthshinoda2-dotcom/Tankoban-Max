@@ -6,11 +6,11 @@ import os
 import time
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView,
+    QAbstractItemView, QSplitter,
 )
 
 from constants import BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, ACCENT_COLOR
@@ -71,6 +71,7 @@ DEFAULT_COLUMNS = [
 class DetailView(QWidget):
     back_clicked = Signal()
     item_activated = Signal(str)  # item ID on double-click
+    preview_requested = Signal(str, str, str)  # (key, item_path, item_id) for thumb loading
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -112,6 +113,10 @@ class DetailView(QWidget):
 
         layout.addLayout(top)
 
+        # Splitter: table (left) + preview pane (right)
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.setStyleSheet("QSplitter::handle { background-color: #0a0a1a; width: 1px; }")
+
         # Table
         self._table = QTableWidget()
         self._table.verticalHeader().setVisible(False)
@@ -123,6 +128,7 @@ class DetailView(QWidget):
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.doubleClicked.connect(self._on_double_click)
+        self._table.currentCellChanged.connect(self._on_row_changed)
 
         self._table.setStyleSheet(f"""
             QTableWidget {{
@@ -152,9 +158,69 @@ class DetailView(QWidget):
                 font-weight: bold;
                 font-size: 10px;
             }}
+            QScrollBar:vertical {{
+                background-color: #0f0f23;
+                width: 10px;
+                margin: 0;
+                border: none;
+            }}
+            QScrollBar::handle:vertical {{
+                background-color: #2a3a5e;
+                border-radius: 4px;
+                min-height: 30px;
+                margin: 2px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background-color: #3a5a8e;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0;
+            }}
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                background: none;
+            }}
         """)
 
-        layout.addWidget(self._table)
+        self._splitter.addWidget(self._table)
+
+        # Preview pane
+        self._preview_pane = QWidget()
+        self._preview_pane.setFixedWidth(300)
+        self._preview_pane.setStyleSheet(f"background-color: #0f0f23; border-left: 1px solid #1a2a3e;")
+        preview_layout = QVBoxLayout(self._preview_pane)
+        preview_layout.setContentsMargins(12, 12, 12, 12)
+        preview_layout.setSpacing(8)
+
+        # Cover image
+        self._preview_cover = QLabel()
+        self._preview_cover.setAlignment(Qt.AlignCenter)
+        self._preview_cover.setMinimumHeight(300)
+        self._preview_cover.setStyleSheet("background: transparent;")
+        preview_layout.addWidget(self._preview_cover)
+
+        # Item title
+        self._preview_title = QLabel("")
+        self._preview_title.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        self._preview_title.setStyleSheet(f"color: {TEXT_PRIMARY}; background: transparent;")
+        self._preview_title.setWordWrap(True)
+        self._preview_title.setAlignment(Qt.AlignCenter)
+        preview_layout.addWidget(self._preview_title)
+
+        # Item info lines
+        self._preview_info = QLabel("")
+        self._preview_info.setFont(QFont("Segoe UI", 9))
+        self._preview_info.setStyleSheet(f"color: {TEXT_SECONDARY}; background: transparent;")
+        self._preview_info.setWordWrap(True)
+        self._preview_info.setAlignment(Qt.AlignCenter)
+        preview_layout.addWidget(self._preview_info)
+
+        preview_layout.addStretch()
+
+        self._splitter.addWidget(self._preview_pane)
+        self._splitter.setStretchFactor(0, 1)  # table stretches
+        self._splitter.setStretchFactor(1, 0)  # preview fixed
+
+        layout.addWidget(self._splitter)
 
         # Apply default columns
         self._apply_columns()
@@ -193,6 +259,82 @@ class DetailView(QWidget):
 
         for i in range(len(items)):
             self._table.setRowHeight(i, 32)
+
+        # Clear preview and select first row
+        self._clear_preview()
+        if items:
+            self._table.selectRow(0)
+
+    def set_preview_pixmap(self, item_id: str, px: QPixmap):
+        """Called when a thumbnail is ready for a detail item."""
+        # Only update if the currently selected row matches this item
+        row = self._table.currentRow()
+        if 0 <= row < len(self._items):
+            if self._items[row].get("id") == item_id:
+                scaled = px.scaled(
+                    276, 400,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+                self._preview_cover.setPixmap(scaled)
+
+    def _on_row_changed(self, current_row, _col, _prev_row, _prev_col):
+        if 0 <= current_row < len(self._items):
+            item = self._items[current_row]
+            self._update_preview_info(item)
+            # Request thumbnail for this item
+            item_id = item.get("id", "")
+            path = item.get("path", "")
+            thumb_path = item.get("thumb_path")
+            if item_id and path:
+                self.preview_requested.emit(
+                    f"detail:{item_id}", path, item_id,
+                )
+        else:
+            self._clear_preview()
+
+    def _update_preview_info(self, item: dict):
+        """Populate preview pane text from item data."""
+        self._preview_title.setText(item.get("title", ""))
+
+        info_parts = []
+        size = item.get("size", 0)
+        if size:
+            info_parts.append(_fmt_size(size))
+
+        mtime = item.get("mtime_ms", 0)
+        if mtime:
+            info_parts.append(_fmt_date(mtime))
+
+        fmt = item.get("format", item.get("ext", ""))
+        if fmt:
+            info_parts.append(fmt.upper())
+
+        dur = item.get("duration_sec")
+        if dur:
+            info_parts.append(_fmt_duration(dur))
+
+        path = item.get("path", "")
+        if path:
+            info_parts.append(os.path.basename(path))
+
+        self._preview_info.setText("\n".join(info_parts))
+
+        # Clear old cover while new one loads
+        self._preview_cover.clear()
+        self._preview_cover.setText("Loading...")
+        self._preview_cover.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; background: transparent; font-style: italic;"
+        )
+
+    def _clear_preview(self):
+        self._preview_cover.clear()
+        self._preview_cover.setText("Select an item")
+        self._preview_cover.setStyleSheet(
+            f"color: {TEXT_SECONDARY}; background: transparent; font-style: italic;"
+        )
+        self._preview_title.setText("")
+        self._preview_info.setText("")
 
     def _on_context_menu(self, pos):
         row = self._table.rowAt(pos.y())
