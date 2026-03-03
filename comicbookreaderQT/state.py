@@ -22,6 +22,8 @@ def default_reader_settings():
         "image_invert": 0,
         "image_grayscale": 0,
         "image_scale_quality": "off",
+        "loupe_zoom": 2.0,
+        "loupe_size": 220,
     }
 
 

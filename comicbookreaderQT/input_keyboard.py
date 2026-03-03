@@ -24,6 +24,9 @@ class KeyboardRouter:
         if key == Qt.Key.Key_H:
             w.toggle_hud_visibility()
             return True
+        if key == Qt.Key.Key_L:
+            w.toggle_loupe()
+            return True
 
         if key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
             mode = w.get_control_mode()

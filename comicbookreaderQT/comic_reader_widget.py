@@ -26,6 +26,7 @@ from state_machine import (
     normalize_settings,
     uses_vertical_scroll,
 )
+from loupe_widget import LoupeWidget
 from volume_nav_overlay import VolumeNavOverlay
 
 
@@ -101,8 +102,10 @@ class ComicReaderWidget(QWidget):
 
         self.mega_settings_overlay = MegaSettingsOverlay(self)
         self.volume_nav_overlay = VolumeNavOverlay(self)
+        self.loupe = LoupeWidget(self)
         self.mega_settings_overlay.hide()
         self.volume_nav_overlay.hide()
+        self.loupe.hide()
 
         self.top_bar.back_clicked.connect(self._on_hud_back_clicked)
         self.bottom_hud.prev_clicked.connect(self._on_hud_prev)
@@ -1232,6 +1235,23 @@ class ComicReaderWidget(QWidget):
         self.canvas.update()
         self._emit_progress_changed()
 
+    def toggle_loupe(self):
+        enabled = not self.loupe.isVisible()
+        self.loupe.setVisible(enabled)
+        if enabled:
+            zoom = float(self.state.settings.get("loupe_zoom", 2.0))
+            size = int(self.state.settings.get("loupe_size", 220))
+            self.loupe.set_zoom(zoom)
+            self.loupe.set_loupe_size(size)
+
+    def _update_loupe(self, pos):
+        if not self.loupe.isVisible():
+            return
+        canvas_pos = self.canvas.mapFromParent(pos)
+        self.loupe.set_frame_rects(self.canvas.last_frame_rects)
+        self.loupe.update_cursor(canvas_pos)
+        self.loupe.raise_()
+
     def toggle_fullscreen_window(self):
         win = self.window()
         if win is None:
@@ -1492,6 +1512,7 @@ class ComicReaderWidget(QWidget):
 
     def mouseMoveEvent(self, event):
         self.hud.note_activity()
+        self._update_loupe(event.position().toPoint())
         if self.pointer.handle_mouse_move(event):
             event.accept()
             return

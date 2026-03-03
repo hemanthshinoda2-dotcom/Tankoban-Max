@@ -14,6 +14,7 @@ class CanvasWidget(QWidget):
         self._get_cache_entry = None
         self._get_flip_pair = None
         self._get_two_page_scroll_rows = None
+        self.last_frame_rects: list[tuple[QRect, "QPixmap", QRect]] = []
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         self.setAutoFillBackground(False)
 
@@ -60,7 +61,15 @@ class CanvasWidget(QWidget):
         y = (view_h - target_h) // 2
         self._target_rect = QRect(x, y, target_w, target_h)
 
+    def _record_draw_rect(self, screen_rect: QRect, pixmap, source_rect: QRect | None = None):
+        if pixmap is None or pixmap.isNull():
+            return
+        if source_rect is None:
+            source_rect = QRect(0, 0, pixmap.width(), pixmap.height())
+        self.last_frame_rects.append((QRect(screen_rect), pixmap, QRect(source_rect)))
+
     def paintEvent(self, event):
+        self.last_frame_rects = []
         painter = QPainter(self)
         painter.fillRect(self.rect(), Qt.GlobalColor.black)
         if self._state is not None and self._get_cache_entry is not None and self._state.pages:
@@ -217,7 +226,9 @@ class CanvasWidget(QWidget):
             draw_w, draw_h = self._scaled_page_size(entry)
             x = (view_w - draw_w) / 2.0
             target = QRect(int(x), int(y), int(draw_w), int(draw_h))
-            painter.drawPixmap(target, self._filtered_pixmap(entry))
+            pix = self._filtered_pixmap(entry)
+            painter.drawPixmap(target, pix)
+            self._record_draw_rect(target, entry.pixmap)
             y += draw_h + gap
             index += 1
 
@@ -274,7 +285,9 @@ class CanvasWidget(QWidget):
                 y = -int(pan_y)
             else:
                 y = int((view_h - draw_h) / 2)
-            painter.drawPixmap(QRect(x, y, draw_w, draw_h), self._filtered_pixmap(right_entry))
+            target = QRect(x, y, draw_w, draw_h)
+            painter.drawPixmap(target, self._filtered_pixmap(right_entry))
+            self._record_draw_rect(target, right_entry.pixmap)
             return
 
         if pair.cover_alone:
@@ -324,8 +337,12 @@ class CanvasWidget(QWidget):
             ly = int((view_h - draw_lh) / 2)
         lx = left_rect.right() - draw_lw + 1 - int(pan_x)
 
-        painter.drawPixmap(QRect(rx, ry, draw_rw, draw_rh), self._filtered_pixmap(right_entry))
-        painter.drawPixmap(QRect(lx, ly, draw_lw, draw_lh), self._filtered_pixmap(left_entry))
+        rt = QRect(rx, ry, draw_rw, draw_rh)
+        lt = QRect(lx, ly, draw_lw, draw_lh)
+        painter.drawPixmap(rt, self._filtered_pixmap(right_entry))
+        self._record_draw_rect(rt, right_entry.pixmap)
+        painter.drawPixmap(lt, self._filtered_pixmap(left_entry))
+        self._record_draw_rect(lt, left_entry.pixmap)
         self._paint_gutter_shadow(painter, left_w, gutter)
 
     def _paint_single_in_slot(
@@ -371,7 +388,9 @@ class CanvasWidget(QWidget):
             y = slot_rect.top() - int(pan_y)
         else:
             y = slot_rect.top() + int((slot_rect.height() - draw_h) / 2)
-        painter.drawPixmap(QRect(x, y, draw_w, draw_h), self._filtered_pixmap(entry))
+        target = QRect(x, y, draw_w, draw_h)
+        painter.drawPixmap(target, self._filtered_pixmap(entry))
+        self._record_draw_rect(target, entry.pixmap)
 
     def _paint_two_page_scroll_rows(self, painter: QPainter):
         if self._get_two_page_scroll_rows is None:
@@ -433,7 +452,9 @@ class CanvasWidget(QWidget):
             draw_y = y + int((row_h - draw_h) / 2)
         else:
             draw_y = y
-        painter.drawPixmap(QRect(x, draw_y, draw_w, draw_h), self._filtered_pixmap(entry))
+        target = QRect(x, draw_y, draw_w, draw_h)
+        painter.drawPixmap(target, self._filtered_pixmap(entry))
+        self._record_draw_rect(target, entry.pixmap)
 
     def _draw_two_page_scroll_cover(self, painter: QPainter, idx: int, y: int, row_h: int, view_w: int):
         entry = self._get_cache_entry(idx)
@@ -449,7 +470,9 @@ class CanvasWidget(QWidget):
         draw_h = max(1, int(src_h * scale))
         dx = left_w - draw_w
         dy = y + int((row_h - draw_h) / 2)
-        painter.drawPixmap(QRect(dx, dy, draw_w, draw_h), self._filtered_pixmap(entry))
+        target = QRect(dx, dy, draw_w, draw_h)
+        painter.drawPixmap(target, self._filtered_pixmap(entry))
+        self._record_draw_rect(target, entry.pixmap)
 
     def _draw_two_page_scroll_unpaired(self, painter: QPainter, idx: int, y: int, row_h: int, view_w: int):
         entry = self._get_cache_entry(idx)
@@ -466,7 +489,9 @@ class CanvasWidget(QWidget):
         draw_w = max(1, int(src_w * scale))
         draw_h = max(1, int(src_h * scale))
         dy = y + int((row_h - draw_h) / 2)
-        painter.drawPixmap(QRect(right_x, dy, draw_w, draw_h), self._filtered_pixmap(entry))
+        target = QRect(right_x, dy, draw_w, draw_h)
+        painter.drawPixmap(target, self._filtered_pixmap(entry))
+        self._record_draw_rect(target, entry.pixmap)
 
     def _draw_two_page_scroll_pair(self, painter: QPainter, right_idx: int, left_idx: int, y: int, row_h: int, view_w: int):
         right_entry = self._get_cache_entry(right_idx)
@@ -486,7 +511,9 @@ class CanvasWidget(QWidget):
             draw_w = max(1, int(rw * scale))
             draw_h = max(1, int(rh * scale))
             dy = y + int((row_h - draw_h) / 2)
-            painter.drawPixmap(QRect(right_rect.left(), dy, draw_w, draw_h), self._filtered_pixmap(right_entry))
+            rt = QRect(right_rect.left(), dy, draw_w, draw_h)
+            painter.drawPixmap(rt, self._filtered_pixmap(right_entry))
+            self._record_draw_rect(rt, right_entry.pixmap)
 
         if left_entry is None or left_entry.pixmap.isNull():
             self._draw_loading_rect(painter, QRect(left_rect.left() + 12, y, max(12, left_w - 24), max(80, row_h)))
@@ -498,7 +525,9 @@ class CanvasWidget(QWidget):
             draw_h = max(1, int(lh * scale))
             dy = y + int((row_h - draw_h) / 2)
             dx = left_rect.right() - draw_w + 1
-            painter.drawPixmap(QRect(dx, dy, draw_w, draw_h), self._filtered_pixmap(left_entry))
+            lt = QRect(dx, dy, draw_w, draw_h)
+            painter.drawPixmap(lt, self._filtered_pixmap(left_entry))
+            self._record_draw_rect(lt, left_entry.pixmap)
 
     def _paint_gutter_shadow(self, painter: QPainter, left_w: int, gutter: int):
         if gutter <= 0:
