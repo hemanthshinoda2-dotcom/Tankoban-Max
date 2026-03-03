@@ -16,6 +16,7 @@ class CanvasWidget(QWidget):
         self._get_two_page_scroll_rows = None
         self.last_frame_rects: list[tuple[QRect, "QPixmap", QRect]] = []
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAutoFillBackground(False)
 
     def set_pixmap(self, pixmap):

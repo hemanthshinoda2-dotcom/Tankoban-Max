@@ -109,7 +109,6 @@ class ComicReaderWidget(QWidget):
         self.setStyleSheet("background: black;")
         self.setWindowTitle("Qt Comic Reader")
         self.setMouseTracking(True)
-        self.canvas.setMouseTracking(True)
 
         self.top_bar = TopBar(self)
         self.bottom_hud = BottomHud(self)
@@ -145,9 +144,8 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.next_vol_clicked.connect(self._on_hud_next_vol)
         self.manual_scroller.drag_progress.connect(self._on_manual_scroller_drag_progress)
 
-        # Context menu: use DefaultContextMenu policy so contextMenuEvent fires
+        # Context menu: DefaultContextMenu so contextMenuEvent fires on right-click
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
-        self.canvas.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         self._update_hud_geometry()
         self._update_hud_state()
