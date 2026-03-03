@@ -7898,7 +7898,8 @@ class WebTorrentBridge(QObject):
                   str(self._qbit_mgr.get_status().get("message", "")))
             return None
         self._qbit = QBitClient(self._qbit_mgr.base_url)
-        self._qbit.login()
+        from qbit_process import _WEBUI_USERNAME, _WEBUI_PASSWORD
+        self._qbit.login(_WEBUI_USERNAME, _WEBUI_PASSWORD)
         return self._qbit
 
     def _start_poll(self):
@@ -10767,12 +10768,31 @@ class BrowserTabPage:
     pass
 
 
+def _get_internal_page_path(command):
+    """Map a tanko-browser:// command to a local data HTML file path, or None."""
+    from pathlib import Path
+    _DATA_DIR = Path(__file__).parent / "browser" / "data"
+    _MAP = {
+        "torrents": "torrents.html",
+        "history": "history.html",
+        "bookmarks": "bookmarks.html",
+        "downloads": "downloads.html",
+        "settings": "settings.html",
+        "newtab": "newtab.html",
+    }
+    filename = _MAP.get(str(command or "").strip().lower())
+    if not filename:
+        return None
+    p = _DATA_DIR / filename
+    return str(p) if p.is_file() else None
+
+
 def create_browser_tab_page(profile, tab_manager, tab_id):
     """
     Create a per-tab QWebEnginePage subclass instance.
 
     - createWindow(): opens a new renderer-tracked tab for popups/target=_blank.
-    - acceptNavigationRequest(): intercepts magnet links and forwards to renderer.
+    - acceptNavigationRequest(): intercepts magnet: and tanko-browser:// URLs.
     """
     from PySide6.QtWebEngineCore import QWebEnginePage
 
@@ -10804,9 +10824,303 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
                 except Exception:
                     pass
                 return False
+            if url_str.startswith("tanko-browser://"):
+                try:
+                    self._dispatch_tanko_command(url_str)
+                except Exception:
+                    pass
+                return False
             return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
+        # -- tanko-browser:// command dispatch ----------------------------------
+
+        def _get_bridge_root(self):
+            try:
+                return self._tab_manager.parent()
+            except Exception:
+                return None
+
+        def _dispatch_tanko_command(self, url_str):
+            """Parse and dispatch a tanko-browser://COMMAND?params URL."""
+            import urllib.parse
+            stripped = url_str[len("tanko-browser://"):]
+            if "?" in stripped:
+                command, qs = stripped.split("?", 1)
+            else:
+                command, qs = stripped, ""
+            command = command.strip().rstrip("/").lower()
+            parsed = urllib.parse.parse_qs(qs)
+
+            # Internal page navigation (main-frame only)
+            local_path = _get_internal_page_path(command)
+            if local_path and not parsed:
+                from PySide6.QtCore import QUrl, QTimer
+                QTimer.singleShot(0, lambda p=local_path: self.setUrl(
+                    QUrl.fromLocalFile(p)))
+                return
+
+            # Search commands
+            if command == "torrent-search":
+                self._handle_torrent_search(parsed)
+            elif command == "torrent-search-config-load":
+                self._handle_torrent_search_config_load()
+            elif command == "torrent-search-config-save":
+                self._handle_torrent_search_config_save(parsed)
+            elif command == "torrent-search-indexers":
+                self._handle_torrent_search_indexers(parsed)
+            # Add / manage commands
+            elif command == "torrent-add":
+                self._handle_torrent_add(parsed)
+            elif command == "torrent-manage":
+                self._handle_torrent_manage(parsed)
+            # Action commands
+            elif command == "torrent-action":
+                self._handle_torrent_action(parsed)
+            elif command == "torrent-select-files":
+                self._handle_torrent_select_files(parsed)
+            elif command == "torrent-open-folder":
+                self._handle_torrent_open_folder(parsed)
+            elif command == "torrent-pause-all":
+                self._handle_torrent_global("pauseAll")
+            elif command == "torrent-resume-all":
+                self._handle_torrent_global("resumeAll")
+
+        def _handle_torrent_search(self, parsed):
+            import threading
+            query = str(parsed.get("q", [""])[0] or "").strip()
+            if not query:
+                return
+            bridge = self._get_bridge_root()
+            payload = {
+                "query": query,
+                "provider": str(parsed.get("provider", [""])[0] or "").strip(),
+                "indexer": str(parsed.get("indexer", [""])[0] or "").strip(),
+                "source": str(parsed.get("indexer", [""])[0] or "").strip(),
+                "category": str(parsed.get("category", ["all"])[0] or "all").strip(),
+                "page": max(0, _safe_int(parsed.get("page", ["0"])[0], 0)),
+                "limit": max(1, min(100, _safe_int(parsed.get("limit", ["60"])[0], 60))),
+            }
+            sites_param = str(parsed.get("sites", [""])[0] or "").strip()
+            if sites_param:
+                payload["sites"] = [s.strip() for s in sites_param.split(",") if s.strip()]
+            page_ref = self
+
+            def _run():
+                try:
+                    if bridge and hasattr(bridge, "torrentSearch"):
+                        raw = bridge.torrentSearch.query(json.dumps(payload))
+                        result = json.loads(raw) if isinstance(raw, str) else raw
+                        if not isinstance(result, dict):
+                            result = {}
+                        items = result.get("items", [])
+                        result["results"] = items if isinstance(items, list) else []
+                        result_json = json.dumps(result)
+                    else:
+                        try:
+                            from browser.torrent_scrapers import search_all
+                        except Exception:
+                            from projectbutterfly.browser.torrent_scrapers import search_all
+                        rows = search_all(query, sites=set(payload.get("sites", [])) or None, limit=60)
+                        result_json = json.dumps({"ok": True, "results": rows, "items": rows})
+                except Exception:
+                    result_json = json.dumps({"ok": False, "results": [], "items": [], "error": "Search failed"})
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: page_ref.runJavaScript(
+                    f"if(typeof setSearchResults==='function')setSearchResults({result_json});"))
+
+            threading.Thread(target=_run, daemon=True).start()
+
+        def _handle_torrent_search_config_load(self):
+            bridge = self._get_bridge_root()
+            if not bridge or not hasattr(bridge, "torrentSearch"):
+                self.runJavaScript(
+                    'if(typeof setTorrentSearchConfig==="function")setTorrentSearchConfig({});')
+                return
+            try:
+                raw = bridge.torrentSearch.getConfig()
+                cfg = json.loads(raw) if isinstance(raw, str) else raw
+            except Exception:
+                cfg = {"ok": False, "error": "Failed to load config"}
+            js_payload = json.dumps(cfg if isinstance(cfg, dict) else {})
+            self.runJavaScript(
+                f'if(typeof setTorrentSearchConfig==="function")setTorrentSearchConfig({js_payload});')
+
+        def _handle_torrent_search_config_save(self, parsed):
+            import urllib.parse
+            bridge = self._get_bridge_root()
+            if not bridge or not hasattr(bridge, "torrentSearch"):
+                return
+            raw_payload = str(parsed.get("payload", [""])[0] or "").strip()
+            payload_obj = {}
+            if raw_payload:
+                try:
+                    payload_obj = json.loads(raw_payload)
+                except Exception:
+                    payload_obj = {}
+            if not isinstance(payload_obj, dict):
+                payload_obj = {}
+            try:
+                bridge.torrentSearch.saveSettings(json.dumps(payload_obj))
+            except Exception:
+                pass
+            # Reload config and indexers
+            self._handle_torrent_search_config_load()
+            provider = str(payload_obj.get("provider", "") or "").strip()
+            self._handle_torrent_search_indexers(
+                {"provider": [provider]} if provider else {})
+
+        def _handle_torrent_search_indexers(self, parsed):
+            bridge = self._get_bridge_root()
+            provider = str(parsed.get("provider", [""])[0] or "").strip()
+            if not bridge or not hasattr(bridge, "torrentSearch"):
+                js_payload = json.dumps({"ok": False, "indexers": []})
+                self.runJavaScript(
+                    f'if(typeof setTorrentIndexers==="function")setTorrentIndexers({js_payload});')
+                return
+            try:
+                p = {"provider": provider} if provider else {}
+                raw = bridge.torrentSearch.indexers(json.dumps(p))
+                out = json.loads(raw) if isinstance(raw, str) else raw
+            except Exception:
+                out = {"ok": False, "indexers": [], "provider": provider}
+            js_payload = json.dumps(out if isinstance(out, dict) else {})
+            self.runJavaScript(
+                f'if(typeof setTorrentIndexers==="function")setTorrentIndexers({js_payload});')
+
+        def _handle_torrent_add(self, parsed):
+            magnet = str(parsed.get("magnet", [""])[0] or "").strip()
+            if not magnet:
+                return
+            try:
+                self._tab_manager.magnetRequested.emit(
+                    json.dumps({"url": magnet, "tabId": self._tab_id}))
+            except Exception:
+                pass
+
+        def _handle_torrent_manage(self, parsed):
+            bridge = self._get_bridge_root()
+            torrent_id = str(parsed.get("id", [""])[0] or "").strip()
+            if not torrent_id or not bridge or not hasattr(bridge, "webTorrent"):
+                return
+            target = None
+            try:
+                active_raw = bridge.webTorrent.getActive()
+                active = json.loads(active_raw) if isinstance(active_raw, str) else active_raw
+                for row in active.get("torrents", []):
+                    if isinstance(row, dict) and str(row.get("id", "") or "") == torrent_id:
+                        target = row
+                        break
+                if target is None:
+                    hist_raw = bridge.webTorrent.getHistory()
+                    hist = json.loads(hist_raw) if isinstance(hist_raw, str) else hist_raw
+                    for row in hist.get("torrents", []):
+                        if isinstance(row, dict) and str(row.get("id", "") or "") == torrent_id:
+                            target = row
+                            break
+            except Exception:
+                target = None
+            if not isinstance(target, dict):
+                return
+            from browser.torrent_add_dialog import TorrentAddDialog
+            source = str(target.get("magnetUri", "") or "").strip()
+            dlg = TorrentAddDialog(source, bridge_root=bridge, manage_torrent=target)
+            dlg.exec()
+
+        def _handle_torrent_action(self, parsed):
+            bridge = self._get_bridge_root()
+            action = str(parsed.get("action", [""])[0] or "").strip()
+            torrent_id = str(parsed.get("id", [""])[0] or "").strip()
+            if not action or not torrent_id:
+                return
+            if not bridge or not hasattr(bridge, "webTorrent"):
+                return
+            try:
+                payload = json.dumps({"id": torrent_id})
+                if action == "pause":
+                    bridge.webTorrent.pause(payload)
+                elif action == "resume":
+                    bridge.webTorrent.resume(payload)
+                elif action == "remove":
+                    delete_files = str(parsed.get("deleteFiles", ["false"])[0]) == "true"
+                    payload = json.dumps({"id": torrent_id, "deleteFiles": delete_files})
+                    bridge.webTorrent.remove(payload)
+            except Exception:
+                pass
+
+        def _handle_torrent_select_files(self, parsed):
+            bridge = self._get_bridge_root()
+            torrent_id = str(parsed.get("id", [""])[0] or "").strip()
+            if not torrent_id or not bridge or not hasattr(bridge, "webTorrent"):
+                return
+            try:
+                indices_raw = str(parsed.get("indices", [""])[0] or "").strip()
+                indices = json.loads(indices_raw) if indices_raw else []
+                if not isinstance(indices, list):
+                    indices = []
+                payload = {"id": torrent_id, "selectedIndices": indices}
+                priorities_raw = str(parsed.get("priorities", [""])[0] or "").strip()
+                if priorities_raw:
+                    try:
+                        priorities = json.loads(priorities_raw)
+                        if isinstance(priorities, dict):
+                            payload["priorities"] = priorities
+                    except Exception:
+                        pass
+                dest = str(parsed.get("destinationRoot", [""])[0] or "").strip()
+                if dest:
+                    payload["destinationRoot"] = dest
+                if "sequential" in parsed:
+                    payload["sequential"] = str(parsed.get("sequential", ["false"])[0]) == "true"
+                bridge.webTorrent.selectFiles(json.dumps(payload))
+            except Exception:
+                pass
+
+        def _handle_torrent_open_folder(self, parsed):
+            import subprocess
+            bridge = self._get_bridge_root()
+            torrent_id = str(parsed.get("id", [""])[0] or "").strip()
+            if not torrent_id or not bridge or not hasattr(bridge, "webTorrent"):
+                return
+            try:
+                active_json = bridge.webTorrent.getActive()
+                active = json.loads(active_json) if isinstance(active_json, str) else active_json
+                for t in active.get("torrents", []):
+                    if t.get("id") == torrent_id:
+                        path = t.get("savePath") or t.get("destinationRoot", "")
+                        if path and os.path.isdir(path):
+                            subprocess.Popen(["explorer", os.path.normpath(path)])
+                        return
+                hist_json = bridge.webTorrent.getHistory()
+                hist = json.loads(hist_json) if isinstance(hist_json, str) else hist_json
+                for t in hist.get("torrents", []):
+                    if t.get("id") == torrent_id:
+                        path = t.get("savePath") or t.get("destinationRoot", "")
+                        if path and os.path.isdir(path):
+                            subprocess.Popen(["explorer", os.path.normpath(path)])
+                        return
+            except Exception:
+                pass
+
+        def _handle_torrent_global(self, action):
+            bridge = self._get_bridge_root()
+            if not bridge or not hasattr(bridge, "webTorrent"):
+                return
+            try:
+                if action == "pauseAll":
+                    bridge.webTorrent.pauseAll()
+                elif action == "resumeAll":
+                    bridge.webTorrent.resumeAll()
+            except Exception:
+                pass
+
     return _BrowserTabPage(profile)
+
+
+def _safe_int(val, default=0):
+    try:
+        return int(val)
+    except Exception:
+        return default
 
 
 class WebTabManagerBridge(QObject):
@@ -10834,6 +11148,8 @@ class WebTabManagerBridge(QObject):
         self._host_container = None
         self._viewport_rect = (0, 0, 0, 0)
         self._viewport_visible = False
+        self._last_error = ""
+        self._renderer_session_id = ""
 
     def setup(self, profile, host_view, host_container=None):
         self._profile = profile
@@ -10878,16 +11194,31 @@ class WebTabManagerBridge(QObject):
         self.tabUpdated.emit(json.dumps(payload))
 
     def _emit_host_event(self, level, code, message="", tab_id=""):
+        lvl = str(level or "info")
+        msg = str(message or "")
+        if lvl == "error":
+            self._last_error = msg or str(code or "host_error")
         payload = {
-            "level": str(level or "info"),
+            "level": lvl,
             "code": str(code or ""),
-            "message": str(message or ""),
+            "message": msg,
             "tabId": str(tab_id or ""),
             "activeTabId": str(self._active_tab_id or ""),
             "tabCount": int(len(self._tab_order)),
+            "rendererSessionId": str(self._renderer_session_id or ""),
         }
         try:
             self.tabHostEvent.emit(json.dumps(payload))
+        except Exception:
+            pass
+
+    def _update_renderer_session(self, opts):
+        try:
+            if not isinstance(opts, dict):
+                return
+            sid = str(opts.get("rendererSessionId", "") or "").strip()
+            if sid:
+                self._renderer_session_id = sid
         except Exception:
             pass
 
@@ -10946,12 +11277,90 @@ class WebTabManagerBridge(QObject):
                 canGoBack=can_back,
                 canGoForward=can_forward,
             )
+            # Auto-inject search config + torrent updates for torrents page
+            url = str(tab.get("url", "") or "")
+            if _ok and "torrents.html" in url:
+                self._inject_torrent_page_init(page)
+                self._start_torrent_polling(tab_id)
 
         page.urlChanged.connect(on_url_changed)
         page.titleChanged.connect(on_title_changed)
         page.iconChanged.connect(on_icon_changed)
         page.loadStarted.connect(on_load_started)
         page.loadFinished.connect(on_load_finished)
+
+    def _inject_torrent_page_init(self, page):
+        """Inject search config + indexers into a freshly-loaded torrents page."""
+        root = self.parent()
+        if not root or not hasattr(root, "torrentSearch"):
+            return
+        try:
+            cfg_raw = root.torrentSearch.getConfig()
+            cfg = json.loads(cfg_raw) if isinstance(cfg_raw, str) else cfg_raw
+            cfg_json = json.dumps(cfg if isinstance(cfg, dict) else {})
+            page.runJavaScript(
+                f'if(typeof setTorrentSearchConfig==="function")setTorrentSearchConfig({cfg_json});')
+        except Exception:
+            pass
+        try:
+            idx_raw = root.torrentSearch.indexers(json.dumps({}))
+            idx = json.loads(idx_raw) if isinstance(idx_raw, str) else idx_raw
+            idx_json = json.dumps(idx if isinstance(idx, dict) else {})
+            page.runJavaScript(
+                f'if(typeof setTorrentIndexers==="function")setTorrentIndexers({idx_json});')
+        except Exception:
+            pass
+        # Push current torrent state
+        self._push_torrent_updates_to_page(page)
+
+    def _push_torrent_updates_to_page(self, page):
+        """Push active + history torrent data into a page."""
+        root = self.parent()
+        if not root or not hasattr(root, "webTorrent"):
+            return
+        try:
+            active_json = root.webTorrent.getActive()
+            history_json = root.webTorrent.getHistory()
+            active = json.loads(active_json) if isinstance(active_json, str) else active_json
+            history = json.loads(history_json) if isinstance(history_json, str) else history_json
+            combined = json.dumps({
+                "active": active.get("torrents", []),
+                "history": history.get("torrents", []),
+            })
+            page.runJavaScript(
+                f"if(typeof updateTorrents==='function')updateTorrents({combined});")
+        except Exception:
+            pass
+
+    def _start_torrent_polling(self, tab_id):
+        """Start periodic torrent-progress pushes for a tab showing torrents.html."""
+        if hasattr(self, '_torrent_poll_timer') and self._torrent_poll_timer.isActive():
+            return
+        from PySide6.QtCore import QTimer
+        self._torrent_poll_tab_id = tab_id
+        self._torrent_poll_timer = QTimer(self)
+        self._torrent_poll_timer.setInterval(1500)
+        self._torrent_poll_timer.timeout.connect(self._poll_torrent_updates)
+        self._torrent_poll_timer.start()
+
+    def _poll_torrent_updates(self):
+        """Push torrent updates to the active torrents tab (timer callback)."""
+        tid = getattr(self, '_torrent_poll_tab_id', "")
+        tab = self._tabs.get(tid) if tid else None
+        if not tab:
+            # Tab closed — stop polling
+            if hasattr(self, '_torrent_poll_timer'):
+                self._torrent_poll_timer.stop()
+            return
+        url = str(tab.get("url", "") or "")
+        if "torrents.html" not in url:
+            # Navigated away — stop polling
+            if hasattr(self, '_torrent_poll_timer'):
+                self._torrent_poll_timer.stop()
+            return
+        page = tab.get("page")
+        if page:
+            self._push_torrent_updates_to_page(page)
 
     def _build_context_payload(self, tab_id, req):
         tab = self._tabs.get(tab_id) or {}
@@ -11110,6 +11519,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def createTab(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         url = str(opts.get("url", "") or "").strip()
         home = bool(opts.get("home", False))
         tab_id = self._create_tab_internal(url, home=home)
@@ -11117,6 +11527,7 @@ class WebTabManagerBridge(QObject):
             self._emit_host_event("error", "tab_create_failed", "Failed to create tab")
             return json.dumps(_err("tab_create_failed"))
         self._emit_tab_created(tab_id, source="renderer")
+        self._last_error = ""
         self._emit_host_event("info", "tab_created", "Tab created", tab_id)
         return json.dumps(_ok({
             "tabId": tab_id,
@@ -11124,11 +11535,13 @@ class WebTabManagerBridge(QObject):
             "title": self._tabs[tab_id].get("title", ""),
             "home": home,
             "source": "renderer",
+            "rendererSessionId": str(self._renderer_session_id or ""),
         }))
 
     @Slot(str, result=str)
     def closeTab(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.pop(tab_id, None)
         if not tab:
@@ -11154,6 +11567,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def switchTab(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab:
@@ -11162,11 +11576,13 @@ class WebTabManagerBridge(QObject):
         self._active_tab_id = tab_id
         self._set_action_page(tab.get("page"))
         self._apply_viewport_bounds()
+        self._last_error = ""
         return json.dumps(_ok())
 
     @Slot(str, result=str)
     def navigateTo(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         url = str(opts.get("url", "") or "").strip()
         tab = self._tabs.get(tab_id)
@@ -11184,12 +11600,19 @@ class WebTabManagerBridge(QObject):
         except Exception as e:
             self._emit_host_event("error", "navigate_exception", str(e), tab_id)
             return json.dumps(_err(str(e)))
+        self._last_error = ""
         self._apply_viewport_bounds()
-        return json.dumps(_ok())
+        return json.dumps(_ok({
+            "accepted": True,
+            "tabId": tab_id,
+            "url": url,
+            "rendererSessionId": str(self._renderer_session_id or ""),
+        }))
 
     @Slot(str, result=str)
     def goBack(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
@@ -11204,6 +11627,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def goForward(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
@@ -11218,6 +11642,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def reload(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
@@ -11232,6 +11657,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def stop(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
@@ -11246,6 +11672,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def getNavState(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
@@ -11267,6 +11694,7 @@ class WebTabManagerBridge(QObject):
     def setViewportBounds(self, p="{}"):
         try:
             opts = _p(p)
+            self._update_renderer_session(opts)
             x = int(opts.get("x", 0) or 0)
             y = int(opts.get("y", 0) or 0)
             w = int(opts.get("width", 0) or 0)
@@ -11274,6 +11702,7 @@ class WebTabManagerBridge(QObject):
             self._viewport_rect = (x, y, w, h)
             self._viewport_visible = bool(opts.get("visible", True))
             self._apply_viewport_bounds()
+            self._last_error = ""
             return json.dumps(_ok())
         except Exception as e:
             self._emit_host_event("error", "viewport_bounds_failed", str(e), self._active_tab_id)
@@ -11300,6 +11729,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def setTabHome(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         home = bool(opts.get("home", False))
         tab = self._tabs.get(tab_id)
@@ -11307,11 +11737,13 @@ class WebTabManagerBridge(QObject):
             return json.dumps(_err("tab_not_found"))
         tab["home"] = home
         self._apply_viewport_bounds()
+        self._last_error = ""
         return json.dumps(_ok())
 
     @Slot(str, result=str)
     def getZoomFactor(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         view = tab.get("view") if tab else None
@@ -11322,6 +11754,7 @@ class WebTabManagerBridge(QObject):
     @Slot(str, result=str)
     def setZoomFactor(self, p="{}"):
         opts = _p(p)
+        self._update_renderer_session(opts)
         tab_id = str(opts.get("tabId", "") or "").strip()
         factor = float(opts.get("factor", 1.0) or 1.0)
         tab = self._tabs.get(tab_id)
@@ -11336,6 +11769,8 @@ class WebTabManagerBridge(QObject):
 
     @Slot(str, result=str)
     def getTabs(self, _p_unused="{}"):
+        opts = _p(_p_unused)
+        self._update_renderer_session(opts)
         tabs = []
         for tid in self._tab_order:
             tab = self._tabs.get(tid)
@@ -11351,6 +11786,7 @@ class WebTabManagerBridge(QObject):
         return json.dumps(_ok({
             "tabs": tabs,
             "activeTabId": self._active_tab_id,
+            "rendererSessionId": str(self._renderer_session_id or ""),
         }))
 
     @Slot(result=str)
@@ -11368,6 +11804,53 @@ class WebTabManagerBridge(QObject):
                 "visible": bool(self._viewport_visible),
             },
             "activeHome": bool(active.get("home")) if isinstance(active, dict) else False,
+            "activeUrl": str(active.get("url", "")) if isinstance(active, dict) else "",
+            "lastError": str(self._last_error or ""),
+            "rendererSessionId": str(self._renderer_session_id or ""),
+        }))
+
+    @Slot(result=str)
+    def statusVerbose(self):
+        active = self._tabs.get(self._active_tab_id) if self._active_tab_id else None
+        return json.dumps(_ok({
+            "ready": bool(self._profile and self._host_view),
+            "tabCount": int(len(self._tab_order)),
+            "activeTabId": str(self._active_tab_id or ""),
+            "activeHome": bool(active.get("home")) if isinstance(active, dict) else False,
+            "activeUrl": str(active.get("url", "")) if isinstance(active, dict) else "",
+            "viewportRect": {
+                "x": int(self._viewport_rect[0] if self._viewport_rect else 0),
+                "y": int(self._viewport_rect[1] if self._viewport_rect else 0),
+                "width": int(self._viewport_rect[2] if self._viewport_rect else 0),
+                "height": int(self._viewport_rect[3] if self._viewport_rect else 0),
+            },
+            "viewportVisible": bool(self._viewport_visible),
+            "lastError": str(self._last_error or ""),
+            "rendererSessionId": str(self._renderer_session_id or ""),
+        }))
+
+    @Slot(str, result=str)
+    def resetHost(self, p="{}"):
+        opts = _p(p)
+        self._update_renderer_session(opts)
+        for tab in list(self._tabs.values()):
+            view = tab.get("view")
+            if view:
+                try:
+                    view.hide()
+                    view.deleteLater()
+                except Exception:
+                    pass
+        self._tabs = {}
+        self._tab_order = []
+        self._active_tab_id = ""
+        self._last_error = ""
+        self._viewport_visible = False
+        self._apply_viewport_bounds()
+        self._emit_host_event("info", "host_reset", "Host reset")
+        return json.dumps(_ok({
+            "tabCount": 0,
+            "rendererSessionId": str(self._renderer_session_id or ""),
         }))
 
     def shutdown(self):
@@ -11382,6 +11865,7 @@ class WebTabManagerBridge(QObject):
         self._tabs = {}
         self._tab_order = []
         self._active_tab_id = ""
+        self._last_error = ""
 class WebBrowserActionsBridge(QObject):
     """
     Browser utility actions: context-menu dispatch, print-to-PDF,
@@ -12280,6 +12764,8 @@ BRIDGE_SHIM_JS = r"""
         reload:           wrap(b.webTabManager.reload, b.webTabManager),
         stop:             wrap(b.webTabManager.stop, b.webTabManager),
         status:           wrap(b.webTabManager.status, b.webTabManager),
+        statusVerbose:    wrap(b.webTabManager.statusVerbose, b.webTabManager),
+        resetHost:        wrap(b.webTabManager.resetHost, b.webTabManager),
         getNavState:      wrap(b.webTabManager.getNavState, b.webTabManager),
         setViewportBounds: wrap(b.webTabManager.setViewportBounds, b.webTabManager),
         openBrowser:      wrap(b.webTabManager.openBrowser, b.webTabManager),
