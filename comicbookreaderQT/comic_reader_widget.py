@@ -26,6 +26,7 @@ from state_machine import (
     normalize_settings,
     uses_vertical_scroll,
 )
+from end_overlay import EndOfVolumeOverlay
 from loupe_widget import LoupeWidget
 from volume_nav_overlay import VolumeNavOverlay
 
@@ -103,9 +104,15 @@ class ComicReaderWidget(QWidget):
         self.mega_settings_overlay = MegaSettingsOverlay(self)
         self.volume_nav_overlay = VolumeNavOverlay(self)
         self.loupe = LoupeWidget(self)
+        self.end_overlay = EndOfVolumeOverlay(self)
         self.mega_settings_overlay.hide()
         self.volume_nav_overlay.hide()
         self.loupe.hide()
+        self.end_overlay.hide()
+
+        self.end_overlay.next_volume.connect(self._on_end_next_volume)
+        self.end_overlay.replay.connect(self._on_end_replay)
+        self.end_overlay.go_back.connect(self._on_end_back)
 
         self.top_bar.back_clicked.connect(self._on_hud_back_clicked)
         self.bottom_hud.prev_clicked.connect(self._on_hud_prev)
@@ -685,6 +692,8 @@ class ComicReaderWidget(QWidget):
             self._set_flip_pan(self.state.x, self.state.y, redraw=False)
         self._update_hud_geometry()
         self._update_hud_state()
+        if self.end_overlay.isVisible():
+            self.end_overlay.setGeometry(self.rect())
         self.canvas.update()
 
     def closeEvent(self, event):
@@ -794,6 +803,56 @@ class ComicReaderWidget(QWidget):
         except Exception:
             pass
         self.book_closed.emit()
+
+    def _find_sibling_volumes(self):
+        """Return a sorted list of CBZ/CBR files in the same directory."""
+        if not self.state.book_path:
+            return []
+        folder = os.path.dirname(os.path.abspath(self.state.book_path))
+        if not os.path.isdir(folder):
+            return []
+        exts = (".cbz", ".cbr")
+        siblings = []
+        try:
+            for f in os.listdir(folder):
+                if any(f.lower().endswith(e) for e in exts):
+                    siblings.append(os.path.join(folder, f))
+        except OSError:
+            return []
+        siblings.sort(key=lambda p: p.lower())
+        return siblings
+
+    def _find_next_volume(self):
+        siblings = self._find_sibling_volumes()
+        if not siblings or not self.state.book_path:
+            return None
+        current = os.path.abspath(self.state.book_path)
+        try:
+            idx = [s.lower() for s in siblings].index(current.lower())
+        except ValueError:
+            return None
+        if idx + 1 < len(siblings):
+            return siblings[idx + 1]
+        return None
+
+    def _show_end_overlay(self):
+        name = os.path.basename(self.state.book_path) if self.state.book_path else ""
+        series = str(self._book_meta.get("series") or "")
+        has_next = self._find_next_volume() is not None
+        self.end_overlay.setGeometry(self.rect())
+        self.end_overlay.show_overlay(name, series, has_next)
+
+    def _on_end_next_volume(self):
+        nxt = self._find_next_volume()
+        if nxt:
+            self.close_book()
+            self.open_book(nxt)
+
+    def _on_end_replay(self):
+        self.go_to_page(0, keep_scroll=False)
+
+    def _on_end_back(self):
+        self.close_book()
 
     def get_progress(self) -> dict:
         return self.state_machine.get_progress()
@@ -931,6 +990,8 @@ class ComicReaderWidget(QWidget):
             return
         if not self.state.pages:
             return
+        if self.end_overlay.is_open():
+            self.end_overlay.hide_overlay()
         idx = max(0, min(len(self.state.pages) - 1, int(index)))
         mode = self.get_control_mode()
         self.state.page_index = idx
@@ -968,10 +1029,17 @@ class ComicReaderWidget(QWidget):
         self.go_to_page(self.state.page_index - 1, keep_scroll=False)
 
     def next_page(self):
+        if self.state.pages and self.state.page_index >= len(self.state.pages) - 1:
+            self._show_end_overlay()
+            return
         self.go_to_page(self.state.page_index + 1, keep_scroll=False)
 
     def next_two_page(self):
-        self.go_to_page(self.state_machine.next_two_page_index(), keep_scroll=False)
+        nxt = self.state_machine.next_two_page_index()
+        if self.state.pages and nxt == self.state.page_index and nxt >= len(self.state.pages) - 1:
+            self._show_end_overlay()
+            return
+        self.go_to_page(nxt, keep_scroll=False)
 
     def prev_two_page(self):
         self.go_to_page(self.state_machine.prev_two_page_index(), keep_scroll=False)
@@ -1476,6 +1544,10 @@ class ComicReaderWidget(QWidget):
 
     def keyPressEvent(self, event):
         self.hud.note_activity()
+        if self.end_overlay.is_open():
+            self.end_overlay.keyPressEvent(event)
+            event.accept()
+            return
         if self.keyboard.handle_key_press(event):
             event.accept()
             return
