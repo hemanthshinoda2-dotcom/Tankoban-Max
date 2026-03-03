@@ -1,5 +1,5 @@
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import QObject, QRect, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -18,15 +18,15 @@ MODE_LABELS = {
     "auto": "Auto Scroll",
 }
 
-# Unicode symbols for HUD buttons
-_SYM_BACK = "\u276E"          # ❮
-_SYM_PREV = "\u23EE"          # ⏮
-_SYM_PLAY = "\u25B6"          # ▶
-_SYM_PAUSE = "\u23F8"         # ⏸
-_SYM_NEXT = "\u23ED"          # ⏭
-_SYM_PREV_VOL = "\u25C2\u25C2"  # ◂◂
-_SYM_NEXT_VOL = "\u25B8\u25B8"  # ▸▸
-_SYM_MODE = "\u2726"          # ✦
+# Plain text symbols for HUD buttons (avoid Unicode emoji rendering on Windows)
+_SYM_BACK = "<"
+_SYM_PREV = "|<"
+_SYM_PLAY = ">"
+_SYM_PAUSE = "||"
+_SYM_NEXT = ">|"
+_SYM_PREV_VOL = "<<"
+_SYM_NEXT_VOL = ">>"
+_SYM_MODE = "*"
 
 
 class TopBar(QFrame):
@@ -36,14 +36,16 @@ class TopBar(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("readerTopBar")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setStyleSheet(
             """
             QFrame#readerTopBar {
-              background: rgba(0,0,0,190);
+              background: transparent;
               border: 0;
             }
             QLabel#topTitle {
-              color: #ffffff;
+              color: rgba(255,255,255,220);
+              background: transparent;
               font-size: 14px;
               font-weight: 600;
             }
@@ -77,6 +79,15 @@ class TopBar(QFrame):
 
     def set_title(self, title: str):
         self.title.setText(title or "-")
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        g = QLinearGradient(0, 0, 0, self.height())
+        g.setColorAt(0.0, QColor(0, 0, 0, 180))
+        g.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.fillRect(self.rect(), g)
+        p.end()
+        super().paintEvent(event)
 
     def enterEvent(self, event):
         self.hover_changed.emit(True)
@@ -231,10 +242,11 @@ class BottomHud(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("readerBottomHud")
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setStyleSheet(
             """
             QFrame#readerBottomHud {
-              background: rgba(0,0,0,204);
+              background: transparent;
               border: 0;
             }
             QPushButton.hudBtn {
@@ -267,7 +279,8 @@ class BottomHud(QFrame):
               border-color: rgba(255,255,255,10);
             }
             QLabel#pageText {
-              color: #d6d6d6;
+              color: rgba(255,255,255,200);
+              background: transparent;
               font-size: 12px;
             }
             """
@@ -355,6 +368,15 @@ class BottomHud(QFrame):
 
     def set_playing(self, playing: bool):
         self.play_btn.setText(_SYM_PAUSE if bool(playing) else _SYM_PLAY)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        g = QLinearGradient(0, 0, 0, self.height())
+        g.setColorAt(0.0, QColor(0, 0, 0, 0))
+        g.setColorAt(1.0, QColor(0, 0, 0, 190))
+        p.fillRect(self.rect(), g)
+        p.end()
+        super().paintEvent(event)
 
     def enterEvent(self, event):
         self.hover_changed.emit(True)

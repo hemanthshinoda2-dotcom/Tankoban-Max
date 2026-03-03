@@ -90,6 +90,12 @@ class ComicReaderWidget(QWidget):
         self._auto_scroll_shift_held = False
         self._auto_scroll_ctrl_held = False
 
+        # Single-click vs double-click disambiguation timer
+        self._single_click_timer = QTimer(self)
+        self._single_click_timer.setSingleShot(True)
+        self._single_click_timer.setInterval(QApplication.doubleClickInterval())
+        self._single_click_timer.timeout.connect(self._on_single_click_confirmed)
+
         self._db_path = self._default_progress_db_path()
         self._db = read_json(self._db_path, fallback={"books": {}, "series": {}}) or {"books": {}, "series": {}}
         self._current_book_id = ""
@@ -139,11 +145,9 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.next_vol_clicked.connect(self._on_hud_next_vol)
         self.manual_scroller.drag_progress.connect(self._on_manual_scroller_drag_progress)
 
-        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.customContextMenuRequested.connect(lambda p: self._on_context_menu_requested(self, p))
-        for w in (self.canvas, self.top_bar, self.bottom_hud, self.manual_scroller):
-            w.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            w.customContextMenuRequested.connect(lambda p, src=w: self._on_context_menu_requested(src, p))
+        # Context menu: use DefaultContextMenu policy so contextMenuEvent fires
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.DefaultContextMenu)
+        self.canvas.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
 
         self._update_hud_geometry()
         self._update_hud_state()
@@ -602,16 +606,6 @@ class ComicReaderWidget(QWidget):
                 menu.addAction(jump)
 
         menu.exec(global_pos)
-
-    def _on_context_menu_requested(self, source_widget, local_pos):
-        self.hud.note_activity()
-        if not self.state.pages:
-            return
-        try:
-            global_pos = source_widget.mapToGlobal(local_pos)
-        except Exception:
-            global_pos = self.mapToGlobal(local_pos)
-        self._open_reader_context_menu(global_pos)
 
     def toggle_hud_visibility(self):
         self.hud.toggle_hud()
@@ -1793,14 +1787,18 @@ class ComicReaderWidget(QWidget):
         if self.pointer.handle_mouse_press(event):
             event.accept()
             return
-        # For non-flip modes (manual, twoPageScroll): mid click toggles HUD,
-        # side clicks are disabled (matching Electron behaviour).
+        # For non-flip modes: defer single-click HUD toggle so double-click
+        # fullscreen can cancel it.
         if event.button() == Qt.MouseButton.LeftButton and self.state.pages:
-            # manual / twoPageScroll / auto: click = HUD toggle
-            self.toggle_hud_visibility()
+            self._single_click_timer.start()
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def _on_single_click_confirmed(self):
+        """Fires after double-click interval — confirmed single click."""
+        if self.state.pages:
+            self.toggle_hud_visibility()
 
     def mouseMoveEvent(self, event):
         self.hud.note_activity()
@@ -1819,6 +1817,7 @@ class ComicReaderWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self._single_click_timer.stop()  # cancel pending HUD toggle
             self.toggle_fullscreen_window()
             event.accept()
             return
@@ -1832,7 +1831,11 @@ class ComicReaderWidget(QWidget):
     def contextMenuEvent(self, event):
         self.hud.note_activity()
         if self.state.pages:
-            self._open_reader_context_menu(event.globalPos())
+            try:
+                gpos = event.globalPos()
+            except AttributeError:
+                gpos = event.globalPosition().toPoint()
+            self._open_reader_context_menu(gpos)
             event.accept()
             return
         super().contextMenuEvent(event)

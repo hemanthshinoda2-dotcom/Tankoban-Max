@@ -363,7 +363,7 @@ class PathPickerWidget(QWidget):
                 # show sub-dirs as clickable items with folder indicator
                 if query and query not in name.lower():
                     continue
-                item = QListWidgetItem(f"\U0001F4C1  {name}")
+                item = QListWidgetItem(f"[dir]  {name}")
                 item.setData(Qt.ItemDataRole.UserRole, full)
                 item.setData(Qt.ItemDataRole.UserRole + 1, "dir")
                 item.setForeground(QColor(180, 180, 180))
