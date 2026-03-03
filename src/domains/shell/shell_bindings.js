@@ -85,6 +85,8 @@
     applyAppTheme(APP_THEMES[(idx + 1) % APP_THEMES.length]);
   };
 
+  // Restore theme: prefer persistent bridge store (survives profile clears),
+  // fall back to localStorage, then default to 'dark'.
   try {
     var savedModeTheme = localStorage.getItem(APP_THEME_MODE_KEY) || '';
     if (!savedModeTheme) {
@@ -92,6 +94,20 @@
       if (APP_THEMES.indexOf(legacyTheme) >= 0) savedModeTheme = legacyTheme;
     }
     applyAppTheme(savedModeTheme || 'dark');
+    // Butterfly: async load from app_prefs.json (authoritative across sessions)
+    if (window.__tankoButterfly && window.electronAPI && window.electronAPI.shell && window.electronAPI.shell.getAppTheme) {
+      window.electronAPI.shell.getAppTheme().then(function (r) {
+        try {
+          var t = (typeof r === 'string' ? JSON.parse(r) : r);
+          if (t && t.theme && APP_THEMES.indexOf(t.theme) >= 0) {
+            applyAppTheme(t.theme);
+          }
+          if (t && t.preset) {
+            applyTheme(t.preset);
+          }
+        } catch {}
+      }).catch(function () {});
+    }
   } catch { applyAppTheme('dark'); }
 
   if (el.themeToggleBtn) {
@@ -895,6 +911,12 @@
       root.style.setProperty('--vx-accent-rgb', theme.accentRgb);
     } catch (e) {}
     try { localStorage.setItem(APP_THEME_PRESET_KEY, themeId); } catch (e) {}
+    // Butterfly: persist preset to app_prefs.json
+    try {
+      if (window.__tankoButterfly && window.electronAPI && window.electronAPI.shell && window.electronAPI.shell.setAppThemePreset) {
+        window.electronAPI.shell.setAppThemePreset(themeId);
+      }
+    } catch {}
     // Sync active swatch
     try {
       var swatches = document.querySelectorAll('.themeSwatch');

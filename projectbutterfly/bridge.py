@@ -545,7 +545,21 @@ class ShellBridge(QObject):
         """Called from main renderer JS when user cycles theme. Persists to app_prefs.json."""
         try:
             clean = str(theme or "dark").strip().strip('"\'')
-            storage.write_json_sync(storage.data_path("app_prefs.json"), {"appTheme": clean})
+            prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
+            prefs["appTheme"] = clean
+            storage.write_json_sync(storage.data_path("app_prefs.json"), prefs)
+        except Exception:
+            pass
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def setAppThemePreset(self, preset=""):
+        """Persist the color-preset id (noir, midnight, ember …) to app_prefs.json."""
+        try:
+            clean = str(preset or "").strip().strip('"\'')
+            prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
+            prefs["appThemePreset"] = clean
+            storage.write_json_sync(storage.data_path("app_prefs.json"), prefs)
         except Exception:
             pass
         return json.dumps(_ok())
@@ -609,12 +623,16 @@ class ShellBridge(QObject):
 
     @Slot(result=str)
     def getAppTheme(self):
-        """Retrieve the current app theme from app_prefs.json."""
+        """Retrieve the current app theme + preset from app_prefs.json."""
         try:
             prefs = storage.read_json(storage.data_path("app_prefs.json")) or {}
-            return json.dumps({"ok": True, "theme": prefs.get("appTheme", "dark")})
+            return json.dumps({
+                "ok": True,
+                "theme": prefs.get("appTheme", "dark"),
+                "preset": prefs.get("appThemePreset", ""),
+            })
         except Exception:
-            return json.dumps({"ok": True, "theme": "dark"})
+            return json.dumps({"ok": True, "theme": "dark", "preset": ""})
 
 
 # ---------------------------------------------------------------------------
@@ -10498,6 +10516,7 @@ class WebTabManagerBridge(QObject):
     tabClosed = Signal(str)
     tabUpdated = Signal(str)
     magnetRequested = Signal(str)
+    tabHostEvent = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -10550,6 +10569,20 @@ class WebTabManagerBridge(QObject):
         payload = {"tabId": tab_id}
         payload.update(fields)
         self.tabUpdated.emit(json.dumps(payload))
+
+    def _emit_host_event(self, level, code, message="", tab_id=""):
+        payload = {
+            "level": str(level or "info"),
+            "code": str(code or ""),
+            "message": str(message or ""),
+            "tabId": str(tab_id or ""),
+            "activeTabId": str(self._active_tab_id or ""),
+            "tabCount": int(len(self._tab_order)),
+        }
+        try:
+            self.tabHostEvent.emit(json.dumps(payload))
+        except Exception:
+            pass
 
     def _connect_page_signals(self, tab_id, page):
         def on_url_changed(url):
@@ -10717,6 +10750,9 @@ class WebTabManagerBridge(QObject):
             "loading": False,
         }
         self._tab_order.append(tab_id)
+        if not self._active_tab_id:
+            self._active_tab_id = tab_id
+            self._set_action_page(page)
 
         if url:
             try:
@@ -10730,6 +10766,13 @@ class WebTabManagerBridge(QObject):
     def _apply_viewport_bounds(self):
         x, y, w, h = self._viewport_rect
         visible = bool(self._viewport_visible and w > 4 and h > 4)
+        if self._active_tab_id and self._active_tab_id not in self._tabs:
+            self._active_tab_id = ""
+        if not self._active_tab_id and self._tab_order:
+            self._active_tab_id = str(self._tab_order[0] or "")
+            active_tab = self._tabs.get(self._active_tab_id) or {}
+            self._set_action_page(active_tab.get("page"))
+            self._emit_host_event("warn", "active_tab_recovered", "Recovered active tab from tab order", self._active_tab_id)
         for tid, tab in list(self._tabs.items()):
             view = tab.get("view")
             if not view:
@@ -10742,7 +10785,7 @@ class WebTabManagerBridge(QObject):
                 view.show()
                 view.raise_()
             except Exception:
-                pass
+                self._emit_host_event("error", "set_geometry_failed", "Failed to place active tab viewport", tid)
 
     @Slot(str, result=str)
     def createTab(self, p="{}"):
@@ -10751,8 +10794,10 @@ class WebTabManagerBridge(QObject):
         home = bool(opts.get("home", False))
         tab_id = self._create_tab_internal(url, home=home)
         if not tab_id:
+            self._emit_host_event("error", "tab_create_failed", "Failed to create tab")
             return json.dumps(_err("tab_create_failed"))
         self._emit_tab_created(tab_id, source="renderer")
+        self._emit_host_event("info", "tab_created", "Tab created", tab_id)
         return json.dumps(_ok({
             "tabId": tab_id,
             "url": url,
@@ -10792,6 +10837,7 @@ class WebTabManagerBridge(QObject):
         tab_id = str(opts.get("tabId", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab:
+            self._emit_host_event("error", "tab_not_found", "switchTab target missing", tab_id)
             return json.dumps(_err("tab_not_found"))
         self._active_tab_id = tab_id
         self._set_action_page(tab.get("page"))
@@ -10805,8 +10851,10 @@ class WebTabManagerBridge(QObject):
         url = str(opts.get("url", "") or "").strip()
         tab = self._tabs.get(tab_id)
         if not tab or not tab.get("page"):
+            self._emit_host_event("error", "tab_not_found", "navigateTo target missing", tab_id)
             return json.dumps(_err("tab_not_found"))
         if not url:
+            self._emit_host_event("error", "no_url", "navigateTo called without URL", tab_id)
             return json.dumps(_err("no_url"))
         tab["home"] = False
         tab["url"] = url
@@ -10814,6 +10862,7 @@ class WebTabManagerBridge(QObject):
             from PySide6.QtCore import QUrl
             tab["page"].load(QUrl(url))
         except Exception as e:
+            self._emit_host_event("error", "navigate_exception", str(e), tab_id)
             return json.dumps(_err(str(e)))
         self._apply_viewport_bounds()
         return json.dumps(_ok())
@@ -10896,15 +10945,19 @@ class WebTabManagerBridge(QObject):
 
     @Slot(str, result=str)
     def setViewportBounds(self, p="{}"):
-        opts = _p(p)
-        x = int(opts.get("x", 0) or 0)
-        y = int(opts.get("y", 0) or 0)
-        w = int(opts.get("width", 0) or 0)
-        h = int(opts.get("height", 0) or 0)
-        self._viewport_rect = (x, y, w, h)
-        self._viewport_visible = bool(opts.get("visible", True))
-        self._apply_viewport_bounds()
-        return json.dumps(_ok())
+        try:
+            opts = _p(p)
+            x = int(opts.get("x", 0) or 0)
+            y = int(opts.get("y", 0) or 0)
+            w = int(opts.get("width", 0) or 0)
+            h = int(opts.get("height", 0) or 0)
+            self._viewport_rect = (x, y, w, h)
+            self._viewport_visible = bool(opts.get("visible", True))
+            self._apply_viewport_bounds()
+            return json.dumps(_ok())
+        except Exception as e:
+            self._emit_host_event("error", "viewport_bounds_failed", str(e), self._active_tab_id)
+            return json.dumps(_err(str(e)))
 
     @Slot(result=str)
     def openBrowser(self):
@@ -10978,6 +11031,23 @@ class WebTabManagerBridge(QObject):
         return json.dumps(_ok({
             "tabs": tabs,
             "activeTabId": self._active_tab_id,
+        }))
+
+    @Slot(result=str)
+    def status(self):
+        active = self._tabs.get(self._active_tab_id) if self._active_tab_id else None
+        return json.dumps(_ok({
+            "ready": bool(self._profile and self._host_view),
+            "activeTabId": str(self._active_tab_id or ""),
+            "tabCount": int(len(self._tab_order)),
+            "viewport": {
+                "x": int(self._viewport_rect[0] if self._viewport_rect else 0),
+                "y": int(self._viewport_rect[1] if self._viewport_rect else 0),
+                "width": int(self._viewport_rect[2] if self._viewport_rect else 0),
+                "height": int(self._viewport_rect[3] if self._viewport_rect else 0),
+                "visible": bool(self._viewport_visible),
+            },
+            "activeHome": bool(active.get("home")) if isinstance(active, dict) else False,
         }))
 
     def shutdown(self):
@@ -11886,6 +11956,7 @@ BRIDGE_SHIM_JS = r"""
         goForward:        wrap(b.webTabManager.goForward, b.webTabManager),
         reload:           wrap(b.webTabManager.reload, b.webTabManager),
         stop:             wrap(b.webTabManager.stop, b.webTabManager),
+        status:           wrap(b.webTabManager.status, b.webTabManager),
         getNavState:      wrap(b.webTabManager.getNavState, b.webTabManager),
         setViewportBounds: wrap(b.webTabManager.setViewportBounds, b.webTabManager),
         openBrowser:      wrap(b.webTabManager.openBrowser, b.webTabManager),
@@ -11898,6 +11969,7 @@ BRIDGE_SHIM_JS = r"""
         onTabClosed:      onEvent(b.webTabManager.tabClosed),
         onTabUpdated:     onEvent(b.webTabManager.tabUpdated),
         onMagnetRequested: onEvent(b.webTabManager.magnetRequested),
+        onTabHostEvent:   onEvent(b.webTabManager.tabHostEvent),
       },
 
       // webBrowserActions
