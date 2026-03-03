@@ -38,6 +38,36 @@ def _fmt_date(ms):
         return "—"
 
 
+def _fmt_duration(sec):
+    if not sec:
+        return "—"
+    sec = int(sec)
+    h, m, s = sec // 3600, (sec % 3600) // 60, sec % 60
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"
+
+
+# Maps column type to (formatter, alignment)
+_COLUMN_FORMATTERS = {
+    "num":      (lambda item, i: str(i + 1),                    Qt.AlignCenter),
+    "title":    (lambda item, i: item.get("title", ""),          Qt.AlignLeft | Qt.AlignVCenter),
+    "size":     (lambda item, i: _fmt_size(item.get("size", 0)), Qt.AlignRight | Qt.AlignVCenter),
+    "date":     (lambda item, i: _fmt_date(item.get("mtime_ms", 0)), Qt.AlignCenter),
+    "format":   (lambda item, i: item.get("format", item.get("ext", "")).upper(), Qt.AlignCenter),
+    "duration": (lambda item, i: _fmt_duration(item.get("duration_sec")), Qt.AlignCenter),
+    "ext":      (lambda item, i: item.get("ext", "").upper(),    Qt.AlignCenter),
+}
+
+# Default column spec (comics)
+DEFAULT_COLUMNS = [
+    ("#", "num", 50),
+    ("Title", "title", None),
+    ("Size", "size", 90),
+    ("Date", "date", 100),
+]
+
+
 class DetailView(QWidget):
     back_clicked = Signal()
     item_activated = Signal(str)  # item ID on double-click
@@ -46,6 +76,7 @@ class DetailView(QWidget):
         super().__init__(parent)
         self.setStyleSheet(f"background-color: {BG_COLOR};")
         self._items: list[dict] = []
+        self._columns = DEFAULT_COLUMNS
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 8, 16, 8)
@@ -83,8 +114,6 @@ class DetailView(QWidget):
 
         # Table
         self._table = QTableWidget()
-        self._table.setColumnCount(4)
-        self._table.setHorizontalHeaderLabels(["#", "Title", "Size", "Date"])
         self._table.verticalHeader().setVisible(False)
         self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self._table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -94,12 +123,6 @@ class DetailView(QWidget):
         self._table.setContextMenuPolicy(Qt.CustomContextMenu)
         self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.doubleClicked.connect(self._on_double_click)
-
-        header = self._table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
 
         self._table.setStyleSheet(f"""
             QTableWidget {{
@@ -133,28 +156,41 @@ class DetailView(QWidget):
 
         layout.addWidget(self._table)
 
+        # Apply default columns
+        self._apply_columns()
+
+    def set_columns(self, columns: list[tuple]):
+        """Set column spec: list of (header, type, width|None)."""
+        self._columns = columns
+        self._apply_columns()
+
+    def _apply_columns(self):
+        cols = self._columns
+        self._table.setColumnCount(len(cols))
+        self._table.setHorizontalHeaderLabels([c[0] for c in cols])
+
+        header = self._table.horizontalHeader()
+        for i, (_, col_type, width) in enumerate(cols):
+            if width is None:
+                header.setSectionResizeMode(i, QHeaderView.Stretch)
+            else:
+                header.setSectionResizeMode(i, QHeaderView.Fixed)
+                self._table.setColumnWidth(i, width)
+
     def set_items(self, items: list[dict], series_name: str):
         self._items = items
         self._title.setText(series_name)
 
         self._table.setRowCount(len(items))
         for i, item in enumerate(items):
-            num_item = QTableWidgetItem(str(i + 1))
-            num_item.setTextAlignment(Qt.AlignCenter)
-            self._table.setItem(i, 0, num_item)
+            for col_idx, (_, col_type, _) in enumerate(self._columns):
+                fmt_fn, align = _COLUMN_FORMATTERS.get(
+                    col_type, (lambda it, idx: "", Qt.AlignLeft)
+                )
+                cell = QTableWidgetItem(fmt_fn(item, i))
+                cell.setTextAlignment(align)
+                self._table.setItem(i, col_idx, cell)
 
-            title_item = QTableWidgetItem(item.get("title", ""))
-            self._table.setItem(i, 1, title_item)
-
-            size_item = QTableWidgetItem(_fmt_size(item.get("size", 0)))
-            size_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self._table.setItem(i, 2, size_item)
-
-            date_item = QTableWidgetItem(_fmt_date(item.get("mtime_ms", 0)))
-            date_item.setTextAlignment(Qt.AlignCenter)
-            self._table.setItem(i, 3, date_item)
-
-        self._table.setRowHeight(0, 32)
         for i in range(len(items)):
             self._table.setRowHeight(i, 32)
 

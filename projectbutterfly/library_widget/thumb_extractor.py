@@ -1,4 +1,4 @@
-"""Extract cover images from comic archives (CBZ/CBR/CB7)."""
+"""Extract cover images from comic archives (CBZ/CBR/CB7) and books (EPUB)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import re
 import zipfile
 
 _IMAGE_RE = re.compile(r'\.(jpe?g|png|webp|bmp|gif)$', re.IGNORECASE)
+_EPUB_COVER_RE = re.compile(r'cover', re.IGNORECASE)
 
 
 def _sorted_image_entries(names: list[str]) -> list[str]:
@@ -71,3 +72,30 @@ def _extract_7z(path: str) -> bytes | None:
             return buf.read()
     except Exception:
         return None
+
+
+def extract_book_cover(book_path: str) -> bytes | None:
+    """Extract cover image from an EPUB file."""
+    ext = os.path.splitext(book_path)[1].lower()
+    if ext == ".epub":
+        return _extract_epub_cover(book_path)
+    return None
+
+
+def _extract_epub_cover(path: str) -> bytes | None:
+    """Extract cover from EPUB (which is a ZIP with OPF metadata)."""
+    try:
+        with zipfile.ZipFile(path, "r") as zf:
+            names = zf.namelist()
+            # Strategy 1: look for an image with "cover" in the name
+            images = [n for n in names if _IMAGE_RE.search(n)]
+            cover_candidates = [n for n in images if _EPUB_COVER_RE.search(os.path.basename(n))]
+            if cover_candidates:
+                return zf.read(cover_candidates[0])
+            # Strategy 2: first image in the archive
+            if images:
+                images.sort(key=lambda n: n.lower())
+                return zf.read(images[0])
+    except Exception:
+        pass
+    return None

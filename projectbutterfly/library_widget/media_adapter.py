@@ -35,6 +35,12 @@ class ComicsAdapter:
     kind: MediaKind = "comics"
     series_label = "series"
     item_label = "volumes"
+    detail_columns = [
+        ("#", "num", 50),
+        ("Title", "title", None),
+        ("Size", "size", 90),
+        ("Date", "date", 100),
+    ]
 
     def extract_series(self, index):
         return [
@@ -72,6 +78,13 @@ class BooksAdapter:
     kind: MediaKind = "books"
     series_label = "series"
     item_label = "books"
+    detail_columns = [
+        ("#", "num", 50),
+        ("Title", "title", None),
+        ("Format", "format", 70),
+        ("Size", "size", 90),
+        ("Date", "date", 100),
+    ]
 
     def extract_series(self, index):
         return [
@@ -109,6 +122,14 @@ class VideoAdapter:
     kind: MediaKind = "video"
     series_label = "shows"
     item_label = "episodes"
+    detail_columns = [
+        ("#", "num", 50),
+        ("Title", "title", None),
+        ("Duration", "duration", 80),
+        ("Ext", "ext", 60),
+        ("Size", "size", 90),
+        ("Date", "date", 100),
+    ]
 
     def extract_series(self, index):
         return [
@@ -117,6 +138,7 @@ class VideoAdapter:
                 "name": s.get("name", ""),
                 "path": s.get("path", ""),
                 "item_count": s.get("episodeCount", 0),
+                "thumb_path": s.get("thumbPath"),
             }
             for s in index.get("shows", [])
         ]
@@ -132,6 +154,7 @@ class VideoAdapter:
                 "mtime_ms": e.get("mtimeMs", 0),
                 "duration_sec": e.get("durationSec"),
                 "resolution": e.get("resolution"),
+                "ext": e.get("ext", ""),
             }
             for e in index.get("episodes", [])
         ]

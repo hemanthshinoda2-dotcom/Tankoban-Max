@@ -62,6 +62,7 @@ class UnifiedLibraryWidget(QWidget):
         self._stack.addWidget(self._home_view)
 
         self._detail_view = DetailView()
+        self._detail_view.set_columns(self._adapter.detail_columns)
         self._detail_view.back_clicked.connect(self._go_home)
         self._stack.addWidget(self._detail_view)
 
@@ -177,10 +178,12 @@ class UnifiedLibraryWidget(QWidget):
 
         for card in self._home_view.cards:
             sid = card.series_data.get("id", "")
+            thumb_path = card.series_data.get("thumb_path")
             first = first_item_by_series.get(sid)
             if first:
                 self._thumb_provider.request_thumb(
                     sid, first.get("path", ""), first.get("id", ""),
+                    thumb_path=thumb_path,
                 )
 
     def _request_continue_thumbs(self, continue_items: list[dict]):
