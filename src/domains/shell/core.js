@@ -2602,11 +2602,14 @@ function setReaderMode(next) {
   async function refreshLibrary() {
     showLoading('Loading library');
     try {
-      console.log('[boot] refreshLibrary: calling library.getState...');
-      appState.library = await Tanko.api.library.getState();
+      console.log('[boot] refreshLibrary: calling library.getState + progress.getAll in parallel...');
+      var [lib, prog] = await Promise.all([
+        Tanko.api.library.getState(),
+        Tanko.api.progress.getAll(),
+      ]);
+      appState.library = lib;
+      appState.progressAll = prog;
       console.log('[boot] refreshLibrary: getState returned', appState.library ? 'object with series=' + (appState.library.series?.length) + ' books=' + (appState.library.books?.length) : 'falsy');
-      appState.progressAll = await Tanko.api.progress.getAll();
-      console.log('[boot] refreshLibrary: progress loaded');
       bookById = new Map((appState.library.books || []).map(b => [b.id, b]));
       buildLibraryDerivedCaches();
       scheduleRenderLibrary();
@@ -2733,7 +2736,6 @@ function setReaderMode(next) {
               const res = await Tanko.api.library.removeSeriesFolder(series.path);
               if (res?.state) {
                 appState.library = res.state;
-                appState.progressAll = await Tanko.api.progress.getAll();
                 bookById = new Map((appState.library.books || []).map(b => [b.id, b]));
                 buildLibraryDerivedCaches();
 

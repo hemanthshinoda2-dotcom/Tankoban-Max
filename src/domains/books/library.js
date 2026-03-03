@@ -1849,7 +1849,6 @@ function getBookProgress(bookId) {
     if (!ok) return;
     const res = await api.books.removeRootFolder(rootPath);
     if (res && res.state) applySnapshot(res.state);
-    await loadProgress();
     renderAll();
     toast('Root folder removed');
   }
@@ -1868,7 +1867,6 @@ function getBookProgress(bookId) {
     }
     var res = await api.books.removeSeriesFolder(seriesPath);
     if (res && res.state) applySnapshot(res.state);
-    await loadProgress();
     renderAll();
     toast('Series folder removed');
   }
@@ -2227,7 +2225,6 @@ function getBookProgress(bookId) {
             ? await api.books.removeSeriesFolder(show.removableSeriesPath)
             : await api.books.removeFile(book.path);
           if (res && res.state) applySnapshot(res.state);
-          await loadProgress();
           renderAll();
           toast('Removed from library');
         }},
@@ -3767,13 +3764,18 @@ function getBookProgress(bookId) {
     state.ui.selectedShowId = null;
     state.ui.selectedBookId = null;
     state.ui.showFolderRel = '';
-    await loadProgress();
-    // RENAME-BOOK: load custom display names
-    try { state.displayNames = (await api.booksDisplayNames.getAll()) || {}; } catch(_e) { state.displayNames = {}; }
+    // Load progress, display names, and state in parallel (not sequentially)
+    var [_prog, _dn] = await Promise.all([
+      loadProgress().catch(function() {}),
+      api.booksDisplayNames.getAll().catch(function() { return {}; }),
+    ]);
+    state.displayNames = _dn || {};
     await refreshState();
-    // FEAT-AUDIOBOOK: load audiobook progress + state in parallel with book state
-    await loadAudiobookProgress();
-    await refreshAudiobookState();
+    // FEAT-AUDIOBOOK: load audiobook data in parallel
+    await Promise.all([
+      loadAudiobookProgress().catch(function() {}),
+      refreshAudiobookState().catch(function() {}),
+    ]);
     renderAll();
   }
 

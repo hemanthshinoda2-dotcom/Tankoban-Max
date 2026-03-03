@@ -244,22 +244,24 @@ Hot search tokens:
 
       card.querySelector('.contFinish').addEventListener('click', async (e) => {
         e.stopPropagation();
-        const cur = appState.progressAll[b.id] || (await Tanko.api.progress.get(b.id)) || {};
+        const cur = appState.progressAll[b.id] || {};
         const next = { ...cur, finished: !cur.finished };
         if (next.finished) next.finishedAt = Date.now();
         else delete next.finishedAt;
-        await Tanko.api.progress.save(b.id, next);
-        appState.progressAll = await Tanko.api.progress.getAll();
+        // Optimistic: update local state immediately, then persist
+        appState.progressAll[b.id] = next;
         renderContinue();
         toast(next.finished ? 'Marked finished' : 'Marked in progress');
+        await Tanko.api.progress.save(b.id, next);
       });
 
       card.querySelector('.contRemove').addEventListener('click', async (e) => {
         e.stopPropagation();
-        await Tanko.api.progress.clear(b.id);
-        appState.progressAll = await Tanko.api.progress.getAll();
+        // Optimistic: update local state immediately, then persist
+        delete appState.progressAll[b.id];
         renderContinue();
         toast('Removed from continue');
+        await Tanko.api.progress.clear(b.id);
       });
 
       // FIND_THIS:CONTINUE_TILE_RIGHT_CLICK (Build 45E)
@@ -406,7 +408,6 @@ Hot search tokens:
                   const res = await Tanko.api.library.removeRootFolder(r);
                   if (res?.state) {
                     appState.library = res.state;
-                    appState.progressAll = await Tanko.api.progress.getAll();
                     bookById = new Map((appState.library.books || []).map(b => [b.id, b]));
                     buildLibraryDerivedCaches();
                     appState.selectedSeriesId = null;
@@ -515,7 +516,6 @@ Hot search tokens:
         const res = await Tanko.api.library.removeSeriesFolder(s.path);
         if (res?.state) {
           appState.library = res.state;
-          appState.progressAll = await Tanko.api.progress.getAll();
           bookById = new Map((appState.library.books || []).map(b => [b.id, b]));
           buildLibraryDerivedCaches();
           appState.selectedSeriesId = null;
