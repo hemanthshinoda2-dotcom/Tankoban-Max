@@ -82,6 +82,38 @@ def _stub():
     return _err("not_implemented")
 
 
+class _SlotCache:
+    """Short-lived cache for read-only bridge slots.
+
+    Absorbs rapid-fire calls to the same slot (e.g. getState + getAll fired
+    from parallel Promise.all) so the second call returns the cached JSON
+    instead of repeating disk I/O and serialization.
+    """
+
+    def __init__(self, ttl_ms=500):
+        self._ttl = ttl_ms / 1000.0
+        self._store = {}  # key -> (monotonic_timestamp, json_string)
+
+    def get(self, key):
+        entry = self._store.get(key)
+        if entry and (time.monotonic() - entry[0]) < self._ttl:
+            return entry[1]
+        return None
+
+    def put(self, key, value):
+        self._store[key] = (time.monotonic(), value)
+
+    def invalidate(self, key=None):
+        if key:
+            self._store.pop(key, None)
+        else:
+            self._store.clear()
+
+
+# Global slot cache shared across bridge instances
+_slot_cache = _SlotCache(ttl_ms=500)
+
+
 # ---------------------------------------------------------------------------
 # Shared scanner helpers
 # ---------------------------------------------------------------------------
@@ -658,7 +690,12 @@ class ProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
+        cached = _slot_cache.get("progress.getAll")
+        if cached is not None:
+            return cached
+        result = json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
+        _slot_cache.put("progress.getAll", result)
+        return result
 
     @Slot(str, result=str)
     def get(self, book_id):
@@ -666,6 +703,7 @@ class ProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, str, result=str)
     def save(self, book_id, progress_json):
+        _slot_cache.invalidate("progress.getAll")
         data = self._crud_read()
         prev = data.get(book_id, {}) if isinstance(data.get(book_id), dict) else {}
         nxt = json.loads(progress_json)
@@ -675,10 +713,12 @@ class ProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, result=str)
     def clear(self, book_id):
+        _slot_cache.invalidate("progress.getAll")
         return json.dumps(self.crud_clear(book_id))
 
     @Slot(result=str)
     def clearAll(self):
+        _slot_cache.invalidate("progress.getAll")
         return json.dumps(self.crud_clear_all())
 
 
@@ -711,7 +751,12 @@ class BooksProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(result=str)
     def getAll(self):
-        return json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
+        cached = _slot_cache.get("booksProgress.getAll")
+        if cached is not None:
+            return cached
+        result = json.dumps(_backfill_updated_at(self._crud_read(), self._crud_write))
+        _slot_cache.put("booksProgress.getAll", result)
+        return result
 
     @Slot(str, result=str)
     def get(self, book_id):
@@ -719,6 +764,7 @@ class BooksProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, str, result=str)
     def save(self, book_id, progress_json):
+        _slot_cache.invalidate("booksProgress.getAll")
         data = self._crud_read()
         prev = data.get(book_id, {}) if isinstance(data.get(book_id), dict) else {}
         nxt = json.loads(progress_json)
@@ -728,10 +774,12 @@ class BooksProgressBridge(QObject, JsonCrudMixin):
 
     @Slot(str, result=str)
     def clear(self, book_id):
+        _slot_cache.invalidate("booksProgress.getAll")
         return json.dumps(self.crud_clear(book_id))
 
     @Slot(result=str)
     def clearAll(self):
+        _slot_cache.invalidate("booksProgress.getAll")
         return json.dumps(self.crud_clear_all())
 
 
@@ -1437,19 +1485,30 @@ class LibraryBridge(QObject):
 
     @Slot(result=str)
     def getState(self):
-        return json.dumps(self._route.get_state())
+        cached = _slot_cache.get("library.getState")
+        if cached is not None:
+            return cached
+        result = json.dumps(self._route.get_state())
+        _slot_cache.put("library.getState", result)
+        return result
+
+    def _invalidate_cache(self):
+        _slot_cache.invalidate("library.getState")
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
+        self._invalidate_cache()
         return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(result=str)
     def cancelScan(self):
+        self._invalidate_cache()
         return json.dumps(self._route.cancel_scan())
 
     @Slot(str, result=str)
     def setScanIgnore(self, patterns_json):
+        self._invalidate_cache()
         try:
             patterns = json.loads(patterns_json) if patterns_json else []
         except Exception:
@@ -1458,30 +1517,37 @@ class LibraryBridge(QObject):
 
     @Slot(result=str)
     def addRootFolder(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("add_root_folder"))
 
     @Slot(result=str)
     def addSeriesFolder(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("add_series_folder"))
 
     @Slot(str, result=str)
     def removeSeriesFolder(self, folder):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("remove_series_folder", folder))
 
     @Slot(str, result=str)
     def removeRootFolder(self, root_path):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("remove_root_folder", root_path))
 
     @Slot(str, result=str)
     def unignoreSeries(self, folder):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("unignore_series", folder))
 
     @Slot(result=str)
     def clearIgnoredSeries(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("clear_ignored_series"))
 
     @Slot(result=str)
     def openComicFileDialog(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("open_comic_file_dialog"))
 
     @Slot(str, result=str)
@@ -1998,19 +2064,30 @@ class BooksBridge(QObject):
 
     @Slot(result=str)
     def getState(self):
-        return json.dumps(self._route.get_state())
+        cached = _slot_cache.get("books.getState")
+        if cached is not None:
+            return cached
+        result = json.dumps(self._route.get_state())
+        _slot_cache.put("books.getState", result)
+        return result
+
+    def _invalidate_cache(self):
+        _slot_cache.invalidate("books.getState")
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
+        self._invalidate_cache()
         return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(result=str)
     def cancelScan(self):
+        self._invalidate_cache()
         return json.dumps(self._route.cancel_scan())
 
     @Slot(str, result=str)
     def setScanIgnore(self, p):
+        self._invalidate_cache()
         try:
             patterns = json.loads(p) if p else []
         except Exception:
@@ -2019,30 +2096,37 @@ class BooksBridge(QObject):
 
     @Slot(result=str)
     def addRootFolder(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("add_root_folder"))
 
     @Slot(str, result=str)
     def removeRootFolder(self, p):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("remove_root_folder", p))
 
     @Slot(result=str)
     def addSeriesFolder(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("add_series_folder"))
 
     @Slot(str, result=str)
     def removeSeriesFolder(self, p):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("remove_series_folder", p))
 
     @Slot(result=str)
     def addFiles(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("add_files"))
 
     @Slot(str, result=str)
     def removeFile(self, p):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("remove_file", p))
 
     @Slot(result=str)
     def openFileDialog(self):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("open_file_dialog"))
 
     @Slot(str, result=str)
@@ -3381,15 +3465,28 @@ class VideoBridge(QObject):
             o = json.loads(opts) if opts else {}
         except Exception:
             o = {}
-        return json.dumps(self._route.get_state(o))
+        cache_key = "video.getState"
+        if not o:
+            cached = _slot_cache.get(cache_key)
+            if cached is not None:
+                return cached
+        result = json.dumps(self._route.get_state(o))
+        if not o:
+            _slot_cache.put(cache_key, result)
+        return result
+
+    def _invalidate_cache(self):
+        _slot_cache.invalidate("video.getState")
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
+        self._invalidate_cache()
         return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(str, result=str)
     def scanShow(self, p):
+        self._invalidate_cache()
         return json.dumps(self._route.mutate_config("scan_show", p))
 
     @Slot(str, str, result=str)
@@ -7661,7 +7758,7 @@ class WebFindBridge(QObject):
 
 class WebTorrentBridge(QObject):
     """
-    Torrent client using ``libtorrent`` (python-bindings for libtorrent-rasterbar).
+    Torrent client using a bundled qBittorrent instance controlled via Web API.
 
     Manages torrent lifecycle (add magnet/URL, pause/resume/cancel/remove),
     file selection with priority, sequential streaming, history persistence,
@@ -7688,40 +7785,121 @@ class WebTorrentBridge(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._lt = None               # libtorrent module (lazy)
-        self._session = None           # libtorrent.session
-        self._active = {}              # id -> { handle, entry, ... }
-        self._pending = {}             # resolveId -> { handle, info }
+        self._qbit_mgr = None         # QBitProcessManager (lazy)
+        self._qbit = None             # QBitClient (lazy)
+        self._active = {}             # id -> { info_hash, entry, ... }
+        self._pending = {}            # resolveId -> { info_hash, info }
+        self._id_to_hash = {}         # wtr_xxx -> qBit info hash
+        self._hash_to_id = {}         # qBit info hash -> wtr_xxx
         self._history_cache = None
         self._poll_thread = None
         self._poll_stop = threading.Event()
 
     # â”€â”€ libtorrent bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    def _try_import(self):
-        if self._lt is not None:
-            return self._lt
-        try:
-            import libtorrent as lt
-            self._lt = lt
-        except ImportError:
-            self._lt = False
-        return self._lt
+    @staticmethod
+    def _extract_hash_from_magnet(magnet):
+        """Extract 40-char hex info hash from a magnet URI."""
+        import re as _re
+        import base64 as _b64
+        m = _re.search(r"btih:([a-fA-F0-9]{40})", magnet)
+        if m:
+            return m.group(1).lower()
+        m = _re.search(r"btih:([a-zA-Z2-7]{32})", magnet)
+        if m:
+            try:
+                return _b64.b32decode(m.group(1).upper()).hex().lower()
+            except Exception:
+                pass
+        return ""
 
-    def _ensure_session(self):
-        if self._session is not None:
-            return self._session
-        lt = self._try_import()
-        if not lt or lt is False:
+    @staticmethod
+    def _extract_hash_from_torrent_bytes(buf):
+        """Extract info hash from raw .torrent file bytes (bencode → SHA1 of info dict)."""
+        try:
+            # Minimal bencode parser for 'info' dict
+            def _bdecode(data, idx=0):
+                ch = data[idx:idx+1]
+                if ch == b"d":
+                    d = {}
+                    idx += 1
+                    while data[idx:idx+1] != b"e":
+                        k, idx = _bdecode(data, idx)
+                        v, idx = _bdecode(data, idx)
+                        d[k] = v
+                    return d, idx + 1
+                elif ch == b"l":
+                    lst = []
+                    idx += 1
+                    while data[idx:idx+1] != b"e":
+                        v, idx = _bdecode(data, idx)
+                        lst.append(v)
+                    return lst, idx + 1
+                elif ch == b"i":
+                    end = data.index(b"e", idx)
+                    return int(data[idx+1:end]), end + 1
+                elif ch and ch.isdigit():
+                    colon = data.index(b":", idx)
+                    length = int(data[idx:colon])
+                    start = colon + 1
+                    return data[start:start+length], start + length
+                else:
+                    raise ValueError("Bad bencode")
+
+            # Find the raw 'info' dict bytes for hashing
+            if not isinstance(buf, (bytes, bytearray)):
+                return ""
+            # Find b"4:infod" pattern
+            info_key = b"4:info"
+            pos = buf.find(info_key)
+            if pos < 0:
+                return ""
+            info_start = pos + len(info_key)
+            # Decode the info dict to find its end
+            _val, info_end = _bdecode(buf, info_start)
+            info_bytes = buf[info_start:info_end]
+            return hashlib.sha1(info_bytes).hexdigest().lower()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _qbit_state_to_ours(qbit_state, has_dest):
+        """Map qBittorrent torrent state string to our internal state."""
+        s = str(qbit_state or "").lower()
+        if s in ("stalleddl", "downloading", "forceddl", "allocating",
+                 "checkingresumedata", "moving"):
+            return "downloading"
+        if s in ("metadl", "forcedmetadl"):
+            return "resolving_metadata"
+        if s in ("pauseddl", "stoppeddl"):
+            return "paused"
+        if s in ("stalledup", "uploading", "forcedup"):
+            return "seeding"
+        if s in ("pausedup", "stoppedup", "checkingup"):
+            return "completed" if has_dest else "completed_pending"
+        if s in ("error", "missingfiles"):
+            return "error"
+        if s == "queueddl":
+            return "downloading"
+        if s == "queuedup":
+            return "seeding"
+        return "downloading"
+
+    def _ensure_qbit(self):
+        """Lazy-start qBittorrent process and create API client."""
+        if self._qbit is not None:
+            return self._qbit
+        from qbit_process import QBitProcessManager
+        from torrent_service import QBitClient
+        if self._qbit_mgr is None:
+            self._qbit_mgr = QBitProcessManager()
+        if not self._qbit_mgr.ensure_running():
+            print("[WebTorrentBridge] qBittorrent failed to start: " +
+                  str(self._qbit_mgr.get_status().get("message", "")))
             return None
-        settings = lt.default_settings()
-        settings["enable_dht"] = True
-        settings["enable_lsd"] = True
-        settings["enable_natpmp"] = True
-        settings["enable_upnp"] = True
-        self._session = lt.session(settings)
-        self._session.listen_on(6881, 6891)
-        return self._session
+        self._qbit = QBitClient(self._qbit_mgr.base_url)
+        self._qbit.login()
+        return self._qbit
 
     def _start_poll(self):
         if self._poll_thread and self._poll_thread.is_alive():
@@ -7739,37 +7917,61 @@ class WebTorrentBridge(QObject):
             self._poll_stop.wait(0.8)
 
     def _tick(self):
-        """Update progress for all active torrents."""
+        """Update progress for all active torrents via qBittorrent Web API."""
+        qbit = self._qbit
+        if not qbit:
+            return
+        # Batch query all tracked hashes
+        all_hashes = [rec.get("info_hash", "") for rec in self._active.values()
+                      if rec.get("info_hash")]
+        if not all_hashes:
+            return
+        try:
+            info_list = qbit.torrent_info("|".join(all_hashes))
+        except Exception:
+            return
+        if not isinstance(info_list, list):
+            return
+
+        # Build lookup by hash
+        info_by_hash = {}
+        for t in info_list:
+            ih = str(t.get("hash", "")).lower()
+            if ih:
+                info_by_hash[ih] = t
+
         for tid, rec in list(self._active.items()):
-            h = rec.get("handle")
+            ih = rec.get("info_hash", "")
             entry = rec.get("entry")
-            if not h or not entry:
+            if not ih or not entry:
+                continue
+            t = info_by_hash.get(ih.lower())
+            if not t:
                 continue
             try:
-                metadata_now = self._apply_metadata_if_ready(rec)
+                metadata_now = self._apply_metadata_if_ready(rec, t)
                 if metadata_now:
                     self._apply_deferred_selection(tid)
 
-                s = h.status()
-                entry["progress"] = float(s.progress)
-                entry["downloadRate"] = int(s.download_rate)
-                entry["uploadSpeed"] = int(s.upload_rate)
-                entry["uploaded"] = int(s.total_upload)
-                entry["downloaded"] = int(s.total_download)
-                entry["numPeers"] = int(s.num_peers)
-                entry["name"] = str(s.name or entry.get("name", ""))
+                progress = float(t.get("progress", 0))
+                entry["progress"] = progress
+                entry["downloadRate"] = int(t.get("dlspeed", 0))
+                entry["uploadSpeed"] = int(t.get("upspeed", 0))
+                entry["uploaded"] = int(t.get("uploaded", 0))
+                entry["downloaded"] = int(t.get("downloaded", 0))
+                entry["numPeers"] = int(t.get("num_seeds", 0)) + int(t.get("num_leechs", 0))
+                qbit_name = str(t.get("name", "") or "")
+                if qbit_name and qbit_name.lower() != ih.lower():
+                    entry["name"] = qbit_name
 
                 # State transitions
-                lt = self._lt
-                finished = bool(s.is_finished)
-                if lt:
-                    try:
-                        finished = finished or (s.state == lt.torrent_status.seeding)
-                    except Exception:
-                        pass
+                qbit_state = str(t.get("state", ""))
+                has_dest = bool(str(entry.get("destinationRoot", "")).strip())
+                finished = progress >= 1.0 or qbit_state.lower() in (
+                    "stalledup", "uploading", "forcedup", "pausedup", "stoppedup")
 
                 if finished:
-                    if not str(entry.get("destinationRoot", "")).strip():
+                    if not has_dest:
                         if entry.get("state") != "completed_pending":
                             entry["state"] = "completed_pending"
                             entry["finishedAt"] = int(time.time() * 1000)
@@ -7783,10 +7985,19 @@ class WebTorrentBridge(QObject):
                         self._upsert_history(entry)
                         self.torrentCompleted.emit(json.dumps(entry))
                 elif entry.get("state") == "resolving_metadata" and entry.get("metadataReady"):
-                    if str(entry.get("destinationRoot", "")).strip():
+                    if has_dest:
                         entry["state"] = "downloading"
                     else:
                         entry["state"] = "metadata_ready"
+                elif entry.get("state") not in ("metadata_ready", "completed_pending",
+                                                 "completed", "completed_with_errors",
+                                                 "streaming", "cancelled"):
+                    mapped = self._qbit_state_to_ours(qbit_state, has_dest)
+                    if mapped == "paused" and entry.get("state") == "paused":
+                        pass  # keep paused
+                    elif mapped != entry.get("state") and entry.get("state") not in (
+                            "metadata_ready", "completed_pending"):
+                        entry["state"] = mapped
 
                 self.torrentProgress.emit(json.dumps(entry))
             except Exception:
@@ -7865,21 +8076,24 @@ class WebTorrentBridge(QObject):
         return entry
 
     @staticmethod
-    def _build_file_list(ti):
-        """Build file list from a libtorrent torrent_info."""
+    def _build_file_list_from_qbit(qbit_files):
+        """Build file list from qBittorrent /torrents/files JSON."""
         files = []
-        if not ti:
+        if not qbit_files or not isinstance(qbit_files, list):
             return files
-        fs_obj = ti.files()
-        for i in range(fs_obj.num_files()):
+        for i, f in enumerate(qbit_files):
+            if not isinstance(f, dict):
+                continue
+            path = str(f.get("name", ""))
+            prio = int(f.get("priority", 1))
             files.append({
-                "index": i,
-                "path": fs_obj.file_path(i),
-                "name": os.path.basename(fs_obj.file_path(i)),
-                "length": fs_obj.file_size(i),
-                "progress": 0,
-                "selected": True,
-                "priority": "normal",
+                "index": int(f.get("index", i)),
+                "path": path,
+                "name": os.path.basename(path),
+                "length": int(f.get("size", 0)),
+                "progress": float(f.get("progress", 0)),
+                "selected": prio > 0,
+                "priority": "high" if prio >= 6 else ("normal" if prio > 0 else "low"),
             })
         return files
 
@@ -7901,12 +8115,13 @@ class WebTorrentBridge(QObject):
 
     @staticmethod
     def _priority_wire_value(priority_label):
+        """Return qBittorrent file priority: 0=skip, 1=normal, 6=max."""
         p = WebTorrentBridge._priority_label(priority_label)
         if p == "high":
-            return 7
+            return 6
         if p == "low":
             return 1
-        return 4
+        return 1
 
     @staticmethod
     def _sanitize_component(name, fallback):
@@ -8049,40 +8264,50 @@ class WebTorrentBridge(QObject):
             except Exception:
                 pass
 
-    def _apply_metadata_if_ready(self, rec):
-        """Populate entry metadata once when libtorrent reports it available."""
+    def _apply_metadata_if_ready(self, rec, qbit_torrent=None):
+        """Populate entry metadata once when qBittorrent has resolved it."""
         if not rec:
             return False
-        h = rec.get("handle")
+        ih = rec.get("info_hash", "")
         entry = rec.get("entry")
-        if not h or not entry:
+        if not ih or not entry:
             return False
-        try:
-            has_metadata = bool(h.has_metadata())
-        except Exception:
-            has_metadata = False
-        if not has_metadata or entry.get("metadataReady"):
+        if entry.get("metadataReady"):
             return False
 
-        try:
-            ti = h.get_torrent_info()
-        except Exception:
-            ti = None
+        # Check if metadata is available: name differs from info_hash
+        qname = ""
+        if qbit_torrent:
+            qname = str(qbit_torrent.get("name", "") or "")
+        if not qname or qname.lower() == ih.lower():
+            return False
 
-        entry["infoHash"] = str(ti.info_hash()) if ti else str(entry.get("infoHash", "") or "")
-        entry["name"] = str(ti.name()) if ti else str(entry.get("name", "") or "")
-        entry["totalSize"] = int(ti.total_size()) if ti else int(entry.get("totalSize", 0) or 0)
-        entry["files"] = self._build_file_list(ti)
+        # Fetch file list from qBit
+        qbit = self._qbit
+        if not qbit:
+            return False
+        try:
+            qbit_files = qbit.torrent_files(ih)
+        except Exception:
+            qbit_files = []
+
+        entry["infoHash"] = ih
+        entry["name"] = qname
+        if qbit_torrent:
+            entry["totalSize"] = int(qbit_torrent.get("total_size", 0) or
+                                     qbit_torrent.get("size", 0) or 0)
+        entry["files"] = self._build_file_list_from_qbit(qbit_files)
         entry["metadataReady"] = True
         if not isinstance(entry.get("filePriorities"), dict):
             entry["filePriorities"] = {}
 
-        # If destination is not chosen yet, keep it parked in metadata_ready and deselected.
+        # If destination is not chosen yet, park in metadata_ready and deselect all.
         if not str(entry.get("destinationRoot", "")).strip():
             entry["state"] = "metadata_ready"
             try:
-                if ti:
-                    h.prioritize_files([0] * int(ti.files().num_files()))
+                file_ids = list(range(len(entry["files"])))
+                if file_ids:
+                    qbit.set_file_priority(ih, file_ids, 0)
             except Exception:
                 pass
             for f in (entry.get("files") or []):
@@ -8114,51 +8339,63 @@ class WebTorrentBridge(QObject):
 
     # â”€â”€ add torrent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    def _add_torrent(self, entry, params):
-        """Add a torrent to libtorrent session and bind tracking."""
-        ses = self._ensure_session()
-        if not ses:
-            return {"ok": False, "error": "libtorrent not available"}
+    def _add_torrent(self, entry, magnet=None, torrent_buf=None,
+                      save_path=None, is_stopped=False, stop_condition=None):
+        """Add a torrent via qBittorrent Web API and bind tracking."""
+        qbit = self._ensure_qbit()
+        if not qbit:
+            return {"ok": False, "error": "qBittorrent not available"}
 
-        lt = self._lt
+        sequential = bool(entry.get("sequential", True))
+        sp = save_path or entry.get("savePath", "")
+
         try:
-            h = ses.add_torrent(params)
+            if torrent_buf:
+                result = qbit.add_torrent(torrent_file=torrent_buf,
+                                          save_path=sp, sequential=sequential,
+                                          is_stopped=is_stopped,
+                                          stop_condition=stop_condition)
+            else:
+                result = qbit.add_torrent(urls=magnet or entry.get("magnetUri", ""),
+                                          save_path=sp, sequential=sequential,
+                                          is_stopped=is_stopped,
+                                          stop_condition=stop_condition)
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
-        if entry.get("sequential", True):
-            h.set_sequential_download(True)
+        if not result:
+            return {"ok": False, "error": "qBittorrent add_torrent returned empty"}
 
-        rec = {"handle": h, "entry": entry}
+        # Determine info_hash
+        ih = entry.get("infoHash", "")
+        if not ih and magnet:
+            ih = self._extract_hash_from_magnet(magnet)
+        if not ih and entry.get("magnetUri"):
+            ih = self._extract_hash_from_magnet(entry["magnetUri"])
+        entry["infoHash"] = ih
+
+        # Register ID <-> hash mapping
+        self._id_to_hash[entry["id"]] = ih
+        if ih:
+            self._hash_to_id[ih.lower()] = entry["id"]
+
+        rec = {"info_hash": ih, "entry": entry}
         self._active[entry["id"]] = rec
 
-        # If metadata is already available (e.g. .torrent file)
-        if h.has_metadata():
-            ti = h.get_torrent_info()
-            entry["infoHash"] = str(ti.info_hash()) if ti else ""
-            entry["name"] = str(ti.name()) if ti else entry.get("name", "")
-            entry["totalSize"] = int(ti.total_size()) if ti else 0
-            entry["files"] = self._build_file_list(ti)
-            entry["metadataReady"] = True
-            if not isinstance(entry.get("filePriorities"), dict):
-                entry["filePriorities"] = {}
-            if not str(entry.get("destinationRoot", "")).strip():
-                entry["state"] = "metadata_ready"
-                try:
-                    if ti:
-                        h.prioritize_files([0] * int(ti.files().num_files()))
-                except Exception:
-                    pass
-                for f in (entry.get("files") or []):
-                    if isinstance(f, dict):
-                        f["selected"] = False
-            else:
-                entry["state"] = "downloading"
+        # For .torrent files, metadata is immediately available — poll once
+        if torrent_buf and ih:
+            time.sleep(0.5)  # brief wait for qBit to parse
             try:
-                self.torrentMetadata.emit(json.dumps(entry))
+                info_list = qbit.torrent_info(ih)
+                if isinstance(info_list, list) and info_list:
+                    t = info_list[0]
+                    qname = str(t.get("name", "") or "")
+                    if qname and qname.lower() != ih.lower():
+                        self._apply_metadata_if_ready(rec, t)
             except Exception:
                 pass
-        else:
+
+        if not entry.get("metadataReady"):
             entry["state"] = "resolving_metadata"
 
         self._upsert_history(entry)
@@ -8175,10 +8412,8 @@ class WebTorrentBridge(QObject):
         magnet = str(payload.get("magnetUri", "")).strip()
         if not magnet or not magnet.startswith("magnet:"):
             return json.dumps(_err("Invalid magnet URI"))
-        lt = self._try_import()
-        if not lt or lt is False:
-            return json.dumps(_err("libtorrent not available"))
 
+        ih = self._extract_hash_from_magnet(magnet)
         dest = str(payload.get("destinationRoot", "")).strip()
         save_path = os.path.abspath(dest) if dest else os.path.join(
             storage.data_path("web_torrent_tmp"), "tmp_" + str(int(time.time())))
@@ -8186,6 +8421,7 @@ class WebTorrentBridge(QObject):
 
         entry = self._create_entry({
             "magnetUri": magnet,
+            "infoHash": ih,
             "origin": str(payload.get("origin", "")),
             "sourceUrl": str(payload.get("referer", "")),
             "destinationRoot": dest,
@@ -8193,9 +8429,7 @@ class WebTorrentBridge(QObject):
             "directWrite": bool(dest),
         })
 
-        params = lt.parse_magnet_uri(magnet)
-        params.save_path = save_path
-        return json.dumps(self._add_torrent(entry, params))
+        return json.dumps(self._add_torrent(entry, magnet=magnet, save_path=save_path))
 
     @Slot(str, result=str)
     def startTorrentUrl(self, p):
@@ -8203,9 +8437,6 @@ class WebTorrentBridge(QObject):
         url = str(payload.get("url", "")).strip()
         if not url.startswith("http"):
             return json.dumps(_err("Invalid torrent URL"))
-        lt = self._try_import()
-        if not lt or lt is False:
-            return json.dumps(_err("libtorrent not available"))
 
         # Fetch torrent file
         import urllib.request
@@ -8222,17 +8453,17 @@ class WebTorrentBridge(QObject):
             storage.data_path("web_torrent_tmp"), "tmp_" + str(int(time.time())))
         os.makedirs(save_path, exist_ok=True)
 
+        ih = self._extract_hash_from_torrent_bytes(buf)
         entry = self._create_entry({
             "sourceUrl": url,
+            "infoHash": ih,
             "origin": str(payload.get("origin", "")),
             "destinationRoot": dest,
             "savePath": save_path,
             "directWrite": bool(dest),
         })
 
-        ti = lt.torrent_info(lt.bdecode(buf))
-        params = {"ti": ti, "save_path": save_path}
-        return json.dumps(self._add_torrent(entry, params))
+        return json.dumps(self._add_torrent(entry, torrent_buf=buf, save_path=save_path))
 
     @Slot(str, result=str)
     def startConfigured(self, p):
@@ -8241,9 +8472,10 @@ class WebTorrentBridge(QObject):
         pending = self._pending.get(resolve_id)
         if not pending:
             return json.dumps(_err("No pending resolve with that ID"))
-        lt = self._try_import()
-        if not lt or lt is False:
-            return json.dumps(_err("libtorrent not available"))
+
+        qbit = self._ensure_qbit()
+        if not qbit:
+            return json.dumps(_err("qBittorrent not available"))
 
         streamable_only = bool(payload.get("streamableOnly", False))
         save_path = str(payload.get("savePath", "") or payload.get("destinationRoot", "")).strip()
@@ -8272,41 +8504,30 @@ class WebTorrentBridge(QObject):
             "videoLibraryStreamable": streamable_only,
         })
 
-        # Re-add the torrent with requested save path
-        h = pending.get("handle")
-        if h:
+        # Delete the resolve torrent from qBit — we'll re-add with new save path
+        old_hash = pending.get("info_hash", "")
+        if old_hash:
             try:
-                ses = self._ensure_session()
-                if ses:
-                    ses.remove_torrent(h)
+                qbit.delete(old_hash, delete_files=True)
             except Exception:
                 pass
 
         magnet = info.get("magnetUri", "")
         torrent_path = str(info.get("torrentPath", "") or "").strip()
+        torrent_buf = None
         if torrent_path and os.path.isfile(torrent_path):
             try:
                 with open(torrent_path, "rb") as f:
-                    buf = f.read()
-                ti = lt.torrent_info(lt.bdecode(buf))
-                params = {"ti": ti, "save_path": save_path}
+                    torrent_buf = f.read()
             except Exception as e:
                 return json.dumps(_err("Failed to read torrent file: " + str(e)))
-        elif magnet:
-            params = lt.parse_magnet_uri(magnet)
-            params.save_path = save_path
-        elif h and h.has_metadata():
-            try:
-                ti = h.get_torrent_info()
-                params = {"ti": ti, "save_path": save_path}
-            except Exception as e:
-                return json.dumps(_err("Failed to restore pending metadata: " + str(e)))
-        else:
+        elif not magnet:
             return json.dumps(_err("No source to re-add"))
 
         self._pending.pop(resolve_id, None)
 
-        result = self._add_torrent(entry, params)
+        result = self._add_torrent(entry, magnet=magnet, torrent_buf=torrent_buf,
+                                    save_path=save_path)
         if result.get("ok") and (selected_files or priorities or ("sequential" in payload)):
             sel_payload = {
                 "id": entry["id"],
@@ -8325,10 +8546,12 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("handle"):
+        if not rec or not rec.get("info_hash"):
             return json.dumps(_err("Torrent not active"))
         try:
-            rec["handle"].pause()
+            qbit = self._qbit
+            if qbit:
+                qbit.pause(rec["info_hash"])
             rec["entry"]["state"] = "paused"
             self._upsert_history(rec["entry"])
             self._emit_updated()
@@ -8341,10 +8564,12 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("handle"):
+        if not rec or not rec.get("info_hash"):
             return json.dumps(_err("Torrent not active"))
         try:
-            rec["handle"].resume()
+            qbit = self._qbit
+            if qbit:
+                qbit.resume(rec["info_hash"])
             rec["entry"]["state"] = "downloading"
             self._upsert_history(rec["entry"])
             self._emit_updated()
@@ -8359,12 +8584,16 @@ class WebTorrentBridge(QObject):
         rec = self._active.pop(tid, None)
         if not rec:
             return json.dumps(_err("Torrent not active"))
-        try:
-            ses = self._ensure_session()
-            if ses and rec.get("handle"):
-                ses.remove_torrent(rec["handle"])
-        except Exception:
-            pass
+        ih = rec.get("info_hash", "")
+        if ih:
+            try:
+                qbit = self._qbit
+                if qbit:
+                    qbit.delete(ih)
+            except Exception:
+                pass
+            self._id_to_hash.pop(tid, None)
+            self._hash_to_id.pop(ih.lower(), None)
         rec["entry"]["state"] = "cancelled"
         rec["entry"]["finishedAt"] = int(time.time() * 1000)
         self._upsert_history(rec["entry"])
@@ -8379,14 +8608,18 @@ class WebTorrentBridge(QObject):
             return json.dumps(_err("Missing id"))
         remove_files = bool(payload.get("removeFiles", payload.get("deleteFiles", False)))
         rec = self._active.pop(tid, None)
-        if rec and rec.get("handle"):
+        ih = ""
+        if rec:
+            ih = rec.get("info_hash", "")
+        if ih:
             try:
-                ses = self._ensure_session()
-                if ses:
-                    ses.remove_torrent(rec["handle"],
-                                       1 if remove_files else 0)
+                qbit = self._qbit
+                if qbit:
+                    qbit.delete(ih, delete_files=remove_files)
             except Exception:
                 pass
+            self._id_to_hash.pop(tid, None)
+            self._hash_to_id.pop(ih.lower(), None)
         # Remove from history
         c = self._ensure_history()
         c["torrents"] = [t for t in c["torrents"]
@@ -8439,9 +8672,9 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("handle"):
+        if not rec or not rec.get("info_hash"):
             return json.dumps(_err("Torrent not active"))
-        h = rec["handle"]
+        ih = rec["info_hash"]
         entry = rec["entry"]
 
         selected_list = self._parse_selected_indices(payload.get("selectedIndices", []))
@@ -8468,7 +8701,7 @@ class WebTorrentBridge(QObject):
         for idx, label in in_priorities.items():
             entry["filePriorities"][str(idx)] = self._priority_label(label)
 
-        if not h.has_metadata():
+        if not entry.get("metadataReady"):
             rec["deferredSelection"] = {
                 "selectedIndices": list(selected_list),
                 "priorities": dict(entry.get("filePriorities") or {}),
@@ -8479,11 +8712,19 @@ class WebTorrentBridge(QObject):
             self._emit_updated()
             return json.dumps(_ok({"pending": True}))
 
-        ti = h.get_torrent_info()
-        num_files = ti.files().num_files() if ti else 0
-        priorities = [0] * num_files
+        qbit = self._qbit
+        files = entry.get("files") or []
+        num_files = len(files)
 
-        if selected_list:
+        # Set all files to skip first, then enable selected
+        if qbit and num_files > 0:
+            all_ids = list(range(num_files))
+            try:
+                qbit.set_file_priority(ih, all_ids, 0)
+            except Exception:
+                pass
+
+        if selected_list and qbit:
             for pos, idx in enumerate(selected_list):
                 if idx < 0 or idx >= num_files:
                     continue
@@ -8492,16 +8733,28 @@ class WebTorrentBridge(QObject):
                 )
                 entry["filePriorities"][str(idx)] = pval
                 wire = self._priority_wire_value(pval)
-                if sequential:
-                    wire = min(7, wire + max(0, len(selected_list) - pos - 1))
-                priorities[idx] = wire
+                try:
+                    qbit.set_file_priority(ih, [idx], wire)
+                except Exception:
+                    pass
 
-        try:
-            h.set_sequential_download(sequential)
-        except Exception:
-            pass
+        # Toggle sequential if needed
+        if qbit:
+            try:
+                info_list = qbit.torrent_info(ih)
+                if isinstance(info_list, list) and info_list:
+                    cur_seq = bool(info_list[0].get("seq_dl", False))
+                    if cur_seq != sequential:
+                        qbit.toggle_sequential(ih)
+            except Exception:
+                pass
 
-        h.prioritize_files(priorities)
+        # Update save location if destination changed
+        if dest and qbit:
+            try:
+                qbit.set_location(ih, os.path.abspath(dest))
+            except Exception:
+                pass
 
         # Normalize entry file flags for UI/history.
         if isinstance(entry.get("files"), list):
@@ -8516,6 +8769,12 @@ class WebTorrentBridge(QObject):
         if entry.get("state") in ("metadata_ready", "completed_pending"):
             if entry.get("destinationRoot") and selected_indices:
                 entry["state"] = "downloading"
+                # Resume the torrent now that files are selected
+                if qbit:
+                    try:
+                        qbit.resume(ih)
+                    except Exception:
+                        pass
 
         self._upsert_history(entry)
         self._emit_updated()
@@ -8594,30 +8853,38 @@ class WebTorrentBridge(QObject):
         auto_activated = False
         activation_source = "already_active"
 
-        if (not rec or not rec.get("handle")) and auto_activate:
-            # Qt bridge fallback: if not active, we currently do not auto-rebuild
-            # from history unless there is a running session.
+        if (not rec or not rec.get("info_hash")) and auto_activate:
             activation_source = "none"
-        if not rec or not rec.get("handle"):
+        if not rec or not rec.get("info_hash"):
             return json.dumps({
                 "ok": False,
                 "error": "Torrent not active",
                 "autoActivated": auto_activated,
                 "activationSource": activation_source,
             })
-        h = rec["handle"]
+        ih = rec["info_hash"]
         entry = rec.get("entry") or {}
+        qbit = self._qbit
 
         await_ready = bool(payload.get("awaitReady", False))
         ready_timeout_ms = int(payload.get("readyTimeoutMs", 15000) or 15000)
         if ready_timeout_ms < 500:
             ready_timeout_ms = 500
 
-        if not h.has_metadata():
-            deadline = time.time() + (ready_timeout_ms / 1000.0)
-            while await_ready and not h.has_metadata() and time.time() < deadline:
-                time.sleep(0.15)
-            if not h.has_metadata():
+        if not entry.get("metadataReady"):
+            if await_ready:
+                deadline = time.time() + (ready_timeout_ms / 1000.0)
+                while not entry.get("metadataReady") and time.time() < deadline:
+                    # Poll qBit for metadata
+                    try:
+                        info_list = qbit.torrent_info(ih) if qbit else []
+                        if isinstance(info_list, list) and info_list:
+                            self._apply_metadata_if_ready(rec, info_list[0])
+                    except Exception:
+                        pass
+                    if not entry.get("metadataReady"):
+                        time.sleep(0.3)
+            if not entry.get("metadataReady"):
                 return json.dumps({
                     "ok": False,
                     "error": "Metadata not ready",
@@ -8625,11 +8892,9 @@ class WebTorrentBridge(QObject):
                     "activationSource": activation_source,
                 })
 
-        self._apply_metadata_if_ready(rec)
-
         file_index = int(payload.get("fileIndex", -1))
-        ti = h.get_torrent_info()
-        num_files = ti.files().num_files() if ti else 0
+        files = entry.get("files") or []
+        num_files = len(files)
         if file_index < 0 or file_index >= num_files:
             return json.dumps({
                 "ok": False,
@@ -8641,16 +8906,24 @@ class WebTorrentBridge(QObject):
         for_playback_cache = bool(payload.get("forPlaybackCache", False))
         prefer_http = bool(payload.get("preferHttp", False))
 
-        # Prioritize target file for near-term playback.
-        priorities = [0] * num_files if (for_playback_cache or prefer_http) else [1] * num_files
-        priorities[file_index] = 7
-        try:
-            h.prioritize_files(priorities)
-            h.set_sequential_download(True)
-        except Exception:
-            pass
+        # Prioritize target file for near-term playback via qBit API.
+        if qbit:
+            try:
+                # Skip all other files, max-priority the target
+                all_ids = list(range(num_files))
+                qbit.set_file_priority(ih, all_ids, 0)
+                qbit.set_file_priority(ih, [file_index], 6)
+                # Ensure sequential mode
+                info_list = qbit.torrent_info(ih)
+                if isinstance(info_list, list) and info_list:
+                    if not info_list[0].get("seq_dl", False):
+                        qbit.toggle_sequential(ih)
+            except Exception:
+                pass
 
-        rel_path = ti.files().file_path(file_index) if ti else ""
+        rel_path = ""
+        if file_index < len(files) and isinstance(files[file_index], dict):
+            rel_path = str(files[file_index].get("path", "") or files[file_index].get("name", ""))
         if isinstance(entry.get("files"), list):
             for i, f in enumerate(entry["files"]):
                 if not isinstance(f, dict):
@@ -8663,6 +8936,11 @@ class WebTorrentBridge(QObject):
         entry["sequential"] = True
         if entry.get("state") in ("metadata_ready", "completed_pending"):
             entry["state"] = "streaming"
+            if qbit:
+                try:
+                    qbit.resume(ih)
+                except Exception:
+                    pass
 
         base_save = str(entry.get("savePath", "") or entry.get("destinationRoot", "")).strip()
         abs_target = ""
@@ -8706,13 +8984,20 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("entry") or not rec.get("handle"):
+        if not rec or not rec.get("entry") or not rec.get("info_hash"):
             return json.dumps(_err("Torrent not active"))
-        h = rec["handle"]
         entry = rec["entry"]
 
         if not entry.get("metadataReady"):
-            self._apply_metadata_if_ready(rec)
+            # Try to fetch metadata from qBit
+            qbit = self._qbit
+            if qbit:
+                try:
+                    info_list = qbit.torrent_info(rec["info_hash"])
+                    if isinstance(info_list, list) and info_list:
+                        self._apply_metadata_if_ready(rec, info_list[0])
+                except Exception:
+                    pass
         if not entry.get("metadataReady"):
             return json.dumps(_err("Torrent metadata not ready"))
 
@@ -8723,12 +9008,6 @@ class WebTorrentBridge(QObject):
         os.makedirs(abs_root, exist_ok=True)
 
         torrent_name = str(entry.get("name", "") or "").strip()
-        if not torrent_name:
-            try:
-                ti = h.get_torrent_info()
-                torrent_name = str(ti.name()) if ti else ""
-            except Exception:
-                torrent_name = ""
         if not torrent_name:
             torrent_name = "Torrent"
         show_path = os.path.join(abs_root, torrent_name)
@@ -8826,28 +9105,34 @@ class WebTorrentBridge(QObject):
 
     @Slot(result=str)
     def pauseAll(self):
+        qbit = self._qbit
         for rec in self._active.values():
             if rec.get("entry", {}).get("state") in ("downloading", "seeding"):
-                try:
-                    rec["handle"].pause()
-                    rec["entry"]["state"] = "paused"
-                    self._upsert_history(rec["entry"])
-                except Exception:
-                    pass
+                ih = rec.get("info_hash", "")
+                if ih and qbit:
+                    try:
+                        qbit.pause(ih)
+                        rec["entry"]["state"] = "paused"
+                        self._upsert_history(rec["entry"])
+                    except Exception:
+                        pass
         self._emit_updated()
         return json.dumps(_ok())
 
     @Slot(result=str)
     def resumeAll(self):
+        qbit = self._qbit
         for rec in self._active.values():
             if rec.get("entry", {}).get("state") == "paused":
-                try:
-                    rec["handle"].resume()
-                    p = rec["entry"].get("progress", 0)
-                    rec["entry"]["state"] = "seeding" if p >= 1 else "downloading"
-                    self._upsert_history(rec["entry"])
-                except Exception:
-                    pass
+                ih = rec.get("info_hash", "")
+                if ih and qbit:
+                    try:
+                        qbit.resume(ih)
+                        p = rec["entry"].get("progress", 0)
+                        rec["entry"]["state"] = "seeding" if p >= 1 else "downloading"
+                        self._upsert_history(rec["entry"])
+                    except Exception:
+                        pass
         self._emit_updated()
         return json.dumps(_ok())
 
@@ -8856,30 +9141,36 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("handle"):
+        if not rec or not rec.get("info_hash"):
             return json.dumps(_ok({"peers": []}))
         peers = []
-        try:
-            for peer in rec["handle"].get_peer_info():
-                peers.append({
-                    "ip": str(peer.ip),
-                    "client": str(peer.client),
-                    "progress": float(peer.progress),
-                    "dlSpeed": int(peer.down_speed),
-                    "ulSpeed": int(peer.up_speed),
-                })
-        except Exception:
-            pass
+        qbit = self._qbit
+        if qbit:
+            try:
+                peer_data = qbit.torrent_peers(rec["info_hash"])
+                if isinstance(peer_data, dict):
+                    for _key, peer in peer_data.get("peers", {}).items():
+                        if not isinstance(peer, dict):
+                            continue
+                        peers.append({
+                            "ip": str(peer.get("ip", "")),
+                            "client": str(peer.get("client", "")),
+                            "progress": float(peer.get("progress", 0)),
+                            "dlSpeed": int(peer.get("dl_speed", 0)),
+                            "ulSpeed": int(peer.get("up_speed", 0)),
+                        })
+            except Exception:
+                pass
         return json.dumps(_ok({"peers": peers}))
 
     @Slot(result=str)
     def getDhtNodes(self):
-        ses = self._session
-        if not ses:
+        qbit = self._qbit
+        if not qbit:
             return json.dumps(0)
         try:
-            s = ses.status()
-            return json.dumps(int(s.dht_nodes))
+            info = qbit.transfer_info()
+            return json.dumps(int(info.get("dht_nodes", 0)))
         except Exception:
             return json.dumps(0)
 
@@ -8903,35 +9194,34 @@ class WebTorrentBridge(QObject):
         source = str(source or "").strip()
         if not source:
             return None, None, "No source provided"
-        lt = self._try_import()
-        if not lt or lt is False:
-            return None, None, "libtorrent not available"
-
-        ses = self._ensure_session()
-        if not ses:
-            return None, None, "Session unavailable"
+        qbit = self._ensure_qbit()
+        if not qbit:
+            return None, None, "qBittorrent not available"
 
         tmp_dir = self._new_resolve_tmp_dir()
 
         try:
+            ih = ""
+            source_path = ""
+            torrent_buf = None
             if source.startswith("magnet:"):
-                params = lt.parse_magnet_uri(source)
-                params.save_path = tmp_dir
-                source_path = ""
+                ih = self._extract_hash_from_magnet(source)
+                qbit.add_torrent(urls=source, save_path=tmp_dir,
+                                 is_stopped=True, stop_condition="MetadataReceived")
             else:
                 source_path = os.path.abspath(source)
                 with open(source_path, "rb") as f:
-                    buf = f.read()
-                ti = lt.torrent_info(lt.bdecode(buf))
-                params = {"ti": ti, "save_path": tmp_dir}
-            h = ses.add_torrent(params)
+                    torrent_buf = f.read()
+                ih = self._extract_hash_from_torrent_bytes(torrent_buf)
+                qbit.add_torrent(torrent_file=torrent_buf, save_path=tmp_dir,
+                                 is_stopped=True, stop_condition="MetadataReceived")
         except Exception as e:
             return None, None, str(e)
 
         resolve_id = "res_" + str(int(time.time() * 1000)) + "_" + hashlib.md5(os.urandom(8)).hexdigest()[:6]
         info = {
             "name": "",
-            "infoHash": "",
+            "infoHash": ih,
             "totalSize": 0,
             "files": [],
             "magnetUri": source if source.startswith("magnet:") else "",
@@ -8939,7 +9229,7 @@ class WebTorrentBridge(QObject):
             "source": source,
         }
         self._pending[resolve_id] = {
-            "handle": h,
+            "info_hash": ih,
             "info": info,
             "startedAt": int(time.time() * 1000),
             "tmpDir": tmp_dir,
@@ -8951,7 +9241,7 @@ class WebTorrentBridge(QObject):
             "timeoutMs": 90000,
             "lastError": "",
         }
-        return resolve_id, h, ""
+        return resolve_id, ih, ""
 
     def _restart_pending_resolve(self, resolve_id, pending):
         if not isinstance(pending, dict):
@@ -8960,36 +9250,34 @@ class WebTorrentBridge(QObject):
         source = str(info.get("source", "") or "").strip()
         if not source:
             return False, "Missing resolve source"
-        lt = self._try_import()
-        if not lt or lt is False:
-            return False, "libtorrent not available"
-        ses = self._ensure_session()
-        if not ses:
-            return False, "Session unavailable"
+        qbit = self._ensure_qbit()
+        if not qbit:
+            return False, "qBittorrent not available"
 
-        old_handle = pending.get("handle")
-        if old_handle:
+        old_hash = pending.get("info_hash", "")
+        if old_hash:
             try:
-                ses.remove_torrent(old_handle)
+                qbit.delete(old_hash, delete_files=True)
             except Exception:
                 pass
 
         tmp_dir = self._new_resolve_tmp_dir()
         try:
+            ih = ""
             if source.startswith("magnet:"):
-                params = lt.parse_magnet_uri(source)
-                params.save_path = tmp_dir
+                ih = self._extract_hash_from_magnet(source)
+                qbit.add_torrent(urls=source, save_path=tmp_dir,
+                                 is_stopped=True, stop_condition="MetadataReceived")
             else:
                 source_path = os.path.abspath(source)
                 with open(source_path, "rb") as f:
                     buf = f.read()
-                ti = lt.torrent_info(lt.bdecode(buf))
-                params = {"ti": ti, "save_path": tmp_dir}
-            handle = ses.add_torrent(params)
+                qbit.add_torrent(torrent_file=buf, save_path=tmp_dir,
+                                 is_stopped=True, stop_condition="MetadataReceived")
         except Exception as e:
             return False, str(e)
 
-        pending["handle"] = handle
+        pending["info_hash"] = ih or old_hash
         pending["tmpDir"] = tmp_dir
         pending["state"] = "resolving"
         pending["done"] = False
@@ -9006,7 +9294,7 @@ class WebTorrentBridge(QObject):
         if not pending:
             return _err("No pending resolve with that ID")
 
-        h = pending.get("handle")
+        ih = pending.get("info_hash", "")
         info = pending.get("info", {})
         started_at = int(pending.get("startedAt", int(time.time() * 1000)) or 0)
         elapsed_ms = max(0, int(time.time() * 1000) - started_at)
@@ -9029,10 +9317,10 @@ class WebTorrentBridge(QObject):
                 "error": last_error or ("Resolve " + state),
             })
 
-        if not h:
+        if not ih:
             pending["state"] = "error"
             pending["done"] = True
-            pending["lastError"] = "Pending resolve handle missing"
+            pending["lastError"] = "Pending resolve info hash missing"
             return _ok({
                 "resolveId": rid,
                 "done": True,
@@ -9058,21 +9346,34 @@ class WebTorrentBridge(QObject):
                 "error": msg,
             })
 
+        # Check if qBittorrent has resolved metadata (name != info_hash)
         has_metadata = False
-        try:
-            has_metadata = bool(h.has_metadata())
-        except Exception:
-            has_metadata = False
-
-        if has_metadata:
+        qbit = self._qbit
+        qbit_torrent = None
+        if qbit:
             try:
-                ti = h.get_torrent_info()
-                info["name"] = str(ti.name())
-                info["infoHash"] = str(ti.info_hash())
-                info["totalSize"] = int(ti.total_size())
-                info["files"] = self._build_file_list(ti)
-                priorities = [0] * ti.files().num_files()
-                h.prioritize_files(priorities)
+                info_list = qbit.torrent_info(ih)
+                if isinstance(info_list, list) and info_list:
+                    qbit_torrent = info_list[0]
+                    qname = str(qbit_torrent.get("name", "") or "")
+                    if qname and qname.lower() != ih.lower():
+                        has_metadata = True
+            except Exception:
+                pass
+
+        if has_metadata and qbit_torrent:
+            try:
+                qbit_files = qbit.torrent_files(ih)
+                info["name"] = str(qbit_torrent.get("name", ""))
+                info["infoHash"] = ih
+                info["totalSize"] = int(qbit_torrent.get("total_size", 0) or
+                                        qbit_torrent.get("size", 0) or 0)
+                info["files"] = self._build_file_list_from_qbit(qbit_files)
+                # Pause the torrent (it was added stopped for metadata only)
+                try:
+                    qbit.pause(ih)
+                except Exception:
+                    pass
             except Exception as e:
                 pending["state"] = "error"
                 pending["done"] = True
@@ -9197,13 +9498,15 @@ class WebTorrentBridge(QObject):
         payload = _p(p)
         resolve_id = str(payload.get("resolveId", ""))
         pending = self._pending.pop(resolve_id, None)
-        if pending and pending.get("handle"):
-            try:
-                ses = self._ensure_session()
-                if ses:
-                    ses.remove_torrent(pending["handle"])
-            except Exception:
-                pass
+        if pending:
+            ih = pending.get("info_hash", "")
+            if ih:
+                try:
+                    qbit = self._qbit
+                    if qbit:
+                        qbit.delete(ih, delete_files=True)
+                except Exception:
+                    pass
         return json.dumps(_ok())
 
     @Slot(str, result=str)
@@ -9227,11 +9530,12 @@ class WebTorrentBridge(QObject):
 
     def shutdown(self):
         self._poll_stop.set()
-        if self._session:
+        if self._qbit_mgr:
             try:
-                self._session.pause()
+                self._qbit_mgr.stop()
             except Exception:
                 pass
+        self._qbit = None
 
 
 class TorrentSearchBridge(QObject):

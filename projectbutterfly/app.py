@@ -836,6 +836,10 @@ def main():
         except Exception:
             pass
         try:
+            win._bridge.webTorrent.shutdown()
+        except Exception:
+            pass
+        try:
             win._flaresolverr.stop()
         except Exception:
             pass

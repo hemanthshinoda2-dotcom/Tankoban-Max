@@ -13,6 +13,7 @@ Classes:
 import json
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -206,7 +207,7 @@ class QBitClient:
         return status == 200
 
     def transfer_info(self) -> dict:
-        """Get global transfer info (speed, connection status)."""
+        """Get global transfer info (speed, connection status, dht_nodes)."""
         status, body = _http_get(self._url("/api/v2/transfer/info"), self._headers())
         if status == 200:
             try:
@@ -214,6 +215,213 @@ class QBitClient:
             except json.JSONDecodeError:
                 pass
         return {}
+
+    # ------------------------------------------------------------------
+    # Extended API methods (used by WebTorrentBridge)
+    # ------------------------------------------------------------------
+
+    def add_torrent(self, urls: str = "", torrent_file: bytes | None = None,
+                    save_path: str = "", is_stopped: bool = False,
+                    sequential: bool = False,
+                    stop_condition: str = "") -> bool:
+        """
+        Add torrent via magnet URI, HTTP URL, or raw .torrent bytes.
+
+        Args:
+            urls: Magnet URI or HTTP URL (newline-separated for multiples).
+            torrent_file: Raw .torrent file bytes (mutually exclusive with urls).
+            save_path: Download destination folder.
+            is_stopped: Add in stopped state (for metadata-only resolve).
+            sequential: Enable sequential downloading.
+            stop_condition: "MetadataReceived" or "FilesChecked".
+        """
+        if torrent_file:
+            return self._add_torrent_file(torrent_file, save_path, is_stopped,
+                                          sequential, stop_condition)
+
+        data = {}
+        if urls:
+            data["urls"] = urls
+        if save_path:
+            data["savepath"] = save_path
+        if is_stopped:
+            data["stopped"] = "true"
+        if sequential:
+            data["sequentialDownload"] = "true"
+        if stop_condition:
+            data["stopCondition"] = stop_condition
+
+        status, _ = _http_post(
+            self._url("/api/v2/torrents/add"),
+            data=data,
+            headers=self._headers(),
+        )
+        return status == 200
+
+    def _add_torrent_file(self, buf: bytes, save_path: str = "",
+                          is_stopped: bool = False, sequential: bool = False,
+                          stop_condition: str = "") -> bool:
+        """Upload a .torrent file via multipart form data."""
+        boundary = f"----TankoBoundary{int(time.time() * 1000)}"
+        parts: list[bytes] = []
+
+        # .torrent file part
+        parts.append(f"--{boundary}\r\n".encode())
+        parts.append(b'Content-Disposition: form-data; name="torrents"; filename="torrent.torrent"\r\n')
+        parts.append(b"Content-Type: application/x-bittorrent\r\n\r\n")
+        parts.append(buf)
+        parts.append(b"\r\n")
+
+        # Form field parts
+        fields = {}
+        if save_path:
+            fields["savepath"] = save_path
+        if is_stopped:
+            fields["stopped"] = "true"
+        if sequential:
+            fields["sequentialDownload"] = "true"
+        if stop_condition:
+            fields["stopCondition"] = stop_condition
+
+        for key, val in fields.items():
+            parts.append(f"--{boundary}\r\n".encode())
+            parts.append(f'Content-Disposition: form-data; name="{key}"\r\n\r\n'.encode())
+            parts.append(f"{val}\r\n".encode())
+
+        parts.append(f"--{boundary}--\r\n".encode())
+        body = b"".join(parts)
+
+        hdrs = self._headers()
+        hdrs["Content-Type"] = f"multipart/form-data; boundary={boundary}"
+
+        req = urllib.request.Request(
+            self._url("/api/v2/torrents/add"),
+            data=body, headers=hdrs, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status == 200
+        except urllib.error.HTTPError as e:
+            return e.code == 200
+        except Exception:
+            return False
+
+    def torrent_info(self, hashes: str = "") -> list[dict]:
+        """
+        Get torrent info. hashes can be pipe-separated or empty for all.
+
+        Returns list of torrent dicts with fields: hash, name, state, progress,
+        dlspeed, upspeed, total_size, downloaded, uploaded, num_seeds, num_leechs,
+        save_path, content_path, seq_dl, magnet_uri, etc.
+        """
+        url = self._url("/api/v2/torrents/info")
+        if hashes:
+            url += f"?hashes={urllib.parse.quote(hashes)}"
+        status, body = _http_get(url, self._headers())
+        if status == 200:
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                pass
+        return []
+
+    def torrent_files(self, info_hash: str) -> list[dict]:
+        """
+        Get file list for a torrent.
+
+        Returns list of dicts: {index, name, size, progress, priority, is_seed}.
+        """
+        url = self._url(f"/api/v2/torrents/files?hash={urllib.parse.quote(info_hash)}")
+        status, body = _http_get(url, self._headers())
+        if status == 200:
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                pass
+        return []
+
+    def torrent_properties(self, info_hash: str) -> dict:
+        """Get detailed torrent properties (metadata, speeds, dates)."""
+        url = self._url(f"/api/v2/torrents/properties?hash={urllib.parse.quote(info_hash)}")
+        status, body = _http_get(url, self._headers())
+        if status == 200:
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def set_file_priority(self, info_hash: str, file_ids: list[int],
+                          priority: int) -> bool:
+        """
+        Set priority for specific files in a torrent.
+
+        Priority values: 0=skip, 1=normal, 6=high, 7=maximum.
+        file_ids: list of 0-based file indexes.
+        """
+        ids_str = "|".join(str(i) for i in file_ids)
+        status, _ = _http_post(
+            self._url("/api/v2/torrents/filePrio"),
+            data={"hash": info_hash, "id": ids_str, "priority": str(priority)},
+            headers=self._headers(),
+        )
+        return status == 200
+
+    def toggle_sequential(self, hashes: str) -> bool:
+        """Toggle sequential download for torrent(s). hashes can be pipe-separated."""
+        status, _ = _http_post(
+            self._url("/api/v2/torrents/toggleSequentialDownload"),
+            data={"hashes": hashes},
+            headers=self._headers(),
+        )
+        return status == 200
+
+    def set_location(self, hashes: str, location: str) -> bool:
+        """Move torrent save path to a new location."""
+        status, _ = _http_post(
+            self._url("/api/v2/torrents/setLocation"),
+            data={"hashes": hashes, "location": location},
+            headers=self._headers(),
+        )
+        return status == 200
+
+    def torrent_peers(self, info_hash: str) -> dict:
+        """
+        Get peer list for a torrent.
+
+        Returns dict with 'peers' key mapping peer_id -> peer info.
+        """
+        url = self._url(f"/api/v2/sync/torrentPeers?hash={urllib.parse.quote(info_hash)}&rid=0")
+        status, body = _http_get(url, self._headers())
+        if status == 200:
+            try:
+                return json.loads(body)
+            except json.JSONDecodeError:
+                pass
+        return {}
+
+    def set_preferences(self, prefs: dict) -> bool:
+        """Set qBittorrent application preferences."""
+        data = f"json={json.dumps(prefs)}".encode("utf-8")
+        hdrs = self._headers()
+        hdrs["Content-Type"] = "application/x-www-form-urlencoded"
+        req = urllib.request.Request(
+            self._url("/api/v2/app/setPreferences"),
+            data=data, headers=hdrs, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
+    def shutdown_app(self) -> bool:
+        """Request graceful qBittorrent shutdown."""
+        status, _ = _http_post(
+            self._url("/api/v2/app/shutdown"),
+            headers=self._headers(),
+        )
+        return status == 200
 
 
 # ---------------------------------------------------------------------------
