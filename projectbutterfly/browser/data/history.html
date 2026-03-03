@@ -6,9 +6,32 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  :root {
+    --bg-page: #202124;
+    --text: #e8eaed;
+    --text-dim: #9aa0a6;
+    --text-url: #5f6368;
+    --accent: #8ab4f8;
+    --input-bg: #303134;
+    --input-border: #5f6368;
+    --border: #3c4043;
+    --hover-bg: rgba(255,255,255,0.06);
+  }
+  body.light {
+    --bg-page: #ffffff;
+    --text: #202124;
+    --text-dim: #5f6368;
+    --text-url: #9aa0a6;
+    --accent: #1a73e8;
+    --input-bg: #f1f3f4;
+    --input-border: #dadce0;
+    --border: #dadce0;
+    --hover-bg: rgba(0,0,0,0.06);
+  }
+
   body {
-    background: #202124;
-    color: #e8eaed;
+    background: var(--bg-page);
+    color: var(--text);
     font-family: 'Segoe UI', system-ui, sans-serif;
     padding: 40px;
     max-width: 800px;
@@ -24,10 +47,10 @@
   .search-bar {
     width: 100%;
     height: 40px;
-    background: #303134;
-    border: 1px solid #5f6368;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: 20px;
-    color: #e8eaed;
+    color: var(--text);
     font-size: 14px;
     padding: 0 20px;
     outline: none;
@@ -35,9 +58,9 @@
     transition: border-color 0.2s;
   }
   .search-bar:focus {
-    border-color: #8ab4f8;
+    border-color: var(--accent);
   }
-  .search-bar::placeholder { color: #9aa0a6; }
+  .search-bar::placeholder { color: var(--text-dim); }
 
   .date-group {
     margin-bottom: 24px;
@@ -46,9 +69,9 @@
   .date-header {
     font-size: 13px;
     font-weight: 600;
-    color: #8ab4f8;
+    color: var(--accent);
     padding: 8px 0;
-    border-bottom: 1px solid #3c4043;
+    border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
   }
 
@@ -62,19 +85,19 @@
     gap: 12px;
   }
   .history-item:hover {
-    background: rgba(255,255,255,0.06);
+    background: var(--hover-bg);
   }
 
   .history-time {
     font-size: 12px;
-    color: #9aa0a6;
+    color: var(--text-dim);
     min-width: 50px;
     flex-shrink: 0;
   }
 
   .history-title {
     font-size: 14px;
-    color: #e8eaed;
+    color: var(--text);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -83,7 +106,7 @@
 
   .history-url {
     font-size: 12px;
-    color: #5f6368;
+    color: var(--text-url);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -94,7 +117,7 @@
     opacity: 0;
     background: transparent;
     border: none;
-    color: #9aa0a6;
+    color: var(--text-dim);
     cursor: pointer;
     font-size: 16px;
     padding: 2px 6px;
@@ -106,7 +129,7 @@
 
   .empty-state {
     text-align: center;
-    color: #5f6368;
+    color: var(--text-url);
     padding: 60px 0;
     font-size: 15px;
   }

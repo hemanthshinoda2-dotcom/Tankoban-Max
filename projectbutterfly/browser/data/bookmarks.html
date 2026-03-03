@@ -5,49 +5,59 @@
 <title>Bookmarks</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-page: #202124; --text: #e8eaed; --text-dim: #9aa0a6; --accent: #8ab4f8;
+    --section-bg: #292a2d; --border: #3c4043; --row-bg: #26272b; --row-border: #303134;
+    --input-bg: #202124; --input-border: #5f6368; --hover-bg: rgba(255,255,255,.08);
+  }
+  body.light {
+    --bg-page: #ffffff; --text: #202124; --text-dim: #5f6368; --accent: #1a73e8;
+    --section-bg: #f8f9fa; --border: #dadce0; --row-bg: #f8f9fa; --row-border: #e8eaed;
+    --input-bg: #f1f3f4; --input-border: #dadce0; --hover-bg: rgba(0,0,0,.06);
+  }
   body {
-    background: #202124;
-    color: #e8eaed;
+    background: var(--bg-page);
+    color: var(--text);
     font-family: 'Segoe UI', system-ui, sans-serif;
     padding: 28px;
   }
   h1 { font-size: 28px; font-weight: 400; margin-bottom: 16px; }
   .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
   .btn {
-    background: #292a2d;
-    color: #e8eaed;
-    border: 1px solid #5f6368;
+    background: var(--section-bg);
+    color: var(--text);
+    border: 1px solid var(--input-border);
     border-radius: 6px;
     padding: 6px 12px;
     cursor: pointer;
     font-size: 12px;
   }
-  .btn:hover { background: rgba(255,255,255,.08); }
+  .btn:hover { background: var(--hover-bg); }
   .btn-danger { color: #ea4335; border-color: rgba(234,67,53,.45); }
-  .list { border: 1px solid #3c4043; border-radius: 10px; overflow: hidden; }
+  .list { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .row {
     display: grid;
     grid-template-columns: .9fr 1.4fr auto;
     gap: 10px;
     align-items: center;
     padding: 10px;
-    border-bottom: 1px solid #303134;
-    background: #26272b;
+    border-bottom: 1px solid var(--row-border);
+    background: var(--row-bg);
   }
   .row:last-child { border-bottom: none; }
   .field {
     width: 100%;
-    background: #202124;
-    color: #e8eaed;
-    border: 1px solid #5f6368;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--input-border);
     border-radius: 6px;
     padding: 7px 8px;
     font-size: 12px;
     outline: none;
   }
-  .field:focus { border-color: #8ab4f8; }
+  .field:focus { border-color: var(--accent); }
   .actions { display: flex; gap: 6px; }
-  .empty { color: #9aa0a6; padding: 22px; text-align: center; }
+  .empty { color: var(--text-dim); padding: 22px; text-align: center; }
 </style>
 </head>
 <body>

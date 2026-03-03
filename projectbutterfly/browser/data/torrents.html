@@ -5,59 +5,71 @@
 <title>Torrents</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: #202124; color: #e8eaed; font-family: "Segoe UI", system-ui, sans-serif; }
+  :root {
+    --bg: #202124; --bg2: #292a2d; --text: #e8eaed; --dim: #9aa0a6;
+    --accent: #8ab4f8; --border: #3c4043; --input-border: #5f6368;
+    --hover: rgba(255,255,255,.08); --hover-row: rgba(255,255,255,0.03);
+    --empty: #5f6368;
+  }
+  body.light {
+    --bg: #ffffff; --bg2: #f8f9fa; --text: #202124; --dim: #5f6368;
+    --accent: #1a73e8; --border: #dadce0; --input-border: #dadce0;
+    --hover: rgba(0,0,0,.06); --hover-row: rgba(0,0,0,0.03);
+    --empty: #9aa0a6;
+  }
+  body { background: var(--bg); color: var(--text); font-family: "Segoe UI", system-ui, sans-serif; }
   .page { display: flex; flex-direction: column; height: 100vh; }
-  .header, .search, .tabs, .statusbar { background: #292a2d; border-bottom: 1px solid #3c4043; }
+  .header, .search, .tabs, .statusbar { background: var(--bg2); border-bottom: 1px solid var(--border); }
   .header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; }
   .header h1 { font-size: 18px; font-weight: 500; }
   .actions { margin-left: auto; display: flex; gap: 6px; }
   .btn {
-    height: 30px; padding: 0 12px; border: 1px solid #5f6368; border-radius: 6px;
-    color: #9aa0a6; background: transparent; cursor: pointer; font-size: 12px;
+    height: 30px; padding: 0 12px; border: 1px solid var(--input-border); border-radius: 6px;
+    color: var(--dim); background: transparent; cursor: pointer; font-size: 12px;
   }
-  .btn:hover { border-color: #8ab4f8; color: #e8eaed; }
-  .btn.accent { border-color: transparent; background: #8ab4f8; color: #202124; font-weight: 600; }
+  .btn:hover { border-color: var(--accent); color: var(--text); }
+  .btn.accent { border-color: transparent; background: var(--accent); color: #ffffff; font-weight: 600; }
   .search { padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; }
   .searchrow { display: flex; align-items: center; gap: 8px; }
   .search input, .search select {
-    height: 34px; background: #202124; color: #e8eaed; border: 1px solid #5f6368; border-radius: 6px;
+    height: 34px; background: var(--bg); color: var(--text); border: 1px solid var(--input-border); border-radius: 6px;
     padding: 0 10px; font-size: 13px;
   }
   .search input { flex: 1; }
-  .status { font-size: 11px; color: #9aa0a6; min-height: 14px; }
+  .status { font-size: 11px; color: var(--dim); min-height: 14px; }
   .status.ok { color: #81c995; }
   .status.err { color: #f28b82; }
-  .settings { border: 1px solid #3c4043; border-radius: 8px; padding: 10px; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+  .settings { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 8px; grid-template-columns: repeat(3, minmax(180px, 1fr)); }
   .settings.hidden { display: none; }
-  .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: #9aa0a6; }
-  .settings input { height: 30px; border: 1px solid #5f6368; border-radius: 6px; background: #202124; color: #e8eaed; padding: 0 8px; }
+  .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--dim); }
+  .settings input { height: 30px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--bg); color: var(--text); padding: 0 8px; }
   .settings .full { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
   .tabs { display: flex; }
-  .tab { padding: 10px 16px; color: #9aa0a6; border-bottom: 2px solid transparent; cursor: pointer; font-size: 13px; }
-  .tab.active { color: #8ab4f8; border-bottom-color: #8ab4f8; }
+  .tab { padding: 10px 16px; color: var(--dim); border-bottom: 2px solid transparent; cursor: pointer; font-size: 13px; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
   .panel { flex: 1; overflow: auto; }
   .hidden { display: none !important; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   th, td { padding: 8px 10px; border-bottom: 1px solid rgba(60,64,67,0.6); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  th { position: sticky; top: 0; background: #292a2d; color: #9aa0a6; text-transform: uppercase; font-size: 11px; }
-  tr:hover td { background: rgba(255,255,255,0.03); }
-  .empty { padding: 40px 18px; color: #5f6368; text-align: center; }
-  .progress { height: 6px; background: #3c4043; border-radius: 3px; overflow: hidden; margin-top: 4px; }
-  .progress > div { height: 100%; background: #8ab4f8; }
+  th { position: sticky; top: 0; background: var(--bg2); color: var(--dim); text-transform: uppercase; font-size: 11px; }
+  tr:hover td { background: var(--hover-row); }
+  .empty { padding: 40px 18px; color: var(--empty); text-align: center; }
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .progress > div { height: 100%; background: var(--accent); }
   .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; }
   .b-downloading { color: #8ab4f8; background: rgba(138,180,248,.18); }
   .b-ready { color: #fcb266; background: rgba(252,178,102,.2); }
   .b-paused { color: #fdd663; background: rgba(253,214,99,.2); }
   .b-ok { color: #81c995; background: rgba(129,201,149,.2); }
   .b-err { color: #f28b82; background: rgba(242,139,130,.2); }
-  .statusbar { border-top: 1px solid #3c4043; border-bottom: none; padding: 6px 16px; display: flex; gap: 20px; color: #9aa0a6; font-size: 11px; }
-  .ctx { position: fixed; z-index: 999; min-width: 200px; background: #292a2d; border: 1px solid #3c4043; border-radius: 8px; padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+  .statusbar { border-top: 1px solid var(--border); border-bottom: none; padding: 6px 16px; display: flex; gap: 20px; color: var(--dim); font-size: 11px; }
+  .ctx { position: fixed; z-index: 999; min-width: 200px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 0; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
   .ctx.hidden { display: none; }
   .ctx > div { padding: 7px 14px; cursor: pointer; font-size: 13px; }
-  .ctx > div:hover { background: rgba(255,255,255,.08); }
+  .ctx > div:hover { background: var(--hover); }
   .ctx .danger { color: #f28b82; }
-  .ctx hr { border: 0; border-top: 1px solid #3c4043; margin: 4px 8px; }
+  .ctx hr { border: 0; border-top: 1px solid var(--border); margin: 4px 8px; }
 </style>
 </head>
 <body>

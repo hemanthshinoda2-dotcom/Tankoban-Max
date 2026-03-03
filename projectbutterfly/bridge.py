@@ -6281,6 +6281,7 @@ class WebBrowserSettingsBridge(QObject, JsonCrudMixin):
         "blockThirdPartyCookies": False,
         "antiFingerprintProtection": True,
         "bookmarksBarVisible": False,
+        "theme": "dark",
     }
 
     @staticmethod
@@ -10526,12 +10527,14 @@ class WebTabManagerBridge(QObject):
         self._tab_seq = 0
         self._profile = None
         self._host_view = None
+        self._host_container = None
         self._viewport_rect = (0, 0, 0, 0)
         self._viewport_visible = False
 
-    def setup(self, profile, host_view):
+    def setup(self, profile, host_view, host_container=None):
         self._profile = profile
         self._host_view = host_view
+        self._host_container = host_container or host_view
         self._apply_viewport_bounds()
 
     def _next_tab_id(self):
@@ -10726,7 +10729,8 @@ class WebTabManagerBridge(QObject):
         page = create_browser_tab_page(self._profile, self, tab_id)
         self._connect_page_signals(tab_id, page)
 
-        view = QWebEngineView(self._host_view)
+        parent_widget = self._host_container or self._host_view
+        view = QWebEngineView(parent_widget)
         view.setPage(page)
         view.setStyleSheet("background-color: #0d1117;")
         view.hide()
@@ -12032,7 +12036,12 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
     bridge = BridgeRoot()
     bridge.window.set_window(win)
     try:
-        bridge.webTabManager.setup(web_view.page().profile(), web_view)
+        host_container = None
+        try:
+            host_container = win.centralWidget() if win and hasattr(win, "centralWidget") else None
+        except Exception:
+            host_container = None
+        bridge.webTabManager.setup(web_view.page().profile(), web_view, host_container)
     except Exception:
         pass
 

@@ -94,6 +94,9 @@ class ChromeBrowser(QWidget):
         self._settings = self._data_bridge.load_browser_settings()
         search_engines.load_from_settings(self._settings)
 
+        # Apply persisted theme before building UI
+        theme.apply(self._settings.get("theme", "dark"))
+
         # Inject anti-bot + ad blocker scripts into the profile
         inject_antibot_script(self._profile)
         inject_adblocker_script(self._profile)
@@ -338,7 +341,7 @@ class ChromeBrowser(QWidget):
     def _build_tab_view(self, tab: TabData):
         view = QWebEngineView()
         page = ChromePage(self._profile, tab.id, self)
-        page.setBackgroundColor(QColor(32, 33, 36))
+        page.setBackgroundColor(QColor(theme.BG_VIEWPORT))
         view.setPage(page)
 
         settings = view.settings()
@@ -816,6 +819,14 @@ class ChromeBrowser(QWidget):
         tab = self._tab_mgr.get(tab_id)
         if not tab or not tab.view:
             return
+        # Inject theme class into all internal pages
+        cur_theme = str(self._settings.get("theme", "dark"))
+        theme_js = (
+            "document.body.classList.remove('light','dark');"
+            "document.body.classList.add('" + cur_theme + "');"
+        )
+        tab.view.page().runJavaScript(theme_js)
+
         url = str(tab.url or "")
         if "history.html" in url:
             self._inject_history_data(tab_id)
@@ -835,6 +846,7 @@ class ChromeBrowser(QWidget):
             "blockThirdPartyCookies": bool(self._settings.get("blockThirdPartyCookies")),
             "antiFingerprintProtection": bool(self._settings.get("antiFingerprintProtection", True)),
             "bookmarksBarVisible": bool(not self._bookmarks_bar.isHidden()),
+            "theme": str(self._settings.get("theme", "dark")),
         }
         js = "if(typeof setSettingsData==='function')setSettingsData(" + json.dumps(payload) + ");"
         tab.view.page().runJavaScript(js)
@@ -870,6 +882,100 @@ class ChromeBrowser(QWidget):
         self._data_bridge.save_browser_settings(self._settings)
         self._schedule_session_save()
 
+    def _apply_theme(self, name: str):
+        """Switch to theme *name* and refresh all widget styles."""
+        theme.apply(name)
+
+        # Root widget
+        self.setStyleSheet(f"background: {theme.BG_TITLEBAR};")
+        self._viewport.setStyleSheet(f"background: {theme.BG_VIEWPORT};")
+
+        # Tab bar
+        self._tab_bar.setStyleSheet(theme.TAB_BAR_STYLE)
+        self._tab_bar._new_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {theme.TEXT_SECONDARY};
+                border: none;
+                border-radius: 14px;
+                font-size: 18px;
+                font-weight: bold;
+                font-family: 'Segoe UI', sans-serif;
+            }}
+            QPushButton:hover {{
+                background: {theme.CLOSE_BG};
+                color: {theme.TEXT_PRIMARY};
+            }}
+        """)
+        self._tab_bar._close_btn.setStyleSheet(theme.WINDOW_CLOSE_BTN_STYLE)
+        self._tab_bar._min_btn.setStyleSheet(theme.WINDOW_BTN_STYLE)
+        self._tab_bar._max_btn.setStyleSheet(theme.WINDOW_BTN_STYLE)
+
+        # Nav bar
+        self._nav_bar.setStyleSheet(theme.NAV_BAR_STYLE)
+
+        # Find bar
+        self._find_bar.setStyleSheet(theme.FIND_BAR_STYLE)
+
+        # Bookmarks bar
+        self._bookmarks_bar.setStyleSheet(f"""
+            QWidget {{
+                background: {theme.BG_TOOLBAR};
+                border-bottom: 1px solid {theme.BORDER_COLOR};
+            }}
+        """)
+
+        # Downloads shelf
+        self._downloads_shelf.setStyleSheet(f"""
+            QWidget {{
+                background: {theme.BG_TOOLBAR};
+                border-top: 1px solid {theme.BORDER_COLOR};
+            }}
+        """)
+
+        # Permission bar
+        self._permission_bar.setStyleSheet(f"""
+            QWidget {{
+                background: {theme.BG_TOOLBAR};
+                border-bottom: 1px solid {theme.BORDER_COLOR};
+            }}
+        """)
+
+        # Update webview backgrounds and inject theme class into internal pages
+        theme_js = (
+            "document.body.classList.remove('light','dark');"
+            "document.body.classList.add('" + name + "');"
+        )
+        for tab in self._tab_mgr.tabs:
+            if tab.view:
+                tab.view.page().setBackgroundColor(
+                    QColor(theme.BG_VIEWPORT)
+                )
+                url = str(tab.url or "")
+                if tab.internal or any(p in url for p in (
+                    "newtab.html", "settings.html", "history.html",
+                    "downloads.html", "bookmarks.html", "torrents.html",
+                )):
+                    tab.view.page().runJavaScript(theme_js)
+
+        # Force full repaint on paint-based widgets
+        self._tab_bar.update()
+        self._nav_bar.update()
+        self._downloads_shelf.update()
+        self._status_bar.update()
+        # Omnibox lives inside nav bar as _address
+        if hasattr(self._nav_bar, '_address'):
+            self._nav_bar._address.update()
+            # Update omnibox completion popup stylesheet
+            if hasattr(self._nav_bar._address, '_popup'):
+                self._nav_bar._address._popup.setStyleSheet(f"""
+                    QWidget {{
+                        background: {theme.BG_POPUP};
+                        border: 1px solid {theme.BORDER_COLOR};
+                        border-radius: 8px;
+                    }}
+                """)
+
     @staticmethod
     def _as_bool(raw, default=False):
         if raw is None:
@@ -901,6 +1007,11 @@ class ChromeBrowser(QWidget):
             self._bookmarks_bar.setVisible(show)
             if show:
                 self._bookmarks_bar.refresh()
+        if "theme" in parsed:
+            name = str(parsed.get("theme", ["dark"])[0]).strip().lower()
+            if name in ("dark", "light"):
+                self._settings["theme"] = name
+                self._apply_theme(name)
         self._save_settings()
 
     def _resolve_internal_command_source_tab(self) -> str:

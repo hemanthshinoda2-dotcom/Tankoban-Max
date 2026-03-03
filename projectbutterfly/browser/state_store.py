@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
     "defaultSearchEngine": "google",
     "blockThirdPartyCookies": False,
     "antiFingerprintProtection": True,
+    "theme": "dark",
 }
 
 DEFAULT_SESSION = {

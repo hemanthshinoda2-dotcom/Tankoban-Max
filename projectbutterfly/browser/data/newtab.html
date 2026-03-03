@@ -7,9 +7,32 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  :root {
+    --bg-page: #202124;
+    --text: #e8eaed;
+    --accent: #8ab4f8;
+    --input-bg: #303134;
+    --input-border: #5f6368;
+    --text-dim: #9aa0a6;
+    --icon-bg: #303134;
+    --icon-border: #3c4043;
+    --hover-bg: rgba(255,255,255,0.06);
+  }
+  body.light {
+    --bg-page: #ffffff;
+    --text: #202124;
+    --accent: #1a73e8;
+    --input-bg: #f1f3f4;
+    --input-border: #dadce0;
+    --text-dim: #5f6368;
+    --icon-bg: #f1f3f4;
+    --icon-border: #dadce0;
+    --hover-bg: rgba(0,0,0,0.06);
+  }
+
   body {
-    background: #202124;
-    color: #e8eaed;
+    background: var(--bg-page);
+    color: var(--text);
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     display: flex;
     flex-direction: column;
@@ -27,9 +50,9 @@
     font-weight: 300;
     letter-spacing: -1px;
     margin-bottom: 32px;
-    color: #e8eaed;
+    color: var(--text);
   }
-  .brand span { color: #8ab4f8; }
+  .brand span { color: var(--accent); }
 
   /* -- Search bar -- */
   .search-wrapper {
@@ -41,22 +64,22 @@
   .search-input {
     width: 100%;
     height: 46px;
-    background: #303134;
-    border: 1px solid #5f6368;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
     border-radius: 24px;
-    color: #e8eaed;
+    color: var(--text);
     font-size: 16px;
     padding: 0 48px 0 20px;
     outline: none;
     transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
   }
   .search-input:focus {
-    background: #303134;
-    border-color: #8ab4f8;
+    background: var(--input-bg);
+    border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(138,180,248,0.2);
   }
   .search-input::placeholder {
-    color: #9aa0a6;
+    color: var(--text-dim);
   }
 
   .search-icon {
@@ -90,25 +113,25 @@
     color: inherit;
   }
   .shortcut:hover {
-    background: rgba(255,255,255,0.06);
+    background: var(--hover-bg);
   }
 
   .shortcut-icon {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: #303134;
-    border: 1px solid #3c4043;
+    background: var(--icon-bg);
+    border: 1px solid var(--icon-border);
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 20px;
-    color: #8ab4f8;
+    color: var(--accent);
   }
 
   .shortcut-label {
     font-size: 12px;
-    color: #9aa0a6;
+    color: var(--text-dim);
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -129,7 +152,7 @@
     id="searchInput"
     autofocus
   >
-  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" stroke-width="2">
+  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--text-dim);">
     <circle cx="11" cy="11" r="8"/>
     <line x1="21" y1="21" x2="16.65" y2="16.65"/>
   </svg>
