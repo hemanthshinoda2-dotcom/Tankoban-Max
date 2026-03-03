@@ -8,6 +8,8 @@ from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QColor, QPainter, QFont, QPixmap, QMouseEvent
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QSizePolicy
 
+from context_menu import build_series_menu
+
 from constants import (
     CARD_WIDTH, CARD_HEIGHT, CARD_COVER_HEIGHT,
     CARD_BG, CARD_HOVER_BG, CARD_BORDER_RADIUS,
@@ -103,6 +105,10 @@ class SeriesCard(QWidget):
         if event.button() == Qt.LeftButton:
             self.clicked.emit(self._sid)
         super().mouseReleaseEvent(event)
+
+    def contextMenuEvent(self, event):
+        menu = build_series_menu(self._series, self)
+        menu.exec(event.globalPos())
 
     def set_pixmap(self, px: QPixmap):
         """Replace the placeholder with an actual cover image."""

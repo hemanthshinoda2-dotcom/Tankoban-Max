@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from constants import BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, ACCENT_COLOR
+from context_menu import build_item_menu
 
 
 def _fmt_size(b):
@@ -90,6 +91,8 @@ class DetailView(QWidget):
         self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._table.setShowGrid(False)
         self._table.setAlternatingRowColors(True)
+        self._table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self._table.customContextMenuRequested.connect(self._on_context_menu)
         self._table.doubleClicked.connect(self._on_double_click)
 
         header = self._table.horizontalHeader()
@@ -154,6 +157,12 @@ class DetailView(QWidget):
         self._table.setRowHeight(0, 32)
         for i in range(len(items)):
             self._table.setRowHeight(i, 32)
+
+    def _on_context_menu(self, pos):
+        row = self._table.rowAt(pos.y())
+        if 0 <= row < len(self._items):
+            menu = build_item_menu(self._items[row], self._table)
+            menu.exec(self._table.viewport().mapToGlobal(pos))
 
     def _on_double_click(self, index):
         row = index.row()

@@ -57,6 +57,8 @@ class UnifiedLibraryWidget(QWidget):
         self._home_view = HomeView()
         self._home_view.set_item_label(self._adapter.item_label)
         self._home_view.card_clicked.connect(self._on_card_clicked)
+        self._home_view.sort_changed.connect(self._on_sort_changed)
+        self._sort_index = 0
         self._stack.addWidget(self._home_view)
 
         self._detail_view = DetailView()
@@ -85,7 +87,6 @@ class UnifiedLibraryWidget(QWidget):
 
     def _on_data_ready(self):
         self._all_series = list(self._provider.series)
-        self._all_series.sort(key=lambda s: (s.get("name", "").lower(), s.get("id", "")))
 
         # Populate sidebar
         self._sidebar.populate(self._provider.root_folders, self._all_series)
@@ -106,15 +107,26 @@ class UnifiedLibraryWidget(QWidget):
         self._filter_path = path
         self._apply_filter()
 
+    def _on_sort_changed(self, index: int):
+        self._sort_index = index
+        self._apply_filter()
+
     def _apply_filter(self):
         if not self._filter_path:
-            visible = self._all_series
+            visible = list(self._all_series)
         else:
             fp = os.path.normpath(self._filter_path).lower()
             visible = [
                 s for s in self._all_series
                 if os.path.normpath(s.get("path", "")).lower().startswith(fp)
             ]
+
+        # Apply sort
+        from home_view import SORT_OPTIONS
+        if 0 <= self._sort_index < len(SORT_OPTIONS):
+            _, key_fn = SORT_OPTIONS[self._sort_index]
+            reverse = self._sort_index in (1, 2)  # Z-A, Count ↓
+            visible.sort(key=key_fn, reverse=reverse)
 
         self._home_view.set_series(visible)
         self._request_thumbs()

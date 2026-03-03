@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QLabel
+from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 
 from constants import BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, CARD_SPACING
 from flow_layout import FlowLayout
@@ -12,9 +12,18 @@ from series_card import SeriesCard
 from continue_tile import ContinueTile
 
 
+SORT_OPTIONS = [
+    ("Name A–Z", lambda s: s.get("name", "").lower()),
+    ("Name Z–A", lambda s: s.get("name", "").lower()),
+    ("Volume Count ↓", lambda s: s.get("item_count", 0)),
+    ("Volume Count ↑", lambda s: s.get("item_count", 0)),
+]
+
+
 class HomeView(QScrollArea):
     card_clicked = Signal(str)  # series ID
     continue_clicked = Signal(str)  # item ID
+    sort_changed = Signal(int)  # sort index
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -57,6 +66,46 @@ class HomeView(QScrollArea):
 
         continue_layout.addWidget(self._continue_scroll)
         self._layout.addWidget(self._continue_section)
+
+        # Sort bar
+        sort_bar = QHBoxLayout()
+        sort_bar.setContentsMargins(0, 0, 0, 0)
+        sort_bar.setSpacing(8)
+
+        sort_label = QLabel("Sort:")
+        sort_label.setFont(QFont("Segoe UI", 9))
+        sort_label.setStyleSheet(f"color: {TEXT_SECONDARY}; background: transparent;")
+        sort_bar.addWidget(sort_label)
+
+        self._sort_combo = QComboBox()
+        self._sort_combo.setFixedWidth(160)
+        self._sort_combo.setFont(QFont("Segoe UI", 9))
+        for label, _ in SORT_OPTIONS:
+            self._sort_combo.addItem(label)
+        self._sort_combo.setStyleSheet(f"""
+            QComboBox {{
+                background-color: #1a2a3e;
+                color: {TEXT_PRIMARY};
+                border: 1px solid #2a3a5e;
+                border-radius: 4px;
+                padding: 4px 8px;
+            }}
+            QComboBox::drop-down {{
+                border: none;
+                width: 20px;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: #1a1a2e;
+                color: {TEXT_PRIMARY};
+                border: 1px solid #2a3a5e;
+                selection-background-color: #1a3a5c;
+            }}
+        """)
+        self._sort_combo.currentIndexChanged.connect(self.sort_changed)
+        sort_bar.addWidget(self._sort_combo)
+        sort_bar.addStretch()
+
+        self._layout.addLayout(sort_bar)
 
         # Grid area
         self._grid_widget = QWidget()
