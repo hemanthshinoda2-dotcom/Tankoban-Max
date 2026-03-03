@@ -33,6 +33,7 @@ SHORTCUTS = [
     ("Ctrl+Shift+I",    "toggle_devtools"),
     ("Ctrl+J",          "open_downloads"),
     ("Ctrl+Shift+Delete", "open_clear_data"),
+    ("Ctrl+Shift+O",    "open_bookmarks_manager"),
     ("Ctrl+P",          "print_page"),
     ("Ctrl+U",          "view_source"),
     ("Ctrl+G",          "focus_address_bar"),

@@ -1,5 +1,5 @@
-"""
-Project Butterfly — QWebChannel Bridge
+﻿"""
+Project Butterfly â€” QWebChannel Bridge
 
 Replaces: preload/index.js + preload/namespaces/*.js + main/ipc/ (all 46 register files)
 
@@ -8,7 +8,7 @@ Architecture:
   - Python Signals push events to JS (replaces ipcRenderer.on)
   - A JS shim (injected before page load) creates window.electronAPI from the
     QWebChannel object, so src/services/api_gateway.js works UNTOUCHED
-  - Domain implementations are plugged in via set_domain() — stubs return
+  - Domain implementations are plugged in via set_domain() â€” stubs return
     { ok: false, error: 'not_implemented' } until the domain module is ported
 
 The renderer never knows it's not running in Electron. It calls
@@ -23,6 +23,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -34,6 +35,15 @@ from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 import storage
+from QTRoute.src import common as qtr_common
+from QTRoute.src import (
+    QTRouteScanRuntime,
+    QTRouteService,
+    QTRouteStore,
+    make_books_profile,
+    make_comics_profile,
+    make_video_profile,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -76,99 +86,67 @@ def _stub():
 # Shared scanner helpers
 # ---------------------------------------------------------------------------
 
-DEFAULT_SCAN_IGNORE_DIRNAMES = frozenset({
-    "__macosx", "node_modules", ".git", ".svn", ".hg",
-    "@eadir", "$recycle.bin", "system volume information",
-})
-
-COMIC_EXTENSIONS = frozenset({".cbz", ".cbr", ".pdf", ".zip", ".rar", ".cb7", ".7z"})
-BOOK_EXTENSIONS = frozenset({".epub", ".pdf", ".txt", ".mobi", ".fb2"})
-VIDEO_EXTENSIONS = frozenset({".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".mpg", ".mpeg", ".ts"})
+DEFAULT_SCAN_IGNORE_DIRNAMES = qtr_common.DEFAULT_SCAN_IGNORE_DIRNAMES
+COMIC_EXTENSIONS = qtr_common.COMIC_EXTENSIONS
+BOOK_EXTENSIONS = qtr_common.BOOK_EXTENSIONS
+VIDEO_EXTENSIONS = qtr_common.VIDEO_EXTENSIONS
 AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".m4b", ".ogg", ".opus", ".flac", ".wav", ".aac", ".wma"})
 SUBTITLE_EXTENSIONS = frozenset({".srt", ".ass", ".ssa", ".vtt", ".sub"})
 
-_LIBRARY_CONFIG_FILE = "library_state.json"
-_LIBRARY_INDEX_FILE = "library_index.json"
-_VIDEO_INDEX_FILE = "video_index.json"
+_LIBRARY_CONFIG_FILE = qtr_common.LIBRARY_CONFIG_FILE
+_LIBRARY_INDEX_FILE = qtr_common.LIBRARY_INDEX_FILE
+_VIDEO_INDEX_FILE = qtr_common.VIDEO_INDEX_FILE
 _ADDED_FILES_ROOT_ID = "__added_files__"
 _ADDED_FILES_SHOW_ID = "__added_files_show__"
 _ADDED_SHOW_FOLDERS_ROOT_ID = "__added_show_folders__"
 _ADDED_SHOW_FOLDERS_ROOT_NAME = "Folders"
 _STREAMABLE_MANIFEST_FILE = ".tanko_torrent_stream.json"
+_QTR_STORE = QTRouteStore(storage)
 
 
 def _path_key(p):
     """Normalize path for case-insensitive comparison."""
-    return os.path.normpath(os.path.abspath(str(p or ""))).lower()
+    return qtr_common.path_key(p)
 
 
 def _uniq_paths(paths):
     """Deduplicate paths case-insensitively."""
-    seen = set()
-    out = []
-    for p in paths:
-        if not p:
-            continue
-        k = _path_key(p)
-        if k in seen:
-            continue
-        seen.add(k)
-        out.append(str(p).strip())
-    return out
+    return qtr_common.uniq_paths(paths or [])
 
 
 def _sanitize_ignore(patterns, max_count=200):
     """Sanitize scan ignore patterns: dedup, lowercase, cap count."""
-    if not isinstance(patterns, list):
-        return []
-    seen = set()
-    out = []
-    for p in patterns:
-        s = str(p or "").strip().lower()
-        if not s or s in seen:
-            continue
-        seen.add(s)
-        out.append(s)
-        if len(out) >= max_count:
-            break
-    return out
+    return qtr_common.sanitize_ignore(patterns, max_count=max_count)
 
 
 def _b64url(data_bytes):
     """Base64url encode without padding (matches JS Buffer.toString('base64url'))."""
-    return base64.urlsafe_b64encode(data_bytes).decode("ascii").rstrip("=")
+    return qtr_common.b64url(data_bytes)
 
 
 def _series_id_for_folder(folder_path):
     """Base64url of folder path string (matches JS seriesIdForFolder)."""
-    return _b64url(str(folder_path or "").encode("utf-8"))
+    return qtr_common.series_id_for_folder(folder_path)
 
 
 def _book_id_for_path(file_path, size, mtime_ms):
-    """Book/comic ID = base64url('path::size::mtimeMs') — matches JS bookIdForPath."""
-    return _b64url("{}::{}::{}".format(
-        str(file_path or ""), int(size or 0), int(mtime_ms or 0)
-    ).encode("utf-8"))
+    """Book/comic ID = base64url('path::size::mtimeMs') â€” matches JS bookIdForPath."""
+    return qtr_common.book_id_for_path(file_path, size, mtime_ms)
 
 
 def _safe_b64_decode(s):
     """Decode base64url string, return empty string on failure."""
-    try:
-        padded = s + "=" * (4 - len(s) % 4) if len(s) % 4 else s
-        return base64.urlsafe_b64decode(padded).decode("utf-8", errors="replace")
-    except Exception:
-        return ""
+    return qtr_common.safe_b64_decode(s)
 
 
 def _sha1_b64url(raw_str):
-    """SHA1 hash of string → base64url (matches JS crypto.createHash('sha1')...base64url)."""
-    h = hashlib.sha1(raw_str.encode("utf-8")).digest()
-    return _b64url(h)
+    """SHA1 hash of string â†’ base64url (matches JS crypto.createHash('sha1')...base64url)."""
+    return qtr_common.sha1_b64url(raw_str)
 
 
 def _video_root_id(path):
     """Root/show ID = base64url of path."""
-    return _b64url(str(path or "").encode("utf-8"))
+    return qtr_common.video_root_id(path)
 
 
 def _js_num_str(val):
@@ -184,18 +162,17 @@ def _video_episode_id(file_path, size, mtime_ms):
     """Episode ID = SHA1('path::size::mtimeMs') in base64url.
     IMPORTANT: mtime_ms must be passed as a float (st.st_mtime * 1000)
     and formatted like JavaScript's Number.toString() to match Electron IDs."""
-    return _sha1_b64url("{}::{}::{}".format(
-        str(file_path or ""), int(size or 0), _js_num_str(float(mtime_ms or 0))))
+    return qtr_common.video_episode_id(file_path, size, mtime_ms)
 
 
 def _video_folder_key(show_id, folder_rel_path):
     """Folder key = SHA1('showId::folderRelPath') in base64url."""
-    return _sha1_b64url("{}::{}".format(str(show_id or ""), str(folder_rel_path or "")))
+    return qtr_common.video_folder_key(show_id, folder_rel_path)
 
 
 def _loose_show_id(root_path):
     """SHA1('rootPath::LOOSE_FILES') in base64url."""
-    return _sha1_b64url("{}::LOOSE_FILES".format(str(root_path or "")))
+    return qtr_common.loose_show_id(root_path)
 
 
 def _audiobook_id(folder_path, total_size, latest_mtime):
@@ -205,62 +182,27 @@ def _audiobook_id(folder_path, total_size, latest_mtime):
 
 def _list_immediate_subdirs(root_folder):
     """List immediate child directories (skip dot-prefixed)."""
-    try:
-        entries = os.listdir(root_folder)
-    except OSError:
-        return []
-    out = []
-    for e in sorted(entries):
-        if e.startswith("."):
-            continue
-        fp = os.path.join(root_folder, e)
-        try:
-            if os.path.isdir(fp):
-                out.append(fp)
-        except OSError:
-            continue
-    return out
+    return qtr_common.list_immediate_subdirs(root_folder)
 
 
 def _should_ignore_dir(dirname, ignore_dirnames, ignore_substrings):
     """Check if a directory name should be skipped during scan."""
-    lower = dirname.lower()
-    if lower in ignore_dirnames:
-        return True
-    for sub in ignore_substrings:
-        if sub in lower:
-            return True
-    return False
+    return qtr_common.should_ignore_dir(dirname, ignore_dirnames, ignore_substrings)
 
 
 def _is_path_within(parent, target):
     """Check if target path is within parent directory."""
-    try:
-        p = os.path.normpath(os.path.abspath(str(parent or ""))).lower()
-        t = os.path.normpath(os.path.abspath(str(target or ""))).lower()
-        return t.startswith(p + os.sep) or t == p
-    except Exception:
-        return False
+    return qtr_common.is_path_within(parent, target)
 
 
 def _read_library_config():
     """Read shared library_state.json (used by both library and video domains)."""
-    raw = storage.read_json(storage.data_path(_LIBRARY_CONFIG_FILE), {})
-    return {
-        "seriesFolders": raw.get("seriesFolders", []),
-        "rootFolders": raw.get("rootFolders", []),
-        "ignoredSeries": raw.get("ignoredSeries", []),
-        "scanIgnore": raw.get("scanIgnore", []),
-        "videoFolders": raw.get("videoFolders", []),
-        "videoShowFolders": raw.get("videoShowFolders", []),
-        "videoHiddenShowIds": raw.get("videoHiddenShowIds", []),
-        "videoFiles": raw.get("videoFiles", []),
-    }
+    return _QTR_STORE.read_shared_library_config()
 
 
 def _write_library_config(cfg):
     """Write shared library_state.json (preserves all fields)."""
-    storage.write_json_sync(storage.data_path(_LIBRARY_CONFIG_FILE), cfg)
+    _QTR_STORE.write_shared_library_config(cfg)
 
 
 # ---------------------------------------------------------------------------
@@ -336,10 +278,10 @@ class JsonCrudMixin:
         return _ok()
 
 
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 # NAMESPACE QOBJECTS
 # One class per preload namespace. @Slot methods match the JS API surface.
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 
 # ---------------------------------------------------------------------------
@@ -433,15 +375,86 @@ class WindowBridge(QObject):
 
     @Slot(result=str)
     def openSubtitleDialog(self):
-        return json.dumps(_stub())
+        try:
+            root = self.parent()
+            video = getattr(root, "video", None)
+            if video and hasattr(video, "openSubtitleFileDialog"):
+                return video.openSubtitleFileDialog()
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_err("subtitle_dialog_unavailable"))
 
     @Slot(str, result=str)
     def openBookInNewWindow(self, book_id):
-        return json.dumps(_stub())
+        bid = str(book_id or "").strip()
+        if not bid:
+            return json.dumps(_err("Missing bookId"))
+        root = self.parent()
+        library = getattr(root, "library", None)
+        if not library:
+            return json.dumps(_err("library_unavailable"))
+        try:
+            library._ensure_index()
+        except Exception:
+            pass
+        book = None
+        for b in (library._idx.get("books", []) if isinstance(getattr(library, "_idx", None), dict) else []):
+            if str(b.get("id", "")) == bid:
+                book = b
+                break
+        if not book:
+            return json.dumps(_err("book_not_found"))
+        path = str(book.get("path", "")).strip()
+        if not path:
+            return json.dumps(_err("book_path_missing"))
+        try:
+            library.emit_app_open_files([path], source="window-open-book")
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        if self._win:
+            try:
+                if self._win.isMinimized():
+                    self._win.showNormal()
+                self._win.show()
+                self._win.raise_()
+                self._win.activateWindow()
+            except Exception:
+                pass
+        return json.dumps(_ok({"forwarded": True, "path": path}))
 
     @Slot(str, result=str)
     def openVideoShell(self, payload):
-        return json.dumps(_stub())
+        p = _p(payload)
+        if not isinstance(p, dict):
+            return json.dumps(_err("invalid_payload"))
+        fp = str(p.get("filePath") or p.get("path") or p.get("videoPath") or "").strip()
+        if not fp:
+            return json.dumps(_err("Missing filePath"))
+        launch_args = {
+            "filePath": fp,
+            "startSeconds": float(p.get("startSeconds") or p.get("resumeSeconds") or 0),
+            "sessionId": str(int(time.time() * 1000)),
+            "videoId": str(p.get("videoId") or ""),
+            "showId": str(p.get("showId") or ""),
+        }
+        root = self.parent()
+        player = getattr(root, "player", None)
+        if not player:
+            return json.dumps(_err("player_unavailable"))
+        try:
+            out = player.launchQt(json.dumps(launch_args))
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        if self._win:
+            try:
+                if self._win.isMinimized():
+                    self._win.showNormal()
+                self._win.show()
+                self._win.raise_()
+                self._win.activateWindow()
+            except Exception:
+                pass
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -450,6 +463,56 @@ class WindowBridge(QObject):
 
 class ShellBridge(QObject):
     """Replaces preload/namespaces/shell.js."""
+
+    @staticmethod
+    def _read_browser_host_policy():
+        """
+        Read host policy from web_browser_settings.json.
+        Defaults to in-app Sources mode with external launch disabled.
+        """
+        mode = "in_app"
+        external_fallback = False
+        try:
+            settings_path = storage.data_path("web_browser_settings.json")
+            raw = storage.read_json(settings_path, {}) or {}
+            wrapped = isinstance(raw.get("settings"), dict)
+            settings = raw.get("settings") if wrapped else raw
+            if not isinstance(settings, dict):
+                settings = {}
+
+            host_cfg = settings.get("browserHost") if isinstance(settings.get("browserHost"), dict) else {}
+            if not isinstance(host_cfg, dict):
+                host_cfg = {}
+
+            host_mode = str(host_cfg.get("mode", "") or "").strip().lower()
+            if host_mode not in ("in_app", "external"):
+                host_mode = "in_app"
+            host_external_fallback = bool(host_cfg.get("externalFallbackEnabled", False))
+
+            changed = False
+            if settings.get("browserHost") != {
+                "mode": host_mode,
+                "externalFallbackEnabled": host_external_fallback,
+            }:
+                changed = True
+                settings["browserHost"] = {
+                    "mode": host_mode,
+                    "externalFallbackEnabled": host_external_fallback,
+                }
+
+            if changed:
+                out_doc = dict(raw) if isinstance(raw, dict) else {}
+                if wrapped:
+                    out_doc["settings"] = settings
+                else:
+                    out_doc = settings
+                storage.write_json_sync(settings_path, out_doc)
+
+            mode = host_mode
+            external_fallback = host_external_fallback
+        except Exception:
+            pass
+        return {"mode": mode, "externalFallbackEnabled": external_fallback}
 
     @Slot(str, result=str)
     def revealPath(self, path):
@@ -489,14 +552,60 @@ class ShellBridge(QObject):
 
     @Slot(result=str)
     def openWebMode(self):
-        """Open the Qt-native TankoWeb panel (stack index 2)."""
+        """Open Sources mode inside Butterfly shell by default."""
         try:
             win = self.parent().window._win
-            if win:
-                win.show_tankoweb()
-            return json.dumps(_ok())
+            if not win:
+                return json.dumps(_err("window_unavailable"))
+            try:
+                win.show_web_view()
+            except Exception:
+                pass
+
+            policy = self._read_browser_host_policy()
+            policy_mode = str(policy.get("mode", "in_app") or "in_app").strip().lower()
+            external_fallback = bool(policy.get("externalFallbackEnabled", False))
+
+            if policy_mode != "external" and hasattr(win, "activate_sources_mode"):
+                out = win.activate_sources_mode()
+                if isinstance(out, dict) and out.get("ok"):
+                    return json.dumps(_ok({
+                        "mode": "sources",
+                        "host": "in_app",
+                        "externalFallbackEnabled": external_fallback,
+                    }))
+
+            # Hidden fallback path for debugging/migration only.
+            if (policy_mode == "external" or external_fallback) and hasattr(win, "launch_tanko_browser"):
+                out = win.launch_tanko_browser()
+                if isinstance(out, dict):
+                    return json.dumps(out)
+                return json.dumps(_ok({
+                    "mode": "external",
+                    "launched": True,
+                    "host": "external",
+                }))
+
+            # Last fallback: force in-app mode via JS if the method isn't present.
+            try:
+                if hasattr(win, "_web_page"):
+                    win._web_page.runJavaScript(
+                        "(function(){try{if(window.Tanko&&window.Tanko.modeRouter&&window.Tanko.modeRouter.setMode){window.Tanko.modeRouter.setMode('sources',{force:true});}else if(window.setMode){window.setMode('sources');}if(window.Tanko&&window.Tanko.sources&&window.Tanko.sources.openSources){window.Tanko.sources.openSources();}}catch(_e){}})();"
+                    )
+                return json.dumps(_ok({
+                    "mode": "sources",
+                    "host": "in_app_fallback",
+                    "externalFallbackEnabled": external_fallback,
+                }))
+            except Exception:
+                return json.dumps(_err("sources_mode_activation_failed"))
         except Exception as e:
             return json.dumps(_err(str(e)))
+
+    @Slot(result=str)
+    def openSourcesMode(self):
+        """Alias for compatibility with legacy callers."""
+        return self.openWebMode()
 
     @Slot(result=str)
     def getAppTheme(self):
@@ -796,7 +905,7 @@ class VideoProgressBridge(QObject, JsonCrudMixin):
         merged = {**prev, **nxt, "updatedAt": int(time.time() * 1000)}
         data[video_id] = merged
         self._crud_write(data)
-        # Emit with progress included — JS handler uses payload.progress to update state
+        # Emit with progress included â€” JS handler uses payload.progress to update state
         self.progressUpdated.emit(json.dumps({"videoId": video_id, "progress": merged}))
         return json.dumps({"ok": True, "value": merged})
 
@@ -912,7 +1021,7 @@ class VideoUiBridge(QObject, JsonCrudMixin):
 
 
 # ---------------------------------------------------------------------------
-# Stub namespaces — complex domains not yet ported
+# Stub namespaces â€” complex domains not yet ported
 # These return _stub() for every method so the renderer doesn't crash.
 # They'll be replaced by real implementations as domains are ported.
 # ---------------------------------------------------------------------------
@@ -927,6 +1036,7 @@ class LibraryBridge(QObject):
     """Comics library: folder management, scanning, series discovery."""
     libraryUpdated = Signal(str)
     scanStatus = Signal(str)
+    appOpenFiles = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -939,14 +1049,173 @@ class LibraryBridge(QObject):
         self._error = None
         self._idx_loaded = False
         self._scan_id = 0
+        self._route_store = QTRouteStore(storage)
+        self._route_runtime = QTRouteScanRuntime("comics")
+        self._route = QTRouteService(make_comics_profile(self), self._route_runtime)
 
     # --- internals ---
+
+    # --- QTRoute profile callbacks ---
+
+    def _route_observe_runtime(self):
+        return {
+            "scanning": self._scanning,
+            "scanId": self._scan_id,
+            "thread": self._scan_thread,
+            "cancelEvent": self._cancel_event,
+        }
+
+    def _route_get_state(self, _opts=None):
+        self._ensure_index()
+        cfg = _read_library_config()
+        snap = self._make_snapshot(cfg)
+        if not self._scanning and self._last_scan_at == 0:
+            self._start_scan()
+        return snap
+
+    def _route_scan(self, force=False, _opts=None):
+        self._ensure_index()
+        self._start_scan(force=bool(force))
+        return _ok()
+
+    def _route_cancel_scan(self):
+        if self._scanning:
+            self._cancel_event.set()
+            self._scanning = False
+            self._scan_thread = None
+            self._emit_scan_status(False, canceled=True)
+            self._emit_updated()
+        return _ok()
+
+    def _route_mutate_config(self, action, payload=None):
+        act = str(action or "").strip().lower()
+
+        if act == "set_scan_ignore":
+            patterns = payload if isinstance(payload, list) else []
+            cfg = _read_library_config()
+            cfg["scanIgnore"] = _sanitize_ignore(patterns)
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "add_root_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add root folder")
+            if not folder:
+                return {"ok": False}
+            cfg = _read_library_config()
+            roots = cfg.get("rootFolders", [])
+            if _path_key(folder) not in set(_path_key(r) for r in roots):
+                roots.insert(0, folder)
+                cfg["rootFolders"] = roots
+                _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {**_ok(self._make_snapshot(cfg)), "folder": folder}
+
+        if act == "add_series_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add series folder")
+            if not folder:
+                return {"ok": False}
+            cfg = _read_library_config()
+            series = cfg.get("seriesFolders", [])
+            if _path_key(folder) not in set(_path_key(s) for s in series):
+                series.insert(0, folder)
+                cfg["seriesFolders"] = series
+                _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {**_ok(self._make_snapshot(cfg)), "folder": folder}
+
+        if act == "remove_series_folder":
+            folder = str(payload or "").strip()
+            if not folder:
+                return _err("Missing folder")
+            cfg = _read_library_config()
+            fk = _path_key(folder)
+            manual = cfg.get("seriesFolders", [])
+            manual_keys = set(_path_key(s) for s in manual)
+            if fk in manual_keys:
+                cfg["seriesFolders"] = [s for s in manual if _path_key(s) != fk]
+            else:
+                ignored = cfg.get("ignoredSeries", [])
+                if fk not in set(_path_key(x) for x in ignored):
+                    ignored.append(folder)
+                    cfg["ignoredSeries"] = ignored
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "remove_root_folder":
+            root_path = str(payload or "").strip()
+            if not root_path:
+                return _err("Missing root_path")
+            cfg = _read_library_config()
+            rk = _path_key(root_path)
+            cfg["rootFolders"] = [r for r in cfg.get("rootFolders", []) if _path_key(r) != rk]
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "unignore_series":
+            folder = str(payload or "").strip()
+            if not folder:
+                return _err("Missing folder")
+            cfg = _read_library_config()
+            fk = _path_key(folder)
+            cfg["ignoredSeries"] = [x for x in cfg.get("ignoredSeries", []) if _path_key(x) != fk]
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "clear_ignored_series":
+            cfg = _read_library_config()
+            cfg["ignoredSeries"] = []
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "open_comic_file_dialog":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(COMIC_EXTENSIONS))
+            path, _ = QFileDialog.getOpenFileName(
+                None, "Open comic file", "",
+                "Comic files ({});;All Files (*)".format(exts),
+            )
+            if not path:
+                return {"ok": False}
+            return {"ok": True, "path": path}
+
+        return _err("unsupported_action")
+
+    def _route_lookup_from_path(self, file_path):
+        fp = str(file_path or "").strip()
+        if not fp:
+            return _err("Missing path")
+        ext = os.path.splitext(fp)[1].lower()
+        if ext not in COMIC_EXTENSIONS:
+            return {"ok": False, "error": "unsupported_format"}
+        try:
+            st = os.stat(fp)
+        except OSError:
+            return {"ok": False, "error": "file_not_found"}
+        bid = _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000))
+        parent_dir = os.path.dirname(fp)
+        sid = _series_id_for_folder(parent_dir)
+        book = {
+            "id": bid, "seriesId": sid,
+            "seriesName": os.path.basename(parent_dir),
+            "title": os.path.splitext(os.path.basename(fp))[0],
+            "path": fp, "size": st.st_size,
+            "mtimeMs": int(st.st_mtime * 1000),
+            "ext": ext.lstrip(".").upper(),
+        }
+        return {"ok": True, "book": book}
 
     def _ensure_index(self):
         if self._idx_loaded:
             return
         self._idx_loaded = True
-        raw = storage.read_json(storage.data_path(_LIBRARY_INDEX_FILE), {})
+        raw = self._route_store.read_index("comics")
         self._idx = {"series": raw.get("series", []), "books": raw.get("books", [])}
         # Invalidate old-format cache (IDs without ::size::mtime) and force rescan
         needs_rescan = False
@@ -956,7 +1225,7 @@ class LibraryBridge(QObject):
                 needs_rescan = True
                 break
         if needs_rescan:
-            print("[comics] Old-format IDs detected in cache — clearing and forcing rescan")
+            print("[comics] Old-format IDs detected in cache â€” clearing and forcing rescan")
             self._idx = {"series": [], "books": []}
             self._last_scan_at = 0
             self._start_scan(force=True)
@@ -1012,6 +1281,15 @@ class LibraryBridge(QObject):
         payload = {"scanning": scanning, "progress": progress}
         if canceled:
             payload["canceled"] = True
+            try:
+                self._route_runtime.note_scan_canceled()
+            except Exception:
+                pass
+        elif not scanning:
+            try:
+                self._route_runtime.note_scan_finished()
+            except Exception:
+                pass
         try:
             self.scanStatus.emit(json.dumps(payload))
         except Exception:
@@ -1063,13 +1341,13 @@ class LibraryBridge(QObject):
             return
         # Safety: don't overwrite good disk cache with empty scan results
         if not series and self._idx.get("series"):
-            print("[scan] Comics scan found 0 series but disk cache has data — skipping overwrite")
+            print("[scan] Comics scan found 0 series but disk cache has data â€” skipping overwrite")
             self._scanning = False
             self._scan_thread = None
             self._emit_scan_status(False)
             return
         self._idx = {"series": series, "books": books}
-        storage.write_json_sync(storage.data_path(_LIBRARY_INDEX_FILE), self._idx)
+        self._route_store.write_index("comics", self._idx)
         self._last_scan_at = int(time.time() * 1000)
         self._scanning = False
         self._scan_thread = None
@@ -1093,6 +1371,10 @@ class LibraryBridge(QObject):
             pass
 
     def _start_scan(self, force=False):
+        try:
+            self._route_runtime.note_scan_request(bool(force))
+        except Exception:
+            pass
         cfg = _read_library_config()
         effective = self._effective_series(cfg)
         key = json.dumps(sorted(effective), sort_keys=True)
@@ -1109,35 +1391,44 @@ class LibraryBridge(QObject):
         self._emit_scan_status(True, {"seriesDone": 0, "seriesTotal": len(effective), "currentSeries": ""})
         t = threading.Thread(target=self._do_scan, args=(effective, ignore_subs, self._scan_id), daemon=True)
         self._scan_thread = t
+        try:
+            self._route_runtime.note_scan_started()
+        except Exception:
+            pass
         t.start()
+
+    def emit_app_open_files(self, paths, source="os"):
+        clean = []
+        for p in paths or []:
+            s = str(p or "").strip()
+            if s:
+                clean.append(s)
+        if not clean:
+            return
+        payload = {
+            "paths": clean,
+            "source": str(source or "os"),
+            "timestamp": int(time.time() * 1000),
+        }
+        try:
+            self.appOpenFiles.emit(json.dumps(payload))
+        except Exception:
+            pass
 
     # --- @Slot methods ---
 
     @Slot(result=str)
     def getState(self):
-        self._ensure_index()
-        cfg = _read_library_config()
-        snap = self._make_snapshot(cfg)
-        if not self._scanning and self._last_scan_at == 0:
-            self._start_scan()
-        return json.dumps(snap)
+        return json.dumps(self._route.get_state())
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
-        self._ensure_index()
-        self._start_scan(force=True)
-        return json.dumps(_ok())
+        return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(result=str)
     def cancelScan(self):
-        if self._scanning:
-            self._cancel_event.set()
-            self._scanning = False
-            self._scan_thread = None
-            self._emit_scan_status(False, canceled=True)
-            self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps(self._route.cancel_scan())
 
     @Slot(str, result=str)
     def setScanIgnore(self, patterns_json):
@@ -1145,130 +1436,39 @@ class LibraryBridge(QObject):
             patterns = json.loads(patterns_json) if patterns_json else []
         except Exception:
             patterns = []
-        cfg = _read_library_config()
-        cfg["scanIgnore"] = _sanitize_ignore(patterns)
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("set_scan_ignore", patterns))
 
     @Slot(result=str)
     def addRootFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add root folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        cfg = _read_library_config()
-        roots = cfg.get("rootFolders", [])
-        if _path_key(folder) not in set(_path_key(r) for r in roots):
-            roots.insert(0, folder)
-            cfg["rootFolders"] = roots
-            _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({**_ok(self._make_snapshot(cfg)), "folder": folder})
+        return json.dumps(self._route.mutate_config("add_root_folder"))
 
     @Slot(result=str)
     def addSeriesFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add series folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        cfg = _read_library_config()
-        series = cfg.get("seriesFolders", [])
-        if _path_key(folder) not in set(_path_key(s) for s in series):
-            series.insert(0, folder)
-            cfg["seriesFolders"] = series
-            _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({**_ok(self._make_snapshot(cfg)), "folder": folder})
+        return json.dumps(self._route.mutate_config("add_series_folder"))
 
     @Slot(str, result=str)
     def removeSeriesFolder(self, folder):
-        folder = str(folder or "").strip()
-        if not folder:
-            return json.dumps(_err("Missing folder"))
-        cfg = _read_library_config()
-        fk = _path_key(folder)
-        manual = cfg.get("seriesFolders", [])
-        manual_keys = set(_path_key(s) for s in manual)
-        if fk in manual_keys:
-            cfg["seriesFolders"] = [s for s in manual if _path_key(s) != fk]
-        else:
-            ignored = cfg.get("ignoredSeries", [])
-            if fk not in set(_path_key(x) for x in ignored):
-                ignored.append(folder)
-                cfg["ignoredSeries"] = ignored
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("remove_series_folder", folder))
 
     @Slot(str, result=str)
     def removeRootFolder(self, root_path):
-        root_path = str(root_path or "").strip()
-        if not root_path:
-            return json.dumps(_err("Missing root_path"))
-        cfg = _read_library_config()
-        rk = _path_key(root_path)
-        cfg["rootFolders"] = [r for r in cfg.get("rootFolders", []) if _path_key(r) != rk]
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("remove_root_folder", root_path))
 
     @Slot(str, result=str)
     def unignoreSeries(self, folder):
-        folder = str(folder or "").strip()
-        if not folder:
-            return json.dumps(_err("Missing folder"))
-        cfg = _read_library_config()
-        fk = _path_key(folder)
-        cfg["ignoredSeries"] = [x for x in cfg.get("ignoredSeries", []) if _path_key(x) != fk]
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("unignore_series", folder))
 
     @Slot(result=str)
     def clearIgnoredSeries(self):
-        cfg = _read_library_config()
-        cfg["ignoredSeries"] = []
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("clear_ignored_series"))
 
     @Slot(result=str)
     def openComicFileDialog(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(COMIC_EXTENSIONS))
-        path, _ = QFileDialog.getOpenFileName(
-            None, "Open comic file", "",
-            "Comic files ({});;All Files (*)".format(exts),
-        )
-        if not path:
-            return json.dumps({"ok": False})
-        return json.dumps({"ok": True, "path": path})
+        return json.dumps(self._route.mutate_config("open_comic_file_dialog"))
 
     @Slot(str, result=str)
     def bookFromPath(self, file_path):
-        fp = str(file_path or "").strip()
-        if not fp:
-            return json.dumps(_err("Missing path"))
-        ext = os.path.splitext(fp)[1].lower()
-        if ext not in COMIC_EXTENSIONS:
-            return json.dumps({"ok": False, "error": "unsupported_format"})
-        try:
-            st = os.stat(fp)
-        except OSError:
-            return json.dumps({"ok": False, "error": "file_not_found"})
-        bid = _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000))
-        parent_dir = os.path.dirname(fp)
-        sid = _series_id_for_folder(parent_dir)
-        book = {
-            "id": bid, "seriesId": sid,
-            "seriesName": os.path.basename(parent_dir),
-            "title": os.path.splitext(os.path.basename(fp))[0],
-            "path": fp, "size": st.st_size,
-            "mtimeMs": int(st.st_mtime * 1000),
-            "ext": ext.lstrip(".").upper(),
-        }
-        return json.dumps({"ok": True, "book": book})
+        return json.dumps(self._route.lookup_from_path(file_path))
 
 
 class BooksBridge(QObject):
@@ -1290,11 +1490,185 @@ class BooksBridge(QObject):
         self._error = None
         self._idx_loaded = False
         self._scan_id = 0
+        self._route_store = QTRouteStore(storage)
+        self._route_runtime = QTRouteScanRuntime("books")
+        self._route = QTRouteService(make_books_profile(self), self._route_runtime)
 
     # --- internals ---
 
+    # --- QTRoute profile callbacks ---
+
+    def _route_observe_runtime(self):
+        return {
+            "scanning": self._scanning,
+            "scanId": self._scan_id,
+            "thread": self._scan_thread,
+            "cancelEvent": self._cancel_event,
+        }
+
+    def _route_get_state(self, _opts=None):
+        self._ensure_index()
+        cfg = self._read_config()
+        snap = self._make_snapshot(cfg)
+        if not self._scanning and self._last_scan_at == 0:
+            self._start_scan()
+        return snap
+
+    def _route_scan(self, force=False, _opts=None):
+        self._ensure_index()
+        self._start_scan(force=bool(force))
+        return _ok()
+
+    def _route_cancel_scan(self):
+        if self._scanning:
+            self._cancel_event.set()
+            self._scanning = False
+            self._scan_thread = None
+            self._emit_scan_status(False, canceled=True)
+            self._emit_updated()
+        return _ok()
+
+    def _route_mutate_config(self, action, payload=None):
+        act = str(action or "").strip().lower()
+
+        if act == "set_scan_ignore":
+            patterns = payload if isinstance(payload, list) else []
+            cfg = self._read_config()
+            cfg["scanIgnore"] = _sanitize_ignore(patterns)
+            self._write_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "add_root_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add books root folder")
+            if not folder:
+                return {"ok": False}
+            cfg = self._read_config()
+            roots = cfg.get("bookRootFolders", [])
+            if _path_key(folder) not in set(_path_key(r) for r in roots):
+                roots.insert(0, folder)
+                cfg["bookRootFolders"] = roots
+                self._write_config(cfg)
+            self._start_scan(force=True)
+            return {**_ok(self._make_snapshot(cfg)), "folder": folder}
+
+        if act == "remove_root_folder":
+            p = str(payload or "").strip()
+            if not p:
+                return _err("Missing path")
+            cfg = self._read_config()
+            pk = _path_key(p)
+            cfg["bookRootFolders"] = [r for r in cfg.get("bookRootFolders", []) if _path_key(r) != pk]
+            self._write_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "add_series_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add books series folder")
+            if not folder:
+                return {"ok": False}
+            cfg = self._read_config()
+            series = cfg.get("bookSeriesFolders", [])
+            if _path_key(folder) not in set(_path_key(s) for s in series):
+                series.insert(0, folder)
+                cfg["bookSeriesFolders"] = series
+                self._write_config(cfg)
+            self._start_scan(force=True)
+            return {**_ok(self._make_snapshot(cfg)), "folder": folder}
+
+        if act == "remove_series_folder":
+            p = str(payload or "").strip()
+            if not p:
+                return _err("Missing path")
+            cfg = self._read_config()
+            pk = _path_key(p)
+            manual = cfg.get("bookSeriesFolders", [])
+            if pk in set(_path_key(s) for s in manual):
+                cfg["bookSeriesFolders"] = [s for s in manual if _path_key(s) != pk]
+                self._write_config(cfg)
+                self._start_scan(force=True)
+            else:
+                sid = _series_id_for_folder(p)
+                self._idx["books"] = [b for b in self._idx.get("books", []) if b.get("seriesId") != sid]
+                self._idx["series"] = [s for s in self._idx.get("series", []) if s.get("id") != sid]
+                self._route_store.write_index("books", self._idx)
+                self._emit_updated()
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "add_files":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(BOOK_EXTENSIONS))
+            paths, _ = QFileDialog.getOpenFileNames(
+                None, "Add book files", "",
+                "Book files ({});;All Files (*)".format(exts),
+            )
+            if not paths:
+                return {"ok": False}
+            cfg = self._read_config()
+            singles = cfg.get("bookSingleFiles", [])
+            existing = set(_path_key(s) for s in singles)
+            for fp in paths:
+                pk = _path_key(fp)
+                if pk not in existing:
+                    singles.append(fp)
+                    existing.add(pk)
+            cfg["bookSingleFiles"] = singles
+            self._write_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "remove_file":
+            p = str(payload or "").strip()
+            if not p:
+                return _err("Missing path")
+            cfg = self._read_config()
+            pk = _path_key(p)
+            cfg["bookSingleFiles"] = [s for s in cfg.get("bookSingleFiles", []) if _path_key(s) != pk]
+            self._write_config(cfg)
+            self._start_scan(force=True)
+            return _ok(self._make_snapshot(cfg))
+
+        if act == "open_file_dialog":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(BOOK_EXTENSIONS))
+            path, _ = QFileDialog.getOpenFileName(
+                None, "Open book file", "",
+                "Book files ({});;All Files (*)".format(exts),
+            )
+            if not path:
+                return {"ok": False}
+            return self._route.lookup_from_path(path)
+
+        return _err("unsupported_action")
+
+    def _route_lookup_from_path(self, p):
+        fp = str(p or "").strip()
+        if not fp:
+            return _err("Missing path")
+        ext = os.path.splitext(fp)[1].lower()
+        if ext not in BOOK_EXTENSIONS:
+            return {"ok": False, "error": "unsupported_format"}
+        try:
+            st = os.stat(fp)
+        except OSError:
+            return {"ok": False, "error": "file_not_found"}
+        cfg = self._read_config()
+        cls = self._classify_book(cfg, fp)
+        book = {
+            "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
+            "seriesId": cls["seriesId"], "seriesName": cls.get("seriesName", ""),
+            "title": os.path.splitext(os.path.basename(fp))[0],
+            "path": fp, "size": st.st_size,
+            "mtimeMs": int(st.st_mtime * 1000),
+            "format": ext.lstrip(".").lower(),
+            "sourceKind": cls["sourceKind"],
+        }
+        return {"ok": True, "book": book}
+
     def _read_config(self):
-        raw = storage.read_json(storage.data_path(self._CONFIG_FILE), {})
+        raw = self._route_store.read_books_config()
         return {
             "bookRootFolders": raw.get("bookRootFolders", []),
             "bookSeriesFolders": raw.get("bookSeriesFolders", []),
@@ -1303,13 +1677,13 @@ class BooksBridge(QObject):
         }
 
     def _write_config(self, cfg):
-        storage.write_json_sync(storage.data_path(self._CONFIG_FILE), cfg)
+        self._route_store.write_books_config(cfg)
 
     def _ensure_index(self):
         if self._idx_loaded:
             return
         self._idx_loaded = True
-        raw = storage.read_json(storage.data_path(self._INDEX_FILE), {})
+        raw = self._route_store.read_index("books")
         self._idx = {
             "series": raw.get("series", []),
             "books": raw.get("books", []),
@@ -1323,7 +1697,7 @@ class BooksBridge(QObject):
                 needs_rescan = True
                 break
         if needs_rescan:
-            print("[books] Old-format IDs detected in cache — clearing and forcing rescan")
+            print("[books] Old-format IDs detected in cache â€” clearing and forcing rescan")
             self._idx = {"series": [], "books": [], "folders": []}
             self._last_scan_at = 0
             self._start_scan(force=True)
@@ -1372,6 +1746,15 @@ class BooksBridge(QObject):
         payload = {"scanning": scanning, "progress": progress}
         if canceled:
             payload["canceled"] = True
+            try:
+                self._route_runtime.note_scan_canceled()
+            except Exception:
+                pass
+        elif not scanning:
+            try:
+                self._route_runtime.note_scan_finished()
+            except Exception:
+                pass
         try:
             self.scanStatus.emit(json.dumps(payload))
         except Exception:
@@ -1411,7 +1794,7 @@ class BooksBridge(QObject):
         total = len(effective) + (1 if single_files else 0)
         ignore_subs = [s.lower() for s in cfg.get("scanIgnore", []) if s]
 
-        # Build a mapping from folder → (rootId, rootPath) for hierarchy fields
+        # Build a mapping from folder â†’ (rootId, rootPath) for hierarchy fields
         root_folders = cfg.get("bookRootFolders", [])
         explicit_series = cfg.get("bookSeriesFolders", [])
 
@@ -1534,13 +1917,13 @@ class BooksBridge(QObject):
             return
         # Safety: don't overwrite good disk cache with empty scan results
         if not series_map and self._idx.get("series"):
-            print("[scan] Books scan found 0 series but disk cache has data — skipping overwrite")
+            print("[scan] Books scan found 0 series but disk cache has data â€” skipping overwrite")
             self._scanning = False
             self._scan_thread = None
             self._emit_scan_status(False)
             return
         self._idx = {"series": list(series_map.values()), "books": books, "folders": folders_list}
-        storage.write_json_sync(storage.data_path(self._INDEX_FILE), self._idx)
+        self._route_store.write_index("books", self._idx)
         self._last_scan_at = int(time.time() * 1000)
         self._scanning = False
         self._scan_thread = None
@@ -1567,6 +1950,10 @@ class BooksBridge(QObject):
             pass
 
     def _start_scan(self, force=False):
+        try:
+            self._route_runtime.note_scan_request(bool(force))
+        except Exception:
+            pass
         cfg = self._read_config()
         effective = self._effective_series(cfg)
         singles = cfg.get("bookSingleFiles", [])
@@ -1583,35 +1970,26 @@ class BooksBridge(QObject):
         self._emit_scan_status(True, {"foldersDone": 0, "foldersTotal": len(effective), "currentFolder": ""})
         t = threading.Thread(target=self._do_scan, args=(cfg, self._scan_id), daemon=True)
         self._scan_thread = t
+        try:
+            self._route_runtime.note_scan_started()
+        except Exception:
+            pass
         t.start()
 
     # --- @Slot methods ---
 
     @Slot(result=str)
     def getState(self):
-        self._ensure_index()
-        cfg = self._read_config()
-        snap = self._make_snapshot(cfg)
-        if not self._scanning and self._last_scan_at == 0:
-            self._start_scan()
-        return json.dumps(snap)
+        return json.dumps(self._route.get_state())
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
-        self._ensure_index()
-        self._start_scan(force=True)
-        return json.dumps(_ok())
+        return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(result=str)
     def cancelScan(self):
-        if self._scanning:
-            self._cancel_event.set()
-            self._scanning = False
-            self._scan_thread = None
-            self._emit_scan_status(False, canceled=True)
-            self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps(self._route.cancel_scan())
 
     @Slot(str, result=str)
     def setScanIgnore(self, p):
@@ -1619,152 +1997,46 @@ class BooksBridge(QObject):
             patterns = json.loads(p) if p else []
         except Exception:
             patterns = []
-        cfg = self._read_config()
-        cfg["scanIgnore"] = _sanitize_ignore(patterns)
-        self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("set_scan_ignore", patterns))
 
     @Slot(result=str)
     def addRootFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add books root folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        cfg = self._read_config()
-        roots = cfg.get("bookRootFolders", [])
-        if _path_key(folder) not in set(_path_key(r) for r in roots):
-            roots.insert(0, folder)
-            cfg["bookRootFolders"] = roots
-            self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({**_ok(self._make_snapshot(cfg)), "folder": folder})
+        return json.dumps(self._route.mutate_config("add_root_folder"))
 
     @Slot(str, result=str)
     def removeRootFolder(self, p):
-        p = str(p or "").strip()
-        if not p:
-            return json.dumps(_err("Missing path"))
-        cfg = self._read_config()
-        pk = _path_key(p)
-        cfg["bookRootFolders"] = [r for r in cfg.get("bookRootFolders", []) if _path_key(r) != pk]
-        self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("remove_root_folder", p))
 
     @Slot(result=str)
     def addSeriesFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add books series folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        cfg = self._read_config()
-        series = cfg.get("bookSeriesFolders", [])
-        if _path_key(folder) not in set(_path_key(s) for s in series):
-            series.insert(0, folder)
-            cfg["bookSeriesFolders"] = series
-            self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({**_ok(self._make_snapshot(cfg)), "folder": folder})
+        return json.dumps(self._route.mutate_config("add_series_folder"))
 
     @Slot(str, result=str)
     def removeSeriesFolder(self, p):
-        p = str(p or "").strip()
-        if not p:
-            return json.dumps(_err("Missing path"))
-        cfg = self._read_config()
-        pk = _path_key(p)
-        manual = cfg.get("bookSeriesFolders", [])
-        if pk in set(_path_key(s) for s in manual):
-            cfg["bookSeriesFolders"] = [s for s in manual if _path_key(s) != pk]
-            self._write_config(cfg)
-            self._start_scan(force=True)
-        else:
-            sid = _series_id_for_folder(p)
-            self._idx["books"] = [b for b in self._idx.get("books", []) if b.get("seriesId") != sid]
-            self._idx["series"] = [s for s in self._idx.get("series", []) if s.get("id") != sid]
-            storage.write_json_sync(storage.data_path(self._INDEX_FILE), self._idx)
-            self._emit_updated()
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("remove_series_folder", p))
 
     @Slot(result=str)
     def addFiles(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(BOOK_EXTENSIONS))
-        paths, _ = QFileDialog.getOpenFileNames(
-            None, "Add book files", "",
-            "Book files ({});;All Files (*)".format(exts),
-        )
-        if not paths:
-            return json.dumps({"ok": False})
-        cfg = self._read_config()
-        singles = cfg.get("bookSingleFiles", [])
-        existing = set(_path_key(s) for s in singles)
-        for fp in paths:
-            pk = _path_key(fp)
-            if pk not in existing:
-                singles.append(fp)
-                existing.add(pk)
-        cfg["bookSingleFiles"] = singles
-        self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("add_files"))
 
     @Slot(str, result=str)
     def removeFile(self, p):
-        p = str(p or "").strip()
-        if not p:
-            return json.dumps(_err("Missing path"))
-        cfg = self._read_config()
-        pk = _path_key(p)
-        cfg["bookSingleFiles"] = [s for s in cfg.get("bookSingleFiles", []) if _path_key(s) != pk]
-        self._write_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps(_ok(self._make_snapshot(cfg)))
+        return json.dumps(self._route.mutate_config("remove_file", p))
 
     @Slot(result=str)
     def openFileDialog(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(BOOK_EXTENSIONS))
-        path, _ = QFileDialog.getOpenFileName(
-            None, "Open book file", "",
-            "Book files ({});;All Files (*)".format(exts),
-        )
-        if not path:
-            return json.dumps({"ok": False})
-        return self.bookFromPath(path)
+        return json.dumps(self._route.mutate_config("open_file_dialog"))
 
     @Slot(str, result=str)
     def bookFromPath(self, p):
-        fp = str(p or "").strip()
-        if not fp:
-            return json.dumps(_err("Missing path"))
-        ext = os.path.splitext(fp)[1].lower()
-        if ext not in BOOK_EXTENSIONS:
-            return json.dumps({"ok": False, "error": "unsupported_format"})
-        try:
-            st = os.stat(fp)
-        except OSError:
-            return json.dumps({"ok": False, "error": "file_not_found"})
-        cfg = self._read_config()
-        cls = self._classify_book(cfg, fp)
-        book = {
-            "id": _book_id_for_path(fp, st.st_size, int(st.st_mtime * 1000)),
-            "seriesId": cls["seriesId"], "seriesName": cls.get("seriesName", ""),
-            "title": os.path.splitext(os.path.basename(fp))[0],
-            "path": fp, "size": st.st_size,
-            "mtimeMs": int(st.st_mtime * 1000),
-            "format": ext.lstrip(".").lower(),
-            "sourceKind": cls["sourceKind"],
-        }
-        return json.dumps({"ok": True, "book": book})
+        return json.dumps(self._route.lookup_from_path(p))
 
 
 class BooksTtsEdgeBridge(QObject):
     """
     Edge TTS (Text-to-Speech) via the ``edge-tts`` pip package.
 
-    Provides voice listing, text→audio synthesis with SHA-256-keyed disk
+    Provides voice listing, textâ†’audio synthesis with SHA-256-keyed disk
     cache (``tts_audio_cache/``), cache eviction at 500 MB, and a probe
     method that tests both voice availability and synthesis readiness.
 
@@ -1785,7 +2057,7 @@ class BooksTtsEdgeBridge(QObject):
         self._evict_count = 0
         self._edge_tts = None       # lazy-loaded module reference
 
-    # ── helpers ──────────────────────────────────────────────────────────
+    # â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _try_import(self):
         if self._edge_tts is not None:
@@ -1890,7 +2162,7 @@ class BooksTtsEdgeBridge(QObject):
         hz = round((max(0.5, min(2.0, float(pitch or 1.0))) - 1) * 50)
         return ("+" if hz >= 0 else "") + str(hz) + "Hz"
 
-    # ── async runner (edge_tts is asyncio-based) ────────────────────────
+    # â”€â”€ async runner (edge_tts is asyncio-based) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _run_async(self, coro):
         """Run an asyncio coroutine from a sync context (Qt slot).
@@ -1917,7 +2189,7 @@ class BooksTtsEdgeBridge(QObject):
         except Exception:
             return asyncio.run(coro)
 
-    # ── voice listing ───────────────────────────────────────────────────
+    # â”€â”€ voice listing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _fetch_voices(self):
         et = self._try_import()
@@ -1960,7 +2232,7 @@ class BooksTtsEdgeBridge(QObject):
         except Exception as e:
             return json.dumps({"ok": False, "voices": [], "reason": str(e)})
 
-    # ── synthesis ───────────────────────────────────────────────────────
+    # â”€â”€ synthesis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _synth_edge(self, text, voice, rate_str, pitch_str):
         et = self._try_import()
@@ -2072,7 +2344,7 @@ class BooksTtsEdgeBridge(QObject):
         result["elapsedMs"] = elapsed
         return json.dumps(result)
 
-    # ── probe ───────────────────────────────────────────────────────────
+    # â”€â”€ probe â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(str, result=str)
     def probe(self, p):
@@ -2127,7 +2399,7 @@ class BooksTtsEdgeBridge(QObject):
         out["reason"] = s.get("errorCode") or s.get("reason") or "probe_failed"
         return json.dumps(out)
 
-    # ── warmup / reset / cache management ───────────────────────────────
+    # â”€â”€ warmup / reset / cache management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(str, result=str)
     def warmup(self, p):
@@ -2143,7 +2415,7 @@ class BooksTtsEdgeBridge(QObject):
 
     @Slot(result=str)
     def resetInstance(self):
-        """Reset cached state — forces fresh voice fetch on next call."""
+        """Reset cached state â€” forces fresh voice fetch on next call."""
         self._voices_cache = []
         self._voices_at = 0
         return json.dumps({"ok": True})
@@ -2352,14 +2624,247 @@ class VideoBridge(QObject):
         self._error = None
         self._idx_loaded = False
         self._scan_id = 0
+        self._route_store = QTRouteStore(storage)
+        self._route_runtime = QTRouteScanRuntime("video")
+        self._route = QTRouteService(make_video_profile(self), self._route_runtime)
 
     # --- internals ---
+
+    # --- QTRoute profile callbacks ---
+
+    def _route_observe_runtime(self):
+        return {
+            "scanning": self._scanning,
+            "scanId": self._scan_id,
+            "thread": self._scan_thread,
+            "cancelEvent": self._cancel_event,
+        }
+
+    def _route_get_state(self, opts=None):
+        self._ensure_index()
+        o = opts if isinstance(opts, dict) else {}
+        cfg = _read_library_config()
+        snap = self._make_snapshot(cfg, o)
+        if not self._scanning and self._last_scan_at == 0:
+            self._start_scan()
+        return snap
+
+    def _route_scan(self, force=False, _opts=None):
+        self._ensure_index()
+        self._start_scan(force=bool(force))
+        return _ok()
+
+    def _route_cancel_scan(self):
+        if self._scanning:
+            self._cancel_event.set()
+            self._scanning = False
+            self._scan_thread = None
+            self._emit_scan_status(False, canceled=True)
+            self._emit_updated()
+        return _ok()
+
+    def _route_mutate_config(self, action, payload=None):
+        act = str(action or "").strip().lower()
+
+        if act == "scan_show":
+            self._ensure_index()
+            self._start_scan(force=True)
+            return _ok()
+
+        if act == "add_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add video folder")
+            if not folder:
+                return {"ok": False}
+            cfg = _read_library_config()
+            vf = cfg.get("videoFolders", [])
+            if _path_key(folder) not in set(_path_key(f) for f in vf):
+                vf.insert(0, folder)
+                cfg["videoFolders"] = vf
+                _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {"ok": True, "state": self._make_snapshot(cfg), "folder": folder}
+
+        if act == "add_show_folder":
+            from PySide6.QtWidgets import QFileDialog
+            folder = QFileDialog.getExistingDirectory(None, "Add show folder")
+            if not folder:
+                return {"ok": False}
+            return self._add_show_folder_path(folder)
+
+        if act == "add_show_folder_path":
+            fp = str(payload or "").strip()
+            if not fp:
+                return _err("Missing path")
+            return self._add_show_folder_path(fp)
+
+        if act == "remove_folder":
+            fp = str(payload or "").strip()
+            if not fp:
+                return _err("Missing path")
+            cfg = _read_library_config()
+            pk = _path_key(fp)
+            cfg["videoFolders"] = [f for f in cfg.get("videoFolders", []) if _path_key(f) != pk]
+            cfg["videoShowFolders"] = [f for f in cfg.get("videoShowFolders", []) if _path_key(f) != pk]
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "remove_streamable_folder":
+            payload_obj = payload if isinstance(payload, dict) else {}
+            show_path = str(payload_obj.get("showPath", "")).strip()
+            folder_rel = str(payload_obj.get("folderRelPath", "")).strip()
+            delete_files = payload_obj.get("deleteFiles", True)
+            if not show_path:
+                return _err("Missing showPath")
+            target = os.path.normpath(os.path.join(show_path, folder_rel) if folder_rel else show_path)
+            if not _is_path_within(show_path, target):
+                return _err("Target not within show path")
+            if not self._has_stream_manifest(target):
+                return _err("Not a streamable folder")
+            deleted = False
+            if delete_files is not False:
+                try:
+                    import shutil as _shutil
+                    _shutil.rmtree(target, ignore_errors=True)
+                    deleted = True
+                except Exception:
+                    pass
+            cfg = _read_library_config()
+            cfg["videoShowFolders"] = [f for f in cfg.get("videoShowFolders", [])
+                                       if not _is_path_within(target, f)]
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {"ok": True, "showPath": show_path,
+                    "targetFolder": target, "deleted": deleted}
+
+        if act == "hide_show":
+            sid = str(payload or "").strip()
+            if not sid:
+                return _err("Missing showId")
+            cfg = _read_library_config()
+            hidden = cfg.get("videoHiddenShowIds", [])
+            if sid not in hidden:
+                hidden.append(sid)
+                cfg["videoHiddenShowIds"] = hidden
+                _write_library_config(cfg)
+            self._emit_updated()
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "open_file_dialog":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(VIDEO_EXTENSIONS))
+            path, _ = QFileDialog.getOpenFileName(
+                None, "Open video file", "",
+                "Video files ({});;All Files (*)".format(exts),
+            )
+            if not path:
+                return {"ok": False}
+            return {"ok": True, "path": path}
+
+        if act == "open_subtitle_file_dialog":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(SUBTITLE_EXTENSIONS))
+            path, _ = QFileDialog.getOpenFileName(
+                None, "Load subtitle file", "",
+                "Subtitle files ({});;All Files (*)".format(exts),
+            )
+            if not path:
+                return {"ok": False}
+            return {"ok": True, "path": path}
+
+        if act == "add_files":
+            from PySide6.QtWidgets import QFileDialog
+            exts = " ".join("*" + e for e in sorted(VIDEO_EXTENSIONS))
+            paths, _ = QFileDialog.getOpenFileNames(
+                None, "Add video files", "",
+                "Video files ({});;All Files (*)".format(exts),
+            )
+            if not paths:
+                return {"ok": False}
+            cfg = _read_library_config()
+            vfiles = cfg.get("videoFiles", [])
+            existing = set(_path_key(f) for f in vfiles)
+            for fp in paths:
+                pk = _path_key(fp)
+                if pk not in existing:
+                    vfiles.append(fp)
+                    existing.add(pk)
+            cfg["videoFiles"] = vfiles
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "remove_file":
+            fp = str(payload or "").strip()
+            if not fp:
+                return _err("Missing path")
+            cfg = _read_library_config()
+            pk = _path_key(fp)
+            cfg["videoFiles"] = [f for f in cfg.get("videoFiles", []) if _path_key(f) != pk]
+            _write_library_config(cfg)
+            self._start_scan(force=True)
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "restore_all_hidden_shows":
+            cfg = _read_library_config()
+            cfg["videoHiddenShowIds"] = []
+            _write_library_config(cfg)
+            self._emit_updated()
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "restore_hidden_shows_for_root":
+            rid = str(payload or "").strip()
+            if not rid:
+                return _err("Missing rootId")
+            cfg = _read_library_config()
+            hidden = cfg.get("videoHiddenShowIds", [])
+            self._ensure_index()
+            root_show_ids = set(s.get("id") for s in self._idx.get("shows", []) if s.get("rootId") == rid)
+            cfg["videoHiddenShowIds"] = [h for h in hidden if h not in root_show_ids]
+            _write_library_config(cfg)
+            self._emit_updated()
+            return {"ok": True, "state": self._make_snapshot(cfg)}
+
+        if act == "get_episodes_for_show":
+            sid = str(payload or "").strip()
+            if not sid:
+                return _err("Missing showId")
+            self._ensure_index()
+            eps = [e for e in self._idx.get("episodes", []) if e.get("showId") == sid]
+            return {"ok": True, "episodes": eps}
+
+        if act == "get_episodes_for_root":
+            rid = str(payload or "").strip()
+            if not rid:
+                return _err("Missing rootId")
+            self._ensure_index()
+            eps = [e for e in self._idx.get("episodes", []) if e.get("rootId") == rid]
+            return {"ok": True, "episodes": eps}
+
+        if act == "get_episodes_by_ids":
+            if not isinstance(payload, list):
+                return _err("Invalid ids")
+            self._ensure_index()
+            id_set = set(str(i) for i in payload)
+            eps = []
+            for e in self._idx.get("episodes", []):
+                if e.get("id") in id_set:
+                    eps.append(e)
+                elif any(a in id_set for a in e.get("aliasIds", [])):
+                    eps.append(e)
+            return {"ok": True, "episodes": eps}
+
+        return _err("unsupported_action")
+
+    def _route_lookup_from_path(self, _path):
+        return _err("unsupported_lookup")
 
     def _ensure_index(self):
         if self._idx_loaded:
             return
         self._idx_loaded = True
-        raw = storage.read_json(storage.data_path(_VIDEO_INDEX_FILE), {})
+        raw = self._route_store.read_index("video")
         self._idx = {
             "roots": raw.get("roots", []),
             "shows": raw.get("shows", []),
@@ -2367,7 +2872,7 @@ class VideoBridge(QObject):
         }
         # Dedup shows in memory (cached index may contain duplicates from
         # Electron scanner when root folders and show folders overlap).
-        # Important: do NOT clear + rescan — that destroys Electron-generated
+        # Important: do NOT clear + rescan â€” that destroys Electron-generated
         # properties (torrentStreamable, sourceKind, episodeCount, etc.)
         # that butterfly's scanner doesn't produce.
         if self._idx["shows"]:
@@ -2412,7 +2917,7 @@ class VideoBridge(QObject):
                 if checked >= 5:
                     break
             if needs_id_fix:
-                print("[video] Stale episode IDs detected (int mtimeMs) — forcing rescan")
+                print("[video] Stale episode IDs detected (int mtimeMs) â€” forcing rescan")
                 self._last_scan_at = 0
                 self._start_scan(force=True)
                 return
@@ -2458,6 +2963,15 @@ class VideoBridge(QObject):
         payload = {"scanning": scanning, "phase": phase, "progress": progress}
         if canceled:
             payload["canceled"] = True
+            try:
+                self._route_runtime.note_scan_canceled()
+            except Exception:
+                pass
+        elif not scanning:
+            try:
+                self._route_runtime.note_scan_finished()
+            except Exception:
+                pass
         try:
             self.scanStatus.emit(json.dumps(payload))
         except Exception:
@@ -2771,7 +3285,7 @@ class VideoBridge(QObject):
             return
         # Safety: don't overwrite good disk cache with empty scan results
         if not shows and self._idx.get("shows"):
-            print("[scan] Video scan found 0 shows but disk cache has data — skipping overwrite")
+            print("[scan] Video scan found 0 shows but disk cache has data â€” skipping overwrite")
             self._scanning = False
             self._scan_thread = None
             self._emit_scan_status(False)
@@ -2787,7 +3301,7 @@ class VideoBridge(QObject):
                             ep[k] = prev_ep[k]
 
         self._idx = {"roots": roots, "shows": shows, "episodes": episodes}
-        storage.write_json_sync(storage.data_path(_VIDEO_INDEX_FILE), self._idx)
+        self._route_store.write_index("video", self._idx)
         self._last_scan_at = int(time.time() * 1000)
         self._scanning = False
         self._scan_thread = None
@@ -2796,6 +3310,10 @@ class VideoBridge(QObject):
         self._emit_updated()
 
     def _start_scan(self, force=False):
+        try:
+            self._route_runtime.note_scan_request(bool(force))
+        except Exception:
+            pass
         cfg = _read_library_config()
         folders = cfg.get("videoFolders", [])
         show_folders = cfg.get("videoShowFolders", [])
@@ -2815,6 +3333,10 @@ class VideoBridge(QObject):
         t = threading.Thread(target=self._do_scan,
                              args=(folders, show_folders, cfg, self._scan_id), daemon=True)
         self._scan_thread = t
+        try:
+            self._route_runtime.note_scan_started()
+        except Exception:
+            pass
         t.start()
 
     def _add_show_folder_path(self, folder):
@@ -2837,29 +3359,20 @@ class VideoBridge(QObject):
     @Slot(result=str)
     @Slot(str, result=str)
     def getState(self, opts=""):
-        self._ensure_index()
         try:
             o = json.loads(opts) if opts else {}
         except Exception:
             o = {}
-        cfg = _read_library_config()
-        snap = self._make_snapshot(cfg, o)
-        if not self._scanning and self._last_scan_at == 0:
-            self._start_scan()
-        return json.dumps(snap)
+        return json.dumps(self._route.get_state(o))
 
     @Slot(result=str)
     @Slot(str, result=str)
     def scan(self, opts=""):
-        self._ensure_index()
-        self._start_scan(force=True)
-        return json.dumps(_ok())
+        return json.dumps(self._route.scan(force=True, opts=opts))
 
     @Slot(str, result=str)
     def scanShow(self, p):
-        self._ensure_index()
-        self._start_scan(force=True)
-        return json.dumps(_ok())
+        return json.dumps(self._route.mutate_config("scan_show", p))
 
     @Slot(str, str, result=str)
     def generateShowThumbnail(self, show_id, opts=""):
@@ -2884,62 +3397,30 @@ class VideoBridge(QObject):
         result = self._mpv_grab_frame(first_ep["path"], sid)
         if result and result.get("ok"):
             show["thumbPath"] = result.get("producedPath")
-            storage.write_json_sync(storage.data_path(_VIDEO_INDEX_FILE), self._idx)
+            self._route_store.write_index("video", self._idx)
             self._emit_updated()
+            result["generated"] = True
         return json.dumps(result or _err("Frame grab failed"))
 
     @Slot(result=str)
     def cancelScan(self):
-        if self._scanning:
-            self._cancel_event.set()
-            self._scanning = False
-            self._scan_thread = None
-            self._emit_scan_status(False, canceled=True)
-            self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps(self._route.cancel_scan())
 
     @Slot(result=str)
     def addFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add video folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        cfg = _read_library_config()
-        vf = cfg.get("videoFolders", [])
-        if _path_key(folder) not in set(_path_key(f) for f in vf):
-            vf.insert(0, folder)
-            cfg["videoFolders"] = vf
-            _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg), "folder": folder})
+        return json.dumps(self._route.mutate_config("add_folder"))
 
     @Slot(result=str)
     def addShowFolder(self):
-        from PySide6.QtWidgets import QFileDialog
-        folder = QFileDialog.getExistingDirectory(None, "Add show folder")
-        if not folder:
-            return json.dumps({"ok": False})
-        return json.dumps(self._add_show_folder_path(folder))
+        return json.dumps(self._route.mutate_config("add_show_folder"))
 
     @Slot(str, result=str)
     def addShowFolderPath(self, p):
-        fp = str(p or "").strip()
-        if not fp:
-            return json.dumps(_err("Missing path"))
-        return json.dumps(self._add_show_folder_path(fp))
+        return json.dumps(self._route.mutate_config("add_show_folder_path", p))
 
     @Slot(str, result=str)
     def removeFolder(self, p):
-        fp = str(p or "").strip()
-        if not fp:
-            return json.dumps(_err("Missing path"))
-        cfg = _read_library_config()
-        pk = _path_key(fp)
-        cfg["videoFolders"] = [f for f in cfg.get("videoFolders", []) if _path_key(f) != pk]
-        cfg["videoShowFolders"] = [f for f in cfg.get("videoShowFolders", []) if _path_key(f) != pk]
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("remove_folder", p))
 
     @Slot(str, result=str)
     def removeStreamableFolder(self, p):
@@ -2947,144 +3428,43 @@ class VideoBridge(QObject):
             payload = json.loads(p) if isinstance(p, str) else {}
         except Exception:
             return json.dumps(_err("Invalid payload"))
-        show_path = str(payload.get("showPath", "")).strip()
-        folder_rel = str(payload.get("folderRelPath", "")).strip()
-        delete_files = payload.get("deleteFiles", True)
-        if not show_path:
-            return json.dumps(_err("Missing showPath"))
-        target = os.path.normpath(os.path.join(show_path, folder_rel) if folder_rel else show_path)
-        if not _is_path_within(show_path, target):
-            return json.dumps(_err("Target not within show path"))
-        if not self._has_stream_manifest(target):
-            return json.dumps(_err("Not a streamable folder"))
-        deleted = False
-        if delete_files is not False:
-            try:
-                import shutil as _shutil
-                _shutil.rmtree(target, ignore_errors=True)
-                deleted = True
-            except Exception:
-                pass
-        cfg = _read_library_config()
-        cfg["videoShowFolders"] = [f for f in cfg.get("videoShowFolders", [])
-                                   if not _is_path_within(target, f)]
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({"ok": True, "showPath": show_path,
-                          "targetFolder": target, "deleted": deleted})
+        return json.dumps(self._route.mutate_config("remove_streamable_folder", payload))
 
     @Slot(str, result=str)
     def hideShow(self, show_id):
-        sid = str(show_id or "").strip()
-        if not sid:
-            return json.dumps(_err("Missing showId"))
-        cfg = _read_library_config()
-        hidden = cfg.get("videoHiddenShowIds", [])
-        if sid not in hidden:
-            hidden.append(sid)
-            cfg["videoHiddenShowIds"] = hidden
-            _write_library_config(cfg)
-        self._emit_updated()
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("hide_show", show_id))
 
     @Slot(result=str)
     def openFileDialog(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(VIDEO_EXTENSIONS))
-        path, _ = QFileDialog.getOpenFileName(
-            None, "Open video file", "",
-            "Video files ({});;All Files (*)".format(exts),
-        )
-        if not path:
-            return json.dumps({"ok": False})
-        return json.dumps({"ok": True, "path": path})
+        return json.dumps(self._route.mutate_config("open_file_dialog"))
 
     @Slot(result=str)
     def openSubtitleFileDialog(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(SUBTITLE_EXTENSIONS))
-        path, _ = QFileDialog.getOpenFileName(
-            None, "Load subtitle file", "",
-            "Subtitle files ({});;All Files (*)".format(exts),
-        )
-        if not path:
-            return json.dumps({"ok": False})
-        return json.dumps({"ok": True, "path": path})
+        return json.dumps(self._route.mutate_config("open_subtitle_file_dialog"))
 
     @Slot(result=str)
     def addFiles(self):
-        from PySide6.QtWidgets import QFileDialog
-        exts = " ".join("*" + e for e in sorted(VIDEO_EXTENSIONS))
-        paths, _ = QFileDialog.getOpenFileNames(
-            None, "Add video files", "",
-            "Video files ({});;All Files (*)".format(exts),
-        )
-        if not paths:
-            return json.dumps({"ok": False})
-        cfg = _read_library_config()
-        vfiles = cfg.get("videoFiles", [])
-        existing = set(_path_key(f) for f in vfiles)
-        for fp in paths:
-            pk = _path_key(fp)
-            if pk not in existing:
-                vfiles.append(fp)
-                existing.add(pk)
-        cfg["videoFiles"] = vfiles
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("add_files"))
 
     @Slot(str, result=str)
     def removeFile(self, p):
-        fp = str(p or "").strip()
-        if not fp:
-            return json.dumps(_err("Missing path"))
-        cfg = _read_library_config()
-        pk = _path_key(fp)
-        cfg["videoFiles"] = [f for f in cfg.get("videoFiles", []) if _path_key(f) != pk]
-        _write_library_config(cfg)
-        self._start_scan(force=True)
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("remove_file", p))
 
     @Slot(result=str)
     def restoreAllHiddenShows(self):
-        cfg = _read_library_config()
-        cfg["videoHiddenShowIds"] = []
-        _write_library_config(cfg)
-        self._emit_updated()
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("restore_all_hidden_shows"))
 
     @Slot(str, result=str)
     def restoreHiddenShowsForRoot(self, root_id):
-        rid = str(root_id or "").strip()
-        if not rid:
-            return json.dumps(_err("Missing rootId"))
-        cfg = _read_library_config()
-        hidden = cfg.get("videoHiddenShowIds", [])
-        self._ensure_index()
-        root_show_ids = set(s.get("id") for s in self._idx.get("shows", []) if s.get("rootId") == rid)
-        cfg["videoHiddenShowIds"] = [h for h in hidden if h not in root_show_ids]
-        _write_library_config(cfg)
-        self._emit_updated()
-        return json.dumps({"ok": True, "state": self._make_snapshot(cfg)})
+        return json.dumps(self._route.mutate_config("restore_hidden_shows_for_root", root_id))
 
     @Slot(str, result=str)
     def getEpisodesForShow(self, show_id):
-        sid = str(show_id or "").strip()
-        if not sid:
-            return json.dumps(_err("Missing showId"))
-        self._ensure_index()
-        eps = [e for e in self._idx.get("episodes", []) if e.get("showId") == sid]
-        return json.dumps({"ok": True, "episodes": eps})
+        return json.dumps(self._route.mutate_config("get_episodes_for_show", show_id))
 
     @Slot(str, result=str)
     def getEpisodesForRoot(self, root_id):
-        rid = str(root_id or "").strip()
-        if not rid:
-            return json.dumps(_err("Missing rootId"))
-        self._ensure_index()
-        eps = [e for e in self._idx.get("episodes", []) if e.get("rootId") == rid]
-        return json.dumps({"ok": True, "episodes": eps})
+        return json.dumps(self._route.mutate_config("get_episodes_for_root", root_id))
 
     @Slot(str, result=str)
     def getEpisodesByIds(self, ids_json):
@@ -3092,21 +3472,11 @@ class VideoBridge(QObject):
             ids = json.loads(ids_json) if ids_json else []
         except Exception:
             ids = []
-        if not isinstance(ids, list):
-            return json.dumps(_err("Invalid ids"))
-        self._ensure_index()
-        id_set = set(str(i) for i in ids)
-        eps = []
-        for e in self._idx.get("episodes", []):
-            if e.get("id") in id_set:
-                eps.append(e)
-            elif any(a in id_set for a in e.get("aliasIds", [])):
-                eps.append(e)
-        return json.dumps({"ok": True, "episodes": eps})
+        return json.dumps(self._route.mutate_config("get_episodes_by_ids", ids))
 
 
 class VideoPosterBridge(QObject):
-    """Video poster images — JPEG/PNG per show ID, filesystem-based."""
+    """Video poster images â€” JPEG/PNG per show ID, filesystem-based."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -3356,7 +3726,7 @@ class ThumbsBridge(QObject):
 
 
 class ArchivesBridge(QObject):
-    """CBZ/CBR archive session management — ZIP via zipfile, RAR via rarfile."""
+    """CBZ/CBR archive session management â€” ZIP via zipfile, RAR via rarfile."""
 
     _CBZ_MAX = 3
     _CBR_MAX = 3
@@ -3668,7 +4038,7 @@ def _natural_sort_key(filename):
 class PlayerBridge(QObject):
     """Video player powered by python-mpv, rendered in a native QWidget.
 
-    In Butterfly the player is *internal* — mpv renders directly into
+    In Butterfly the player is *internal* â€” mpv renders directly into
     app.py's QStackedWidget.  No subprocess, no file-based progress sync.
     The renderer calls these Slots just like it called the Electron IPC
     ``player:*`` channels.
@@ -3692,7 +4062,7 @@ class PlayerBridge(QObject):
     playerExited       = Signal(str)   # BUILD14_PLAYER_EXITED
     playerEnded        = Signal(str)   # natural end-of-file
 
-    # ── constants ────────────────────────────────────────────────────────
+    # â”€â”€ constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _POLL_MS = 200            # UI update interval (faster than old 500ms)
     _PROGRESS_WRITE_MS = 5000 # periodic progress persistence interval
     _SPEED_PRESETS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0]
@@ -3752,7 +4122,7 @@ class PlayerBridge(QObject):
         # Player overlay reference (set by app.py)
         self._overlay = None
 
-        # Snapshot diff — skip emitting when nothing changed
+        # Snapshot diff â€” skip emitting when nothing changed
         self._last_emitted_snapshot = None
 
         # Player settings persistence path
@@ -3761,7 +4131,7 @@ class PlayerBridge(QObject):
         )
         self._load_player_settings()
 
-    # ── app.py wiring ───────────────────────────────────────────────────
+    # â”€â”€ app.py wiring â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def setMpvWidget(self, widget, show_player_fn, show_web_fn):
         """Called by app.py after QStackedWidget is built."""
@@ -3777,7 +4147,7 @@ class PlayerBridge(QObject):
         """Give PlayerBridge a ref to VideoProgressBridge for progress persistence."""
         self._progress_domain = bridge
 
-    # ── player settings persistence ─────────────────────────────────────
+    # â”€â”€ player settings persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _load_player_settings(self):
         try:
@@ -3804,7 +4174,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── mpv lifecycle ───────────────────────────────────────────────────
+    # â”€â”€ mpv lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _ensure_mpv(self):
         """Create the mpv.MPV instance on first use (lazy).
@@ -3854,7 +4224,7 @@ class PlayerBridge(QObject):
             print(f"[player] Ensure libmpv-2.dll is in resources/mpv/windows/ or on PATH")
             return False
         if self._mpv_widget is None:
-            print("[player] mpv widget not set — call setMpvWidget() first")
+            print("[player] mpv widget not set â€” call setMpvWidget() first")
             return False
         wid = str(int(self._mpv_widget.winId()))
         try:
@@ -3962,7 +4332,7 @@ class PlayerBridge(QObject):
 
         return True
 
-    # ── mpv property observers ──────────────────────────────────────────
+    # â”€â”€ mpv property observers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _on_time_pos(self, _name, value):
         try:
@@ -4032,7 +4402,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── timers ──────────────────────────────────────────────────────────
+    # â”€â”€ timers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _start_poll(self):
         if self._poll_timer is not None:
@@ -4060,7 +4430,7 @@ class PlayerBridge(QObject):
             self._progress_timer = None
 
     def _poll_tick(self):
-        """UI update tick — uses observer-cached values (never polls mpv)."""
+        """UI update tick â€” uses observer-cached values (never polls mpv)."""
         if self._mpv is None:
             return
 
@@ -4117,7 +4487,7 @@ class PlayerBridge(QObject):
             "chapters": self._chapter_list,
         }
 
-    # ── progress persistence ────────────────────────────────────────────
+    # â”€â”€ progress persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _persist_progress(self, phase="pause"):
         """Write progress into VideoProgressBridge, matching run_player.py format."""
@@ -4157,7 +4527,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── playlist management ─────────────────────────────────────────────
+    # â”€â”€ playlist management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _setup_playlist(self, args):
         """Initialize playlist from launchQt args or build from folder."""
@@ -4275,7 +4645,7 @@ class PlayerBridge(QObject):
         if self._playlist_index + 1 < len(self._playlist):
             self._navigate_playlist(1)
         else:
-            # End of playlist — return to library
+            # End of playlist â€” return to library
             self.stop("playlist_ended")
 
     def _restore_track_prefs(self):
@@ -4308,7 +4678,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── speed control ───────────────────────────────────────────────────
+    # â”€â”€ speed control â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_speed(self, speed):
         """Set playback speed."""
@@ -4332,7 +4702,7 @@ class PlayerBridge(QObject):
         """Reset speed to 1.0x."""
         self.set_speed(1.0)
 
-    # ── volume control ──────────────────────────────────────────────────
+    # â”€â”€ volume control â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_volume(self, vol):
         """Set volume (0-100)."""
@@ -4358,7 +4728,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── track control ───────────────────────────────────────────────────
+    # â”€â”€ track control â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def cycle_audio_track(self):
         try:
@@ -4406,7 +4776,7 @@ class PlayerBridge(QObject):
             pass
         return []
 
-    # ── chapter control ─────────────────────────────────────────────────
+    # â”€â”€ chapter control â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def next_chapter(self):
         try:
@@ -4422,7 +4792,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── aspect ratio ────────────────────────────────────────────────────
+    # â”€â”€ aspect ratio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_aspect_ratio(self, ratio):
         """Set video aspect ratio. Pass '' or 'default' for auto."""
@@ -4435,7 +4805,7 @@ class PlayerBridge(QObject):
         except Exception:
             pass
 
-    # ── subtitle margin ─────────────────────────────────────────────────
+    # â”€â”€ subtitle margin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_subtitle_margin(self, px):
         """Push subtitles up by px pixels from bottom."""
@@ -4449,7 +4819,7 @@ class PlayerBridge(QObject):
             except Exception:
                 pass
 
-    # ── Slots (called from JS) ──────────────────────────────────────────
+    # â”€â”€ Slots (called from JS) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(str, str, result=str)
     def start(self, media_ref_json, opts_json=""):
@@ -4648,7 +5018,7 @@ class PlayerBridge(QObject):
 
     @Slot(str, result=str)
     def launchQt(self, args_json):
-        """In Butterfly there is no external Qt player — playback is inline.
+        """In Butterfly there is no external Qt player â€” playback is inline.
         We translate launchQt into an internal start() call so existing
         renderer code (video.js ``openVideoQtFallback``) keeps working."""
         p = _p(args_json)
@@ -4675,7 +5045,7 @@ class PlayerBridge(QObject):
     def getState(self):
         return json.dumps(_ok({"state": self._state_snapshot()}))
 
-    # ── cleanup ─────────────────────────────────────────────────────────
+    # â”€â”€ cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def shutdown(self):
         """Called by app.py on quit."""
@@ -4691,7 +5061,7 @@ class PlayerBridge(QObject):
 
 
 class Build14Bridge(QObject):
-    """Return state save/restore for player window transitions — single JSON blob."""
+    """Return state save/restore for player window transitions â€” single JSON blob."""
 
     _STATE_FILE = "build14_return_state.json"
 
@@ -4987,7 +5357,7 @@ class AudiobooksBridge(QObject):
             return
         # Safety: don't overwrite good disk cache with empty scan results
         if not audiobooks and self._idx.get("audiobooks"):
-            print("[scan] Audiobook scan found 0 items but disk cache has data — skipping overwrite")
+            print("[scan] Audiobook scan found 0 items but disk cache has data â€” skipping overwrite")
             self._scanning = False
             self._scan_thread = None
             self._emit_scan_status(False)
@@ -5152,7 +5522,7 @@ class AudiobooksBridge(QObject):
 
 
 # ---------------------------------------------------------------------------
-# Web/Browser stubs (large surface — Phase 3)
+# Web/Browser stubs (large surface â€” Phase 3)
 # ---------------------------------------------------------------------------
 
 class WebSourcesBridge(QObject):
@@ -5199,7 +5569,7 @@ class WebSourcesBridge(QObject):
         self._download_stats = {}        # id -> {received, ts}
         self._picker_pending = {}        # requestId -> callback (future use)
 
-    # ── helpers ──────────────────────────────────────────────────────────
+    # â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _ensure_sources(self):
         if self._sources_cache is not None:
@@ -5386,7 +5756,7 @@ class WebSourcesBridge(QObject):
             s = s[:180].strip()
         return s
 
-    # ── Sources CRUD ─────────────────────────────────────────────────────
+    # â”€â”€ Sources CRUD â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def get(self):
@@ -5453,7 +5823,7 @@ class WebSourcesBridge(QObject):
         self._emit_sources_updated()
         return json.dumps(_ok())
 
-    # ── Download history ─────────────────────────────────────────────────
+    # â”€â”€ Download history â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def getDownloadHistory(self):
@@ -5494,7 +5864,7 @@ class WebSourcesBridge(QObject):
         self._emit_downloads_updated()
         return json.dumps(_ok())
 
-    # ── Destinations ─────────────────────────────────────────────────────
+    # â”€â”€ Destinations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def getDestinations(self):
@@ -5586,7 +5956,7 @@ class WebSourcesBridge(QObject):
             pass
         return json.dumps(_ok())
 
-    # ── Download routing ─────────────────────────────────────────────────
+    # â”€â”€ Download routing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(str, result=str)
     def routeDownload(self, p):
@@ -5649,7 +6019,7 @@ class WebSourcesBridge(QObject):
         self._emit_downloads_updated()
         return json.dumps(_ok({"id": did, "queued": True}))
 
-    # ── QWebEngineDownloadRequest handler (wired by app.py) ──
+    # â”€â”€ QWebEngineDownloadRequest handler (wired by app.py) â”€â”€
 
     def handleDownloadRequested(self, download):
         """
@@ -5675,8 +6045,15 @@ class WebSourcesBridge(QObject):
                 pass
         filename = self._sanitize_filename(suggested or "download")
 
-        # Determine save directory
-        dest_dir = self._get_default_destination()
+        # Determine save directory. If caller pre-selected a directory
+        # (for type-based routing), keep it instead of overriding.
+        dest_dir = ""
+        try:
+            dest_dir = str(download.downloadDirectory() or "").strip()
+        except Exception:
+            dest_dir = ""
+        if not dest_dir:
+            dest_dir = self._get_default_destination()
         if dest_dir:
             os.makedirs(dest_dir, exist_ok=True)
             try:
@@ -5828,7 +6205,7 @@ class WebSourcesBridge(QObject):
             pass
         return ""
 
-    # ── Live download lifecycle ──
+    # â”€â”€ Live download lifecycle â”€â”€
 
     @Slot(str, result=str)
     def pauseDownload(self, p):
@@ -5881,20 +6258,74 @@ class WebBrowserSettingsBridge(QObject, JsonCrudMixin):
     _crud_file = "web_browser_settings.json"
     _crud_debounce = False
 
+    _DEFAULTS = {
+        "defaultSearchEngine": "google",
+        "blockThirdPartyCookies": False,
+        "antiFingerprintProtection": True,
+        "bookmarksBarVisible": False,
+    }
+
+    @staticmethod
+    def _normalize_host_policy(settings):
+        data = dict(settings) if isinstance(settings, dict) else {}
+        host = data.get("browserHost")
+        if not isinstance(host, dict):
+            host = {}
+        mode = str(host.get("mode", "") or "").strip().lower()
+        if mode not in ("in_app", "external"):
+            mode = "in_app"
+        host["mode"] = mode
+        host["externalFallbackEnabled"] = bool(host.get("externalFallbackEnabled", False))
+        data["browserHost"] = host
+        return data
+
+    @classmethod
+    def _normalize_settings(cls, settings):
+        data = dict(settings) if isinstance(settings, dict) else {}
+        for key, default in cls._DEFAULTS.items():
+            if key not in data:
+                data[key] = default
+        return cls._normalize_host_policy(data)
+
+    def _read_document(self):
+        raw = storage.read_json(self._crud_path(), {}) or {}
+        wrapped = isinstance(raw.get("settings"), dict)
+        settings = raw.get("settings") if wrapped else raw
+        if not isinstance(settings, dict):
+            settings = {}
+        return raw if isinstance(raw, dict) else {}, settings, wrapped
+
+    def _write_document(self, raw_doc, settings, wrapped):
+        if wrapped:
+            out = dict(raw_doc) if isinstance(raw_doc, dict) else {}
+            out["settings"] = settings
+        else:
+            out = settings
+        storage.write_json_sync(self._crud_path(), out)
+
     @Slot(result=str)
     def get(self):
-        data = self._crud_read()
-        return json.dumps(_ok({"settings": data}))
+        raw_doc, settings, wrapped = self._read_document()
+        normalized = self._normalize_settings(settings)
+        if normalized != settings:
+            self._write_document(raw_doc, normalized, wrapped)
+        return json.dumps(_ok({"settings": normalized}))
 
     @Slot(str, result=str)
     def save(self, payload_json):
-        payload = json.loads(payload_json)
-        storage.write_json_sync(self._crud_path(), payload)
+        payload = json.loads(payload_json) if payload_json else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        raw_doc, _existing, wrapped = self._read_document()
+        payload_settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else payload
+        normalized = self._normalize_settings(payload_settings)
+        use_wrapped = wrapped or isinstance(payload.get("settings"), dict)
+        self._write_document(raw_doc, normalized, use_wrapped)
         return json.dumps(_ok())
 
 
 class WebHistoryBridge(QObject):
-    """Web browsing history — array store with upsert, scoped filtering, pagination."""
+    """Web browsing history â€” array store with upsert, scoped filtering, pagination."""
     historyUpdated = Signal(str)
 
     _HISTORY_FILE = "web_browsing_history.json"
@@ -6153,7 +6584,7 @@ class WebSessionBridge(QObject, JsonCrudMixin):
 
 
 class WebBookmarksBridge(QObject):
-    """Web bookmarks — array store with dedup by URL, toggle, max 5000."""
+    """Web bookmarks â€” array store with dedup by URL, toggle, max 5000."""
     bookmarksUpdated = Signal(str)
 
     _BOOKMARKS_FILE = "web_bookmarks.json"
@@ -6316,7 +6747,7 @@ class WebBookmarksBridge(QObject):
 
 class WebDataBridge(QObject):
     """
-    Browsing-data management — aggregate usage stats and selective clearing.
+    Browsing-data management â€” aggregate usage stats and selective clearing.
 
     Cross-domain: delegates clearing to WebHistoryBridge, WebSourcesBridge,
     and WebTorrentBridge (when implemented), plus QWebEngineProfile cache.
@@ -6437,7 +6868,7 @@ class WebDataBridge(QObject):
 
 
 class WebPermissionsBridge(QObject):
-    """Per-origin web permission overrides — rules array with origin normalization."""
+    """Per-origin web permission overrides â€” rules array with origin normalization."""
     permissionsUpdated = Signal(str)
     permissionPrompt = Signal(str)
 
@@ -6447,7 +6878,7 @@ class WebPermissionsBridge(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._cache = None
-        self._pending_prompts = {}  # promptId → {page, origin, feature}
+        self._pending_prompts = {}  # promptId â†’ {page, origin, feature}
 
     @staticmethod
     def _normalize_origin(value):
@@ -6528,6 +6959,21 @@ class WebPermissionsBridge(QObject):
         self._write()
         self._emit_updated()
         return json.dumps(_ok({"rule": found}))
+
+    @Slot(str, result=str)
+    def getDecision(self, payload_json):
+        payload = json.loads(payload_json) if payload_json else {}
+        origin = self._normalize_origin(payload.get("origin"))
+        permission = str(payload.get("permission", "") or "").strip()
+        if not origin or not permission:
+            return json.dumps(_ok({"decision": "ask"}))
+        rule = self._find_rule(origin, permission)
+        decision = self._decision_from_value(rule.get("decision")) if rule else "ask"
+        return json.dumps(_ok({
+            "origin": origin,
+            "permission": permission,
+            "decision": decision,
+        }))
 
     @Slot(str, result=str)
     def reset(self, payload_json):
@@ -6611,7 +7057,7 @@ class WebPermissionsBridge(QObject):
 
 
 class WebUserscriptsBridge(QObject):
-    """Per-site userscript manager — stores scripts and matches them to URLs."""
+    """Per-site userscript manager â€” stores scripts and matches them to URLs."""
     userscriptsUpdated = Signal(str)
 
     _CFG_FILE = "web_userscripts.json"
@@ -6893,7 +7339,7 @@ class WebUserscriptsBridge(QObject):
 
 
 class WebAdblockBridge(QObject):
-    """Network-level ad blocker — domain blocklist from EasyList, config CRUD."""
+    """Network-level ad blocker â€” domain blocklist from EasyList, config CRUD."""
     adblockUpdated = Signal(str)
 
     _CFG_FILE = "web_adblock.json"
@@ -7136,7 +7582,7 @@ class WebFindBridge(QObject):
     """
     In-page find (Ctrl+F) for the browser webview.
 
-    In Electron the main process was a no-op stub — find was managed entirely
+    In Electron the main process was a no-op stub â€” find was managed entirely
     by the renderer calling webContents.findInPage().  In Butterfly we route
     the request to QWebEnginePage.findText() via a stored page reference that
     app.py must set after boot: ``bridge.webFind.setPage(page)``.
@@ -7176,7 +7622,7 @@ class WebFindBridge(QObject):
         if case_sensitive:
             flags |= QWebEnginePage.FindFlag.FindCaseSensitively
 
-        # findText is async — we emit findResult when the callback fires
+        # findText is async â€” we emit findResult when the callback fires
         def _on_result(result):
             # result is a QWebEngineFindTextResult
             matches = 0
@@ -7217,7 +7663,9 @@ class WebTorrentBridge(QObject):
     _HISTORY_FILE = "web_torrent_history.json"
     _MAX_HISTORY = 1000
     _ACTIVE_STATES = {"downloading", "paused", "resolving_metadata",
-                      "metadata_ready", "completed_pending", "seeding"}
+                      "metadata_ready", "completed_pending", "seeding", "streaming"}
+    _STREAM_CACHE_DIR = "web_torrent_stream_cache"
+    _STREAM_PLAYLIST_DIR = "web_torrent_stream_playlists"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -7229,7 +7677,7 @@ class WebTorrentBridge(QObject):
         self._poll_thread = None
         self._poll_stop = threading.Event()
 
-    # ── libtorrent bootstrap ────────────────────────────────────────────
+    # â”€â”€ libtorrent bootstrap â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _try_import(self):
         if self._lt is not None:
@@ -7279,6 +7727,10 @@ class WebTorrentBridge(QObject):
             if not h or not entry:
                 continue
             try:
+                metadata_now = self._apply_metadata_if_ready(rec)
+                if metadata_now:
+                    self._apply_deferred_selection(tid)
+
                 s = h.status()
                 entry["progress"] = float(s.progress)
                 entry["downloadRate"] = int(s.download_rate)
@@ -7290,26 +7742,39 @@ class WebTorrentBridge(QObject):
 
                 # State transitions
                 lt = self._lt
-                if lt and s.state == lt.torrent_status.seeding:
-                    if entry["state"] == "downloading":
+                finished = bool(s.is_finished)
+                if lt:
+                    try:
+                        finished = finished or (s.state == lt.torrent_status.seeding)
+                    except Exception:
+                        pass
+
+                if finished:
+                    if not str(entry.get("destinationRoot", "")).strip():
+                        if entry.get("state") != "completed_pending":
+                            entry["state"] = "completed_pending"
+                            entry["finishedAt"] = int(time.time() * 1000)
+                            entry["progress"] = 1.0
+                            self._upsert_history(entry)
+                            self.torrentCompleted.emit(json.dumps(entry))
+                    elif entry.get("state") not in ("completed", "completed_with_errors"):
                         entry["state"] = "completed"
                         entry["finishedAt"] = int(time.time() * 1000)
                         entry["progress"] = 1.0
-                        self._write_history()
+                        self._upsert_history(entry)
                         self.torrentCompleted.emit(json.dumps(entry))
-                elif s.is_finished and entry["state"] == "downloading":
-                    entry["state"] = "completed"
-                    entry["finishedAt"] = int(time.time() * 1000)
-                    entry["progress"] = 1.0
-                    self._write_history()
-                    self.torrentCompleted.emit(json.dumps(entry))
+                elif entry.get("state") == "resolving_metadata" and entry.get("metadataReady"):
+                    if str(entry.get("destinationRoot", "")).strip():
+                        entry["state"] = "downloading"
+                    else:
+                        entry["state"] = "metadata_ready"
 
                 self.torrentProgress.emit(json.dumps(entry))
             except Exception:
                 pass
         self._emit_updated()
 
-    # ── history persistence ─────────────────────────────────────────────
+    # â”€â”€ history persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _ensure_history(self):
         if self._history_cache is not None:
@@ -7355,7 +7820,7 @@ class WebTorrentBridge(QObject):
             "history": c.get("torrents", []),
         }))
 
-    # ── entry factory ───────────────────────────────────────────────────
+    # â”€â”€ entry factory â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @staticmethod
     def _create_entry(partial=None):
@@ -7372,6 +7837,8 @@ class WebTorrentBridge(QObject):
             "directWrite": False, "sequential": True,
             "filePriorities": {}, "files": None,
             "metadataReady": False,
+            "videoLibrary": False, "videoLibraryStreamable": False,
+            "showFolderPath": "",
             "routedFiles": 0, "ignoredFiles": 0, "failedFiles": 0,
         }
         if partial:
@@ -7404,7 +7871,229 @@ class WebTorrentBridge(QObject):
             return payload
         return ""
 
-    # ── add torrent ─────────────────────────────────────────────────────
+    @staticmethod
+    def _priority_label(raw):
+        p = str(raw or "normal").strip().lower()
+        if p == "high":
+            return "high"
+        if p == "low":
+            return "low"
+        return "normal"
+
+    @staticmethod
+    def _priority_wire_value(priority_label):
+        p = WebTorrentBridge._priority_label(priority_label)
+        if p == "high":
+            return 7
+        if p == "low":
+            return 1
+        return 4
+
+    @staticmethod
+    def _sanitize_component(name, fallback):
+        s = str(name or "").strip()
+        if not s:
+            s = str(fallback or "item")
+        out = []
+        for ch in s:
+            if ch in '<>:"/\\|?*' or ord(ch) < 32:
+                out.append("_")
+            else:
+                out.append(ch)
+        clean = "".join(out).strip(" .")
+        return clean or str(fallback or "item")
+
+    @staticmethod
+    def _normalize_video_rel_path(file_path, torrent_name):
+        rel = str(file_path or "").replace("\\", "/").strip()
+        t_name = str(torrent_name or "").replace("\\", "/").strip()
+        if not rel:
+            return ""
+        if t_name and rel.startswith(t_name + "/"):
+            rel = rel[len(t_name) + 1:]
+        while rel.startswith("/"):
+            rel = rel[1:]
+        return rel
+
+    @staticmethod
+    def _ensure_placeholder_file(file_path):
+        try:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            if os.path.exists(file_path):
+                return True
+            with open(file_path, "wb"):
+                pass
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _is_video_file(path_or_name):
+        ext = os.path.splitext(str(path_or_name or ""))[1].lower()
+        return ext in {".mp4", ".mkv", ".avi", ".webm", ".mov", ".wmv",
+                       ".flv", ".m4v", ".ts", ".m2ts"}
+
+    @staticmethod
+    def _parse_selected_indices(raw):
+        out = []
+        seen = set()
+        if isinstance(raw, list):
+            for item in raw:
+                try:
+                    idx = int(item)
+                except Exception:
+                    continue
+                if idx < 0 or idx in seen:
+                    continue
+                seen.add(idx)
+                out.append(idx)
+        return out
+
+    @staticmethod
+    def _parse_priorities(raw):
+        out = {}
+        if not isinstance(raw, dict):
+            return out
+        for k, v in raw.items():
+            try:
+                idx = int(k)
+            except Exception:
+                continue
+            if idx < 0:
+                continue
+            out[idx] = WebTorrentBridge._priority_label(v)
+        return out
+
+    @staticmethod
+    def _selected_from_entry_files(entry):
+        selected = []
+        for f in (entry.get("files") or []):
+            if not isinstance(f, dict):
+                continue
+            try:
+                idx = int(f.get("index", -1))
+            except Exception:
+                continue
+            if idx < 0 or not f.get("selected", False):
+                continue
+            selected.append(idx)
+        return selected
+
+    @staticmethod
+    def _default_stream_cache_path(entry, tid, file_index, rel_path):
+        name = WebTorrentBridge._sanitize_component(entry.get("name") or tid, "torrent")
+        leaf = WebTorrentBridge._sanitize_component(os.path.basename(rel_path), "file_" + str(file_index))
+        root = storage.data_path(os.path.join(WebTorrentBridge._STREAM_CACHE_DIR, str(tid), name))
+        os.makedirs(root, exist_ok=True)
+        return os.path.join(root, str(file_index) + "__" + leaf)
+
+    @staticmethod
+    def _default_playlist_path(tid, file_index):
+        root = storage.data_path(os.path.join(WebTorrentBridge._STREAM_PLAYLIST_DIR, str(tid)))
+        os.makedirs(root, exist_ok=True)
+        return os.path.join(root, str(file_index) + ".m3u8")
+
+    @staticmethod
+    def _write_simple_playlist(path_out, media_path):
+        try:
+            os.makedirs(os.path.dirname(path_out), exist_ok=True)
+            with open(path_out, "w", encoding="utf-8") as f:
+                f.write("#EXTM3U\n")
+                f.write(str(media_path))
+                f.write("\n")
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _wait_for_file(path, timeout_ms):
+        deadline = time.time() + (max(200, int(timeout_ms or 0)) / 1000.0)
+        while time.time() < deadline:
+            try:
+                if os.path.isfile(path) and os.path.getsize(path) > 0:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.2)
+        return False
+
+    def _cleanup_stream_paths(self, torrent_id):
+        tid = str(torrent_id or "").strip()
+        if not tid:
+            return
+        for rel in (
+            os.path.join(self._STREAM_CACHE_DIR, tid),
+            os.path.join(self._STREAM_PLAYLIST_DIR, tid),
+        ):
+            try:
+                shutil.rmtree(storage.data_path(rel), ignore_errors=True)
+            except Exception:
+                pass
+
+    def _apply_metadata_if_ready(self, rec):
+        """Populate entry metadata once when libtorrent reports it available."""
+        if not rec:
+            return False
+        h = rec.get("handle")
+        entry = rec.get("entry")
+        if not h or not entry:
+            return False
+        try:
+            has_metadata = bool(h.has_metadata())
+        except Exception:
+            has_metadata = False
+        if not has_metadata or entry.get("metadataReady"):
+            return False
+
+        try:
+            ti = h.get_torrent_info()
+        except Exception:
+            ti = None
+
+        entry["infoHash"] = str(ti.info_hash()) if ti else str(entry.get("infoHash", "") or "")
+        entry["name"] = str(ti.name()) if ti else str(entry.get("name", "") or "")
+        entry["totalSize"] = int(ti.total_size()) if ti else int(entry.get("totalSize", 0) or 0)
+        entry["files"] = self._build_file_list(ti)
+        entry["metadataReady"] = True
+        if not isinstance(entry.get("filePriorities"), dict):
+            entry["filePriorities"] = {}
+
+        # If destination is not chosen yet, keep it parked in metadata_ready and deselected.
+        if not str(entry.get("destinationRoot", "")).strip():
+            entry["state"] = "metadata_ready"
+            try:
+                if ti:
+                    h.prioritize_files([0] * int(ti.files().num_files()))
+            except Exception:
+                pass
+            for f in (entry.get("files") or []):
+                if isinstance(f, dict):
+                    f["selected"] = False
+        elif entry.get("state") in ("resolving_metadata", "metadata_ready"):
+            entry["state"] = "downloading"
+
+        self._upsert_history(entry)
+        try:
+            self.torrentMetadata.emit(json.dumps(entry))
+        except Exception:
+            pass
+        return True
+
+    def _apply_deferred_selection(self, tid):
+        rec = self._active.get(str(tid or ""))
+        if not rec:
+            return
+        queued = rec.pop("deferredSelection", None)
+        if not queued:
+            return
+        payload = dict(queued)
+        payload["id"] = str(tid)
+        try:
+            self.selectFiles(payload)
+        except Exception:
+            pass
+
+    # â”€â”€ add torrent â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _add_torrent(self, entry, params):
         """Add a torrent to libtorrent session and bind tracking."""
@@ -7432,6 +8121,24 @@ class WebTorrentBridge(QObject):
             entry["totalSize"] = int(ti.total_size()) if ti else 0
             entry["files"] = self._build_file_list(ti)
             entry["metadataReady"] = True
+            if not isinstance(entry.get("filePriorities"), dict):
+                entry["filePriorities"] = {}
+            if not str(entry.get("destinationRoot", "")).strip():
+                entry["state"] = "metadata_ready"
+                try:
+                    if ti:
+                        h.prioritize_files([0] * int(ti.files().num_files()))
+                except Exception:
+                    pass
+                for f in (entry.get("files") or []):
+                    if isinstance(f, dict):
+                        f["selected"] = False
+            else:
+                entry["state"] = "downloading"
+            try:
+                self.torrentMetadata.emit(json.dumps(entry))
+            except Exception:
+                pass
         else:
             entry["state"] = "resolving_metadata"
 
@@ -7441,7 +8148,7 @@ class WebTorrentBridge(QObject):
         self._start_poll()
         return {"ok": True, "id": entry["id"]}
 
-    # ── public API slots ────────────────────────────────────────────────
+    # â”€â”€ public API slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(str, result=str)
     def startMagnet(self, p):
@@ -7519,25 +8226,34 @@ class WebTorrentBridge(QObject):
         if not lt or lt is False:
             return json.dumps(_err("libtorrent not available"))
 
-        save_path = str(payload.get("savePath", "")).strip()
+        streamable_only = bool(payload.get("streamableOnly", False))
+        save_path = str(payload.get("savePath", "") or payload.get("destinationRoot", "")).strip()
         if not save_path:
             save_path = os.path.join(
                 storage.data_path("web_torrent_tmp"), "tmp_" + str(int(time.time())))
+        save_path = os.path.abspath(save_path)
         os.makedirs(save_path, exist_ok=True)
 
         info = pending.get("info", {})
+        selected_files = self._parse_selected_indices(payload.get("selectedFiles", []))
+        priorities = self._parse_priorities(payload.get("priorities", {}))
+        sequential = bool(payload.get("sequential", True))
+
         entry = self._create_entry({
-            "destinationRoot": save_path,
+            "destinationRoot": "" if streamable_only else save_path,
             "savePath": save_path,
-            "directWrite": True,
+            "directWrite": not streamable_only,
             "origin": str(payload.get("origin", "")),
             "magnetUri": info.get("magnetUri", ""),
             "name": info.get("name", ""),
             "infoHash": info.get("infoHash", ""),
             "totalSize": info.get("totalSize", 0),
+            "sequential": sequential,
+            "filePriorities": priorities,
+            "videoLibraryStreamable": streamable_only,
         })
 
-        # Re-add the torrent with save path
+        # Re-add the torrent with requested save path
         h = pending.get("handle")
         if h:
             try:
@@ -7548,23 +8264,41 @@ class WebTorrentBridge(QObject):
                 pass
 
         magnet = info.get("magnetUri", "")
-        if magnet:
+        torrent_path = str(info.get("torrentPath", "") or "").strip()
+        if torrent_path and os.path.isfile(torrent_path):
+            try:
+                with open(torrent_path, "rb") as f:
+                    buf = f.read()
+                ti = lt.torrent_info(lt.bdecode(buf))
+                params = {"ti": ti, "save_path": save_path}
+            except Exception as e:
+                return json.dumps(_err("Failed to read torrent file: " + str(e)))
+        elif magnet:
             params = lt.parse_magnet_uri(magnet)
             params.save_path = save_path
+        elif h and h.has_metadata():
+            try:
+                ti = h.get_torrent_info()
+                params = {"ti": ti, "save_path": save_path}
+            except Exception as e:
+                return json.dumps(_err("Failed to restore pending metadata: " + str(e)))
         else:
             return json.dumps(_err("No source to re-add"))
 
         self._pending.pop(resolve_id, None)
 
-        # Apply file selection after adding
         result = self._add_torrent(entry, params)
-        selected = payload.get("selectedFiles")
-        if result.get("ok") and isinstance(selected, list) and selected:
-            self.selectFiles(json.dumps({
+        if result.get("ok") and (selected_files or priorities or ("sequential" in payload)):
+            sel_payload = {
                 "id": entry["id"],
-                "selectedIndices": selected,
-                "destinationRoot": save_path,
-            }))
+                "selectedIndices": selected_files,
+                "priorities": priorities,
+                "sequential": sequential,
+            }
+            if not streamable_only:
+                sel_payload["destinationRoot"] = save_path
+            self.selectFiles(sel_payload)
+
         return json.dumps(result)
 
     @Slot(str, result=str)
@@ -7624,7 +8358,7 @@ class WebTorrentBridge(QObject):
         tid = self._extract_id(payload)
         if not tid:
             return json.dumps(_err("Missing id"))
-        remove_files = bool(payload.get("removeFiles", False))
+        remove_files = bool(payload.get("removeFiles", payload.get("deleteFiles", False)))
         rec = self._active.pop(tid, None)
         if rec and rec.get("handle"):
             try:
@@ -7639,6 +8373,7 @@ class WebTorrentBridge(QObject):
         c["torrents"] = [t for t in c["torrents"]
                          if not (t and str(t.get("id", "")) == tid)]
         self._write_history()
+        self._cleanup_stream_paths(tid)
         self._emit_updated()
         return json.dumps(_ok())
 
@@ -7690,10 +8425,11 @@ class WebTorrentBridge(QObject):
         h = rec["handle"]
         entry = rec["entry"]
 
-        selected_indices = set()
-        raw = payload.get("selectedIndices", [])
-        if isinstance(raw, list):
-            selected_indices = {int(x) for x in raw}
+        selected_list = self._parse_selected_indices(payload.get("selectedIndices", []))
+        selected_indices = set(selected_list)
+        in_priorities = self._parse_priorities(payload.get("priorities", {}))
+        if not isinstance(entry.get("filePriorities"), dict):
+            entry["filePriorities"] = {}
 
         # Update destination if provided
         dest = str(payload.get("destinationRoot", "")).strip()
@@ -7704,7 +8440,22 @@ class WebTorrentBridge(QObject):
             entry["savePath"] = abs_root
             entry["directWrite"] = True
 
+        if "sequential" in payload:
+            entry["sequential"] = bool(payload.get("sequential"))
+        elif "sequential" not in entry:
+            entry["sequential"] = True
+        sequential = bool(entry.get("sequential", True))
+
+        for idx, label in in_priorities.items():
+            entry["filePriorities"][str(idx)] = self._priority_label(label)
+
         if not h.has_metadata():
+            rec["deferredSelection"] = {
+                "selectedIndices": list(selected_list),
+                "priorities": dict(entry.get("filePriorities") or {}),
+                "sequential": sequential,
+                "destinationRoot": str(entry.get("destinationRoot", "") or ""),
+            }
             self._upsert_history(entry)
             self._emit_updated()
             return json.dumps(_ok({"pending": True}))
@@ -7712,16 +8463,36 @@ class WebTorrentBridge(QObject):
         ti = h.get_torrent_info()
         num_files = ti.files().num_files() if ti else 0
         priorities = [0] * num_files
-        for i in range(num_files):
-            if i in selected_indices:
-                priorities[i] = 4   # normal priority
-                if entry.get("files") and i < len(entry["files"]):
-                    entry["files"][i]["selected"] = True
-            else:
-                if entry.get("files") and i < len(entry["files"]):
-                    entry["files"][i]["selected"] = False
+
+        if selected_list:
+            for pos, idx in enumerate(selected_list):
+                if idx < 0 or idx >= num_files:
+                    continue
+                pval = self._priority_label(
+                    in_priorities.get(idx) or entry["filePriorities"].get(str(idx)) or "normal"
+                )
+                entry["filePriorities"][str(idx)] = pval
+                wire = self._priority_wire_value(pval)
+                if sequential:
+                    wire = min(7, wire + max(0, len(selected_list) - pos - 1))
+                priorities[idx] = wire
+
+        try:
+            h.set_sequential_download(sequential)
+        except Exception:
+            pass
 
         h.prioritize_files(priorities)
+
+        # Normalize entry file flags for UI/history.
+        if isinstance(entry.get("files"), list):
+            for i, f in enumerate(entry["files"]):
+                if not isinstance(f, dict):
+                    continue
+                selected = i in selected_indices
+                f["selected"] = selected
+                if selected:
+                    f["priority"] = entry["filePriorities"].get(str(i), "normal")
 
         if entry.get("state") in ("metadata_ready", "completed_pending"):
             if entry.get("destinationRoot") and selected_indices:
@@ -7729,7 +8500,7 @@ class WebTorrentBridge(QObject):
 
         self._upsert_history(entry)
         self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps(_ok({"selectedCount": len(selected_indices)}))
 
     @Slot(str, result=str)
     def setDestination(self, p):
@@ -7744,82 +8515,295 @@ class WebTorrentBridge(QObject):
         abs_root = os.path.abspath(dest)
         os.makedirs(abs_root, exist_ok=True)
         entry = rec["entry"]
+        prev_save = str(entry.get("savePath", "") or "").strip()
         entry["destinationRoot"] = abs_root
         entry["savePath"] = abs_root
         entry["directWrite"] = True
+
+        if entry.get("state") == "completed_pending":
+            routed = 0
+            ignored = 0
+            failed = 0
+            src_root = os.path.abspath(prev_save) if prev_save else ""
+            same_root = bool(src_root and os.path.abspath(src_root).lower() == os.path.abspath(abs_root).lower())
+            for f in (entry.get("files") or []):
+                if not isinstance(f, dict):
+                    continue
+                if f.get("selected") is False:
+                    ignored += 1
+                    continue
+                rel = str(f.get("path", "") or f.get("name", "")).strip().lstrip("\\/")
+                if not rel:
+                    ignored += 1
+                    continue
+                src = os.path.join(src_root, rel) if src_root else ""
+                dst = os.path.join(abs_root, rel)
+                if not src or not os.path.exists(src):
+                    failed += 1
+                    continue
+                try:
+                    if same_root and os.path.abspath(src).lower() == os.path.abspath(dst).lower():
+                        routed += 1
+                        continue
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    shutil.copy2(src, dst)
+                    routed += 1
+                except Exception:
+                    failed += 1
+            entry["routedFiles"] = int(routed)
+            entry["ignoredFiles"] = int(ignored)
+            entry["failedFiles"] = int(failed)
+            entry["state"] = "completed_with_errors" if failed > 0 else "completed"
+            if not entry.get("finishedAt"):
+                entry["finishedAt"] = int(time.time() * 1000)
+
         self._upsert_history(entry)
         self._emit_updated()
-        return json.dumps(_ok())
+        return json.dumps(_ok({
+            "state": entry.get("state", ""),
+            "routedFiles": int(entry.get("routedFiles", 0) or 0),
+            "failedFiles": int(entry.get("failedFiles", 0) or 0),
+        }))
 
     @Slot(str, result=str)
     def streamFile(self, p):
-        """Set sequential download priority for a specific file (for playback)."""
+        """Prepare a torrent file for playback and return a playable path payload."""
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
+        auto_activate = ("autoActivate" not in payload) or bool(payload.get("autoActivate"))
+        auto_activated = False
+        activation_source = "already_active"
+
+        if (not rec or not rec.get("handle")) and auto_activate:
+            # Qt bridge fallback: if not active, we currently do not auto-rebuild
+            # from history unless there is a running session.
+            activation_source = "none"
         if not rec or not rec.get("handle"):
-            return json.dumps(_err("Torrent not active"))
+            return json.dumps({
+                "ok": False,
+                "error": "Torrent not active",
+                "autoActivated": auto_activated,
+                "activationSource": activation_source,
+            })
         h = rec["handle"]
+        entry = rec.get("entry") or {}
+
+        await_ready = bool(payload.get("awaitReady", False))
+        ready_timeout_ms = int(payload.get("readyTimeoutMs", 15000) or 15000)
+        if ready_timeout_ms < 500:
+            ready_timeout_ms = 500
+
         if not h.has_metadata():
-            return json.dumps(_err("Metadata not ready"))
+            deadline = time.time() + (ready_timeout_ms / 1000.0)
+            while await_ready and not h.has_metadata() and time.time() < deadline:
+                time.sleep(0.15)
+            if not h.has_metadata():
+                return json.dumps({
+                    "ok": False,
+                    "error": "Metadata not ready",
+                    "autoActivated": auto_activated,
+                    "activationSource": activation_source,
+                })
+
+        self._apply_metadata_if_ready(rec)
 
         file_index = int(payload.get("fileIndex", -1))
         ti = h.get_torrent_info()
         num_files = ti.files().num_files() if ti else 0
         if file_index < 0 or file_index >= num_files:
-            return json.dumps(_err("Invalid file index"))
+            return json.dumps({
+                "ok": False,
+                "error": "Invalid file index",
+                "autoActivated": auto_activated,
+                "activationSource": activation_source,
+            })
 
-        # Prioritize target file, deselect others
-        priorities = [0] * num_files
-        priorities[file_index] = 7   # highest priority
-        h.prioritize_files(priorities)
-        h.set_sequential_download(True)
+        for_playback_cache = bool(payload.get("forPlaybackCache", False))
+        prefer_http = bool(payload.get("preferHttp", False))
 
-        return json.dumps(_ok({"streaming": True, "fileIndex": file_index}))
+        # Prioritize target file for near-term playback.
+        priorities = [0] * num_files if (for_playback_cache or prefer_http) else [1] * num_files
+        priorities[file_index] = 7
+        try:
+            h.prioritize_files(priorities)
+            h.set_sequential_download(True)
+        except Exception:
+            pass
+
+        rel_path = ti.files().file_path(file_index) if ti else ""
+        if isinstance(entry.get("files"), list):
+            for i, f in enumerate(entry["files"]):
+                if not isinstance(f, dict):
+                    continue
+                f["selected"] = (i == file_index)
+                f["priority"] = "high" if i == file_index else "low"
+        if not isinstance(entry.get("filePriorities"), dict):
+            entry["filePriorities"] = {}
+        entry["filePriorities"][str(file_index)] = "high"
+        entry["sequential"] = True
+        if entry.get("state") in ("metadata_ready", "completed_pending"):
+            entry["state"] = "streaming"
+
+        base_save = str(entry.get("savePath", "") or entry.get("destinationRoot", "")).strip()
+        abs_target = ""
+        if base_save and rel_path:
+            abs_target = os.path.abspath(os.path.join(base_save, rel_path))
+        if not abs_target:
+            abs_target = self._default_stream_cache_path(entry, tid, file_index, rel_path)
+            try:
+                os.makedirs(os.path.dirname(abs_target), exist_ok=True)
+            except Exception:
+                pass
+
+        if await_ready:
+            self._wait_for_file(abs_target, ready_timeout_ms)
+
+        transport = "file"
+        out_path = abs_target
+        out_url = "file://" + abs_target.replace("\\", "/")
+
+        if for_playback_cache and prefer_http:
+            playlist_path = self._default_playlist_path(tid, file_index)
+            if self._write_simple_playlist(playlist_path, abs_target):
+                out_path = playlist_path
+                transport = "http_playlist"
+                out_url = "file://" + playlist_path.replace("\\", "/")
+
+        self._upsert_history(entry)
+        self._emit_updated()
+
+        return json.dumps(_ok({
+            "path": out_path,
+            "url": out_url,
+            "transport": transport,
+            "autoActivated": auto_activated,
+            "activationSource": activation_source,
+        }))
 
     @Slot(str, result=str)
     def addToVideoLibrary(self, p):
-        """Route torrent video files to a video library folder."""
+        """Create/route a torrent-backed show folder into the video library."""
         payload = _p(p)
         tid = self._extract_id(payload)
         rec = self._active.get(tid)
-        if not rec or not rec.get("entry"):
+        if not rec or not rec.get("entry") or not rec.get("handle"):
             return json.dumps(_err("Torrent not active"))
+        h = rec["handle"]
         entry = rec["entry"]
+
+        if not entry.get("metadataReady"):
+            self._apply_metadata_if_ready(rec)
+        if not entry.get("metadataReady"):
+            return json.dumps(_err("Torrent metadata not ready"))
+
         dest = str(payload.get("destinationRoot", "")).strip()
         if not dest:
             return json.dumps(_err("Destination folder required"))
         abs_root = os.path.abspath(dest)
         os.makedirs(abs_root, exist_ok=True)
 
-        # Find video files
-        VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".webm", ".mov", ".wmv",
-                      ".flv", ".m4v", ".ts", ".m2ts"}
+        torrent_name = str(entry.get("name", "") or "").strip()
+        if not torrent_name:
+            try:
+                ti = h.get_torrent_info()
+                torrent_name = str(ti.name()) if ti else ""
+            except Exception:
+                torrent_name = ""
+        if not torrent_name:
+            torrent_name = "Torrent"
+        show_path = os.path.join(abs_root, torrent_name)
+
+        files = entry.get("files") or []
         video_indices = []
-        for f in (entry.get("files") or []):
-            ext = os.path.splitext(str(f.get("name", "") or f.get("path", "")))[1].lower()
-            if ext in VIDEO_EXTS:
-                video_indices.append(f.get("index", 0))
+        for f in files:
+            if not isinstance(f, dict):
+                continue
+            path_or_name = str(f.get("path", "") or f.get("name", ""))
+            if self._is_video_file(path_or_name):
+                try:
+                    video_indices.append(int(f.get("index", 0)))
+                except Exception:
+                    pass
 
         if not video_indices:
             return json.dumps(_err("No video files found in torrent"))
 
+        streamable = bool(payload.get("streamable", False))
         entry["videoLibrary"] = True
-        entry["destinationRoot"] = abs_root
-        entry["savePath"] = abs_root
-        entry["directWrite"] = True
+        entry["showFolderPath"] = show_path
+        entry["videoLibraryStreamable"] = streamable
 
-        # Select only video files
-        self.selectFiles(json.dumps({
-            "id": tid,
-            "selectedIndices": video_indices,
-            "destinationRoot": abs_root,
-            "sequential": True,
-        }))
+        if streamable:
+            manifest = {
+                "version": 1,
+                "streamable": True,
+                "createdAt": int(time.time() * 1000),
+                "torrentId": str(entry.get("id", "") or tid),
+                "infoHash": str(entry.get("infoHash", "") or ""),
+                "magnetUri": str(entry.get("magnetUri", "") or ""),
+                "torrentName": torrent_name,
+                "files": [],
+            }
+
+            files_by_index = {}
+            for f in files:
+                if isinstance(f, dict):
+                    try:
+                        files_by_index[int(f.get("index", -1))] = f
+                    except Exception:
+                        pass
+
+            for idx in video_indices:
+                f = files_by_index.get(idx)
+                if not f:
+                    continue
+                rel = self._normalize_video_rel_path(
+                    str(f.get("path", "") or f.get("name", "")),
+                    torrent_name,
+                )
+                if not rel:
+                    continue
+                self._ensure_placeholder_file(os.path.join(show_path, rel))
+                manifest["files"].append({
+                    "fileIndex": int(idx),
+                    "relativePath": rel,
+                    "length": int(f.get("length", 0) or 0),
+                    "name": str(f.get("name", "") or ""),
+                })
+
+            try:
+                os.makedirs(show_path, exist_ok=True)
+                manifest_path = os.path.join(show_path, _STREAMABLE_MANIFEST_FILE)
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                return json.dumps(_err("Failed to create streamable manifest: " + str(e)))
+        else:
+            select_out = self.selectFiles({
+                "id": tid,
+                "selectedIndices": video_indices,
+                "destinationRoot": show_path,
+                "sequential": True,
+            })
+            try:
+                parsed = json.loads(select_out) if isinstance(select_out, str) else select_out
+            except Exception:
+                parsed = {"ok": False, "error": "Failed to select files"}
+            if not parsed.get("ok", False):
+                return json.dumps(parsed)
+
+        # Register the show folder for video scanning.
+        root = self.parent()
+        try:
+            if root and hasattr(root, "video"):
+                root.video.addShowFolderPath(json.dumps({"path": show_path}))
+        except Exception:
+            pass
 
         self._upsert_history(entry)
         self._emit_updated()
-        return json.dumps(_ok({"showPath": abs_root}))
+        return json.dumps(_ok({"showPath": show_path, "streamable": streamable}))
 
     @Slot(result=str)
     def pauseAll(self):
@@ -7888,74 +8872,306 @@ class WebTorrentBridge(QObject):
             return json.dumps(_ok({"cancelled": True}))
         return json.dumps(_ok({"path": folder}))
 
-    @Slot(str, result=str)
-    def resolveMetadata(self, p):
-        """Resolve metadata for a magnet/torrent without downloading."""
-        payload = _p(p)
-        source = str(payload.get("source", "") or "").strip()
+    def _new_resolve_tmp_dir(self):
+        import tempfile
+        tmp_dir = os.path.join(
+            tempfile.gettempdir(), "tanko-resolve-" + str(int(time.time()))
+        )
+        os.makedirs(tmp_dir, exist_ok=True)
+        return tmp_dir
+
+    def _begin_metadata_resolve(self, source):
+        source = str(source or "").strip()
         if not source:
-            return json.dumps(_err("No source provided"))
+            return None, None, "No source provided"
         lt = self._try_import()
         if not lt or lt is False:
-            return json.dumps(_err("libtorrent not available"))
+            return None, None, "libtorrent not available"
 
         ses = self._ensure_session()
         if not ses:
-            return json.dumps(_err("Session unavailable"))
+            return None, None, "Session unavailable"
 
-        import tempfile
-        tmp_dir = os.path.join(tempfile.gettempdir(),
-                               "tanko-resolve-" + str(int(time.time())))
-        os.makedirs(tmp_dir, exist_ok=True)
+        tmp_dir = self._new_resolve_tmp_dir()
 
         try:
             if source.startswith("magnet:"):
                 params = lt.parse_magnet_uri(source)
                 params.save_path = tmp_dir
+                source_path = ""
             else:
-                buf = open(source, "rb").read()
+                source_path = os.path.abspath(source)
+                with open(source_path, "rb") as f:
+                    buf = f.read()
                 ti = lt.torrent_info(lt.bdecode(buf))
                 params = {"ti": ti, "save_path": tmp_dir}
             h = ses.add_torrent(params)
         except Exception as e:
-            return json.dumps(_err(str(e)))
+            return None, None, str(e)
 
-        # Wait for metadata (up to 180s)
-        deadline = time.time() + 180
-        while not h.has_metadata() and time.time() < deadline:
-            time.sleep(0.5)
+        resolve_id = "res_" + str(int(time.time() * 1000)) + "_" + hashlib.md5(os.urandom(8)).hexdigest()[:6]
+        info = {
+            "name": "",
+            "infoHash": "",
+            "totalSize": 0,
+            "files": [],
+            "magnetUri": source if source.startswith("magnet:") else "",
+            "torrentPath": source_path if not source.startswith("magnet:") else "",
+            "source": source,
+        }
+        self._pending[resolve_id] = {
+            "handle": h,
+            "info": info,
+            "startedAt": int(time.time() * 1000),
+            "tmpDir": tmp_dir,
+            "state": "resolving",
+            "done": False,
+            "retryCount": 0,
+            "maxRetries": 1,
+            "retryAfterMs": 22000,
+            "timeoutMs": 90000,
+            "lastError": "",
+        }
+        return resolve_id, h, ""
 
-        if not h.has_metadata():
+    def _restart_pending_resolve(self, resolve_id, pending):
+        if not isinstance(pending, dict):
+            return False, "Invalid pending resolve"
+        info = pending.get("info", {}) if isinstance(pending.get("info"), dict) else {}
+        source = str(info.get("source", "") or "").strip()
+        if not source:
+            return False, "Missing resolve source"
+        lt = self._try_import()
+        if not lt or lt is False:
+            return False, "libtorrent not available"
+        ses = self._ensure_session()
+        if not ses:
+            return False, "Session unavailable"
+
+        old_handle = pending.get("handle")
+        if old_handle:
             try:
-                ses.remove_torrent(h)
+                ses.remove_torrent(old_handle)
             except Exception:
                 pass
-            return json.dumps(_err("Metadata resolution timed out (180s)"))
 
-        ti = h.get_torrent_info()
-        resolve_id = "res_" + str(int(time.time() * 1000)) + "_" + hashlib.md5(
-            os.urandom(8)).hexdigest()[:6]
+        tmp_dir = self._new_resolve_tmp_dir()
+        try:
+            if source.startswith("magnet:"):
+                params = lt.parse_magnet_uri(source)
+                params.save_path = tmp_dir
+            else:
+                source_path = os.path.abspath(source)
+                with open(source_path, "rb") as f:
+                    buf = f.read()
+                ti = lt.torrent_info(lt.bdecode(buf))
+                params = {"ti": ti, "save_path": tmp_dir}
+            handle = ses.add_torrent(params)
+        except Exception as e:
+            return False, str(e)
 
-        info = {
-            "name": str(ti.name()),
-            "infoHash": str(ti.info_hash()),
-            "totalSize": int(ti.total_size()),
-            "files": self._build_file_list(ti),
-            "magnetUri": source if source.startswith("magnet:") else "",
-        }
+        pending["handle"] = handle
+        pending["tmpDir"] = tmp_dir
+        pending["state"] = "resolving"
+        pending["done"] = False
+        pending["lastError"] = ""
+        pending["startedAt"] = int(time.time() * 1000)
+        pending["retryCount"] = int(pending.get("retryCount", 0) or 0) + 1
+        pending["retriedAtMs"] = int(time.time() * 1000)
+        self._pending[str(resolve_id)] = pending
+        return True, ""
 
-        # Deselect all files to prevent download
-        priorities = [0] * ti.files().num_files()
-        h.prioritize_files(priorities)
+    def _resolve_status_payload(self, resolve_id):
+        rid = str(resolve_id or "")
+        pending = self._pending.get(rid)
+        if not pending:
+            return _err("No pending resolve with that ID")
 
-        self._pending[resolve_id] = {"handle": h, "info": info}
-        return json.dumps(_ok({
-            "resolveId": resolve_id,
-            "name": info["name"],
-            "infoHash": info["infoHash"],
-            "totalSize": info["totalSize"],
-            "files": info["files"],
-        }))
+        h = pending.get("handle")
+        info = pending.get("info", {})
+        started_at = int(pending.get("startedAt", int(time.time() * 1000)) or 0)
+        elapsed_ms = max(0, int(time.time() * 1000) - started_at)
+        state = str(pending.get("state", "resolving") or "resolving")
+        done = bool(pending.get("done", False))
+        last_error = str(pending.get("lastError", "") or "").strip()
+        timeout_ms = max(5000, int(pending.get("timeoutMs", 90000) or 90000))
+        max_retries = max(0, int(pending.get("maxRetries", 1) or 1))
+        retry_after_ms = max(3000, int(pending.get("retryAfterMs", 22000) or 22000))
+        retry_count = max(0, int(pending.get("retryCount", 0) or 0))
+
+        if done and state in ("timeout", "error", "cancelled"):
+            return _ok({
+                "resolveId": rid,
+                "done": True,
+                "metadataReady": False,
+                "state": state,
+                "elapsedMs": elapsed_ms,
+                "retryCount": retry_count,
+                "error": last_error or ("Resolve " + state),
+            })
+
+        if not h:
+            pending["state"] = "error"
+            pending["done"] = True
+            pending["lastError"] = "Pending resolve handle missing"
+            return _ok({
+                "resolveId": rid,
+                "done": True,
+                "metadataReady": False,
+                "state": "error",
+                "elapsedMs": elapsed_ms,
+                "retryCount": retry_count,
+                "error": pending["lastError"],
+            })
+
+        if elapsed_ms >= timeout_ms:
+            msg = "Metadata resolution timed out (" + str(timeout_ms // 1000) + "s)"
+            pending["state"] = "timeout"
+            pending["done"] = True
+            pending["lastError"] = msg
+            return _ok({
+                "resolveId": rid,
+                "done": True,
+                "metadataReady": False,
+                "state": "timeout",
+                "elapsedMs": elapsed_ms,
+                "retryCount": retry_count,
+                "error": msg,
+            })
+
+        has_metadata = False
+        try:
+            has_metadata = bool(h.has_metadata())
+        except Exception:
+            has_metadata = False
+
+        if has_metadata:
+            try:
+                ti = h.get_torrent_info()
+                info["name"] = str(ti.name())
+                info["infoHash"] = str(ti.info_hash())
+                info["totalSize"] = int(ti.total_size())
+                info["files"] = self._build_file_list(ti)
+                priorities = [0] * ti.files().num_files()
+                h.prioritize_files(priorities)
+            except Exception as e:
+                pending["state"] = "error"
+                pending["done"] = True
+                pending["lastError"] = "Failed reading metadata: " + str(e)
+                return _ok({
+                    "resolveId": rid,
+                    "done": True,
+                    "metadataReady": False,
+                    "state": "error",
+                    "elapsedMs": elapsed_ms,
+                    "retryCount": retry_count,
+                    "error": pending["lastError"],
+                })
+
+            pending["state"] = "metadata_ready"
+            pending["done"] = True
+            pending["lastError"] = ""
+
+            return _ok({
+                "resolveId": rid,
+                "done": True,
+                "metadataReady": True,
+                "state": "metadata_ready",
+                "elapsedMs": elapsed_ms,
+                "retryCount": retry_count,
+                "name": info.get("name", ""),
+                "infoHash": info.get("infoHash", ""),
+                "totalSize": int(info.get("totalSize", 0) or 0),
+                "files": info.get("files", []),
+            })
+
+        if retry_count < max_retries and elapsed_ms >= retry_after_ms:
+            ok, err = self._restart_pending_resolve(rid, pending)
+            if not ok:
+                pending["state"] = "error"
+                pending["done"] = True
+                pending["lastError"] = "Metadata retry failed: " + str(err)
+                return _ok({
+                    "resolveId": rid,
+                    "done": True,
+                    "metadataReady": False,
+                    "state": "error",
+                    "elapsedMs": elapsed_ms,
+                    "retryCount": retry_count,
+                    "error": pending["lastError"],
+                })
+            pending = self._pending.get(rid, pending)
+            elapsed_ms = max(
+                0,
+                int(time.time() * 1000)
+                - int(pending.get("startedAt", int(time.time() * 1000)) or 0),
+            )
+            retry_count = max(0, int(pending.get("retryCount", 0) or 0))
+
+        return _ok({
+            "resolveId": rid,
+            "done": False,
+            "metadataReady": False,
+            "state": "resolving",
+            "elapsedMs": elapsed_ms,
+            "retryCount": retry_count,
+        })
+
+    @Slot(str, result=str)
+    def startResolve(self, p):
+        payload = _p(p)
+        source = str(payload.get("source", "") or "").strip()
+        if source.startswith("magnet:") and "xt=urn:btih:" not in source.lower():
+            return json.dumps(_err("Malformed magnet URI (missing info hash)"))
+        resolve_id, _handle, err = self._begin_metadata_resolve(source)
+        if err:
+            return json.dumps(_err(err))
+        pending = self._pending.get(resolve_id)
+        if isinstance(pending, dict):
+            timeout_ms = max(5000, int(payload.get("timeoutMs", 90000) or 90000))
+            retry_after_ms = max(3000, int(payload.get("retryAfterMs", 22000) or 22000))
+            max_retries = max(0, int(payload.get("maxRetries", 1) or 1))
+            pending["timeoutMs"] = timeout_ms
+            pending["retryAfterMs"] = retry_after_ms
+            pending["maxRetries"] = max_retries
+        status = self._resolve_status_payload(resolve_id)
+        return json.dumps(status)
+
+    @Slot(str, result=str)
+    def getResolveStatus(self, p):
+        payload = _p(p)
+        resolve_id = str(payload.get("resolveId", "") or "").strip()
+        if not resolve_id:
+            return json.dumps(_err("Missing resolveId"))
+        return json.dumps(self._resolve_status_payload(resolve_id))
+
+    @Slot(str, result=str)
+    def resolveMetadata(self, p):
+        """
+        Backward-compatible blocking metadata resolver.
+
+        New callers should prefer startResolve()+getResolveStatus() polling.
+        """
+        payload = _p(p)
+        source = str(payload.get("source", "") or "").strip()
+        resolve_id, _handle, err = self._begin_metadata_resolve(source)
+        if err:
+            return json.dumps(_err(err))
+
+        timeout_ms = int(payload.get("timeoutMs", 180000) or 180000)
+        timeout_ms = max(5000, timeout_ms)
+        deadline = time.time() + (timeout_ms / 1000.0)
+        while time.time() < deadline:
+            status = self._resolve_status_payload(resolve_id)
+            if status.get("ok") and status.get("done"):
+                if status.get("metadataReady"):
+                    return json.dumps(status)
+                msg = str(status.get("error", "") or "Metadata resolution failed")
+                return json.dumps(_err(msg))
+            time.sleep(0.2)
+
+        self.cancelResolve({"resolveId": resolve_id})
+        return json.dumps(_err("Metadata resolution timed out (" + str(timeout_ms // 1000) + "s)"))
 
     @Slot(str, result=str)
     def cancelResolve(self, p):
@@ -7988,7 +9204,7 @@ class WebTorrentBridge(QObject):
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(save_path)))
         return json.dumps(_ok())
 
-    # ── cleanup (called by app.py on quit) ───────────────────────────────
+    # â”€â”€ cleanup (called by app.py on quit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def shutdown(self):
         self._poll_stop.set()
@@ -8031,6 +9247,26 @@ class TorrentSearchBridge(QObject):
         except Exception:
             return {}
 
+    def _read_settings_document(self):
+        try:
+            p = _data_path("web_browser_settings.json")
+            with open(p, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict) and isinstance(raw.get("settings"), dict):
+                return raw, raw["settings"], True
+            if isinstance(raw, dict):
+                return raw, raw, False
+        except Exception:
+            pass
+        return {}, {}, False
+
+    @staticmethod
+    def _normalize_provider_key(value):
+        key = str(value or "").strip().lower()
+        if key in ("jackett", "prowlarr", "tankorent"):
+            return key
+        return "jackett"
+
     @staticmethod
     def _normalize_provider_config(src):
         s = src if isinstance(src, dict) else {}
@@ -8051,29 +9287,65 @@ class TorrentSearchBridge(QObject):
             },
         }
 
+    @staticmethod
+    def _normalize_tankorent_config(src):
+        s = src if isinstance(src, dict) else {}
+        timeout = int(s.get("timeoutMs") or 25000)
+        if timeout <= 0:
+            timeout = 25000
+        sites = s.get("sites") if isinstance(s.get("sites"), dict) else {}
+        return {
+            "enabled": bool(s.get("enabled", True)),
+            "timeoutMs": timeout,
+            "sites": {
+                "piratebay": bool(sites.get("piratebay", True)),
+                "1337x": bool(sites.get("1337x", True)),
+                "nyaa": bool(sites.get("nyaa", True)),
+            },
+        }
+
     def _get_provider_config(self):
         s = self._read_settings()
         ts = s.get("torrentSearch") if isinstance(s.get("torrentSearch"), dict) else {}
-        provider_key = str(ts.get("provider") or s.get("torrentSearchProvider") or "jackett").strip().lower()
-        if provider_key != "prowlarr":
-            provider_key = "jackett"
+        provider_key = self._normalize_provider_key(
+            ts.get("provider") or s.get("torrentSearchProvider") or "jackett"
+        )
 
-        jk_src = s.get("jackett") if isinstance(s.get("jackett"), dict) else {
+        jk_src = ts.get("jackett") if isinstance(ts.get("jackett"), dict) else (
+            s.get("jackett") if isinstance(s.get("jackett"), dict) else {
             "baseUrl": s.get("jackettBaseUrl"), "apiKey": s.get("jackettApiKey"),
             "indexer": s.get("jackettIndexer"), "timeoutMs": s.get("jackettTimeoutMs"),
             "indexersByCategory": s.get("jackettIndexersByCategory"),
-        }
+            }
+        )
         jackett = self._normalize_provider_config(jk_src)
 
-        pw_src = s.get("prowlarr") if isinstance(s.get("prowlarr"), dict) else {
+        pw_src = ts.get("prowlarr") if isinstance(ts.get("prowlarr"), dict) else (
+            s.get("prowlarr") if isinstance(s.get("prowlarr"), dict) else {
             "baseUrl": s.get("prowlarrBaseUrl"), "apiKey": s.get("prowlarrApiKey"),
             "indexer": s.get("prowlarrIndexer"), "timeoutMs": s.get("prowlarrTimeoutMs"),
             "indexersByCategory": s.get("prowlarrIndexersByCategory"),
-        }
+            }
+        )
         prowlarr = self._normalize_provider_config(pw_src)
 
-        current = prowlarr if provider_key == "prowlarr" else jackett
-        return {"provider": provider_key, "current": current, "jackett": jackett, "prowlarr": prowlarr}
+        tk_src = ts.get("tankorent") if isinstance(ts.get("tankorent"), dict) else (
+            s.get("tankorent") if isinstance(s.get("tankorent"), dict) else {}
+        )
+        tankorent = self._normalize_tankorent_config(tk_src)
+
+        current = jackett
+        if provider_key == "prowlarr":
+            current = prowlarr
+        elif provider_key == "tankorent":
+            current = tankorent
+        return {
+            "provider": provider_key,
+            "current": current,
+            "jackett": jackett,
+            "prowlarr": prowlarr,
+            "tankorent": tankorent,
+        }
 
     # --- XML parsing helpers ---
 
@@ -8356,62 +9628,137 @@ class TorrentSearchBridge(QObject):
                 out.append(t)
         return out or ["all"]
 
-    # --- @Slot methods ---
+    @staticmethod
+    def _provider_fallback_chain(provider_key):
+        key = TorrentSearchBridge._normalize_provider_key(provider_key)
+        if key == "prowlarr":
+            return ["prowlarr", "jackett", "tankorent"]
+        if key == "tankorent":
+            return ["tankorent", "jackett", "prowlarr"]
+        return ["jackett", "prowlarr", "tankorent"]
 
-    @Slot(result=str)
-    def health(self):
-        cfg_set = self._get_provider_config()
-        provider_key = cfg_set["provider"]
-        cfg = cfg_set["current"]
+    @staticmethod
+    def _provider_cfg(cfg_set, provider_key):
+        key = TorrentSearchBridge._normalize_provider_key(provider_key)
+        if key == "prowlarr":
+            return cfg_set.get("prowlarr", {})
+        if key == "tankorent":
+            return cfg_set.get("tankorent", {})
+        return cfg_set.get("jackett", {})
 
-        if not cfg["baseUrl"] or not cfg["apiKey"]:
-            msg = "Configure Prowlarr base URL + API key" if provider_key == "prowlarr" else "Configure Jackett base URL + API key"
-            out = {"ok": True, "ready": False, "error": msg, "details": {"configured": False, "provider": provider_key}}
-            self.statusChanged.emit(json.dumps(out))
-            return json.dumps(out)
+    def _resolve_tankorent_sites(self, cfg, payload):
+        enabled = set()
+        site_cfg = cfg.get("sites") if isinstance(cfg.get("sites"), dict) else {}
+        for site in ("piratebay", "1337x", "nyaa"):
+            if bool(site_cfg.get(site, True)):
+                enabled.add(site)
 
-        try:
-            if provider_key == "prowlarr":
-                res = self._fetch_json_http(cfg["baseUrl"] + "/api/v1/health", cfg, self._prowlarr_headers(cfg))
-                if not res["ok"]:
-                    res = self._fetch_json_http(cfg["baseUrl"] + "/api/v1/system/status", cfg, self._prowlarr_headers(cfg))
-                ready = res["ok"]
-                out = {"ok": True, "ready": ready, "details": {"configured": True, "provider": provider_key}}
-                if not ready:
-                    out["error"] = "Prowlarr unreachable"
+        src = str(payload.get("source") or payload.get("indexer") or "").strip().lower()
+        if src and src != "all":
+            if "1337" in src:
+                want = {"1337x"}
+            elif "pirate" in src or "tpb" in src:
+                want = {"piratebay"}
+            elif "nyaa" in src:
+                want = {"nyaa"}
             else:
-                from urllib.parse import quote
-                url = cfg["baseUrl"] + "/api/v2.0/indexers/all/results/torznab/api?t=caps&apikey=" + quote(cfg["apiKey"], safe="")
-                res = self._fetch_text(url, cfg)
-                out = {"ok": True, "ready": res["ok"], "details": {"configured": True, "provider": provider_key, "indexer": cfg["indexer"]}}
-                if not res["ok"]:
-                    out["error"] = "Jackett unreachable (HTTP " + str(res.get("status", 0)) + ")"
-        except Exception as e:
-            out = {"ok": True, "ready": False, "error": str(e), "details": {"configured": True, "provider": provider_key}}
+                want = {src}
+            got = want & enabled
+            return got if got else want
 
-        self.statusChanged.emit(json.dumps(out))
-        return json.dumps(out)
+        raw_sites = payload.get("sites")
+        if isinstance(raw_sites, str):
+            wanted = {t.strip().lower() for t in raw_sites.split(",") if t.strip()}
+            if wanted:
+                got = wanted & enabled
+                return got if got else wanted
+        if isinstance(raw_sites, list):
+            wanted = {str(t).strip().lower() for t in raw_sites if str(t).strip()}
+            if wanted:
+                got = wanted & enabled
+                return got if got else wanted
 
-    @Slot(str, result=str)
-    def query(self, p):
-        try:
-            payload = json.loads(p) if isinstance(p, str) and p.strip() else {}
-        except Exception:
-            payload = {}
+        return enabled
 
-        cfg_set = self._get_provider_config()
-        provider_key = cfg_set["provider"]
-        cfg = cfg_set["current"]
+    def _query_tankorent(self, cfg, payload):
         limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
         page = max(0, int(payload.get("page") or 0))
         envelope = {"page": page, "limit": limit}
 
-        if not cfg["baseUrl"] or not cfg["apiKey"]:
-            return json.dumps({"ok": False, "items": [], "error": "Not configured", "provider": provider_key, **envelope, "returned": 0})
+        if cfg is not None and not bool(cfg.get("enabled", True)):
+            return {"ok": False, "items": [], "error": "Tankorent is disabled", "provider": "tankorent", **envelope, "returned": 0}
 
         query_text = str(payload.get("query") or "").strip()
         if not query_text:
-            return json.dumps({"ok": True, "items": [], "provider": provider_key, **envelope, "returned": 0})
+            return {"ok": True, "items": [], "provider": "tankorent", **envelope, "returned": 0}
+
+        sites = self._resolve_tankorent_sites(cfg or {}, payload)
+        if not sites:
+            return {"ok": False, "items": [], "error": "No Tankorent sites enabled", "provider": "tankorent", **envelope, "returned": 0}
+
+        try:
+            try:
+                from browser.torrent_scrapers import search_all
+            except Exception:
+                from projectbutterfly.browser.torrent_scrapers import search_all
+
+            req_limit = min(200, max(limit, (page + 1) * limit))
+            rows = search_all(query_text, sites=sites, limit=req_limit)
+            start = page * limit
+            rows = rows[start:start + limit]
+
+            category = str(payload.get("category") or "").strip().lower()
+            type_map = {
+                "comics": ("comics", "Comics"),
+                "books": ("books", "Books"),
+                "tv": ("tv", "TV"),
+            }
+            t_key, t_label = type_map.get(category, ("", ""))
+
+            items = []
+            for row in (rows if isinstance(rows, list) else []):
+                if not isinstance(row, dict):
+                    continue
+                title = str(row.get("title", "") or "").strip()
+                magnet = str(row.get("magnetUri", "") or "").strip()
+                if not title or not magnet.lower().startswith("magnet:"):
+                    continue
+                source_name = str(row.get("sourceName") or row.get("source") or "Tankorent").strip()
+                source_key = self._normalize_source_key(row.get("sourceKey") or source_name)
+                stable_id = "tankorent_" + str(self._hash_string("::".join([title, magnet, source_key])))
+                items.append({
+                    "id": stable_id,
+                    "title": title,
+                    "sizeBytes": int(row.get("sizeBytes", 0) or 0) or None,
+                    "fileCount": None,
+                    "seeders": max(0, int(row.get("seeders", 0) or 0)),
+                    "magnetUri": magnet,
+                    "sourceName": source_name,
+                    "sourceKey": source_key,
+                    "sourceUrl": str(row.get("sourceUrl", "") or "").strip() or None,
+                    "publishedAt": str(row.get("publishedAt", "") or "").strip() or None,
+                    "typeKeys": [t_key] if t_key else [],
+                    "typeLabels": [t_label] if t_label else [],
+                })
+            return {"ok": True, "items": items, "provider": "tankorent", **envelope, "returned": len(items)}
+        except Exception as e:
+            return {"ok": False, "items": [], "error": str(e), "provider": "tankorent", **envelope, "returned": 0}
+
+    def _query_provider(self, provider_key, cfg, payload):
+        provider = self._normalize_provider_key(provider_key)
+        if provider == "tankorent":
+            return self._query_tankorent(cfg if isinstance(cfg, dict) else {}, payload)
+
+        limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
+        page = max(0, int(payload.get("page") or 0))
+        envelope = {"page": page, "limit": limit}
+
+        if not cfg.get("baseUrl") or not cfg.get("apiKey"):
+            return {"ok": False, "items": [], "error": "Not configured", "provider": provider, **envelope, "returned": 0}
+
+        query_text = str(payload.get("query") or "").strip()
+        if not query_text:
+            return {"ok": True, "items": [], "provider": provider, **envelope, "returned": 0}
 
         category = str(payload.get("category") or "all").strip().lower()
         source_filter = str(payload.get("source") or payload.get("indexer") or "").strip()
@@ -8423,7 +9770,7 @@ class TorrentSearchBridge(QObject):
         last_error = ""
         for idx_name in indexers:
             try:
-                if provider_key == "prowlarr":
+                if provider == "prowlarr":
                     ids = [idx_name] if idx_name and idx_name.lower() != "all" else []
                     url = self._prowlarr_build_json_url(cfg, payload, ids)
                     res = self._fetch_json_http(url, cfg, self._prowlarr_headers(cfg))
@@ -8449,7 +9796,6 @@ class TorrentSearchBridge(QObject):
             except Exception as e:
                 last_error = str(e)
 
-        # Dedup
         seen = set()
         deduped = []
         for it in all_items:
@@ -8459,36 +9805,178 @@ class TorrentSearchBridge(QObject):
                 deduped.append(it)
 
         if any_ok:
-            return json.dumps({"ok": True, "items": deduped, "provider": provider_key, **envelope, "returned": len(deduped)})
+            return {"ok": True, "items": deduped, "provider": provider, **envelope, "returned": len(deduped)}
 
-        # Fallback: 'all' indexer
         if not force_single and len(indexers) > 1:
             try:
-                if provider_key == "prowlarr":
+                if provider == "prowlarr":
                     url = self._prowlarr_build_json_url(cfg, payload, [])
                     res = self._fetch_json_http(url, cfg, self._prowlarr_headers(cfg))
                     if res["ok"]:
                         items = self._prowlarr_parse_json_items(res["body"] if isinstance(res["body"], list) else [])
-                        return json.dumps({"ok": True, "items": items, "provider": provider_key, **envelope, "returned": len(items)})
+                        return {"ok": True, "items": items, "provider": provider, **envelope, "returned": len(items)}
                 else:
                     url = self._jackett_build_url(cfg, payload, "all")
                     res = self._fetch_text(url, cfg)
                     if res["ok"]:
                         items = self._parse_items(res["body"], "all", "jackett")
-                        return json.dumps({"ok": True, "items": items, "provider": provider_key, **envelope, "returned": len(items)})
+                        return {"ok": True, "items": items, "provider": provider, **envelope, "returned": len(items)}
             except Exception:
                 pass
 
-        return json.dumps({"ok": False, "items": [], "error": last_error or "Search failed", "provider": provider_key, **envelope, "returned": 0})
+        return {"ok": False, "items": [], "error": last_error or "Search failed", "provider": provider, **envelope, "returned": 0}
+
+    # --- @Slot methods ---
 
     @Slot(result=str)
-    def indexers(self):
+    @Slot(str, result=str)
+    def health(self, p="{}"):
+        payload = _p(p)
         cfg_set = self._get_provider_config()
-        provider_key = cfg_set["provider"]
-        cfg = cfg_set["current"]
+        provider_key = self._normalize_provider_key(payload.get("provider") or cfg_set["provider"])
+        cfg = self._provider_cfg(cfg_set, provider_key)
+
+        if provider_key == "tankorent":
+            sites_cfg = cfg.get("sites") if isinstance(cfg.get("sites"), dict) else {}
+            enabled_sites = [k for k in ("piratebay", "1337x", "nyaa") if bool(sites_cfg.get(k, True))]
+            ready = bool(cfg.get("enabled", True) and enabled_sites)
+            out = {
+                "ok": True,
+                "ready": ready,
+                "details": {
+                    "configured": True,
+                    "provider": provider_key,
+                    "enabledSites": enabled_sites,
+                },
+            }
+            if not ready:
+                out["error"] = "No Tankorent sites enabled"
+            self.statusChanged.emit(json.dumps(out))
+            return json.dumps(out)
+
+        if not cfg.get("baseUrl") or not cfg.get("apiKey"):
+            msg = "Configure Prowlarr base URL + API key" if provider_key == "prowlarr" else "Configure Jackett base URL + API key"
+            out = {"ok": True, "ready": False, "error": msg, "details": {"configured": False, "provider": provider_key}}
+            self.statusChanged.emit(json.dumps(out))
+            return json.dumps(out)
+
+        try:
+            if provider_key == "prowlarr":
+                res = self._fetch_json_http(cfg["baseUrl"] + "/api/v1/health", cfg, self._prowlarr_headers(cfg))
+                if not res["ok"]:
+                    res = self._fetch_json_http(cfg["baseUrl"] + "/api/v1/system/status", cfg, self._prowlarr_headers(cfg))
+                ready = res["ok"]
+                out = {"ok": True, "ready": ready, "details": {"configured": True, "provider": provider_key}}
+                if not ready:
+                    out["error"] = "Prowlarr unreachable"
+            else:
+                from urllib.parse import quote
+                url = cfg["baseUrl"] + "/api/v2.0/indexers/all/results/torznab/api?t=caps&apikey=" + quote(cfg["apiKey"], safe="")
+                res = self._fetch_text(url, cfg)
+                out = {"ok": True, "ready": res["ok"], "details": {"configured": True, "provider": provider_key, "indexer": cfg.get("indexer", "all")}}
+                if not res["ok"]:
+                    out["error"] = "Jackett unreachable (HTTP " + str(res.get("status", 0)) + ")"
+        except Exception as e:
+            out = {"ok": True, "ready": False, "error": str(e), "details": {"configured": True, "provider": provider_key}}
+
+        self.statusChanged.emit(json.dumps(out))
+        return json.dumps(out)
+
+    @Slot(str, result=str)
+    def query(self, p):
+        try:
+            payload = json.loads(p) if isinstance(p, str) and p.strip() else {}
+        except Exception:
+            payload = {}
+
+        cfg_set = self._get_provider_config()
+        requested_provider = self._normalize_provider_key(payload.get("provider") or cfg_set["provider"])
+        chain = self._provider_fallback_chain(requested_provider)
+        limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
+        page = max(0, int(payload.get("page") or 0))
+        envelope = {"page": page, "limit": limit}
+        payload = dict(payload)
+        payload["limit"] = limit
+        payload["page"] = page
+
+        query_text = str(payload.get("query") or "").strip()
+        if not query_text:
+            return json.dumps({
+                "ok": True,
+                "items": [],
+                "provider": requested_provider,
+                "activeProvider": requested_provider,
+                "fallbackUsed": False,
+                "fallbackChain": chain,
+                "providersTried": [],
+                **envelope,
+                "returned": 0,
+            })
+
+        tried = []
+        any_ok_empty = None
+        last_error = ""
+        for provider_key in chain:
+            cfg = self._provider_cfg(cfg_set, provider_key)
+            out = self._query_provider(provider_key, cfg, payload)
+            tried.append({
+                "provider": provider_key,
+                "ok": bool(out.get("ok")),
+                "returned": int(out.get("returned", 0) or 0),
+                "error": str(out.get("error", "") or ""),
+            })
+            if out.get("ok") and out.get("items"):
+                out = dict(out)
+                out["provider"] = requested_provider
+                out["activeProvider"] = provider_key
+                out["fallbackUsed"] = (provider_key != requested_provider)
+                out["fallbackChain"] = chain
+                out["providersTried"] = tried
+                return json.dumps(out)
+            if out.get("ok") and any_ok_empty is None:
+                any_ok_empty = dict(out)
+            if not out.get("ok"):
+                last_error = str(out.get("error", "") or last_error)
+
+        if any_ok_empty is not None:
+            any_ok_empty["provider"] = requested_provider
+            any_ok_empty["activeProvider"] = requested_provider
+            any_ok_empty["fallbackUsed"] = False
+            any_ok_empty["fallbackChain"] = chain
+            any_ok_empty["providersTried"] = tried
+            return json.dumps(any_ok_empty)
+
+        return json.dumps({
+            "ok": False,
+            "items": [],
+            "error": last_error or "Search failed",
+            "provider": requested_provider,
+            "activeProvider": "",
+            "fallbackUsed": False,
+            "fallbackChain": chain,
+            "providersTried": tried,
+            **envelope,
+            "returned": 0,
+        })
+
+    @Slot(result=str)
+    @Slot(str, result=str)
+    def indexers(self, p="{}"):
+        payload = _p(p)
+        cfg_set = self._get_provider_config()
+        provider_key = self._normalize_provider_key(payload.get("provider") or cfg_set["provider"])
+        cfg = self._provider_cfg(cfg_set, provider_key)
+
+        if provider_key == "tankorent":
+            sites_cfg = cfg.get("sites") if isinstance(cfg.get("sites"), dict) else {}
+            out = []
+            for site_id, name in (("piratebay", "PirateBay"), ("1337x", "1337x"), ("nyaa", "Nyaa")):
+                if bool(sites_cfg.get(site_id, True)):
+                    out.append({"id": site_id, "name": name})
+            return json.dumps({"ok": True, "indexers": out, "source": "tankorent", "provider": provider_key})
 
         # Try live API
-        if cfg["baseUrl"] and cfg["apiKey"]:
+        if cfg.get("baseUrl") and cfg.get("apiKey"):
             try:
                 if provider_key == "prowlarr":
                     res = self._fetch_json_http(cfg["baseUrl"] + "/api/v1/indexer", cfg, self._prowlarr_headers(cfg))
@@ -8545,16 +10033,30 @@ class TorrentSearchBridge(QObject):
         """Persist Prowlarr/Jackett config from home.html Tools panel."""
         try:
             data = json.loads(p) if p else {}
-            cfg = self._read_settings()
+            raw_doc, cfg, wrapped = self._read_settings_document()
+            if not isinstance(cfg, dict):
+                cfg = {}
             ts = cfg.setdefault("torrentSearch", {})
             if "provider" in data:
-                ts["provider"] = str(data["provider"]).strip().lower()
-            for key in ("jackett", "prowlarr"):
+                ts["provider"] = self._normalize_provider_key(data.get("provider"))
+                cfg["torrentSearchProvider"] = ts["provider"]
+            for key in ("jackett", "prowlarr", "tankorent"):
                 if key in data and isinstance(data[key], dict):
                     ts.setdefault(key, {}).update(data[key])
+                    # Backward compatible mirrors.
+                    if key in ("jackett", "prowlarr"):
+                        cfg.setdefault(key, {}).update(data[key])
+            if "fallbackPolicy" in data and isinstance(data.get("fallbackPolicy"), dict):
+                ts["fallbackPolicy"] = data.get("fallbackPolicy")
+
             path = _data_path("web_browser_settings.json")
+            out_doc = raw_doc if isinstance(raw_doc, dict) else {}
+            if wrapped:
+                out_doc["settings"] = cfg
+            else:
+                out_doc = cfg
             with open(path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, ensure_ascii=False, indent=2)
+                json.dump(out_doc, f, ensure_ascii=False, indent=2)
             return json.dumps(_ok())
         except Exception as e:
             return json.dumps(_err(str(e)))
@@ -8570,7 +10072,7 @@ class TorrentSearchBridge(QObject):
 
 class TorProxyBridge(QObject):
     """
-    Tor SOCKS5 proxy — spawns a Tor child process and applies a SOCKS5
+    Tor SOCKS5 proxy â€” spawns a Tor child process and applies a SOCKS5
     proxy to ``QNetworkProxy.setApplicationProxy()`` so that all
     QWebEngine traffic is routed through Tor.
 
@@ -8593,7 +10095,7 @@ class TorProxyBridge(QObject):
         self._data_dir = ""
         self._monitor_thread = None
 
-    # ── helpers ──────────────────────────────────────────────────────────
+    # â”€â”€ helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @staticmethod
     def _locate_tor():
@@ -8654,7 +10156,7 @@ class TorProxyBridge(QObject):
         payload.update(extra)
         self.statusChanged.emit(json.dumps(payload))
 
-    # ── start ────────────────────────────────────────────────────────────
+    # â”€â”€ start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def start(self):
@@ -8773,7 +10275,7 @@ class TorProxyBridge(QObject):
             pass
         self._emit_status(crashed=True)
 
-    # ── stop ─────────────────────────────────────────────────────────────
+    # â”€â”€ stop â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def stop(self):
@@ -8801,7 +10303,7 @@ class TorProxyBridge(QObject):
         self._emit_status()
         return json.dumps(_ok())
 
-    # ── status ───────────────────────────────────────────────────────────
+    # â”€â”€ status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @Slot(result=str)
     def getStatus(self):
@@ -8811,7 +10313,7 @@ class TorProxyBridge(QObject):
             "port": self._port,
         }))
 
-    # ── cleanup (called by app.py on quit) ───────────────────────────────
+    # â”€â”€ cleanup (called by app.py on quit) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def forceKill(self):
         if self._process:
@@ -8838,7 +10340,7 @@ class TorProxyBridge(QObject):
 
 
 class WebSearchBridge(QObject):
-    """Web search history — omnibox suggestions from search history + bookmarks + browsing history."""
+    """Web search history â€” omnibox suggestions from search history + bookmarks + browsing history."""
 
     _SEARCH_FILE = "web_search_history.json"
     _MAX_ENTRIES = 1000
@@ -8932,12 +10434,570 @@ class WebSearchBridge(QObject):
 
 
 
+
+# ---------------------------------------------------------------------------
+# BrowserTabPage + WebTabManagerBridge
+# ---------------------------------------------------------------------------
+
+class BrowserTabPage:
+    """Placeholder type for lazily-created per-tab QWebEnginePage subclass."""
+    pass
+
+
+def create_browser_tab_page(profile, tab_manager, tab_id):
+    """
+    Create a per-tab QWebEnginePage subclass instance.
+
+    - createWindow(): opens a new renderer-tracked tab for popups/target=_blank.
+    - acceptNavigationRequest(): intercepts magnet links and forwards to renderer.
+    """
+    from PySide6.QtWebEngineCore import QWebEnginePage
+
+    class _BrowserTabPage(QWebEnginePage):
+        def __init__(self, prof, parent=None):
+            super().__init__(prof, parent)
+            self._tab_manager = tab_manager
+            self._tab_id = tab_id
+
+        def createWindow(self, _window_type):
+            new_id = self._tab_manager._create_tab_internal("", home=False)
+            if new_id:
+                try:
+                    self._tab_manager._emit_tab_created(new_id, source="popup")
+                    self._tab_manager.switchTab(json.dumps({"tabId": new_id}))
+                except Exception:
+                    pass
+                tab = self._tab_manager._tabs.get(new_id) or {}
+                return tab.get("page")
+            return None
+
+        def acceptNavigationRequest(self, url, nav_type, is_main_frame):
+            url_str = url.toString()
+            if url_str.startswith("magnet:"):
+                try:
+                    self._tab_manager.magnetRequested.emit(
+                        json.dumps({"url": url_str, "tabId": self._tab_id})
+                    )
+                except Exception:
+                    pass
+                return False
+            return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+    return _BrowserTabPage(profile)
+
+
+class WebTabManagerBridge(QObject):
+    """
+    Native Qt tab manager for Sources browser.
+
+    QWebEngineView tabs are rendered as child widgets of the main renderer
+    view and clipped into the Sources browser viewport bounds reported by JS.
+    """
+
+    tabCreated = Signal(str)
+    tabClosed = Signal(str)
+    tabUpdated = Signal(str)
+    magnetRequested = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._tabs = {}
+        self._tab_order = []
+        self._active_tab_id = ""
+        self._tab_seq = 0
+        self._profile = None
+        self._host_view = None
+        self._viewport_rect = (0, 0, 0, 0)
+        self._viewport_visible = False
+
+    def setup(self, profile, host_view):
+        self._profile = profile
+        self._host_view = host_view
+        self._apply_viewport_bounds()
+
+    def _next_tab_id(self):
+        self._tab_seq += 1
+        return "bt_" + str(self._tab_seq)
+
+    def _set_action_page(self, page):
+        root = self.parent()
+        if not root:
+            return
+        if hasattr(root, "webFind"):
+            try:
+                root.webFind.setPage(page)
+            except Exception:
+                pass
+        if hasattr(root, "webBrowserActions"):
+            try:
+                root.webBrowserActions.setPage(page)
+            except Exception:
+                pass
+
+    def _emit_tab_created(self, tab_id, source="host"):
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            return
+        self.tabCreated.emit(json.dumps({
+            "tabId": tab_id,
+            "url": str(tab.get("url", "") or ""),
+            "title": str(tab.get("title", "") or ""),
+            "home": bool(tab.get("home", False)),
+            "source": str(source or "host"),
+        }))
+
+    def _emit_tab_update(self, tab_id, **fields):
+        payload = {"tabId": tab_id}
+        payload.update(fields)
+        self.tabUpdated.emit(json.dumps(payload))
+
+    def _connect_page_signals(self, tab_id, page):
+        def on_url_changed(url):
+            tab = self._tabs.get(tab_id)
+            if not tab:
+                return
+            target = url.toString() if hasattr(url, "toString") else str(url)
+            tab["url"] = target
+            self._emit_tab_update(tab_id, url=target)
+
+        def on_title_changed(title):
+            tab = self._tabs.get(tab_id)
+            if not tab:
+                return
+            tab["title"] = str(title or "")
+            self._emit_tab_update(tab_id, title=tab["title"])
+
+        def on_icon_changed(_icon):
+            tab = self._tabs.get(tab_id)
+            if not tab:
+                return
+            icon_url = ""
+            try:
+                icon = page.iconUrl()
+                icon_url = icon.toString() if hasattr(icon, "toString") else ""
+            except Exception:
+                pass
+            tab["icon"] = icon_url
+            self._emit_tab_update(tab_id, icon=icon_url)
+
+        def on_load_started():
+            tab = self._tabs.get(tab_id)
+            if not tab:
+                return
+            tab["loading"] = True
+            self._emit_tab_update(tab_id, loading=True)
+
+        def on_load_finished(_ok):
+            tab = self._tabs.get(tab_id)
+            if not tab:
+                return
+            tab["loading"] = False
+            can_back = False
+            can_forward = False
+            try:
+                hist = page.history()
+                can_back = bool(hist and hist.canGoBack())
+                can_forward = bool(hist and hist.canGoForward())
+            except Exception:
+                pass
+            self._emit_tab_update(
+                tab_id,
+                loading=False,
+                canGoBack=can_back,
+                canGoForward=can_forward,
+            )
+
+        page.urlChanged.connect(on_url_changed)
+        page.titleChanged.connect(on_title_changed)
+        page.iconChanged.connect(on_icon_changed)
+        page.loadStarted.connect(on_load_started)
+        page.loadFinished.connect(on_load_finished)
+
+    def _build_context_payload(self, tab_id, req):
+        tab = self._tabs.get(tab_id) or {}
+        payload = {
+            "tabId": tab_id,
+            "pageURL": str(tab.get("url", "") or ""),
+            "x": 0,
+            "y": 0,
+            "selectionText": "",
+            "linkURL": "",
+            "srcURL": "",
+            "hasImageContents": False,
+            "isEditable": False,
+            "misspelledWord": "",
+            "editFlags": {},
+        }
+        if not req:
+            return payload
+        try:
+            payload["x"] = int(req.position().x())
+            payload["y"] = int(req.position().y())
+        except Exception:
+            pass
+        try:
+            payload["selectionText"] = str(req.selectedText() or "")
+        except Exception:
+            pass
+        try:
+            link = req.linkUrl()
+            payload["linkURL"] = link.toString() if hasattr(link, "toString") else ""
+        except Exception:
+            pass
+        try:
+            media = req.mediaUrl()
+            payload["srcURL"] = media.toString() if hasattr(media, "toString") else ""
+        except Exception:
+            pass
+        try:
+            payload["hasImageContents"] = bool(req.mediaType() == req.MediaTypeImage)
+        except Exception:
+            pass
+        try:
+            payload["isEditable"] = bool(req.isContentEditable())
+        except Exception:
+            pass
+        try:
+            payload["misspelledWord"] = str(req.misspelledWord() or "")
+        except Exception:
+            pass
+        return payload
+
+    def _on_context_menu(self, tab_id, _pos):
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            return
+        view = tab.get("view")
+        req = None
+        try:
+            if view and hasattr(view, "lastContextMenuRequest"):
+                req = view.lastContextMenuRequest()
+                if req:
+                    req.setAccepted(True)
+        except Exception:
+            req = None
+        payload = self._build_context_payload(tab_id, req)
+        root = self.parent()
+        if root and hasattr(root, "webBrowserActions"):
+            try:
+                root.webBrowserActions.contextMenu.emit(json.dumps(payload))
+            except Exception:
+                pass
+
+    def _create_tab_internal(self, url, home=False):
+        if not self._profile or not self._host_view:
+            return ""
+        if len(self._tabs) >= 40:
+            return ""
+        tab_id = self._next_tab_id()
+        page = create_browser_tab_page(self._profile, self, tab_id)
+        self._connect_page_signals(tab_id, page)
+
+        view = QWebEngineView(self._host_view)
+        view.setPage(page)
+        view.setStyleSheet("background-color: #0d1117;")
+        view.hide()
+        try:
+            from PySide6.QtCore import Qt
+            view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            view.customContextMenuRequested.connect(
+                lambda pos, tid=tab_id: self._on_context_menu(tid, pos)
+            )
+        except Exception:
+            pass
+
+        title = "Home" if home else "New Tab"
+        self._tabs[tab_id] = {
+            "view": view,
+            "page": page,
+            "home": bool(home),
+            "url": str(url or ""),
+            "title": title,
+            "icon": "",
+            "loading": False,
+        }
+        self._tab_order.append(tab_id)
+
+        if url:
+            try:
+                from PySide6.QtCore import QUrl
+                page.load(QUrl(str(url)))
+            except Exception:
+                pass
+        self._apply_viewport_bounds()
+        return tab_id
+
+    def _apply_viewport_bounds(self):
+        x, y, w, h = self._viewport_rect
+        visible = bool(self._viewport_visible and w > 4 and h > 4)
+        for tid, tab in list(self._tabs.items()):
+            view = tab.get("view")
+            if not view:
+                continue
+            if not visible or tid != self._active_tab_id or bool(tab.get("home")):
+                view.hide()
+                continue
+            try:
+                view.setGeometry(int(x), int(y), int(w), int(h))
+                view.show()
+                view.raise_()
+            except Exception:
+                pass
+
+    @Slot(str, result=str)
+    def createTab(self, p="{}"):
+        opts = _p(p)
+        url = str(opts.get("url", "") or "").strip()
+        home = bool(opts.get("home", False))
+        tab_id = self._create_tab_internal(url, home=home)
+        if not tab_id:
+            return json.dumps(_err("tab_create_failed"))
+        self._emit_tab_created(tab_id, source="renderer")
+        return json.dumps(_ok({
+            "tabId": tab_id,
+            "url": url,
+            "title": self._tabs[tab_id].get("title", ""),
+            "home": home,
+            "source": "renderer",
+        }))
+
+    @Slot(str, result=str)
+    def closeTab(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.pop(tab_id, None)
+        if not tab:
+            return json.dumps(_err("tab_not_found"))
+        if tab_id in self._tab_order:
+            self._tab_order.remove(tab_id)
+        view = tab.get("view")
+        if view:
+            try:
+                view.hide()
+                view.deleteLater()
+            except Exception:
+                pass
+        if self._active_tab_id == tab_id:
+            self._active_tab_id = self._tab_order[-1] if self._tab_order else ""
+            if self._active_tab_id:
+                active = self._tabs.get(self._active_tab_id) or {}
+                self._set_action_page(active.get("page"))
+        self._apply_viewport_bounds()
+        self.tabClosed.emit(json.dumps({"tabId": tab_id}))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def switchTab(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            return json.dumps(_err("tab_not_found"))
+        self._active_tab_id = tab_id
+        self._set_action_page(tab.get("page"))
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def navigateTo(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        url = str(opts.get("url", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        if not url:
+            return json.dumps(_err("no_url"))
+        tab["home"] = False
+        tab["url"] = url
+        try:
+            from PySide6.QtCore import QUrl
+            tab["page"].load(QUrl(url))
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def goBack(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        try:
+            from PySide6.QtWebEngineCore import QWebEnginePage
+            tab["page"].triggerAction(QWebEnginePage.WebAction.Back)
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def goForward(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        try:
+            from PySide6.QtWebEngineCore import QWebEnginePage
+            tab["page"].triggerAction(QWebEnginePage.WebAction.Forward)
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def reload(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        try:
+            from PySide6.QtWebEngineCore import QWebEnginePage
+            tab["page"].triggerAction(QWebEnginePage.WebAction.Reload)
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def stop(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        try:
+            from PySide6.QtWebEngineCore import QWebEnginePage
+            tab["page"].triggerAction(QWebEnginePage.WebAction.Stop)
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def getNavState(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        if not tab or not tab.get("page"):
+            return json.dumps(_err("tab_not_found"))
+        hist = None
+        try:
+            hist = tab["page"].history()
+        except Exception:
+            hist = None
+        return json.dumps(_ok({
+            "canGoBack": bool(hist and hist.canGoBack()),
+            "canGoForward": bool(hist and hist.canGoForward()),
+            "url": tab.get("url", ""),
+            "title": tab.get("title", ""),
+            "loading": bool(tab.get("loading", False)),
+        }))
+
+    @Slot(str, result=str)
+    def setViewportBounds(self, p="{}"):
+        opts = _p(p)
+        x = int(opts.get("x", 0) or 0)
+        y = int(opts.get("y", 0) or 0)
+        w = int(opts.get("width", 0) or 0)
+        h = int(opts.get("height", 0) or 0)
+        self._viewport_rect = (x, y, w, h)
+        self._viewport_visible = bool(opts.get("visible", True))
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(result=str)
+    def openBrowser(self):
+        try:
+            root = self.parent()
+            win = getattr(getattr(root, "window", None), "_win", None)
+            if win and hasattr(win, "show_web_view"):
+                win.show_web_view()
+        except Exception:
+            pass
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(result=str)
+    def closeBrowser(self):
+        self._viewport_visible = False
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def setTabHome(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        home = bool(opts.get("home", False))
+        tab = self._tabs.get(tab_id)
+        if not tab:
+            return json.dumps(_err("tab_not_found"))
+        tab["home"] = home
+        self._apply_viewport_bounds()
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def getZoomFactor(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        tab = self._tabs.get(tab_id)
+        view = tab.get("view") if tab else None
+        if not view:
+            return json.dumps(_err("tab_not_found"))
+        return json.dumps(_ok({"factor": float(view.zoomFactor())}))
+
+    @Slot(str, result=str)
+    def setZoomFactor(self, p="{}"):
+        opts = _p(p)
+        tab_id = str(opts.get("tabId", "") or "").strip()
+        factor = float(opts.get("factor", 1.0) or 1.0)
+        tab = self._tabs.get(tab_id)
+        view = tab.get("view") if tab else None
+        if not view:
+            return json.dumps(_err("tab_not_found"))
+        try:
+            view.setZoomFactor(max(0.25, min(5.0, factor)))
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+        return json.dumps(_ok())
+
+    @Slot(str, result=str)
+    def getTabs(self, _p_unused="{}"):
+        tabs = []
+        for tid in self._tab_order:
+            tab = self._tabs.get(tid)
+            if not tab:
+                continue
+            tabs.append({
+                "tabId": tid,
+                "url": tab.get("url", ""),
+                "title": tab.get("title", ""),
+                "home": bool(tab.get("home", False)),
+                "loading": bool(tab.get("loading", False)),
+            })
+        return json.dumps(_ok({
+            "tabs": tabs,
+            "activeTabId": self._active_tab_id,
+        }))
+
+    def shutdown(self):
+        for tab in list(self._tabs.values()):
+            view = tab.get("view")
+            if view:
+                try:
+                    view.hide()
+                    view.deleteLater()
+                except Exception:
+                    pass
+        self._tabs = {}
+        self._tab_order = []
+        self._active_tab_id = ""
 class WebBrowserActionsBridge(QObject):
     """
     Browser utility actions: context-menu dispatch, print-to-PDF,
     page screenshot, and OS shell open/reveal for downloaded files.
 
-    ctxAction requires a live QWebEnginePage — set via ``setPage(page)``.
+    ctxAction requires a live QWebEnginePage â€” set via ``setPage(page)``.
     printPdf / capturePage also need the page for content access.
     downloadOpenFile / downloadShowInFolder are pure OS shell operations.
     """
@@ -9117,7 +11177,7 @@ class WebBrowserActionsBridge(QObject):
             None, "Save Screenshot", "screenshot.png", "PNG Images (*.png)")
         if not path:
             return json.dumps(_ok({"cancelled": True}))
-        # Grab is on the view, not the page — defer to app.py wiring
+        # Grab is on the view, not the page â€” defer to app.py wiring
         # For now, use page.toHtml fallback or return stub
         return json.dumps(_ok({"path": path, "deferred": True}))
 
@@ -9144,7 +11204,7 @@ class WebBrowserActionsBridge(QObject):
         elif sys.platform == "darwin":
             subprocess.Popen(["open", "-R", save_path])
         else:
-            # Linux — open parent folder
+            # Linux â€” open parent folder
             parent = os.path.dirname(save_path)
             from PySide6.QtGui import QDesktopServices
             from PySide6.QtCore import QUrl
@@ -9152,9 +11212,9 @@ class WebBrowserActionsBridge(QObject):
         return json.dumps(_ok())
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# BRIDGE ROOT — composes all namespaces
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# BRIDGE ROOT â€” composes all namespaces
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 class BridgeRoot(QObject):
     """
@@ -9205,6 +11265,7 @@ class BridgeRoot(QObject):
         self.webSources = WebSourcesBridge(self)
         self.webData = WebDataBridge(self)
         self.webFind = WebFindBridge(self)
+        self.webTabManager = WebTabManagerBridge(self)
         self.webBrowserActions = WebBrowserActionsBridge(self)
         self.booksTtsEdge = BooksTtsEdgeBridge(self)
         self.torProxy = TorProxyBridge(self)
@@ -9212,7 +11273,7 @@ class BridgeRoot(QObject):
         self.player = PlayerBridge(self)
         self.mpv = MpvBridge(self)
 
-        # Wire player → videoProgress for automatic persistence
+        # Wire player â†’ videoProgress for automatic persistence
         self.player.setProgressDomain(self.videoProgress)
 
         # Permanent stub
@@ -9225,16 +11286,16 @@ class BridgeRoot(QObject):
         return json.dumps({"ok": True, "timestamp": int(time.time() * 1000)})
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# JS SHIM — injected into QWebEngineView before page load
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# JS SHIM â€” injected into QWebEngineView before page load
 #
 # Creates window.electronAPI from the QWebChannel bridge so that
 # src/services/api_gateway.js works WITHOUT ANY CHANGES.
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 BRIDGE_SHIM_JS = r"""
 (function() {
-  // SET SYNCHRONOUSLY — must be visible before QWebChannel async callback fires.
+  // SET SYNCHRONOUSLY â€” must be visible before QWebChannel async callback fires.
   // Renderer JS checks this flag at load time to choose the Butterfly code path.
   window.__tankoButterfly = true;
 
@@ -9253,7 +11314,7 @@ BRIDGE_SHIM_JS = r"""
       'webSession','webHistory','webBookmarks','webPermissions','webSearch',
       'build14','files','thumbs','videoPoster','booksOpds','webAdblock',
       'archives','export','webUserscripts','torrentSearch','library','books',
-      'video','audiobooks','webSources','webData','webFind',
+      'video','audiobooks','webSources','webData','webFind','webTabManager',
       'webBrowserActions','booksTtsEdge','torProxy','webTorrent','player',
       'mpv','holyGrail'
     ];
@@ -9268,14 +11329,14 @@ BRIDGE_SHIM_JS = r"""
     function wrap(fn, ctx, _debugName) {
       return function() {
         var args = Array.prototype.slice.call(arguments);
-        // QWebChannel @Slot args must be strings — serialize objects
+        // QWebChannel @Slot args must be strings â€” serialize objects
         var sArgs = args.map(function(a) {
           return (a === undefined || a === null) ? '' :
                  (typeof a === 'object' ? JSON.stringify(a) : String(a));
         });
         return new Promise(function(resolve, reject) {
           try {
-            // Append callback — QWebChannel delivers return values this way
+            // Append callback â€” QWebChannel delivers return values this way
             sArgs.push(function(result) {
               try {
                 if (typeof result === 'string' && result) {
@@ -9297,7 +11358,7 @@ BRIDGE_SHIM_JS = r"""
       };
     }
 
-    // Helper: wrap binary-returning @Slot — decodes base64 .data field to ArrayBuffer
+    // Helper: wrap binary-returning @Slot â€” decodes base64 .data field to ArrayBuffer
     function wrapBinary(fn, ctx) {
       return function() {
         var args = Array.prototype.slice.call(arguments);
@@ -9365,6 +11426,7 @@ BRIDGE_SHIM_JS = r"""
         revealPath:  wrap(b.shell.revealPath, b.shell),
         openPath:    wrap(b.shell.openPath, b.shell),
         openWebMode: wrap(b.shell.openWebMode, b.shell),
+        openSourcesMode: wrap(b.shell.openSourcesMode, b.shell),
       },
 
       // clipboard
@@ -9388,7 +11450,7 @@ BRIDGE_SHIM_JS = r"""
         bookFromPath:      wrap(b.library.bookFromPath, b.library),
         onUpdated:         onEvent(b.library.libraryUpdated),
         onScanStatus:      onEvent(b.library.scanStatus),
-        onAppOpenFiles:    function(cb) { return function(){}; }, // TODO
+        onAppOpenFiles:    onEvent(b.library.appOpenFiles),
       },
 
       // books
@@ -9624,7 +11686,7 @@ BRIDGE_SHIM_JS = r"""
       mpv: {
         isAvailable: wrap(b.mpv.isAvailable, b.mpv),
         probe:       wrap(b.mpv.probe, b.mpv),
-        // Other mpv methods not needed — Butterfly uses native widget
+        // Other mpv methods not needed â€” Butterfly uses native widget
       },
 
       // holyGrail
@@ -9722,6 +11784,7 @@ BRIDGE_SHIM_JS = r"""
       // webPermissions
       webPermissions: {
         list:          wrap(b.webPermissions.list, b.webPermissions),
+        getDecision:   wrap(b.webPermissions.getDecision, b.webPermissions),
         set:           wrap(b.webPermissions.set, b.webPermissions),
         reset:         wrap(b.webPermissions.reset, b.webPermissions),
         resolvePrompt: wrap(b.webPermissions.resolvePrompt, b.webPermissions),
@@ -9813,6 +11876,30 @@ BRIDGE_SHIM_JS = r"""
         add:     wrap(b.webSearch.add, b.webSearch),
       },
 
+      // webTabManager
+      webTabManager: {
+        createTab:        wrap(b.webTabManager.createTab, b.webTabManager),
+        closeTab:         wrap(b.webTabManager.closeTab, b.webTabManager),
+        switchTab:        wrap(b.webTabManager.switchTab, b.webTabManager),
+        navigateTo:       wrap(b.webTabManager.navigateTo, b.webTabManager),
+        goBack:           wrap(b.webTabManager.goBack, b.webTabManager),
+        goForward:        wrap(b.webTabManager.goForward, b.webTabManager),
+        reload:           wrap(b.webTabManager.reload, b.webTabManager),
+        stop:             wrap(b.webTabManager.stop, b.webTabManager),
+        getNavState:      wrap(b.webTabManager.getNavState, b.webTabManager),
+        setViewportBounds: wrap(b.webTabManager.setViewportBounds, b.webTabManager),
+        openBrowser:      wrap(b.webTabManager.openBrowser, b.webTabManager),
+        closeBrowser:     wrap(b.webTabManager.closeBrowser, b.webTabManager),
+        setTabHome:       wrap(b.webTabManager.setTabHome, b.webTabManager),
+        getZoomFactor:    wrap(b.webTabManager.getZoomFactor, b.webTabManager),
+        setZoomFactor:    wrap(b.webTabManager.setZoomFactor, b.webTabManager),
+        getTabs:          wrap(b.webTabManager.getTabs, b.webTabManager),
+        onTabCreated:     onEvent(b.webTabManager.tabCreated),
+        onTabClosed:      onEvent(b.webTabManager.tabClosed),
+        onTabUpdated:     onEvent(b.webTabManager.tabUpdated),
+        onMagnetRequested: onEvent(b.webTabManager.magnetRequested),
+      },
+
       // webBrowserActions
       webBrowserActions: {
         ctxAction:           wrap(b.webBrowserActions.ctxAction, b.webBrowserActions),
@@ -9835,11 +11922,11 @@ BRIDGE_SHIM_JS = r"""
         });
       },
 
-      // features facade (empty — api_gateway.js handles this)
+      // features facade (empty â€” api_gateway.js handles this)
       features: {},
     };
 
-    console.log('[butterfly] QWebChannel bridge ready — window.electronAPI populated');
+    console.log('[butterfly] QWebChannel bridge ready â€” window.electronAPI populated');
 
     // Signal index.html's deferred loader that the bridge is ready.
     try { document.dispatchEvent(new Event('electronAPI:ready')); } catch(e) {}
@@ -9848,9 +11935,9 @@ BRIDGE_SHIM_JS = r"""
 """
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# SETUP — called from app.py
-# ═══════════════════════════════════════════════════════════════════════════
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+# SETUP â€” called from app.py
+# â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 def _read_qrc_text(path: str) -> str:
     """Read a Qt resource file (qrc://) as UTF-8 text."""
@@ -9872,12 +11959,16 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
     """
     bridge = BridgeRoot()
     bridge.window.set_window(win)
+    try:
+        bridge.webTabManager.setup(web_view.page().profile(), web_view)
+    except Exception:
+        pass
 
     channel = QWebChannel()
     channel.registerObject("bridge", bridge)
 
     # Register every child bridge individually.  QWebChannel in PySide6 does
-    # NOT auto-expose child QObjects as nested JS properties — each must be
+    # NOT auto-expose child QObjects as nested JS properties â€” each must be
     # registered explicitly so the shim can access them via channel.objects.
     _child_names = [
         "window", "shell", "clipboard", "progress", "seriesSettings",
@@ -9888,7 +11979,7 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
         "webPermissions", "webSearch", "build14", "files", "thumbs",
         "videoPoster", "booksOpds", "webAdblock", "archives", "export",
         "webUserscripts", "torrentSearch", "library", "books", "video",
-        "audiobooks", "webSources", "webData", "webFind",
+        "audiobooks", "webSources", "webData", "webFind", "webTabManager",
         "webBrowserActions", "booksTtsEdge", "torProxy", "webTorrent",
         "player", "mpv", "holyGrail",
     ]
@@ -9910,7 +12001,7 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
         # Fallback: try the qrc:/// prefix
         qwc_js = _read_qrc_text("qrc:///qtwebchannel/qwebchannel.js")
 
-    # Keep newlines — flattening breaks // comments (they eat rest of line)
+    # Keep newlines â€” flattening breaks // comments (they eat rest of line)
     combined = qwc_js + "\n" + BRIDGE_SHIM_JS if qwc_js else BRIDGE_SHIM_JS
     # Store combined shim so home-tab pages can get their own bridge injection
     bridge._bridge_shim_combined = combined
@@ -9925,3 +12016,4 @@ def setup_bridge(web_view: QWebEngineView, win) -> BridgeRoot:
     web_view.page().scripts().insert(script)
 
     return bridge
+

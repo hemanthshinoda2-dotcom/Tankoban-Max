@@ -138,6 +138,20 @@
 <script>
   let _historyData = [];
 
+  function dispatchCommand(url) {
+    const cmd = String(url || '').trim();
+    if (!cmd) {
+      return;
+    }
+    const frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    frame.src = cmd;
+    frame.onload = frame.onerror = function() {
+      setTimeout(function() { frame.remove(); }, 0);
+    };
+    document.body.appendChild(frame);
+  }
+
   function renderHistory(entries) {
     const list = document.getElementById('historyList');
     const query = document.getElementById('searchInput').value.trim().toLowerCase();
@@ -198,14 +212,14 @@
   function deleteEntry(id) {
     _historyData = _historyData.filter(e => e.id !== id);
     renderHistory(_historyData);
-    window.location.href = 'tanko-browser://history-delete?id=' + encodeURIComponent(id);
+    dispatchCommand('tanko-browser://history-delete?id=' + encodeURIComponent(id));
   }
 
   function clearAll() {
     if (confirm('Clear all browsing history? This cannot be undone.')) {
       _historyData = [];
       renderHistory([]);
-      window.location.href = 'tanko-browser://history-clear';
+      dispatchCommand('tanko-browser://history-clear');
     }
   }
 

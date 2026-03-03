@@ -1,0 +1,505 @@
+{
+  "meta": {
+    "capturedAt": 0,
+    "workspace": "<WORKSPACE>",
+    "userData": "<USER_DATA>"
+  },
+  "books": {
+    "initialState": {
+      "bookRootFolders": [
+        "<WORKSPACE>\\books_root"
+      ],
+      "bookSeriesFolders": [
+        "<WORKSPACE>\\books_root\\BookSeriesA"
+      ],
+      "bookSingleFiles": [
+        "<WORKSPACE>\\single-book.txt"
+      ],
+      "scanIgnore": [],
+      "series": [],
+      "books": [],
+      "folders": [],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null
+    },
+    "afterScan": {
+      "bookRootFolders": [
+        "<WORKSPACE>\\books_root"
+      ],
+      "bookSeriesFolders": [
+        "<WORKSPACE>\\books_root\\BookSeriesA"
+      ],
+      "bookSingleFiles": [
+        "<WORKSPACE>\\single-book.txt"
+      ],
+      "scanIgnore": [],
+      "series": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNB",
+          "name": "BookSeriesA",
+          "path": "<WORKSPACE>\\books_root\\BookSeriesA",
+          "mediaType": "bookSeries",
+          "rootPath": "<WORKSPACE>\\books_root",
+          "rootId": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290",
+          "folderRelPath": "BookSeriesA",
+          "folderKey": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290:BookSeriesA",
+          "count": 2,
+          "newestMtimeMs": 1700000004000
+        },
+        {
+          "id": "__singles__",
+          "name": "Individual Books",
+          "path": null,
+          "mediaType": "bookSeries",
+          "rootPath": null,
+          "rootId": "singles:__singles__",
+          "folderRelPath": "",
+          "folderKey": "singles:__singles__:.",
+          "count": 1,
+          "newestMtimeMs": 1700000005000
+        }
+      ],
+      "books": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNBXGJvb2stMDAxLmVwdWI6OjE2OjoxNzAwMDAwMDAzMDAw",
+          "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNB",
+          "title": "book-001",
+          "path": "<WORKSPACE>\\books_root\\BookSeriesA\\book-001.epub",
+          "size": 16,
+          "mtimeMs": 1700000003000,
+          "format": "epub",
+          "rootId": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290",
+          "rootPath": "<WORKSPACE>\\books_root",
+          "folderRelPath": "BookSeriesA",
+          "folderKey": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290:BookSeriesA"
+        },
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNBXGJvb2stMDAyLnBkZjo6MTU6OjE3MDAwMDAwMDQwMDA",
+          "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNB",
+          "title": "book-002",
+          "path": "<WORKSPACE>\\books_root\\BookSeriesA\\book-002.pdf",
+          "size": 15,
+          "mtimeMs": 1700000004000,
+          "format": "pdf",
+          "rootId": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290",
+          "rootPath": "<WORKSPACE>\\books_root",
+          "folderRelPath": "BookSeriesA",
+          "folderKey": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290:BookSeriesA"
+        },
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxzaW5nbGUtYm9vay50eHQ6OjE4OjoxNzAwMDAwMDA1MDAw",
+          "seriesId": "__singles__",
+          "title": "single-book",
+          "path": "<WORKSPACE>\\single-book.txt",
+          "size": 18,
+          "mtimeMs": 1700000005000,
+          "format": "txt",
+          "rootId": "singles:__singles__",
+          "rootPath": null,
+          "folderRelPath": "",
+          "folderKey": "singles:__singles__:."
+        }
+      ],
+      "folders": [
+        {
+          "rootId": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290",
+          "rootPath": "<WORKSPACE>\\books_root",
+          "relPath": "BookSeriesA",
+          "parentRelPath": "",
+          "name": "BookSeriesA",
+          "folderKey": "root:RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290:BookSeriesA",
+          "seriesCount": 1
+        }
+      ],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null
+    },
+    "events": [
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "BookSeriesA"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "Individual files"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      }
+    ],
+    "mutations": {
+      "setScanIgnore": {
+        "bookRootFolders": [
+          "<WORKSPACE>\\books_root"
+        ],
+        "bookSeriesFolders": [
+          "<WORKSPACE>\\books_root\\BookSeriesA"
+        ],
+        "bookSingleFiles": [
+          "<WORKSPACE>\\single-book.txt"
+        ],
+        "scanIgnore": [
+          "samples",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      },
+      "removeRootFolder": {
+        "bookRootFolders": [],
+        "bookSeriesFolders": [
+          "<WORKSPACE>\\books_root\\BookSeriesA"
+        ],
+        "bookSingleFiles": [
+          "<WORKSPACE>\\single-book.txt"
+        ],
+        "scanIgnore": [
+          "samples",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      },
+      "addRootFolder": {
+        "bookRootFolders": [
+          "<WORKSPACE>\\books_root"
+        ],
+        "bookSeriesFolders": [
+          "<WORKSPACE>\\books_root\\BookSeriesA"
+        ],
+        "bookSingleFiles": [
+          "<WORKSPACE>\\single-book.txt"
+        ],
+        "scanIgnore": [
+          "samples",
+          "cache"
+        ],
+        "error": null,
+        "ok": true,
+        "folder": "<WORKSPACE>\\books_root"
+      },
+      "addFiles": {
+        "bookRootFolders": [
+          "<WORKSPACE>\\books_root"
+        ],
+        "bookSeriesFolders": [
+          "<WORKSPACE>\\books_root\\BookSeriesA"
+        ],
+        "bookSingleFiles": [
+          "<WORKSPACE>\\single-book.txt",
+          "<WORKSPACE>\\single-book-added.mobi"
+        ],
+        "scanIgnore": [
+          "samples",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      },
+      "removeFile": {
+        "bookRootFolders": [
+          "<WORKSPACE>\\books_root"
+        ],
+        "bookSeriesFolders": [
+          "<WORKSPACE>\\books_root\\BookSeriesA"
+        ],
+        "bookSingleFiles": [
+          "<WORKSPACE>\\single-book.txt"
+        ],
+        "scanIgnore": [
+          "samples",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      }
+    },
+    "lookup": {
+      "ok": true,
+      "book": {
+        "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNBXGJvb2stMDAxLmVwdWI6OjE2OjoxNzAwMDAwMDAzMDAw",
+        "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxib29rc19yb290XEJvb2tTZXJpZXNB",
+        "seriesName": "BookSeriesA",
+        "title": "book-001",
+        "path": "<WORKSPACE>\\books_root\\BookSeriesA\\book-001.epub",
+        "size": 16,
+        "mtimeMs": 1700000003000,
+        "format": "epub",
+        "sourceKind": "seriesFolder"
+      }
+    }
+  }
+}

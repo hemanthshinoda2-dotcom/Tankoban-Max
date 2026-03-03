@@ -31,34 +31,50 @@ ENGINES = {
     },
 }
 
-_current_engine = "yandex"
+_current_engine = "google"
+
+
+def normalize_engine_id(engine_id: str) -> str:
+    s = str(engine_id or "").strip().lower()
+    return s if s in ENGINES else "google"
 
 
 def set_default(engine_id: str):
     """Set the default search engine by ID."""
     global _current_engine
-    if engine_id in ENGINES:
-        _current_engine = engine_id
+    _current_engine = normalize_engine_id(engine_id)
+
+
+def load_from_settings(settings: dict):
+    if not isinstance(settings, dict):
+        return
+    set_default(settings.get("defaultSearchEngine"))
+
+
+def apply_to_settings(settings: dict) -> dict:
+    out = dict(settings) if isinstance(settings, dict) else {}
+    out["defaultSearchEngine"] = get_default_id()
+    return out
 
 
 def get_default_id() -> str:
     """Get the current default engine ID."""
-    return _current_engine
+    return normalize_engine_id(_current_engine)
 
 
 def get_engine_name() -> str:
     """Get the display name of the current search engine."""
-    return ENGINES.get(_current_engine, ENGINES["yandex"])["name"]
+    return ENGINES.get(_current_engine, ENGINES["google"])["name"]
 
 
 def get_search_url(query: str) -> str:
     """Build a search URL for the given query using the current engine."""
     from PySide6.QtCore import QUrl
-    engine = ENGINES.get(_current_engine, ENGINES["yandex"])
+    engine = ENGINES.get(_current_engine, ENGINES["google"])
     encoded = QUrl.toPercentEncoding(query).data().decode()
     return engine["search_url"].format(encoded)
 
 
 def get_home_url() -> str:
     """Get the homepage URL for the current engine."""
-    return ENGINES.get(_current_engine, ENGINES["yandex"])["home_url"]
+    return ENGINES.get(_current_engine, ENGINES["google"])["home_url"]

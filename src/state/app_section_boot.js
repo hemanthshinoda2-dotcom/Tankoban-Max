@@ -86,49 +86,22 @@
 
   async function ensureWebModulesLoaded() {
     const d = window.Tanko && window.Tanko.deferred;
-    if (d && typeof d.ensureWebModulesLoaded === 'function') {
+    if (!d) return;
+    if (typeof d.ensureWebModulesLoadedLegacy === 'function') {
+      await d.ensureWebModulesLoadedLegacy();
+      return;
+    }
+    if (typeof d.ensureWebModulesLoaded === 'function') {
       await d.ensureWebModulesLoaded();
     }
   }
 
-  async function openBrowserWorkspace(opts) {
-    const options = (opts && typeof opts === 'object') ? opts : {};
-    await setMode('sources');
-
+  async function activateSourcesMode() {
     await ensureWebModulesLoaded();
-
-    const web = window.Tanko && window.Tanko.web;
-    if (!web) return;
-
-    if (options.openTorrentWorkspace && typeof web.openTorrentWorkspace === 'function') {
-      web.openTorrentWorkspace();
-      return;
-    }
-
-    if (typeof web.openDefault === 'function') {
-      web.openDefault();
-      return;
-    }
-
-    if (typeof web.openHome === 'function') {
-      web.openHome();
-      return;
-    }
-
-    if (typeof web.openBrowser === 'function') {
-      web.openBrowser(null);
-    }
-  }
-
-  async function openSourcesWorkspace() {
     await setMode('sources');
-    await ensureWebModulesLoaded();
     try {
-      if (window.Tanko && window.Tanko.sources) {
-        if (typeof window.Tanko.sources.openSources === 'function') {
-          window.Tanko.sources.openSources();
-          return;
-        }
+      if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
+        window.Tanko.sources.openSources();
       }
     } catch (_err) {}
   }
@@ -158,18 +131,9 @@
         await setMode('videos');
         return;
       case 'browser':
-        await openBrowserWorkspace({ openTorrentWorkspace: false });
-        return;
       case 'sources':
-        await openSourcesWorkspace();
-        return;
       case 'torrent':
-        await openSourcesWorkspace();
-        try {
-          if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openDownloads === 'function') {
-            window.Tanko.sources.openDownloads();
-          }
-        } catch (_err) {}
+        await activateSourcesMode();
         return;
       default:
         await setMode('comics');

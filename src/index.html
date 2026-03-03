@@ -1,4 +1,4 @@
-<!--
+﻿<!--
 AI_NAV: index.html
 OWNERSHIP: Renderer markup skeleton. Owns the top header area, mode switch controls, and containers for library views + video stage.
 
@@ -63,6 +63,7 @@ COMMON ANCHORS
           <sl-button id="modeComicsBtn" class="modeBtn active" size="small" title="Comics">Comics</sl-button>
           <sl-button id="modeBooksBtn" class="modeBtn" size="small" title="Books">Books</sl-button>
           <sl-button id="modeVideosBtn" class="modeBtn" size="small" title="Videos">Videos</sl-button>
+          <sl-button id="modeSourcesBtn" class="modeBtn" size="small" title="Sources">Sources</sl-button>
         </div>
       </div>
 
@@ -503,7 +504,7 @@ COMMON ANCHORS
               </div>
             </div>
 
-            <!-- BUILD_OVERHAUL: Book reader — standard layout (toolbar + sidebar + reading area + footer) -->
+            <!-- BUILD_OVERHAUL: Book reader â€” standard layout (toolbar + sidebar + reading area + footer) -->
             <div id="booksReaderView" class="br-reader hidden">
 
               <!-- Toolbar (always visible) -->
@@ -519,7 +520,7 @@ COMMON ANCHORS
                   </div>
                 </div>
                 <div class="br-toolbar-right">
-                  <!-- REMOVED: Flow mode toggle — scroll mode removed, always paginated -->
+                  <!-- REMOVED: Flow mode toggle â€” scroll mode removed, always paginated -->
                   <button id="booksReaderFlowBtn" class="br-btn" style="display:none" title="Paginated" aria-label="Paginated"><svg viewBox="0 0 22 19" xmlns="http://www.w3.org/2000/svg"><path d="M20 0.5H14C13.4178 0.5 12.8437 0.635544 12.3229 0.895898C11.8022 1.15625 11.3493 1.53426 11 2C10.6507 1.53426 10.1978 1.15625 9.67705 0.895898C9.15634 0.635544 8.58217 0.5 8 0.5H2C1.60218 0.5 1.22064 0.658035 0.93934 0.93934C0.658035 1.22064 0.5 1.60218 0.5 2V14C0.5 14.3978 0.658035 14.7794 0.93934 15.0607C1.22064 15.342 1.60218 15.5 2 15.5H8C8.59674 15.5 9.16903 15.7371 9.59099 16.159C10.0129 16.581 10.25 17.1533 10.25 17.75C10.25 17.9489 10.329 18.1397 10.4697 18.2803C10.6103 18.421 10.8011 18.5 11 18.5C11.1989 18.5 11.3897 18.421 11.5303 18.2803C11.671 18.1397 11.75 17.9489 11.75 17.75C11.75 17.1533 11.9871 16.581 12.409 16.159C12.831 15.7371 13.4033 15.5 14 15.5H20C20.3978 15.5 20.7794 15.342 21.0607 15.0607C21.342 14.7794 21.5 14.3978 21.5 14V2C21.5 1.60218 21.342 1.22064 21.0607 0.93934C20.7794 0.658035 20.3978 0.5 20 0.5ZM8 14H2V2H8C8.59674 2 9.16903 2.23705 9.59099 2.65901C10.0129 3.08097 10.25 3.65326 10.25 4.25V14.75C9.6015 14.262 8.8116 13.9987 8 14ZM20 14H14C13.1884 13.9987 12.3985 14.262 11.75 14.75V4.25C11.75 3.65326 11.9871 3.08097 12.409 2.65901C12.831 2.23705 13.4033 2 14 2H20V14ZM14 4.25H17.75C17.9489 4.25 18.1397 4.32902 18.2803 4.46967C18.421 4.61032 18.5 4.80109 18.5 5C18.5 5.19891 18.421 5.38968 18.2803 5.53033C18.1397 5.67098 17.9489 5.75 17.75 5.75H14C13.8011 5.75 13.6103 5.67098 13.4697 5.53033C13.329 5.38968 13.25 5.19891 13.25 5C13.25 4.80109 13.329 4.61032 13.4697 4.46967C13.6103 4.32902 13.8011 4.25 14 4.25ZM18.5 8C18.5 8.19891 18.421 8.38968 18.2803 8.53033C18.1397 8.67098 17.9489 8.75 17.75 8.75H14C13.8011 8.75 13.6103 8.67098 13.4697 8.53033C13.329 8.38968 13.25 8.19891 13.25 8C13.25 7.80109 13.329 7.61032 13.4697 7.46967C13.6103 7.32902 13.8011 7.25 14 7.25H17.75C17.9489 7.25 18.1397 7.32902 18.2803 7.46967C18.421 7.61032 18.5 7.80109 18.5 8ZM18.5 11C18.5 11.1989 18.421 11.3897 18.2803 11.5303C18.1397 11.671 17.9489 11.75 17.75 11.75H14C13.8011 11.75 13.6103 11.671 13.4697 11.5303C13.329 11.3397 13.25 11.1989 13.25 11C13.25 10.8011 13.329 10.6103 13.4697 10.4697C13.6103 10.329 13.8011 10.25 14 10.25H17.75C17.9489 10.25 18.1397 10.329 18.2803 10.4697C18.421 10.6103 18.5 10.8011 18.5 11Z" fill="currentColor"/></svg></button>
                   <!-- STRIP-LISTEN-MODE: Listen button opens TTS player overlay -->
                   <button id="booksReaderListenBtn" class="br-btn" title="Listen (TTS)" aria-label="Listen with TTS"><svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/></svg></button>
@@ -590,9 +591,9 @@ COMMON ANCHORS
                   <!-- Nav arrow left -->
                   <button id="booksReaderPrevBtn" class="br-nav-arrow br-nav-left" title="Previous page (&#8592;)" aria-label="Previous page"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18.1,19.9L10.2,12l7.9-7.9L16,2L6,12l10,10L18.1,19.9z" fill="currentColor"/></svg></button>
 
-                  <!-- Host (foliate mounts here — clearHost() empties this, so overlays live outside) -->
+                  <!-- Host (foliate mounts here â€” clearHost() empties this, so overlays live outside) -->
                   <div id="booksReaderHost" class="br-host"></div>
-                    <!-- TTS bar + mega panel — repositioned inside reading area for reader-owned narration -->
+                    <!-- TTS bar + mega panel â€” repositioned inside reading area for reader-owned narration -->
                     <div id="lpTtsBar" class="booksReaderTtsBar hidden" role="toolbar" aria-label="TTS controls">
                       <button id="lpTtsBack10" class="iconBtn booksReaderTtsBtn" title="Back 10s (~approx)" aria-label="Back 10 seconds"><svg viewBox="0 0 18 17" xmlns="http://www.w3.org/2000/svg"><path d="M17.8125 8.55482C17.8127 10.6088 17.004 12.5803 15.5614 14.0424C14.1188 15.5046 12.1585 16.3398 10.1047 16.3673H10C8.00552 16.3715 6.08591 15.6081 4.63906 14.2353C4.45828 14.0646 4.35273 13.829 4.34562 13.5804C4.33851 13.3319 4.43044 13.0907 4.60117 12.9099C4.7719 12.7291 5.00746 12.6236 5.25602 12.6165C5.50458 12.6094 5.74578 12.7013 5.92656 12.872C6.77519 13.6732 7.84111 14.2065 8.99112 14.4053C10.1411 14.6041 11.3242 14.4596 12.3926 13.9898C13.4609 13.5201 14.3671 12.7459 14.998 11.764C15.6288 10.7821 15.9563 9.63604 15.9395 8.46909C15.9227 7.30214 15.5623 6.16602 14.9035 5.2027C14.2446 4.23939 13.3165 3.4916 12.2351 3.05279C11.1536 2.61397 9.96684 2.5036 8.82303 2.73545C7.67922 2.9673 6.62911 3.53109 5.80391 4.35638C5.79375 4.36654 5.78438 4.37591 5.77344 4.38529L4.28828 5.74232H5.625C5.87364 5.74232 6.1121 5.84109 6.28791 6.01691C6.46373 6.19272 6.5625 6.43118 6.5625 6.67982C6.5625 6.92846 6.46373 7.16692 6.28791 7.34273C6.1121 7.51855 5.87364 7.61732 5.625 7.61732H1.875C1.62636 7.61732 1.3879 7.51855 1.21209 7.34273C1.03627 7.16692 0.9375 6.92846 0.9375 6.67982V2.92982C0.9375 2.68118 1.03627 2.44272 1.21209 2.26691C1.3879 2.09109 1.62636 1.99232 1.875 1.99232C2.12364 1.99232 2.3621 2.09109 2.53791 2.26691C2.71373 2.44272 2.8125 2.68118 2.8125 2.92982V4.54857L4.49062 3.01263C5.58508 1.92406 6.97748 1.18411 8.49209 0.886166C10.0067 0.588224 11.5756 0.74565 13.0008 1.33857C14.4261 1.93149 15.6437 2.93334 16.5001 4.21765C17.3564 5.50197 17.8131 7.01119 17.8125 8.55482Z" fill="currentColor"/></svg></button>
                       <button id="lpTtsRewind" class="iconBtn booksReaderTtsBtn" title="Previous sentence" aria-label="Previous sentence"><svg viewBox="0 0 14 16" xmlns="http://www.w3.org/2000/svg"><path d="M12.7617 0.439063C12.5177 0.303751 12.242 0.23623 11.9631 0.243511C11.6842 0.250792 11.4124 0.332611 11.1758 0.480469L2.3125 6.02344V1.17969C2.3125 0.931047 2.21373 0.69259 2.03791 0.516775C1.8621 0.34096 1.62364 0.242188 1.375 0.242188C1.12636 0.242188 0.887903 0.34096 0.712087 0.516775C0.536272 0.69259 0.4375 0.931047 0.4375 1.17969V14.9297C0.4375 15.1783 0.536272 15.4168 0.712087 15.5926C0.887903 15.7684 1.12636 15.8672 1.375 15.8672C1.62364 15.8672 1.8621 15.7684 2.03791 15.5926C2.21373 15.4168 2.3125 15.1783 2.3125 14.9297V10.0859L11.1758 15.6328C11.4118 15.7794 11.6826 15.8603 11.9603 15.8674C12.238 15.8745 12.5125 15.8074 12.7557 15.673C12.9988 15.5387 13.2018 15.3419 13.3436 15.1031C13.4854 14.8642 13.561 14.5918 13.5625 14.3141V1.79531C13.5622 1.51835 13.4878 1.24652 13.347 1.00802C13.2062 0.769532 13.0041 0.57308 12.7617 0.439063ZM11.6875 13.7367L2.60156 8.05469L11.6875 2.37266V13.7367Z" fill="currentColor"/></svg></button>
@@ -624,7 +625,7 @@ COMMON ANCHORS
                       <input type="range" id="abVolume" class="ab-bar-volume" min="0" max="1" step="0.05" value="1" title="Volume" aria-label="Volume">
                       <button id="abClose" class="iconBtn ab-bar-btn" title="Close audiobook" aria-label="Close audiobook"><svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
                     </div>
-                    <!-- TTS mega settings overlay — repositioned inside reading area -->
+                    <!-- TTS mega settings overlay â€” repositioned inside reading area -->
                     <div id="lpTtsMega" class="booksReaderTtsMega hidden" role="dialog" aria-label="TTS settings">
                       <div class="booksReaderTtsMegaHead">TTS Settings <button id="lpTtsMegaClose" class="iconBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button></div>
                       <div class="booksReaderTtsMegaBody">
@@ -660,7 +661,7 @@ COMMON ANCHORS
                         </div>
                       </div>
                     </div>
-                    <!-- TTS diagnostics panel — repositioned inside reading area -->
+                    <!-- TTS diagnostics panel â€” repositioned inside reading area -->
                     <div id="lpTtsDiag" class="booksReaderTtsDiag hidden" role="dialog" aria-label="TTS diagnostics">
                       <div class="booksReaderTtsDiagHead">TTS Diagnostics <button id="lpTtsDiagCopy" class="iconBtn" title="Copy diagnostics" aria-label="Copy diagnostics"><svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M4 2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H6zM2 5a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-1h1v1a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h1v1H2z" fill="currentColor"/></svg></button><button id="lpTtsDiagClose" class="iconBtn" title="Close" aria-label="Close"><svg viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg"><path d="M11.0326 10.2874C11.1734 10.4283 11.2526 10.6193 11.2526 10.8186C11.2526 11.0179 11.1734 11.209 11.0326 11.3499C10.8917 11.4908 10.7006 11.5699 10.5013 11.5699C10.302 11.5699 10.1109 11.4908 9.97005 11.3499L6.00193 7.38048L2.03255 11.3486C1.89165 11.4895 1.70056 11.5687 1.5013 11.5687C1.30204 11.5687 1.11095 11.4895 0.970051 11.3486C0.829155 11.2077 0.75 11.0166 0.75 10.8174C0.75 10.6181 0.829155 10.427 0.970051 10.2861L4.93943 6.31798L0.971301 2.34861C0.830405 2.20771 0.75125 2.01661 0.75125 1.81736C0.75125 1.6181 0.830405 1.427 0.971301 1.28611C1.1122 1.14521 1.30329 1.06605 1.50255 1.06605C1.70181 1.06605 1.8929 1.14521 2.0338 1.28611L6.00193 5.25548L9.9713 1.28548C10.1122 1.14458 10.3033 1.06543 10.5026 1.06543C10.7018 1.06543 10.8929 1.14458 11.0338 1.28548C11.1747 1.42638 11.2539 1.61747 11.2539 1.81673C11.2539 2.01599 11.1747 2.20708 11.0338 2.34798L7.06443 6.31798L11.0326 10.2874Z" fill="currentColor" stroke="currentColor" stroke-width="0.15"/></svg></button></div>
                       <div id="lpTtsDiagBody" class="booksReaderTtsDiagBody"></div>
@@ -837,7 +838,7 @@ COMMON ANCHORS
                             <button id="booksReaderZoomUp" class="br-settings-chip" title="Zoom in" disabled>Zoom +</button>
                           </div>
                         </div>
-                        <!-- REMOVED: Scroll mode — always paginated -->
+                        <!-- REMOVED: Scroll mode â€” always paginated -->
                         <div class="br-settings-section" style="display:none">
                           <label class="br-settings-toggle-row">
                             <span class="br-settings-label">Scrolled mode</span>
@@ -952,7 +953,7 @@ COMMON ANCHORS
               <button id="booksReaderPlayBtn" class="hidden" aria-hidden="true"><svg viewBox="0 0 16 18" xmlns="http://www.w3.org/2000/svg"><path d="M14.3195 7.73218L3.06328 0.847019C2.82722 0.703112 2.55721 0.624413 2.2808 0.618957C2.00439 0.6135 1.73148 0.681481 1.48992 0.81596C1.24837 0.950439 1.04682 1.1466 0.905848 1.38442C0.764877 1.62225 0.689531 1.89322 0.6875 2.16968V15.94C0.689531 16.2164 0.764877 16.4874 0.905848 16.7252C1.04682 16.9631 1.24837 17.1592 1.48992 17.2937C1.73148 17.4282 2.00439 17.4962 2.2808 17.4907C2.55721 17.4853 2.82722 17.4066 3.06328 17.2626L14.3195 10.3775C14.5465 10.2393 14.7341 10.0451 14.8643 9.81344C14.9945 9.58179 15.0628 9.32055 15.0628 9.05483C15.0628 8.78912 14.9945 8.52787 14.8643 8.29623C14.7341 8.06458 14.5465 7.87034 14.3195 7.73218ZM2.5625 15.3712V2.73843L12.8875 9.05483L2.5625 15.3712Z" fill="currentColor"/></svg></button>
               <div id="booksReaderStatus" class="booksReaderStatus" role="status" aria-live="polite" aria-atomic="true"></div>
 
-              <!-- TTS player overlay — covers reader while listening -->
+              <!-- TTS player overlay â€” covers reader while listening -->
               <!-- Replica of the pre-listening-mode TTS HUD bar from reader_tts_ui.js -->
               <div id="booksListenPlayerOverlay" class="lp-shell hidden" aria-label="Listening player" role="region">
 
@@ -1006,33 +1007,7 @@ COMMON ANCHORS
             </div>
           </div>
         </div>
-
-        <!-- BUILD_WEB_PARITY: Web tips overlay -->
-        <div id="webLibTipsOverlay" class="keysOverlay hidden" aria-hidden="true">
-          <div class="keysCard">
-            <div class="keysTop">
-              <div class="keysTitle">Web Shortcuts</div>
-              <sl-button id="webLibTipsClose" class="keysClose" pill>Close</sl-button>
-            </div>
-            <div class="keysCols">
-              <div>
-                <div class="keysHead">Navigation</div>
-                <div class="keysLine"><span class="key">Backspace</span><span class="desc">Back (close browser first)</span></div>
-                <div class="keysLine"><span class="key">Escape</span><span class="desc">Close tips or browser</span></div>
-                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">R</span><span class="desc">Reload (page or sources)</span></div>
-                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">T</span><span class="desc">New tab</span></div>
-                <div class="keysLine"><span class="key">Ctrl</span> + <span class="key">W</span><span class="desc">Close tab</span></div>
-              </div>
-              <div>
-                <div class="keysHead">Display</div>
-                <div class="keysLine"><span class="key">K</span><span class="desc">Toggle this tips overlay</span></div>
-                <div class="keysLine"><span class="key">F</span> / <span class="key">F11</span><span class="desc">Toggle fullscreen</span></div>
-              </div>
-            </div>
-            <div class="keysHint muted tiny">Tip: Right-click sources and continue tiles for more options.</div>
-          </div>
-        </div>
-      </section>
+</section>
 
       <!-- Video library view (Build 97) -->
       <section id="videoLibraryView" class="view hidden">
@@ -1207,27 +1182,292 @@ COMMON ANCHORS
 
       </section>
 
+
+
+      <!-- BUILD_WEB: Web sources browser view -->
+      <section id="webLibraryView" class="view hidden">
+        <div class="libraryShell">
+          <aside class="libSidebar" aria-label="Web sources navigation">
+            <button class="sidebarPinBtn" title="Pin sidebar" aria-label="Pin sidebar">
+              <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M9.828.722a.5.5 0 0 1 .354.146l4.95 4.95a.5.5 0 0 1-.707.707l-.71-.71-3.18 3.18a3.02 3.02 0 0 1-.435.343L8.5 11.19V14.5a.5.5 0 0 1-.854.354L5.305 12.51l-3.158 3.159a.5.5 0 0 1-.708-.708L4.598 11.8l-2.347-2.346A.5.5 0 0 1 2.605 8.6h3.31l1.853-1.6a3.02 3.02 0 0 1 .343-.435L11.29 3.38l-.71-.71a.5.5 0 0 1 .146-.849z"/></svg>
+            </button>
+            <div class="navSection">
+              <div class="navHeader">Sources</div>
+              <div class="navItems">
+                <div id="webSourcesList" class="folderTree" role="list" aria-label="Bookmarked sources"></div>
+                <sl-button id="webAddSourceBtn" class="navBtn" title="Add download source">Add source...</sl-button>
+                <sl-button id="webTorrentProvidersBtn" class="navBtn" title="Configure Jackett/Prowlarr">Torrent Providers...</sl-button>
+                <sl-button id="webTipsBtn" class="navBtn" title="Keyboard shortcuts (K)">Tips</sl-button>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Downloads</div>
+              <div class="navItems">
+                <div id="webDownloadStatus" class="muted tiny">No active downloads</div>
+                <div id="webDownloadProgressRow" class="webSidebarDlRow hidden" aria-hidden="true">
+                  <div id="webDownloadProgress" class="webSidebarDlProgress"><div id="webDownloadProgressFill" class="webSidebarDlProgressFill"></div></div>
+                  <div id="webDownloadProgressPct" class="webSidebarDlPct">0%</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+
+            <div class="navSection">
+              <div class="navHeader">Info</div>
+              <div class="navItems">
+                <div id="webDestInfo" class="muted tiny">
+                  Books &rarr; <span id="webDestBooks" class="webDestPath">Not configured</span><br/>
+                  Comics &rarr; <span id="webDestComics" class="webDestPath">Not configured</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="navSep"></div>
+            <div class="navSection navSectionUtility">
+              <div class="navItems">
+                <sl-button id="webUtilityBtnSources" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
+                <sl-button id="webUtilityTorrentProvidersBtn" class="navBtn webUtilityBtn" title="Configure Jackett/Prowlarr">Providers</sl-button>
+              </div>
+            </div>
+          </aside>
+
+          <!-- BUILD_WEB_HOME: library home view (grid + continue row) -->
+          <div class="libContent">
+            <div id="webHomeView" class="homeView">
+              <div class="panel sourcesSearchPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Tankoban Search</div>
+                </div>
+                <div id="sourcesSearchView">
+                  <div class="sourcesSearchControls">
+                    <input id="sourcesSearchInput" class="search" type="text" placeholder="Search torrents..." autocomplete="off" />
+                    <select id="sourcesSearchSource" class="select">
+                      <option value="all">All Sources</option>
+                    </select>
+                    <select id="sourcesSearchType" class="select">
+                      <option value="all">All Types</option>
+                    </select>
+                    <select id="sourcesSearchSort" class="select">
+                      <option value="relevance">Sort: Relevance</option>
+                      <option value="seeders_desc">Sort: Seeders</option>
+                      <option value="size_desc">Sort: Size</option>
+                    </select>
+                    <button id="sourcesSearchBtn" class="btn btn-sm" type="button">Search</button>
+                  </div>
+                  <div id="sourcesSearchStatus" class="muted tiny"></div>
+                  <div id="sourcesSearchTableWrap" class="sourcesSearchTableWrap">
+                    <table id="sourcesSearchTable" class="sourcesSearchTable">
+                      <thead>
+                        <tr>
+                          <th>Title</th>
+                          <th>Size</th>
+                          <th>Files</th>
+                          <th>Seeders</th>
+                          <th>Magnet</th>
+                        </tr>
+                      </thead>
+                      <tbody id="sourcesSearchBody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel sourcesTorrentPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Tankoban Torrents</div>
+                  <div class="panelActions">
+                    <button id="sourcesUnhideBtn" class="btn btn-ghost btn-sm" type="button">Unhide</button>
+                  </div>
+                </div>
+                <div class="sourcesSearchTableWrap">
+                  <table id="sourcesTorrentTable" class="sourcesSearchTable">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        <th>Torrent Name</th>
+                        <th>Size</th>
+                        <th>Download Speed</th>
+                        <th>Download %</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sourcesTorrentBody">
+                      <tr><td colspan="6" class="muted tiny">No torrents yet.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel sourcesBrowserPanel" id="sourcesBrowserPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">TankoBrowser</div>
+                </div>
+                <div id="sourcesBrowserTabStrip" class="sourcesBrowserTabStrip">
+                  <div id="sourcesBrowserTabList" class="sourcesBrowserTabList"></div>
+                  <button id="sourcesBrowserNewTabBtn" class="btn btn-ghost btn-sm sourcesBrowserNewTabBtn" type="button" title="New tab" aria-label="New tab">+</button>
+                </div>
+                <div class="sourcesBrowserToolbar">
+                  <button id="sourcesBrowserBackBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Back" aria-label="Back">&#x2039;</button>
+                  <button id="sourcesBrowserForwardBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Forward" aria-label="Forward">&#x203a;</button>
+                  <button id="sourcesBrowserReloadBtn" class="btn btn-ghost btn-sm sourcesBrowserIconBtn" type="button" title="Reload" aria-label="Reload">&#x21bb;</button>
+                  <div class="sourcesBrowserOmniWrap">
+                    <input id="sourcesBrowserUrlInput" class="search" type="text" placeholder="Search with Google or enter URL" autocomplete="off" />
+                    <div id="sourcesBrowserOmniDropdown" class="sourcesBrowserOmniDropdown hidden" role="listbox" aria-label="Address bar suggestions"></div>
+                  </div>
+                  <button id="sourcesBrowserGoBtn" class="btn btn-sm sourcesBrowserIconBtn" type="button" title="Go" aria-label="Go">&#x27a4;</button>
+                  <button id="sourcesBrowserBookmarkBtn" class="btn btn-ghost btn-sm" type="button">Bookmark</button>
+                  <button id="sourcesBrowserHistoryBtn" class="btn btn-ghost btn-sm" type="button">History</button>
+                </div>
+                <div id="sourcesBrowserStatus" class="muted tiny"></div>
+                <div class="sourcesBrowserViewport">
+                  <div id="sourcesBrowserHome" class="sourcesBrowserHome hidden" aria-label="New tab page">
+                    <form id="sourcesBrowserHomeSearchForm" class="sourcesBrowserHomeSearchForm">
+                      <div class="sourcesBrowserHomeSearchRow">
+                        <input id="sourcesBrowserHomeSearchInput" class="search sourcesBrowserHomeSearchInput" type="text" placeholder="Search the web or type a URL" autocomplete="off" />
+                        <select id="sourcesBrowserHomeEngine" class="select sourcesBrowserHomeEngine" aria-label="Search engine"></select>
+                        <button id="sourcesBrowserHomeSearchBtn" class="btn btn-sm" type="submit">Search</button>
+                      </div>
+                    </form>
+                    <div class="sourcesBrowserHomeSection">
+                      <div class="sourcesBrowserHomeSectionTitle">Shortcuts</div>
+                      <div id="sourcesBrowserHomeShortcuts" class="sourcesBrowserHomeShortcuts"></div>
+                      <div id="sourcesBrowserHomeShortcutsEmpty" class="muted tiny hidden">No shortcuts yet.</div>
+                    </div>
+                    <div class="sourcesBrowserHomeSection">
+                      <div class="sourcesBrowserHomeSectionTitle">Recent Tabs</div>
+                      <div id="sourcesBrowserHomeRecentTabs" class="sourcesBrowserHomeRecentTabs"></div>
+                      <div id="sourcesBrowserHomeRecentTabsEmpty" class="muted tiny hidden">No recent tabs.</div>
+                    </div>
+                  </div>
+                  <webview id="sourcesBrowserWebview"
+                    src="about:blank"
+                    partition="persist:webmode"
+                    allowpopups
+                    webpreferences="contextIsolation=yes"></webview>
+                </div>
+              </div>
+              <div id="sourcesBrowserCtxOverlay" class="sourcesBrowserCtxOverlay hidden" aria-hidden="true"></div>
+              <div id="sourcesBrowserCtxMenu" class="sourcesBrowserCtxMenu hidden" role="menu" aria-label="TankoBrowser context menu"></div>
+
+              <div id="sourcesBrowserHistoryOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="TankoBrowser history">
+                <div class="settingsCard">
+                  <div class="settingsTop">
+                    <div class="settingsTitle">TankoBrowser History</div>
+                    <button id="sourcesBrowserHistoryCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
+                  </div>
+                  <div class="settingsGroup">
+                    <input id="sourcesBrowserHistorySearchInput" class="search" type="text" placeholder="Search history..." autocomplete="off" />
+                  </div>
+                  <div class="settingsActions" style="justify-content:flex-start;">
+                    <button id="sourcesBrowserHistoryClearBtn" class="btn btn-ghost btn-sm" type="button">Clear history</button>
+                  </div>
+                  <div class="sourcesBrowserHistoryListWrap">
+                    <div id="sourcesBrowserHistoryList" class="sourcesBrowserHistoryList"></div>
+                    <div id="sourcesBrowserHistoryEmpty" class="muted tiny sourcesBrowserHistoryEmpty">No history yet.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="sourcesBrowserTabSearchOverlay" class="settingsOverlay hidden" role="dialog" aria-modal="true" aria-label="Search tabs">
+                <div class="settingsCard sourcesBrowserTabSearchCard">
+                  <div class="settingsTop">
+                    <div class="settingsTitle">Search Tabs</div>
+                    <button id="sourcesBrowserTabSearchCloseBtn" class="btn btn-ghost btn-sm" type="button">Close</button>
+                  </div>
+                  <div class="settingsGroup">
+                    <input id="sourcesBrowserTabSearchInput" class="search" type="text" placeholder="Search tabs by title or URL..." autocomplete="off" />
+                  </div>
+                  <div id="sourcesBrowserTabSearchList" class="sourcesBrowserTabSearchList"></div>
+                  <div id="sourcesBrowserTabSearchEmpty" class="muted tiny hidden">No tabs match your search.</div>
+                </div>
+              </div>
+
+              <div class="panel sourcesBrowserDownloadsPanel" id="sourcesBrowserDownloadsPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">TankoBrowser Downloads</div>
+                  <div class="panelActions">
+                    <button id="sourcesBrowserDownloadsClearBtn" class="btn btn-ghost btn-sm" type="button">Clear</button>
+                  </div>
+                </div>
+                <div class="sourcesSearchTableWrap">
+                  <table id="sourcesBrowserDownloadsTable" class="sourcesSearchTable">
+                    <thead>
+                      <tr>
+                        <th>Index</th>
+                        <th>Download Name</th>
+                        <th>Size</th>
+                        <th>Download Speed</th>
+                        <th>Download %</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="sourcesBrowserDownloadsBody">
+                      <tr><td colspan="7" class="muted tiny">No downloads yet.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="panel continuePanel">
+                <div class="continueHead">
+                  <div class="continueTitle">Continue Browsing...</div>
+                </div>
+                <div id="webContinuePanel" class="continueRow continueYacRow hidden"></div>
+                <div id="webContinueEmpty" class="muted tiny continueEmpty">No open tabs.</div>
+              </div>
+
+              <!-- BUILD_WEB_HOME: downloads history panel (Chrome-like visibility even in library mode) -->
+              <div id="webHomeDownloadsPanel" class="panel webHomeDownloadsPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Downloads</div>
+                  <div class="panelActions">
+                    <button id="webHomeDownloadsClear" class="btn btn-ghost btn-sm">Clear</button>
+                  </div>
+                </div>
+                <div id="webHomeDownloadsList" class="webHomeDownloadsList"></div>
+                <div id="webHomeDownloadsEmpty" class="muted tiny hidden">No downloads yet.</div>
+              </div>
+
+              <div class="panel seriesPanel">
+                <div class="panelTitleRow">
+                  <div class="panelTitle">Sources</div>
+                </div>
+                <div id="webSourcesGrid" class="seriesGrid"></div>
+                <div id="webSourcesEmpty" class="muted tiny hidden">No sources yet. Add a source from the sidebar.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      
 <!-- Video player view (Tankoban Plus Build 3) -->
       <section id="videoPlayerView" class="view hidden">
         <div class="videoPlayerShell">
           <div class="videoPlayerBar">
-            <button id="videoBackBtn" class="iconBtn" title="Back to video library" aria-label="Back to video library">←</button>
-            <div id="videoNowTitle" class="videoNowTitle">—</div>
+            <button id="videoBackBtn" class="iconBtn" title="Back to video library" aria-label="Back to video library">â†</button>
+            <div id="videoNowTitle" class="videoNowTitle">â€”</div>
             <div class="videoPlayerBarRight">
               <div id="videoEngineBadge" class="videoEngineBadge" data-engine="none" title="No active engine">No Engine</div>
               <button id="videoTracksBtnTop" class="chipBtn" title="Audio & Subtitles" aria-label="Audio & Subtitles">Tracks</button>
-              <button id="videoSpeedBtnTop" class="chipBtn" title="Playback speed" aria-label="Playback speed">1.0×</button>
+              <button id="videoSpeedBtnTop" class="chipBtn" title="Playback speed" aria-label="Playback speed">1.0Ã—</button>
               <button id="videoPlaylistBtn" class="chipBtn" title="Playlist" aria-label="Playlist">List</button>
               <button id="videoQualityBtnTop" class="chipBtn" title="Render quality" aria-label="Render quality">Balanced</button>
               <button id="videoInfoBtnTop" class="chipBtn" title="Player information" aria-label="Player information">Info</button>
-              <button id="videoFullscreenBtnTop" class="chipBtn" title="Fullscreen" aria-label="Fullscreen">⤢</button>
+              <button id="videoFullscreenBtnTop" class="chipBtn" title="Fullscreen" aria-label="Fullscreen">â¤¢</button>
             </div>
           </div>
 
           <!-- AI_VIDEO_STAGE: Player stage markup. Canvas render will mount here. -->
           <!-- AI_ANCHOR: videoStage, mpvHost, overlays (toast, center flash) live in this region. -->
           <div id="videoStage" class="videoStage">
-            <div id="mpvDetachedPlaceholder" class="mpvDetachedPlaceholder hidden" role="status" aria-live="polite">Playing in the separate mpv window…</div>
+            <div id="mpvDetachedPlaceholder" class="mpvDetachedPlaceholder hidden" role="status" aria-live="polite">Playing in the separate mpv windowâ€¦</div>
 
             <div id="mpvHost" class="mpvHost hidden"></div>
 
@@ -1236,7 +1476,7 @@ COMMON ANCHORS
             <div id="videoDiagnostics" class="videoDiagnostics hidden" aria-live="polite"></div>
 
             <!-- BUILD 101: Fullscreen exit arrow (only visible when fullscreen + HUD shown) -->
-            <button id="videoExitFullscreenBtn" title="Exit fullscreen" aria-label="Exit fullscreen" type="button">←</button>
+            <button id="videoExitFullscreenBtn" title="Exit fullscreen" aria-label="Exit fullscreen" type="button">â†</button>
 
             <!-- BUILD64: Comprehensive right-click context menu (VLC/PotPlayer baseline) -->
             <div id="videoCtxMenu" class="videoCtxMenu hidden" role="menu" aria-label="Video menu">
@@ -1255,19 +1495,19 @@ COMMON ANCHORS
               
               <button class="ctxItem" data-act="seekBack10" role="menuitem">
                 <span class="ctxLabel">Jump back 10s</span>
-                <span class="ctxHotkey">←</span>
+                <span class="ctxHotkey">â†</span>
               </button>
               <button class="ctxItem" data-act="seekForward10" role="menuitem">
                 <span class="ctxLabel">Jump forward 10s</span>
-                <span class="ctxHotkey">→</span>
+                <span class="ctxHotkey">â†’</span>
               </button>
               <button class="ctxItem" data-act="seekBack30" role="menuitem">
                 <span class="ctxLabel">Jump back 30s</span>
-                <span class="ctxHotkey">Shift+←</span>
+                <span class="ctxHotkey">Shift+â†</span>
               </button>
               <button class="ctxItem" data-act="seekForward30" role="menuitem">
                 <span class="ctxLabel">Jump forward 30s</span>
-                <span class="ctxHotkey">Shift+→</span>
+                <span class="ctxHotkey">Shift+â†’</span>
               </button>
               <div class="ctxSep" role="separator"></div>
               
@@ -1285,15 +1525,15 @@ COMMON ANCHORS
               <div class="ctxSubmenu">
                 <button class="ctxItem ctxExpandable" data-submenu="speed" role="menuitem">
                   <span class="ctxLabel">Speed</span>
-                  <span class="ctxArrow">►</span>
+                  <span class="ctxArrow">â–º</span>
                 </button>
                 <div class="ctxSubmenuPanel hidden" data-submenu-id="speed" role="menu">
-                  <button class="ctxItem" data-act="speed" data-speed="0.5" role="menuitem">0.5×</button>
-                  <button class="ctxItem" data-act="speed" data-speed="0.75" role="menuitem">0.75×</button>
-                  <button class="ctxItem" data-act="speed" data-speed="1" role="menuitem">1.0× (Normal)</button>
-                  <button class="ctxItem" data-act="speed" data-speed="1.25" role="menuitem">1.25×</button>
-                  <button class="ctxItem" data-act="speed" data-speed="1.5" role="menuitem">1.5×</button>
-                  <button class="ctxItem" data-act="speed" data-speed="2" role="menuitem">2.0×</button>
+                  <button class="ctxItem" data-act="speed" data-speed="0.5" role="menuitem">0.5Ã—</button>
+                  <button class="ctxItem" data-act="speed" data-speed="0.75" role="menuitem">0.75Ã—</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1" role="menuitem">1.0Ã— (Normal)</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.25" role="menuitem">1.25Ã—</button>
+                  <button class="ctxItem" data-act="speed" data-speed="1.5" role="menuitem">1.5Ã—</button>
+                  <button class="ctxItem" data-act="speed" data-speed="2" role="menuitem">2.0Ã—</button>
                 </div>
               </div>
               
@@ -1301,7 +1541,7 @@ COMMON ANCHORS
               <div class="ctxSubmenu">
                 <button class="ctxItem ctxExpandable" data-submenu="audio" role="menuitem">
                   <span class="ctxLabel">Audio</span>
-                  <span class="ctxArrow">►</span>
+                  <span class="ctxArrow">â–º</span>
                 </button>
                 <div class="ctxSubmenuPanel hidden" data-submenu-id="audio" role="menu">
                   <div id="ctxAudioTracks"></div>
@@ -1316,7 +1556,7 @@ COMMON ANCHORS
               <div class="ctxSubmenu">
                 <button class="ctxItem ctxExpandable" data-submenu="subtitles" role="menuitem">
                   <span class="ctxLabel">Subtitles</span>
-                  <span class="ctxArrow">►</span>
+                  <span class="ctxArrow">â–º</span>
                 </button>
                 <div class="ctxSubmenuPanel hidden" data-submenu-id="subtitles" role="menu">
                   <div id="ctxSubtitleTracks"></div>
@@ -1333,7 +1573,7 @@ COMMON ANCHORS
               <div class="ctxSubmenu">
                 <button class="ctxItem ctxExpandable" data-submenu="video" role="menuitem">
                   <span class="ctxLabel">Video</span>
-                  <span class="ctxArrow">►</span>
+                  <span class="ctxArrow">â–º</span>
                 </button>
                 <div class="ctxSubmenuPanel hidden" data-submenu-id="video" role="menu">
                   <div id="ctxAspectRatios"></div>
@@ -1352,7 +1592,7 @@ COMMON ANCHORS
               
               <button class="ctxItem" data-act="alwaysOnTop" role="menuitem">
                 <span class="ctxLabel" id="ctxAlwaysOnTopLabel">Always on Top</span>
-                <span class="ctxCheck" id="ctxAlwaysOnTopCheck">✓</span>
+                <span class="ctxCheck" id="ctxAlwaysOnTopCheck">âœ“</span>
               </button>
               
               <button class="ctxItem" data-act="toggleFullscreen" role="menuitem">
@@ -1364,9 +1604,9 @@ COMMON ANCHORS
 
             <!-- BUILD 66: Ultra-thin timeline with minimal play/pause button -->
             <div id="videoHud" class="videoHud videoHud--minimal">
-              <button id="videoPrevHudBtn" class="minimalNavBtn" title="Previous episode" aria-label="Previous episode">⟵</button>
-              <button id="videoPlayBtn" class="minimalPlayBtn" title="Play or pause" aria-label="Play or pause">⏵</button>
-              <button id="videoNextHudBtn" class="minimalNavBtn" title="Next episode" aria-label="Next episode">⟶</button>
+              <button id="videoPrevHudBtn" class="minimalNavBtn" title="Previous episode" aria-label="Previous episode">âŸµ</button>
+              <button id="videoPlayBtn" class="minimalPlayBtn" title="Play or pause" aria-label="Play or pause">âµ</button>
+              <button id="videoNextHudBtn" class="minimalNavBtn" title="Next episode" aria-label="Next episode">âŸ¶</button>
               <div id="videoScrub" class="scrub videoScrub videoScrub--minimal" role="slider" tabindex="0"
                    aria-label="Timeline"
                    aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00">
@@ -1386,7 +1626,7 @@ COMMON ANCHORS
               <div class="videoTracksCard">
                 <div class="videoTracksHeader">
                   <div class="videoTracksTitle">Audio & Subtitles</div>
-                  <button id="videoTracksCloseBtn" class="iconBtn" title="Close" aria-label="Close">✕</button>
+                  <button id="videoTracksCloseBtn" class="iconBtn" title="Close" aria-label="Close">âœ•</button>
                 </div>
                 <div class="videoTracksBody">
                   <label class="tracksLabel" for="videoAudioTrackSelect">Audio</label>
@@ -1396,7 +1636,7 @@ COMMON ANCHORS
 
                   
                   <label class="tracksLabel" for="videoLoadSubtitleBtn">External subtitle</label>
-                  <button id="videoLoadSubtitleBtn" class="tracksBtn" title="Load subtitle file" aria-label="Load subtitle file">Load…</button>
+                  <button id="videoLoadSubtitleBtn" class="tracksBtn" title="Load subtitle file" aria-label="Load subtitle file">Loadâ€¦</button>
 
 
                   <div class="tracksDivider"></div>
@@ -1418,23 +1658,23 @@ COMMON ANCHORS
 
                   <!-- Build 60: Speed controls moved to separate panel -->
 
-                  <!-- Tankoban Plus Build 5.4B — Delay controls (mpv only)
+                  <!-- Tankoban Plus Build 5.4B â€” Delay controls (mpv only)
                        INTENT: Quick audio/subtitle sync delay adjustments without changing overlay behavior. -->
                   <label class="tracksLabel" for="videoAudioDelayMinusBtn">Audio delay</label>
                   <div id="videoAudioDelayControls" class="delayControls" aria-label="Audio delay controls">
-                    <button id="videoAudioDelayMinusBtn" class="delayBtn" title="Audio delay minus" aria-label="Audio delay minus">−</button>
+                    <button id="videoAudioDelayMinusBtn" class="delayBtn" title="Audio delay minus" aria-label="Audio delay minus">âˆ’</button>
                     <span id="videoAudioDelayValue" class="delayValue" aria-label="Audio delay value">0.00s</span>
                     <button id="videoAudioDelayPlusBtn" class="delayBtn" title="Audio delay plus" aria-label="Audio delay plus">+</button>
                   </div>
 
                   <label class="tracksLabel" for="videoSubtitleDelayMinusBtn">Subtitle delay</label>
                   <div id="videoSubtitleDelayControls" class="delayControls" aria-label="Subtitle delay controls">
-                    <button id="videoSubtitleDelayMinusBtn" class="delayBtn" title="Subtitle delay minus" aria-label="Subtitle delay minus">−</button>
+                    <button id="videoSubtitleDelayMinusBtn" class="delayBtn" title="Subtitle delay minus" aria-label="Subtitle delay minus">âˆ’</button>
                     <span id="videoSubtitleDelayValue" class="delayValue" aria-label="Subtitle delay value">0.00s</span>
                     <button id="videoSubtitleDelayPlusBtn" class="delayBtn" title="Subtitle delay plus" aria-label="Subtitle delay plus">+</button>
                   </div>
 
-<!-- Tankoban Plus Build 5.4C — Aspect / crop presets + reset (mpv only)
+<!-- Tankoban Plus Build 5.4C â€” Aspect / crop presets + reset (mpv only)
      INTENT: Expose basic transform controls without changing the player overlay model. -->
 <div id="videoTransformsBlock" class="transformsBlock hidden">
   <label class="tracksLabel" for="videoAspectSelect">Aspect</label>
@@ -1468,8 +1708,8 @@ COMMON ANCHORS
             <!-- Build 67: Anchored speed popover -->
             <div id="videoSpeedPanel" class="videoAnchoredPopover hidden" role="dialog" aria-label="Playback speed">
               <div class="anchoredPopoverContent">
-                <button id="videoSpeedDownBtnPanel" class="popoverBtn" aria-label="Decrease speed">−</button>
-                <div id="videoSpeedPanelValue" class="popoverValue mono">1.0×</div>
+                <button id="videoSpeedDownBtnPanel" class="popoverBtn" aria-label="Decrease speed">âˆ’</button>
+                <div id="videoSpeedPanelValue" class="popoverValue mono">1.0Ã—</div>
                 <button id="videoSpeedUpBtnPanel" class="popoverBtn" aria-label="Increase speed">+</button>
               </div>
             </div>
@@ -1479,7 +1719,7 @@ COMMON ANCHORS
               <div class="anchoredPopoverContent anchoredPopoverVertical">
                 <div id="videoVolPct" class="popoverValue mono">100%</div>
                 <input id="videoVol" class="popoverSlider" type="range" min="0" max="100" value="100" step="1" orient="vertical" aria-label="Volume" />
-                <button id="videoVolMuteToggleBtn" class="popoverBtn" aria-label="Mute">🔇</button>
+                <button id="videoVolMuteToggleBtn" class="popoverBtn" aria-label="Mute">ðŸ”‡</button>
               </div>
             </div>
 
@@ -1495,14 +1735,14 @@ COMMON ANCHORS
                     <input id="videoAutoAdvanceToggle" type="checkbox" />
                     <span>Auto-advance</span>
                   </label>
-                  <button id="videoPlaylistCloseBtn" class="iconBtn panelCloseBtn" aria-label="Close">✕</button>
+                  <button id="videoPlaylistCloseBtn" class="iconBtn panelCloseBtn" aria-label="Close">âœ•</button>
                 </div>
               </div>
 
               <div class="panelBody">
                 <div class="panelRow">
-                  <button id="videoPrevEpBtn" class="panelBtn" aria-label="Previous episode">← Prev</button>
-                  <button id="videoNextEpBtn" class="panelBtn" aria-label="Next episode">Next →</button>
+                  <button id="videoPrevEpBtn" class="panelBtn" aria-label="Previous episode">â† Prev</button>
+                  <button id="videoNextEpBtn" class="panelBtn" aria-label="Next episode">Next â†’</button>
                 </div>
 
                 <div id="videoPlaylistList" class="panelList" role="listbox" aria-label="Episodes"></div>
@@ -1514,7 +1754,7 @@ COMMON ANCHORS
             <div id="videoResumePrompt" class="videoPrompt hidden" role="dialog" aria-modal="true">
               <div class="videoPromptCard">
                 <div class="videoPromptTitle">Resume playback?</div>
-                <div id="videoResumeText" class="videoPromptText">—</div>
+                <div id="videoResumeText" class="videoPromptText">â€”</div>
                 <div class="videoPromptActions">
                   <button id="videoResumeBtn" class="primaryBtn">Resume</button>
                   <button id="videoRestartBtn" class="navBtn">Start over</button>
@@ -1944,7 +2184,7 @@ COMMON ANCHORS
         <div id="hiddenSeriesList" class="hiddenSeriesList"></div>
 
         <div class="settingsActions">
-          <button id="clearIgnoredBtn" class="btn btn-ghost">Clear ignore list…</button>
+          <button id="clearIgnoredBtn" class="btn btn-ghost">Clear ignore listâ€¦</button>
         </div>
       </div>
     </div>
@@ -1955,7 +2195,7 @@ COMMON ANCHORS
     <div id="toast" class="toast hidden"></div>
 
     <div id="warmupBar" class="warmupBar hidden">
-      <div id="warmupText" class="warmupText">Generating thumbnails…</div>
+      <div id="warmupText" class="warmupText">Generating thumbnailsâ€¦</div>
       <button id="warmupCancel" class="btn btn-ghost btn-sm">Cancel</button>
     </div>
 
@@ -1964,7 +2204,7 @@ COMMON ANCHORS
       <div class="loadingCard">
         <div class="spinner" aria-hidden="true"></div>
         <div class="loadingText">
-          <div id="loadingTitle" class="loadingTitle">Loading…</div>
+          <div id="loadingTitle" class="loadingTitle">Loadingâ€¦</div>
           <div id="loadingSub" class="loadingSub muted tiny"></div>
           <div class="loadingBarWrap">
             <div id="loadingBar" class="loadingBar"></div>
@@ -1992,7 +2232,7 @@ COMMON ANCHORS
             <div class="keysLine"><span class="key">P</span><span class="desc">Coupling nudge toggle (shift pairing by 1 where supported)</span></div>
             <div class="keysLine"><span class="key">L</span><span class="desc">Toggle Loupe (magnifier Heads Up Display)</span></div>
             <div class="keysLine"><span class="key">Mouse wheel</span><span class="desc">Scroll (Long Strip) / Scrub pages (Auto)</span></div>
-            <div class="keysLine"><span class="key">Up / Down</span><span class="desc">Scroll (Long Strip / Double Page Scroll) • Pan overflow (MangaPlus Fit Width)</span></div>
+            <div class="keysLine"><span class="key">Up / Down</span><span class="desc">Scroll (Long Strip / Double Page Scroll) â€¢ Pan overflow (MangaPlus Fit Width)</span></div>
             <div class="keysLine"><span class="key">Shift + Up / Down</span><span class="desc">Bigger vertical steps (where supported)</span></div>
             <div class="keysLine"><span class="key">Space / Enter</span><span class="desc">Play / pause (Auto + Auto Flip)</span></div>
             <div class="keysLine"><span class="key">Numpad Enter</span><span class="desc">Confirm Go-to (when open)</span></div>
@@ -2075,7 +2315,7 @@ COMMON ANCHORS
     }
 
     if (window.electronAPI) {
-      // Electron mode: preload already set up electronAPI — load immediately.
+      // Electron mode: preload already set up electronAPI â€” load immediately.
       loadInOrder(0);
     } else if (typeof qt !== 'undefined') {
       // Butterfly mode: QWebChannel bridge will dispatch this event once ready.
@@ -2088,4 +2328,5 @@ COMMON ANCHORS
   </script>
 </body>
 </html>
+
 

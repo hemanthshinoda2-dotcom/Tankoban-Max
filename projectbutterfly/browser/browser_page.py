@@ -23,64 +23,28 @@ from PySide6.QtWebEngineCore import (
 # ---------------------------------------------------------------------------
 
 _ANTIBOT_JS = """
-// Hide webdriver flag
-Object.defineProperty(navigator, 'webdriver', { get: () => false });
-
-// Stub navigator.plugins (empty in headless = bot flag)
-Object.defineProperty(navigator, 'plugins', {
-    get: () => [1, 2, 3, 4, 5]
-});
-
-// Stub navigator.languages
-Object.defineProperty(navigator, 'languages', {
-    get: () => ['en-US', 'en']
-});
-
-// Stub window.chrome
-if (!window.chrome) {
-    window.chrome = { runtime: {} };
-}
-
-// Fix notification permission query (bot detection vector)
-if (navigator.permissions && navigator.permissions.query) {
-    const _origQuery = navigator.permissions.query.bind(navigator.permissions);
-    navigator.permissions.query = (params) => {
-        if (params.name === 'notifications') {
-            return Promise.resolve({ state: Notification.permission });
-        }
-        return _origQuery(params);
-    };
-}
-
-// --- Yandex-specific anti-captcha ---
-// Yandex SmartCaptcha checks these; making them look normal avoids triggers
-Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
-Object.defineProperty(navigator, 'deviceMemory', { get: () => 8 });
-Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
-
-// Canvas fingerprint randomization (tiny noise to avoid consistent hash)
+// Keep anti-bot surface conservative.
+// Aggressive fingerprint spoofing (canvas/WebGL/hardware overrides) can
+// increase captcha frequency due to inconsistent signals.
 (function() {
-    const _toDataURL = HTMLCanvasElement.prototype.toDataURL;
-    HTMLCanvasElement.prototype.toDataURL = function(type) {
-        const ctx = this.getContext('2d');
-        if (ctx) {
-            const style = ctx.fillStyle;
-            ctx.fillStyle = 'rgba(0,0,1,0.003)';
-            ctx.fillRect(0, 0, 1, 1);
-            ctx.fillStyle = style;
-        }
-        return _toDataURL.apply(this, arguments);
-    };
-})();
+    var host = String((location && location.hostname) || "").toLowerCase();
+    var isYandex = (host === "yandex.ru")
+        || host.endsWith(".yandex.ru")
+        || host.endsWith(".yandex.com")
+        || host.endsWith(".yandex.by")
+        || host.endsWith(".yandex.kz")
+        || host.endsWith(".yandex.uz")
+        || host.endsWith(".yandex.com.tr");
 
-// WebGL renderer spoofing
-(function() {
-    const getParam = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function(param) {
-        if (param === 37445) return 'Google Inc. (NVIDIA)';
-        if (param === 37446) return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1060, OpenGL 4.5)';
-        return getParam.apply(this, arguments);
-    };
+    // On Yandex domains, do not patch browser fingerprints.
+    if (isYandex) {
+        return;
+    }
+
+    // Minimal compatibility shim only.
+    if (!window.chrome) {
+        window.chrome = { runtime: {} };
+    }
 })();
 """
 

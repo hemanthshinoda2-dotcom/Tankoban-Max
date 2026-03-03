@@ -19,6 +19,7 @@ Handles:
 import argparse
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -34,9 +35,6 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngin
 import storage
 import bridge as bridge_module
 from player_ui import MpvContainer
-from qtroute_library_ui import QTRouteLibraryPanel
-from browser import ChromeBrowser
-import torrent_service
 from flaresolverr_bridge import FlareSolverrBridge
 
 # ---------------------------------------------------------------------------
@@ -69,10 +67,11 @@ APP_SECTION_ALIASES = {
     "video-player": "video",
     "web": "browser",
     "web-browser": "browser",
+    "sources": "sources",
 }
 
 VALID_SECTIONS = frozenset(
-    ["shell", "library", "comic", "book", "audiobook", "video", "browser", "torrent"]
+    ["shell", "library", "comic", "book", "audiobook", "video", "browser", "sources", "torrent"]
 )
 
 VIDEO_EXTENSIONS = frozenset(
@@ -234,11 +233,9 @@ class TankobanWindow(QMainWindow):
     """
     Main application window.
 
-    QStackedWidget layers:
-      - Native QTRoute library shell (Qt widgets)
-      - Legacy web frontend (existing renderer UI / readers)
-      - MpvContainer (native video render surface)
-      - ChromeBrowser (Chrome-like browser, lazy-created)
+    QStackedWidget with two layers:
+      index 0 = QWebEngineView  (existing renderer UI)
+      index 1 = MpvContainer    (mpv native render surface)
     """
 
     def __init__(self, app_section: str = "", dev_tools: bool = False):
@@ -247,6 +244,7 @@ class TankobanWindow(QMainWindow):
         self._app_section = app_section  # Stored for post-load routing
         self._renderer_loaded = False
         self._pending_open_queue = []
+        self._pending_sources_activate = False
 
         self.setWindowTitle(APP_NAME)
         self.setMinimumSize(800, 600)
@@ -294,43 +292,27 @@ class TankobanWindow(QMainWindow):
         settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
         settings.setAttribute(QWebEngineSettings.WebAttribute.LocalStorageEnabled, True)
 
+        self._stack.addWidget(self._web_view)  # index 0
+
         # --- QWebChannel bridge (replaces Electron preload + ipcMain) ---
         # Must be created before MpvContainer so player bridge exists.
         self._bridge = bridge_module.setup_bridge(self._web_view, self)
 
-        # --- Native QTRoute library shell (layer 0) ---
-        self._library_panel = QTRouteLibraryPanel(
-            self._bridge,
-            on_open_paths=self.queue_open_files,
-            on_open_video=self._open_video_path,
-            on_open_legacy=self.show_legacy_frontend,
-            parent=self,
-        )
-        self._stack.addWidget(self._library_panel)
-
-        # --- Legacy web frontend (layer 1) ---
-        self._stack.addWidget(self._web_view)
-
-        # --- MpvContainer (layer 2) ---
+        # --- MpvContainer (layer 1) ---
         # Hosts the mpv render surface + control widgets as direct siblings.
         # No covering overlay — controls are raised above the native HWND.
         self._mpv_container = MpvContainer(self._bridge.player, self)
-        self._stack.addWidget(self._mpv_container)
+        self._stack.addWidget(self._mpv_container)  # index 1
 
-        # --- ChromeBrowser (layer 2, lazy-created) ---
-        self._tankoweb: ChromeBrowser | None = None
+        # --- External Tanko Browser launcher state ---
+        self._aspect_proc: subprocess.Popen | None = None
+        self._aspect_launch_lock = threading.Lock()
 
         # --- FlareSolverr bridge (Cloudflare solver for Prowlarr) ---
         # Must be created on main thread (uses QWebEngineProfile).
         # Uses same profile as browser tabs so cookies are shared.
         self._flaresolverr = FlareSolverrBridge(self._profile, parent=self)
         self._flaresolverr.start()
-
-        # --- Torrent search (Jackett only — user-installed, not bundled) ---
-        self._jackett: torrent_service.JackettClient | None = None
-        # Detect Jackett in background thread to avoid blocking UI
-        self._torrent_init_thread = threading.Thread(target=self._detect_jackett, daemon=True)
-        self._torrent_init_thread.start()
 
         # --- Wire bridge instances with live Qt objects ---
         self._bridge.player.setMpvWidget(
@@ -369,13 +351,11 @@ class TankobanWindow(QMainWindow):
     def _on_load_finished(self, ok: bool):
         if ok:
             self._renderer_loaded = True
-            if self._app_section in {"comic", "book", "audiobook", "video", "browser", "torrent"}:
-                self.show_legacy_frontend()
-            else:
-                self.show_web_view()
             self.show()
             self.showMaximized()
             QTimer.singleShot(350, self._flush_open_file_queue)
+            if self._pending_sources_activate:
+                QTimer.singleShot(0, self.activate_sources_mode)
         else:
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
@@ -383,16 +363,61 @@ class TankobanWindow(QMainWindow):
     # --- Player widget switching ---
 
     def show_web_view(self):
-        """Switch to native QTRoute library shell."""
-        self._stack.setCurrentWidget(self._library_panel)
+        """Switch to the web UI layer."""
+        self._stack.setCurrentIndex(0)
 
-    def show_legacy_frontend(self):
-        """Switch to legacy web frontend (old readers/library shell)."""
-        self._stack.setCurrentWidget(self._web_view)
+    def activate_sources_mode(self):
+        """
+        Activate in-app Sources mode inside the renderer shell.
+
+        This keeps Sources as a first-class app section (same window/shell),
+        without spawning an external browser process.
+        """
+        self.show_web_view()
+        if not self._renderer_loaded:
+            self._pending_sources_activate = True
+            return {"ok": True, "deferred": True, "mode": "sources"}
+
+        self._pending_sources_activate = False
+        js = r"""
+            (function () {
+              function _ensureWebModules() {
+                try {
+                  var d = window.Tanko && window.Tanko.deferred ? window.Tanko.deferred : null;
+                  if (d && typeof d.ensureWebModulesLoadedLegacy === 'function') {
+                    return Promise.resolve(d.ensureWebModulesLoadedLegacy());
+                  }
+                  if (d && typeof d.ensureWebModulesLoaded === 'function') {
+                    return Promise.resolve(d.ensureWebModulesLoaded());
+                  }
+                } catch (_e) {}
+                return Promise.resolve();
+              }
+              _ensureWebModules().then(function () {
+                try {
+                  if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
+                    window.Tanko.modeRouter.setMode('sources', { force: true });
+                  } else if (typeof window.setMode === 'function') {
+                    window.setMode('sources');
+                  }
+                } catch (_eMode) {}
+                try {
+                  if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
+                    window.Tanko.sources.openSources();
+                  }
+                } catch (_eSources) {}
+              });
+            })();
+        """
+        try:
+            self._web_page.runJavaScript(js)
+            return {"ok": True, "mode": "sources"}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def show_player(self):
         """Switch to the mpv player layer and give keyboard focus to container."""
-        self._stack.setCurrentWidget(self._mpv_container)
+        self._stack.setCurrentIndex(1)
         try:
             self._mpv_container.setFocus(Qt.FocusReason.OtherFocusReason)
             self._mpv_container._show_controls()
@@ -434,11 +459,11 @@ class TankobanWindow(QMainWindow):
             if not p:
                 continue
             if is_comic_path(p):
-                self.show_legacy_frontend()
+                self.show_web_view()
                 self._bridge.library.emit_app_open_files([p], source=source)
                 return True
             if is_book_path(p):
-                self.show_legacy_frontend()
+                self.show_web_view()
                 self._bridge.library.emit_app_open_files([p], source=source)
                 return True
             if is_video_path(p):
@@ -465,39 +490,102 @@ class TankobanWindow(QMainWindow):
             print(f"[butterfly] Video launch failed: {out}")
         return out
 
-    # --- TankoWeb mode switching ---
+    # --- External Tanko Browser launch ---
 
-    def show_tankoweb(self):
-        """Switch to the Chrome-like browser panel (lazy-creates on first call)."""
-        if self._tankoweb is None:
-            self._tankoweb = ChromeBrowser(
-                profile=self._profile,
-                on_back=self.show_web_view,
-                on_window_action=self._tankoweb_window_action,
-                bridge_root=self._bridge,
-            )
-            self._stack.addWidget(self._tankoweb)  # index 2
+    def _resolve_aspect_browser_dir(self) -> Path | None:
+        env_dir = str(os.environ.get("TANKO_BROWSER_DIR", "") or "").strip()
+        candidates = []
+        if env_dir:
+            candidates.append(Path(env_dir))
+        candidates.extend([
+            PROJECT_ROOT.parent / "aspect-browser",
+            PROJECT_ROOT / "apps" / "aspect-browser",
+            Path(r"D:\Hemanth's Folder\aspect-browser"),
+        ])
+        for c in candidates:
+            try:
+                if c.is_dir():
+                    return c
+            except Exception:
+                continue
+        return None
 
-        self._stack.setCurrentWidget(self._tankoweb)
+    def _spawn_detached(self, argv, cwd: Path | None = None) -> subprocess.Popen:
+        kwargs = {
+            "stdin": subprocess.DEVNULL,
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "cwd": str(cwd) if cwd else None,
+        }
+        if sys.platform == "win32":
+            flags = getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            kwargs["creationflags"] = flags
+        return subprocess.Popen(argv, **kwargs)
 
-    def _detect_jackett(self):
-        """Detect a running Jackett instance (not bundled, user-installed)."""
-        try:
-            client = torrent_service.detect_jackett()
-            if client:
-                self._jackett = client
-            else:
-                print("[torrent] Jackett: not detected (install Jackett and start it to use)")
-        except Exception as e:
-            print(f"[torrent] Jackett detection error: {e}")
+    def launch_tanko_browser(self):
+        """
+        Launch external Aspect browser (Tanko Browser).
+        Reuses an existing spawned process if it is still running.
+        """
+        with self._aspect_launch_lock:
+            if self._aspect_proc is not None:
+                try:
+                    if self._aspect_proc.poll() is None:
+                        return {"ok": True, "alreadyRunning": True}
+                except Exception:
+                    pass
+                self._aspect_proc = None
 
-    def _tankoweb_window_action(self, action):
-        if action == "minimize":
-            self.showMinimized()
-        elif action == "maximize":
-            self.toggle_fullscreen()
-        elif action == "close":
-            self.close()
+            aspect_dir = self._resolve_aspect_browser_dir()
+            if not aspect_dir:
+                return {
+                    "ok": False,
+                    "error": "Aspect browser directory not found. Set TANKO_BROWSER_DIR or place it at D:\\Hemanth's Folder\\aspect-browser",
+                }
+
+            package_json = aspect_dir / "package.json"
+            if package_json.is_file():
+                try:
+                    electron_exe_candidates = [
+                        aspect_dir / "node_modules" / "electron" / "dist" / "electron.exe",
+                        aspect_dir / "node_modules" / ".bin" / "electron.exe",
+                    ]
+                    electron_exe = None
+                    for c in electron_exe_candidates:
+                        if c.is_file():
+                            electron_exe = c
+                            break
+                    if electron_exe:
+                        self._aspect_proc = self._spawn_detached([str(electron_exe), "."], cwd=aspect_dir)
+                        print(f"[tanko-browser] launched via electron binary: {electron_exe}")
+                        return {"ok": True, "launcher": "electron", "cwd": str(aspect_dir)}
+                except Exception as e:
+                    return {"ok": False, "error": f"Failed to launch Aspect via local electron binary: {e}"}
+
+            exe_candidates = [
+                aspect_dir / "Tankoban Browser.exe",
+                aspect_dir / "TankoBrowser.exe",
+                aspect_dir / "Aspect Browser.exe",
+                aspect_dir / "dist" / "Tankoban Browser.exe",
+                aspect_dir / "dist" / "TankoBrowser.exe",
+                aspect_dir / "dist" / "Aspect Browser.exe",
+                aspect_dir / "dist" / "win-unpacked" / "Tankoban Browser.exe",
+                aspect_dir / "dist" / "win-unpacked" / "TankoBrowser.exe",
+                aspect_dir / "dist" / "win-unpacked" / "Aspect Browser.exe",
+            ]
+            for exe in exe_candidates:
+                try:
+                    if exe.is_file():
+                        self._aspect_proc = self._spawn_detached([str(exe)], cwd=exe.parent)
+                        print(f"[tanko-browser] launched via executable: {exe}")
+                        return {"ok": True, "launcher": "exe", "path": str(exe)}
+                except Exception as e:
+                    return {"ok": False, "error": f"Failed to launch {exe}: {e}"}
+
+            return {
+                "ok": False,
+                "error": f"No launch target found in {aspect_dir}. Expected *.exe or package.json",
+            }
 
     # --- DevTools ---
 
@@ -631,7 +719,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--app-section", "--section", "--app",
         dest="app_section", default="",
-        help="Boot directly into a section (library, comic, book, audiobook, video, browser, torrent)"
+        help="Boot directly into a section (library, comic, book, audiobook, video, browser, sources, torrent). browser/sources/torrent route to in-app Sources mode."
     )
     parser.add_argument(
         "--dev-tools", action="store_true", default=False,
@@ -724,6 +812,10 @@ def main():
     def _on_about_to_quit():
         try:
             win._bridge.player.shutdown()
+        except Exception:
+            pass
+        try:
+            win._bridge.webTabManager.shutdown()
         except Exception:
             pass
         try:

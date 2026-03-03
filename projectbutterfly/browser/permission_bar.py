@@ -10,7 +10,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QWidget, QHBoxLayout, QLabel, QPushButton,
+    QWidget, QHBoxLayout, QLabel, QPushButton, QCheckBox,
 )
 from PySide6.QtWebEngineCore import QWebEnginePage
 
@@ -43,10 +43,11 @@ class PermissionBar(QWidget):
     Inline bar that appears when a site requests a permission.
 
     Signals:
-        permission_decided(QUrl, Feature, bool): origin, feature, granted
+        permission_decided(QUrl, Feature, bool, bool):
+            origin, feature, granted, remember
     """
 
-    permission_decided = Signal(object, object, bool)  # origin, feature, granted
+    permission_decided = Signal(object, object, bool, bool)  # origin, feature, granted, remember
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -73,6 +74,28 @@ class PermissionBar(QWidget):
         self._text_label = QLabel()
         self._text_label.setStyleSheet(f"color: {theme.TEXT_PRIMARY}; font-size: 13px; font-family: 'Segoe UI';")
         layout.addWidget(self._text_label, 1)
+
+        self._remember_chk = QCheckBox("Remember this decision")
+        self._remember_chk.setChecked(True)
+        self._remember_chk.setStyleSheet(f"""
+            QCheckBox {{
+                color: {theme.TEXT_SECONDARY};
+                font-size: 12px;
+                font-family: 'Segoe UI';
+            }}
+            QCheckBox::indicator {{
+                width: 14px;
+                height: 14px;
+                border: 1px solid {theme.BORDER_COLOR};
+                border-radius: 3px;
+                background: rgba(255,255,255,0.03);
+            }}
+            QCheckBox::indicator:checked {{
+                background: {theme.ACCENT};
+                border-color: {theme.ACCENT};
+            }}
+        """)
+        layout.addWidget(self._remember_chk)
 
         self._allow_btn = QPushButton("Allow")
         self._allow_btn.setStyleSheet(f"""
@@ -129,6 +152,7 @@ class PermissionBar(QWidget):
         """Show the permission bar for a given origin and feature."""
         self._origin = origin
         self._feature = feature
+        self._remember_chk.setChecked(True)
 
         host = origin.host() if hasattr(origin, 'host') else str(origin)
         perm_name = _PERMISSION_NAMES.get(feature, "a permission")
@@ -140,7 +164,12 @@ class PermissionBar(QWidget):
 
     def _decide(self, granted: bool):
         if self._origin and self._feature is not None:
-            self.permission_decided.emit(self._origin, self._feature, granted)
+            self.permission_decided.emit(
+                self._origin,
+                self._feature,
+                granted,
+                bool(self._remember_chk.isChecked()),
+            )
         self._origin = None
         self._feature = None
         self.setVisible(False)

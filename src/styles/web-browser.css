@@ -217,88 +217,38 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: none !important;
 }
 
-/* Sources panel order: Browser -> Search -> Torrents */
+/* Sources panel order: Browser -> Downloads -> Search -> Torrents */
 #webHomeView .sourcesBrowserPanel {
   order: 1;
 }
 
-#webHomeView .sourcesSearchPanel {
+#webHomeView .sourcesBrowserDownloadsPanel {
   order: 2;
 }
 
-#webHomeView .sourcesTorrentPanel {
+#webHomeView .sourcesSearchPanel {
   order: 3;
 }
 
-.sourcesBrowserPanel {
+#webHomeView .sourcesTorrentPanel {
+  order: 4;
+}
+
+.sourcesBrowserPanel,
+.sourcesBrowserDownloadsPanel {
   margin-bottom: 10px;
-  display: flex;
-  flex-direction: column;
-  min-height: clamp(560px, calc(100vh - 130px), 1100px);
 }
 
-.sourcesBrowserTopBar {
+.sourcesBrowserTabStrip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px;
+  gap: 8px;
   margin-bottom: 8px;
-  flex-wrap: nowrap;
-}
-
-#sourcesBrowserStatus {
-  display: none !important;
-}
-
-.sourcesBrowserIconBtn {
-  width: 30px;
-  min-width: 30px;
-  padding: 0;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.sourcesBrowserBtnIcon {
-  width: 14px;
-  height: 14px;
-  display: block;
-  fill: currentColor;
-}
-
-.sourcesBrowserBookmarkIcon {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linejoin: round;
-}
-
-.sourcesBrowserIconBtn.isBookmarked {
-  color: var(--wb-accent);
-  border-color: rgba(var(--accent-rgb), 0.45);
-}
-
-.sourcesBrowserIconBtn.isBookmarked .sourcesBrowserBookmarkIcon {
-  fill: currentColor;
-  stroke: currentColor;
-}
-
-#sourcesBrowserBackBtn,
-#sourcesBrowserForwardBtn,
-#sourcesBrowserReloadBtn,
-#sourcesBrowserHomeBtn,
-#sourcesBrowserBookmarkBtn,
-#sourcesBrowserBookmarksBtn,
-#sourcesBrowserHistoryBtn,
-#sourcesBrowserDownloadsBtn {
-  flex: 0 0 auto;
 }
 
 .sourcesBrowserTabList {
-  flex: 1 1 42%;
-  min-width: 140px;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   gap: 6px;
   overflow-x: auto;
@@ -310,9 +260,9 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  max-width: 170px;
-  min-width: 72px;
-  padding: 3px 7px;
+  max-width: 210px;
+  min-width: 80px;
+  padding: 4px 8px;
   border: 1px solid var(--wb-border-subtle);
   border-radius: 10px;
   background: rgba(20, 27, 36, 0.85);
@@ -334,15 +284,15 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 .sourcesBrowserTabTitle {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .sourcesBrowserTabClose {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -358,61 +308,50 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 
 .sourcesBrowserNewTabBtn {
   flex: 0 0 auto;
-  width: 28px;
-  min-width: 28px;
+  width: 30px;
+  min-width: 30px;
   padding: 0;
+  font-weight: 700;
 }
 
-.sourcesBrowserOmniHost {
-  flex: 1 1 38%;
-  min-width: 150px;
-  max-width: 520px;
+.sourcesBrowserToolbar {
   display: flex;
   align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  margin-bottom: 8px;
 }
 
-.sourcesBrowserOmniChip {
+#sourcesBrowserStatus {
+  display: none !important;
+}
+
+.sourcesBrowserIconBtn {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+#sourcesBrowserBackBtn,
+#sourcesBrowserForwardBtn,
+#sourcesBrowserReloadBtn,
+#sourcesBrowserGoBtn,
+#sourcesBrowserBookmarkBtn,
+#sourcesBrowserHistoryBtn {
+  flex: 0 0 auto;
+}
+
+#sourcesBrowserUrlInput {
   width: 100%;
-  justify-content: flex-start;
-  color: var(--wb-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 10px;
+  min-width: 0;
 }
 
 .sourcesBrowserOmniWrap {
   position: relative;
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-
-.sourcesBrowserOmniHost.isExpanded .sourcesBrowserOmniChip {
-  display: none !important;
-}
-
-.sourcesBrowserOmniHost:not(.isExpanded) .sourcesBrowserOmniWrap {
-  display: none !important;
-}
-
-.sourcesBrowserOmniHost:not(.isExpanded) #sourcesBrowserGoBtn {
-  display: none !important;
-}
-
-#sourcesBrowserUrlInput {
-  width: auto;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-#sourcesBrowserGoBtn {
-  flex: 0 0 30px;
-  width: 30px;
-  min-width: 30px;
 }
 
 .sourcesBrowserOmniDropdown {
@@ -466,12 +405,12 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 
 .sourcesBrowserViewport {
   position: relative;
-  flex: 1 1 auto;
-  min-height: 0;
   border: 1px solid var(--wb-border-subtle);
   border-radius: 8px;
   overflow: hidden;
   background: rgba(10, 16, 24, 0.92);
+  /* Desktop-first: make the embedded browser feel near-maximized. */
+  height: clamp(480px, calc(100vh - 210px), 980px);
 }
 
 #sourcesBrowserHome {
@@ -503,13 +442,6 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 
 .sourcesBrowserHomeSection {
   margin-top: 14px;
-}
-
-.sourcesBrowserHomeSectionHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .sourcesBrowserHomeSectionTitle {
@@ -584,25 +516,6 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   object-fit: cover;
 }
 
-.sourcesBrowserHomeEmbeddedRoot {
-  margin-top: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.sourcesBrowserHomeEmbeddedRoot .panel {
-  margin: 0;
-}
-
-.sourcesBrowserHomeDownloadsSection {
-  margin-top: 14px;
-}
-
-.sourcesBrowserHomeDownloadsWrap {
-  margin-top: 8px;
-}
-
 #sourcesBrowserWebview {
   position: absolute;
   inset: 0;
@@ -626,6 +539,12 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: flex;
 }
 
+@media (max-height: 820px) {
+  .sourcesBrowserViewport {
+    height: clamp(360px, calc(100vh - 180px), 760px);
+  }
+}
+
 #sourcesBrowserReloadBtn.isLoading {
   pointer-events: auto;
 }
@@ -635,74 +554,31 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: inline-block;
   width: 12px;
   height: 12px;
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  margin-left: -6px;
-  margin-top: -6px;
   border: 2px solid rgba(255, 255, 255, 0.35);
   border-top-color: #fff;
   border-radius: 50%;
   animation: sourcesBrowserSpin 0.9s linear infinite;
 }
 
-#sourcesBrowserReloadBtn.isLoading .sourcesBrowserBtnIcon {
-  opacity: 0;
+#sourcesBrowserReloadBtn.isLoading {
+  color: transparent !important;
 }
 
-.sourcesBrowserDrawerOverlay {
-  position: absolute;
-  inset: 0;
-  z-index: 14;
-  background: rgba(2, 6, 10, 0.35);
+#sourcesBrowserReloadBtn.isLoading > * {
+  display: none !important;
 }
 
-.sourcesBrowserDrawer {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(440px, 44vw);
-  min-width: 320px;
-  z-index: 15;
-  border-left: 1px solid var(--wb-border-subtle);
-  background: rgba(12, 18, 27, 0.98);
-  box-shadow: -12px 0 28px rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-}
-
-.sourcesBrowserDrawerHead {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--wb-border-subtle);
-}
-
-.sourcesBrowserDrawerTitle {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--wb-accent);
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-}
-
-.sourcesBrowserDrawerPanel {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-}
-
-.sourcesBrowserDrawerPanel .sourcesSearchTableWrap,
-.sourcesBrowserDrawerPanel .sourcesBrowserHistoryListWrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  max-height: none;
+#sourcesBrowserStatus[data-loading="1"]::before {
+  content: '';
+  display: inline-block;
+  vertical-align: -2px;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sourcesBrowserSpin 0.9s linear infinite;
 }
 
 .sourcesBrowserHistoryListWrap {

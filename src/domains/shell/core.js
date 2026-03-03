@@ -68,11 +68,11 @@ SECTION INDEX (search: ══════ SECTION:)
     if (bootReady) flushPendingExternalOpen(); // fire-and-forget
   };
 
-  async function openExternalFilePath(filePath, source = 'unknown') {
+  async function openExternalComicPath(filePath, source = 'unknown') {
     try {
-      const res = await Tanko.api.library.bookFromPath(filePath);
-      const book = res?.book || null;
-      if (!res?.ok || !book?.path) return false;
+      var res = await Tanko.api.library.bookFromPath(filePath);
+      var book = res && res.book ? res.book : null;
+      if (!res || !res.ok || !book || !book.path) return false;
 
       // Save current progress before switching (matches Open File button behavior).
       try { await saveProgressNowSilent(); } catch {}
@@ -81,6 +81,48 @@ SECTION INDEX (search: ══════ SECTION:)
     } catch {
       return false;
     }
+  }
+
+  async function openExternalBookPath(filePath, source = 'unknown') {
+    try {
+      var api = (window.Tanko && window.Tanko.api) ? window.Tanko.api : (window.electronAPI || null);
+      if (!api || !api.books || typeof api.books.bookFromPath !== 'function') return false;
+
+      var res = await api.books.bookFromPath(filePath);
+      var book = res && res.book ? res.book : null;
+      if (!res || !res.ok || !book || !book.path) return false;
+
+      // Ensure books domain is loaded before switching/opening.
+      try {
+        if (window.Tanko && window.Tanko.deferred &&
+            typeof window.Tanko.deferred.ensureBooksModulesLoaded === 'function') {
+          await window.Tanko.deferred.ensureBooksModulesLoaded();
+        }
+      } catch {}
+
+      try {
+        if (window.Tanko && window.Tanko.modeRouter &&
+            typeof window.Tanko.modeRouter.setMode === 'function') {
+          await window.Tanko.modeRouter.setMode('books');
+        } else if (typeof window.setMode === 'function') {
+          window.setMode('books');
+        }
+      } catch {}
+
+      if (window.booksApp && typeof window.booksApp.openBook === 'function') {
+        await window.booksApp.openBook(book);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
+  async function openExternalFilePath(filePath, source = 'unknown') {
+    var comicOk = await openExternalComicPath(filePath, source);
+    if (comicOk) return true;
+    return openExternalBookPath(filePath, source);
   }
 
   async function flushPendingExternalOpen() {
@@ -95,7 +137,7 @@ SECTION INDEX (search: ══════ SECTION:)
       if (extra) toast(`Opening 1 of ${paths.length} files (others ignored)`);
 
       const ok = await openExternalFilePath(first, source);
-      if (!ok) toast('Unsupported or missing comic file');
+      if (!ok) toast('Unsupported or missing file');
       return ok;
     } finally {
       externalOpenInFlight = false;
@@ -110,14 +152,14 @@ SECTION INDEX (search: ══════ SECTION:)
   } catch {}
 
   // Drag & Drop open (global, lightweight)
-  const hasComicExt = (p) => /\.(cbz|cbr)$/i.test(String(p || ''));
+  const hasOpenableExt = (p) => /\.(cbz|cbr|epub|pdf|txt|mobi|fb2)$/i.test(String(p || ''));
 
   document.addEventListener('dragover', (e) => {
     const dt = e.dataTransfer;
     if (!dt) return;
     const files = Array.from(dt.files || []);
     if (!files.length) return;
-    if (!files.some(f => hasComicExt(f?.path))) return;
+    if (!files.some(f => hasOpenableExt(f?.path))) return;
     e.preventDefault();
   });
 
@@ -127,7 +169,7 @@ SECTION INDEX (search: ══════ SECTION:)
     const files = Array.from(dt.files || []);
     if (!files.length) return;
 
-    const f = files.find(ff => hasComicExt(ff?.path));
+    const f = files.find(ff => hasOpenableExt(ff?.path));
     if (!f?.path) return;
 
     e.preventDefault();

@@ -1,0 +1,283 @@
+{
+  "meta": {
+    "capturedAt": 0,
+    "workspace": "<WORKSPACE>",
+    "userData": "<USER_DATA>"
+  },
+  "comics": {
+    "initialState": {
+      "seriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "rootFolders": [
+        "<WORKSPACE>\\comics_root"
+      ],
+      "ignoredSeries": [],
+      "scanIgnore": [],
+      "autoSeriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "effectiveSeriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "series": [],
+      "books": [],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null
+    },
+    "afterScan": {
+      "seriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "rootFolders": [
+        "<WORKSPACE>\\comics_root"
+      ],
+      "ignoredSeries": [],
+      "scanIgnore": [],
+      "autoSeriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "effectiveSeriesFolders": [
+        "<WORKSPACE>\\comics_root\\SeriesOne"
+      ],
+      "series": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmU",
+          "name": "SeriesOne",
+          "path": "<WORKSPACE>\\comics_root\\SeriesOne",
+          "count": 2,
+          "newestMtimeMs": 1700000002000
+        }
+      ],
+      "books": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmVcY2hhcHRlci0wMDEuY2J6OjoxNTo6MTcwMDAwMDAwMTAwMA",
+          "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmU",
+          "title": "chapter-001",
+          "path": "<WORKSPACE>\\comics_root\\SeriesOne\\chapter-001.cbz",
+          "size": 15,
+          "mtimeMs": 1700000001000,
+          "ext": "CBZ"
+        },
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmVcY2hhcHRlci0wMDIuY2JyOjoxNTo6MTcwMDAwMDAwMjAwMA",
+          "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmU",
+          "title": "chapter-002",
+          "path": "<WORKSPACE>\\comics_root\\SeriesOne\\chapter-002.cbr",
+          "size": 15,
+          "mtimeMs": 1700000002000,
+          "ext": "CBR"
+        }
+      ],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null
+    },
+    "events": [
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": "SeriesOne"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": "SeriesOne"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": "SeriesOne"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "progress": {
+            "seriesDone": 0,
+            "seriesTotal": 1,
+            "currentSeries": "SeriesOne"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      }
+    ],
+    "mutations": {
+      "setScanIgnore": {
+        "seriesFolders": [
+          "<WORKSPACE>\\comics_root\\SeriesOne"
+        ],
+        "rootFolders": [
+          "<WORKSPACE>\\comics_root"
+        ],
+        "ignoredSeries": [],
+        "scanIgnore": [
+          "tmp",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      },
+      "removeRootFolder": {
+        "seriesFolders": [
+          "<WORKSPACE>\\comics_root\\SeriesOne"
+        ],
+        "rootFolders": [],
+        "ignoredSeries": [],
+        "scanIgnore": [
+          "tmp",
+          "cache"
+        ],
+        "error": null,
+        "ok": true
+      },
+      "addRootFolder": {
+        "seriesFolders": [
+          "<WORKSPACE>\\comics_root\\SeriesOne"
+        ],
+        "rootFolders": [
+          "<WORKSPACE>\\comics_root"
+        ],
+        "ignoredSeries": [],
+        "scanIgnore": [
+          "tmp",
+          "cache"
+        ],
+        "error": null,
+        "ok": true,
+        "folder": "<WORKSPACE>\\comics_root"
+      }
+    },
+    "lookup": {
+      "ok": true,
+      "book": {
+        "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmVcY2hhcHRlci0wMDEuY2J6OjoxNTo6MTcwMDAwMDAwMTAwMA",
+        "seriesId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVxjb21pY3Nfcm9vdFxTZXJpZXNPbmU",
+        "seriesName": "SeriesOne",
+        "title": "chapter-001",
+        "path": "<WORKSPACE>\\comics_root\\SeriesOne\\chapter-001.cbz",
+        "size": 15,
+        "mtimeMs": 1700000001000,
+        "ext": "CBZ"
+      }
+    }
+  }
+}

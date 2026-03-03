@@ -1,0 +1,137 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bookmarks</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #202124;
+    color: #e8eaed;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 28px;
+  }
+  h1 { font-size: 28px; font-weight: 400; margin-bottom: 16px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    background: #292a2d;
+    color: #e8eaed;
+    border: 1px solid #5f6368;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .btn:hover { background: rgba(255,255,255,.08); }
+  .btn-danger { color: #ea4335; border-color: rgba(234,67,53,.45); }
+  .list { border: 1px solid #3c4043; border-radius: 10px; overflow: hidden; }
+  .row {
+    display: grid;
+    grid-template-columns: .9fr 1.4fr auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    border-bottom: 1px solid #303134;
+    background: #26272b;
+  }
+  .row:last-child { border-bottom: none; }
+  .field {
+    width: 100%;
+    background: #202124;
+    color: #e8eaed;
+    border: 1px solid #5f6368;
+    border-radius: 6px;
+    padding: 7px 8px;
+    font-size: 12px;
+    outline: none;
+  }
+  .field:focus { border-color: #8ab4f8; }
+  .actions { display: flex; gap: 6px; }
+  .empty { color: #9aa0a6; padding: 22px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Bookmarks</h1>
+<div class="toolbar">
+  <button class="btn" onclick="reloadBookmarks()">Refresh</button>
+</div>
+<div id="bookmarksList" class="list"></div>
+
+<script>
+  var bookmarks = [];
+
+  function dispatchCommand(url) {
+    var cmd = String(url || '').trim();
+    if (!cmd) {
+      return;
+    }
+    var frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    frame.src = cmd;
+    frame.onload = frame.onerror = function() {
+      setTimeout(function() { frame.remove(); }, 0);
+    };
+    document.body.appendChild(frame);
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
+  }
+
+  function render() {
+    var host = document.getElementById('bookmarksList');
+    if (!bookmarks.length) {
+      host.innerHTML = '<div class="empty">No bookmarks yet</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < bookmarks.length; i += 1) {
+      var b = bookmarks[i] || {};
+      var id = encodeURIComponent(String(b.id || ''));
+      var title = esc(b.title || '');
+      var url = esc(b.url || '');
+
+      html += '<div class="row">';
+      html += '<input class="field" id="bm-title-' + i + '" value="' + title + '" placeholder="Title">';
+      html += '<input class="field" id="bm-url-' + i + '" value="' + url + '" placeholder="URL">';
+      html += '<div class="actions">';
+      html += '<button class="btn" onclick="saveBookmark(' + i + ', \'' + id + '\')">Save</button>';
+      html += '<button class="btn btn-danger" onclick="removeBookmark(\'' + id + '\')">Remove</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    host.innerHTML = html;
+  }
+
+  function setBookmarksData(rows) {
+    bookmarks = Array.isArray(rows) ? rows.slice() : [];
+    render();
+  }
+
+  function reloadBookmarks() {
+    dispatchCommand('tanko-browser://bookmarks-reload');
+  }
+
+  function removeBookmark(id) {
+    dispatchCommand('tanko-browser://bookmarks-delete?id=' + id);
+  }
+
+  function saveBookmark(index, id) {
+    var titleEl = document.getElementById('bm-title-' + index);
+    var urlEl = document.getElementById('bm-url-' + index);
+    if (!urlEl) {
+      return;
+    }
+    var title = encodeURIComponent(titleEl ? titleEl.value : '');
+    var url = encodeURIComponent(urlEl.value || '');
+    dispatchCommand('tanko-browser://bookmarks-update?id=' + id + '&title=' + title + '&url=' + url);
+  }
+
+  window.setBookmarksData = setBookmarksData;
+  reloadBookmarks();
+</script>
+</body>
+</html>

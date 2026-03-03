@@ -43,6 +43,7 @@ class DownloadItem(QWidget):
     """Single download in the shelf."""
 
     dismissed = Signal(object)  # self
+    open_requested = Signal(str)
 
     def __init__(self, download: QWebEngineDownloadRequest, parent=None):
         super().__init__(parent)
@@ -169,8 +170,7 @@ class DownloadItem(QWidget):
             if self._done:
                 path = self._download.downloadDirectory() + "/" + self._download.downloadFileName()
                 if os.path.exists(path):
-                    import subprocess
-                    subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+                    self.open_requested.emit(os.path.normpath(path))
 
     def enterEvent(self, event):
         self._hovered = True
@@ -191,6 +191,7 @@ class DownloadsShelf(QWidget):
 
     Auto-shows when a download starts, auto-hides when all dismissed.
     """
+    open_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -251,6 +252,7 @@ class DownloadsShelf(QWidget):
         """Add a new download to the shelf."""
         item = DownloadItem(download, self)
         item.dismissed.connect(self._on_item_dismissed)
+        item.open_requested.connect(self.open_requested.emit)
 
         # Insert before stretch
         self._row.insertWidget(self._row.count() - 1, item)

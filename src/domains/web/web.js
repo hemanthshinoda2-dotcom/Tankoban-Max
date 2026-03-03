@@ -1,4 +1,4 @@
-// Tankoban Max — Web browser mode orchestrator (FEAT-BROWSER Phase 3 rewrite)
+// Tankoban Max â€” Web browser mode orchestrator (FEAT-BROWSER Phase 3 rewrite)
 // Replaces 8,973-line monolith with thin orchestrator that delegates to modules.
 (function webBrowserDomain() {
   'use strict';
@@ -7,13 +7,13 @@
 
   var api = window.Tanko && window.Tanko.api ? window.Tanko.api : null;
   if (!api || !api.webSources) {
-    console.warn('[web.js] Tanko.api.webSources not available — aborting');
+    console.warn('[web.js] Tanko.api.webSources not available â€” aborting');
     return;
   }
 
   window.__tankoWebBrowserBound = true;
 
-  // ── Butterfly (Qt) detection ──
+  // â”€â”€ Butterfly (Qt) detection â”€â”€
   var isButterfly = !!(window.__tankoButterfly);
 
   function getTabByBridgeId(bridgeId) {
@@ -24,7 +24,7 @@
     return null;
   }
 
-  // ── DOM element cache ──
+  // â”€â”€ DOM element cache â”€â”€
 
   function qs(id) {
     try { return document.getElementById(id); } catch (e) { return null; }
@@ -325,7 +325,7 @@
     sourcesUnhideBtn: qs('sourcesUnhideBtn'),
   };
 
-  // ── Shared state ──
+  // â”€â”€ Shared state â”€â”€
 
   var MAX_BROWSING_HISTORY_UI = 500;
   var SOURCES_MAX_TABS = 20;
@@ -431,6 +431,9 @@
     sourcesBrowserLoadSettleTimer: 0,
     sourcesBrowserNavPollTimer: 0,
     sourcesBrowserLayoutSettleTimer: 0,
+    sourcesBrowserViewportSyncTimer: 0,
+    sourcesBrowserViewportSyncBound: false,
+    sourcesBrowserViewportHidden: false,
     sourcesBrowserNavToken: 0,
     sourcesBrowserRecoveryNavToken: -1,
     sourcesBrowserRecoveryStage: 0,
@@ -463,7 +466,7 @@
     sourcesBridgeContextMenuBound: false,
   };
 
-  // ── Event bus ──
+  // â”€â”€ Event bus â”€â”€
 
   var _bus = Object.create(null);
 
@@ -480,7 +483,7 @@
     }
   }
 
-  // ── Utility functions (shared via bridge.deps) ──
+  // â”€â”€ Utility functions (shared via bridge.deps) â”€â”€
 
   function escapeHtml(str) {
     var div = document.createElement('div');
@@ -834,7 +837,6 @@
   }
 
   function renderSourcesBrowserTabStrip() {
-    if (isButterfly) return; // QTabBar in BrowserWidget manages tabs natively
     if (!el.sourcesBrowserTabList) return;
     var html = '';
     for (var i = 0; i < state.sourcesTabs.length; i++) {
@@ -1026,7 +1028,7 @@
     scheduleSourcesBrowserViewportLayout();
     if (options.focus && !tab.home) {
       if (isButterfly) {
-        // Focus is handled by Qt overlay — no webview DOM to focus
+        // Focus is handled by Qt overlay â€” no webview DOM to focus
       } else if (tab.webview && typeof tab.webview.focus === 'function') {
         setTimeout(function () { try { tab.webview.focus(); } catch (_eFocus) {} }, 0);
       }
@@ -1420,7 +1422,7 @@
     var sendCtx = function (name, payload) {
       if (!api.webBrowserActions || typeof api.webBrowserActions.ctxAction !== 'function') return;
       if (isButterfly) {
-        // Butterfly: ctxAction operates on the page set by switchTab — no wcId needed
+        // Butterfly: ctxAction operates on the page set by switchTab â€” no wcId needed
         api.webBrowserActions.ctxAction({ webContentsId: 0, action: name, payload: payload });
       } else {
         if (!wcId) return;
@@ -1718,7 +1720,7 @@
     var id = 'st_' + String(state.sourcesTabSeq++);
 
     if (isButterfly) {
-      // Butterfly: Qt manages QWebEngineView natively — no DOM webview
+      // Butterfly: Qt manages QWebEngineView natively â€” no DOM webview
       var tab = {
         id: id,
         webview: null,
@@ -1748,7 +1750,7 @@
         tab.url = target;
         tab.loading = true;
       }
-      // Butterfly: for home tabs, show content immediately — don't wait for the bridge
+      // Butterfly: for home tabs, show content immediately â€” don't wait for the bridge
       // round-trip. The createTab Promise can take 5-60s on first call (Chromium
       // browser-profile init), leaving the panel blank the whole time. Showing the
       // home div now gives instant feedback; switchSourcesTab() re-runs on resolve.
@@ -2145,7 +2147,46 @@
 
   function applySourcesBrowserViewportLayout() {
     if (isButterfly) {
-      // Native Qt browser — BrowserWidget QStackedWidget manages its own geometry.
+      var viewportEl = el.sourcesBrowserWebview ? el.sourcesBrowserWebview.parentElement : null;
+      if (!viewportEl && el.sourcesBrowserPanel) viewportEl = el.sourcesBrowserPanel.querySelector('.sourcesBrowserViewport');
+      if (!viewportEl) return;
+      var rect = null;
+      try { rect = viewportEl.getBoundingClientRect(); } catch (_eRect) { rect = null; }
+      var rawWidth = Math.max(0, Math.round(Number(rect && rect.width) || Number(viewportEl.clientWidth) || 0));
+      var rawHeight = Math.max(0, Math.round(Number(rect && rect.height) || Number(viewportEl.clientHeight) || 0));
+      var rawX = Math.round(Number(rect && rect.left) || 0);
+      var rawY = Math.round(Number(rect && rect.top) || 0);
+      var winW = Math.max(0, Number(window.innerWidth || document.documentElement.clientWidth || 0));
+      var winH = Math.max(0, Number(window.innerHeight || document.documentElement.clientHeight || 0));
+      var clipLeft = Math.max(0, rawX);
+      var clipTop = Math.max(0, rawY);
+      var clipRight = Math.min(winW, rawX + rawWidth);
+      var clipBottom = Math.min(winH, rawY + rawHeight);
+      var width = Math.max(0, Math.round(clipRight - clipLeft));
+      var height = Math.max(0, Math.round(clipBottom - clipTop));
+      var x = Math.round(clipLeft);
+      var y = Math.round(clipTop);
+      var intersectsViewport = width > 4 && height > 4;
+      var activeTab = getSourcesActiveTab();
+      var activeHome = !!(activeTab && activeTab.home);
+      var visible = !viewportEl.classList.contains('hidden')
+        && !!(el.webLibraryView && !el.webLibraryView.classList.contains('hidden'))
+        && !!(el.homeView && !el.homeView.classList.contains('hidden'))
+        && intersectsViewport
+        && !state.sourcesBrowserOverlayLocked
+        && !activeHome;
+      try {
+        if (api.webTabManager && typeof api.webTabManager.setViewportBounds === 'function') {
+          api.webTabManager.setViewportBounds({
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            visible: visible,
+            dpr: Number(window.devicePixelRatio || 1),
+          });
+        }
+      } catch (_eHostBounds) {}
       return;
     }
     // Electron: position <webview> via CSS
@@ -2213,6 +2254,62 @@
   function runSourcesBrowserRenderWatchdog() {
     scheduleSourcesBrowserViewportLayout();
     runSourcesBrowserRecoveryPass();
+  }
+
+  function shouldTrackSourcesViewport() {
+    if (!el.webLibraryView || el.webLibraryView.classList.contains('hidden')) return false;
+    if (!el.homeView || el.homeView.classList.contains('hidden')) return false;
+    return true;
+  }
+
+  function startSourcesBrowserViewportSyncLoop() {
+    if (state.sourcesBrowserViewportSyncTimer) return;
+    state.sourcesBrowserViewportSyncTimer = setInterval(function () {
+      if (!shouldTrackSourcesViewport()) {
+        if (!state.sourcesBrowserViewportHidden && isButterfly) {
+          try {
+            if (api.webTabManager && typeof api.webTabManager.setViewportBounds === 'function') {
+              api.webTabManager.setViewportBounds({
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                visible: false,
+                dpr: Number(window.devicePixelRatio || 1),
+              });
+            }
+          } catch (_eHideViewport) {}
+          state.sourcesBrowserViewportHidden = true;
+        }
+        return;
+      }
+      state.sourcesBrowserViewportHidden = false;
+      scheduleSourcesBrowserViewportLayout();
+    }, 120);
+  }
+
+  function ensureSourcesBrowserViewportSync() {
+    if (!state.sourcesBrowserViewportSyncBound) {
+      var onSourcesLayoutScroll = function () {
+        if (!shouldTrackSourcesViewport()) return;
+        scheduleSourcesBrowserViewportLayout();
+      };
+      window.addEventListener('resize', onSourcesLayoutScroll);
+      window.addEventListener('scroll', onSourcesLayoutScroll, { passive: true, capture: true });
+      document.addEventListener('scroll', onSourcesLayoutScroll, { passive: true, capture: true });
+      if (el.homeView && typeof el.homeView.addEventListener === 'function') {
+        el.homeView.addEventListener('scroll', onSourcesLayoutScroll, { passive: true });
+      }
+      if (el.webLibraryView && typeof el.webLibraryView.querySelector === 'function') {
+        var libContent = el.webLibraryView.querySelector('.libContent');
+        if (libContent && typeof libContent.addEventListener === 'function' && libContent !== el.homeView) {
+          libContent.addEventListener('scroll', onSourcesLayoutScroll, { passive: true });
+        }
+      }
+      state.sourcesBrowserViewportSyncBound = true;
+    }
+    startSourcesBrowserViewportSyncLoop();
+    scheduleSourcesBrowserViewportLayout();
   }
 
   function scheduleSourcesBrowserLoadingSettleCheck() {
@@ -2284,7 +2381,7 @@
         try { api.webTabManager.navigateTo({ tabId: active._bridgeTabId, url: target }); } catch (_eBNav) {}
         try { api.webTabManager.setTabHome({ tabId: active._bridgeTabId, home: false }); } catch (_eBHome) {}
       } else {
-        // _bridgeTabId not yet set (createTab Promise pending) — queue for later
+        // _bridgeTabId not yet set (createTab Promise pending) â€” queue for later
         active._pendingNav = { url: target };
       }
       active.loading = true;
@@ -2388,7 +2485,7 @@
           + '<div class="sourcesBrowserHistoryUrl" title="' + escapeHtml(url) + '">' + escapeHtml(url || '-') + '</div>'
         + '</div>'
         + '<div class="sourcesBrowserHistoryTime">' + escapeHtml(when || '-') + '</div>'
-        + '<button class="sourcesBrowserHistoryRemoveBtn" type="button" title="Remove" data-history-remove-id="' + escapeHtml(id) + '">×</button>'
+        + '<button class="sourcesBrowserHistoryRemoveBtn" type="button" title="Remove" data-history-remove-id="' + escapeHtml(id) + '">Ã—</button>'
       + '</div>';
     }
     el.sourcesBrowserHistoryList.innerHTML = html;
@@ -2427,19 +2524,51 @@
     el.sourcesBrowserBookmarksList.innerHTML = html;
   }
 
+  function focusSourcesDownloadsPanel(smooth) {
+    renderSourcesBrowserDownloadsRows();
+    if (el.sourcesBrowserDownloadsPanel) {
+      el.sourcesBrowserDownloadsPanel.classList.remove('hidden');
+      try {
+        if (typeof el.sourcesBrowserDownloadsPanel.scrollIntoView === 'function') {
+          if (smooth === false) el.sourcesBrowserDownloadsPanel.scrollIntoView({ block: 'start' });
+          else el.sourcesBrowserDownloadsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch (_eScrollDownloads) {
+        try { el.sourcesBrowserDownloadsPanel.scrollIntoView(); } catch (_eScrollDownloads2) {}
+      }
+      return;
+    }
+    if (el.sourcesBrowserHomeDownloadsBody) {
+      var section = el.sourcesBrowserHomeDownloadsBody.closest
+        ? el.sourcesBrowserHomeDownloadsBody.closest('.sourcesBrowserHomeSection')
+        : null;
+      if (section && typeof section.scrollIntoView === 'function') {
+        try {
+          if (smooth === false) section.scrollIntoView({ block: 'start' });
+          else section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (_eScrollHomeDownloads) {
+          try { section.scrollIntoView(); } catch (_eScrollHomeDownloads2) {}
+        }
+      }
+    }
+  }
+
   function openSourcesBrowserDrawer(kind) {
     var panel = String(kind || '').trim().toLowerCase();
     if (!panel) return;
+    if (panel === 'downloads') {
+      closeSourcesBrowserDrawer();
+      focusSourcesDownloadsPanel(true);
+      return;
+    }
     state.sourcesBrowserDrawerKind = panel;
     if (el.sourcesBrowserDrawerTitle) {
       if (panel === 'history') el.sourcesBrowserDrawerTitle.textContent = 'History';
       else if (panel === 'bookmarks') el.sourcesBrowserDrawerTitle.textContent = 'Bookmarks';
-      else if (panel === 'downloads') el.sourcesBrowserDrawerTitle.textContent = 'Downloads';
       else el.sourcesBrowserDrawerTitle.textContent = 'Panel';
     }
     if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.toggle('hidden', panel !== 'history');
     if (el.sourcesBrowserBookmarksPanel) el.sourcesBrowserBookmarksPanel.classList.toggle('hidden', panel !== 'bookmarks');
-    if (el.sourcesBrowserDownloadsPanel) el.sourcesBrowserDownloadsPanel.classList.toggle('hidden', panel !== 'downloads');
     if (el.sourcesBrowserDrawerOverlay) el.sourcesBrowserDrawerOverlay.classList.remove('hidden');
     if (el.sourcesBrowserDrawer) {
       el.sourcesBrowserDrawer.classList.remove('hidden');
@@ -2477,9 +2606,6 @@
         state.bookmarks = [];
         renderSourcesBrowserBookmarksRows();
       }
-    } else if (panel === 'downloads') {
-      setSourcesOmniExpanded(false, { keepValue: true, select: false });
-      renderSourcesBrowserDownloadsRows();
     }
     syncSourcesBrowserOverlayLock();
   }
@@ -2493,7 +2619,6 @@
     }
     if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.add('hidden');
     if (el.sourcesBrowserBookmarksPanel) el.sourcesBrowserBookmarksPanel.classList.add('hidden');
-    if (el.sourcesBrowserDownloadsPanel) el.sourcesBrowserDownloadsPanel.classList.add('hidden');
     syncSourcesBrowserOverlayLock();
   }
 
@@ -2519,6 +2644,7 @@
   function initSourcesBrowser() {
     if (state.sourcesBrowserBound) return;
     state.sourcesBrowserBound = true;
+    enforceSourcesPanelOrder();
 
     if (isButterfly) {
       // Butterfly: register bridge signal listeners for tab state sync
@@ -2567,7 +2693,7 @@
             }
             var existing = getTabByBridgeId(data.tabId);
             if (existing) return; // Already tracked from openSourcesTab
-            // Qt created a tab (e.g. from createWindow) — create matching JS tab
+            // Qt created a tab (e.g. from createWindow) â€” create matching JS tab
             var id = 'st_' + String(state.sourcesTabSeq++);
             var tab = {
               id: id,
@@ -2597,7 +2723,7 @@
             if (!data || !data.tabId) return;
             var tab = getTabByBridgeId(data.tabId);
             if (!tab) return;
-            // Qt closed a tab — remove from JS state
+            // Qt closed a tab â€” remove from JS state
             var idx = state.sourcesTabs.indexOf(tab);
             if (idx !== -1) state.sourcesTabs.splice(idx, 1);
             if (!state.sourcesTabs.length) {
@@ -2845,18 +2971,8 @@
     }
     if (el.sourcesBrowserDownloadsBtn) {
       el.sourcesBrowserDownloadsBtn.addEventListener('click', function () {
-        var active = getSourcesActiveTab();
-        if (active && active.home && el.sourcesBrowserHomeDownloadsBody) {
-          closeSourcesBrowserDrawer();
-          var section = el.sourcesBrowserHomeDownloadsBody.closest
-            ? el.sourcesBrowserHomeDownloadsBody.closest('.sourcesBrowserHomeSection')
-            : null;
-          if (section && typeof section.scrollIntoView === 'function') {
-            section.scrollIntoView({ block: 'start', behavior: 'smooth' });
-          }
-          return;
-        }
-        openSourcesBrowserDrawer('downloads');
+        closeSourcesBrowserDrawer();
+        focusSourcesDownloadsPanel(true);
       });
     }
     if (el.sourcesBrowserDrawerCloseBtn) {
@@ -3133,7 +3249,7 @@
 
     refreshSourcesBrowserNav();
     setSourcesBrowserStatus('Ready', false);
-    window.addEventListener('resize', scheduleSourcesBrowserViewportLayout);
+    ensureSourcesBrowserViewportSync();
     if (!state.sourcesTabs.length) {
       var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
       var initialUrl = String((cfg && cfg.lastUrl) || '').trim();
@@ -3194,7 +3310,7 @@
     }
   }
 
-  // ── webTabs shim (replaces old WCV IPC) ──
+  // â”€â”€ webTabs shim (replaces old WCV IPC) â”€â”€
   // New architecture uses <webview> tags directly in DOM.
   // This shim keeps hub module's findInPage call working.
 
@@ -3225,7 +3341,7 @@
     setMuted: function () { return Promise.resolve(); }
   };
 
-  // ── Bridge + module initialization ──
+  // â”€â”€ Bridge + module initialization â”€â”€
 
   var bridge = {
     state: state,
@@ -3262,7 +3378,7 @@
   var hub          = useWebModule('hub');
   var standalone   = useWebModule('standalone');
 
-  // ── Cross-dependency wiring ──
+  // â”€â”€ Cross-dependency wiring â”€â”€
   // Modules access bridge.deps lazily, so we can wire after all factories run.
   try {
 
@@ -3311,7 +3427,7 @@
   // From downloads
   bridge.deps.showDownloadsPanel  = downloads.showDownloadsPanel;
   bridge.deps.renderDownloadsPanel = downloads.showDownloadsPanel;
-  bridge.deps.renderHomeDownloads = function () {}; // stub — home downloads rendered by orchestrator
+  bridge.deps.renderHomeDownloads = function () {}; // stub â€” home downloads rendered by orchestrator
 
   // From panels
   bridge.deps.hideAllPanels      = panels.hideAllPanels;
@@ -3331,7 +3447,7 @@
   // bridge.deps.openBrowserForTab, bridge.deps.openNewTab, bridge.deps.openHubPanelSection
   // are set after mode-switching functions are defined.
 
-  // ── Mode switching ──
+  // â”€â”€ Mode switching â”€â”€
 
   var _libraryViewMap = { comics: 'libraryView', books: 'booksLibraryView', videos: 'videoLibraryView', sources: 'webLibraryView' };
 
@@ -3452,7 +3568,7 @@
   bridge.deps.openNewTab         = openNewTab;
   bridge.deps.openHubPanelSection = function () {}; // not used in new browser
 
-  // ── Source management ──
+  // â”€â”€ Source management â”€â”€
 
   function renderSources() {
     var sidebarHtml = '';
@@ -3827,12 +3943,30 @@
     if (el.sourcesDownloadsTabBtn) el.sourcesDownloadsTabBtn.classList.toggle('active', key === 'downloads');
     if (el.sourcesSearchView) el.sourcesSearchView.classList.toggle('hidden', key !== 'search');
     if (el.sourcesDownloadsView) el.sourcesDownloadsView.classList.toggle('hidden', key !== 'downloads');
+    if (el.sourcesBrowserDownloadsPanel) el.sourcesBrowserDownloadsPanel.classList.remove('hidden');
     if (el.torrentContainer) el.torrentContainer.style.display = 'none';
     if (el.sourcesDownloadsView && el.torrentContainer && el.torrentContainer.parentElement === el.sourcesDownloadsView && el.contentArea) {
       el.contentArea.appendChild(el.torrentContainer);
     }
     // Do not auto-focus search on mode entry; it scrolls the Sources page
     // away from the top now that TankoBrowser is the first panel.
+  }
+
+  function enforceSourcesPanelOrder() {
+    if (!el.homeView) return;
+    var searchPanel = el.homeView.querySelector('.sourcesSearchPanel');
+    var torrentPanel = el.homeView.querySelector('.sourcesTorrentPanel');
+    var ordered = [
+      el.sourcesBrowserPanel || null,
+      el.sourcesBrowserDownloadsPanel || null,
+      searchPanel || null,
+      torrentPanel || null,
+    ];
+    for (var i = 0; i < ordered.length; i++) {
+      var node = ordered[i];
+      if (!node || node.parentElement !== el.homeView) continue;
+      el.homeView.appendChild(node);
+    }
   }
 
   function enforceProvidersOnlySidebar() {
@@ -3893,7 +4027,7 @@
       var metaBits = [];
       if (row.sourceName) metaBits.push(String(row.sourceName));
       if (Array.isArray(row.typeLabels) && row.typeLabels.length) metaBits.push(String(row.typeLabels.slice(0, 2).join(', ')));
-      var sub = metaBits.length ? ('<div class="muted tiny">' + escapeHtml(metaBits.join(' • ')) + '</div>') : '';
+      var sub = metaBits.length ? ('<div class="muted tiny">' + escapeHtml(metaBits.join(' â€¢ ')) + '</div>') : '';
       html += '<tr>'
         + '<td class="sourcesSearchTitleCell" title="' + escapeHtml(row.title || '') + '">' + escapeHtml(row.title || '-') + sub + '</td>'
         + '<td>' + escapeHtml(formatBytesForSources(row.sizeBytes)) + '</td>'
@@ -4569,8 +4703,8 @@
     var msg = filteredCount === totalCount
       ? (totalCount + ' result(s)')
       : (filteredCount + ' filtered / ' + totalCount + ' result(s)');
-    if (state.searchLoadingMore) msg += ' • loading more...';
-    else if (!state.searchHasMore) msg += ' • end reached';
+    if (state.searchLoadingMore) msg += ' â€¢ loading more...';
+    else if (!state.searchHasMore) msg += ' â€¢ end reached';
     setSourcesSearchStatus(msg);
   }
 
@@ -4888,7 +5022,7 @@
     }).catch(function () { showToast('Failed to remove source'); });
   }
 
-  // ── Browser settings ──
+  // â”€â”€ Browser settings â”€â”€
 
   function normalizeBrowserSettingsForUi(settings) {
     var src = (settings && typeof settings === 'object') ? settings : {};
@@ -5009,7 +5143,7 @@
     }).catch(function () {});
   }
 
-  // ── Download destination picker ──
+  // â”€â”€ Download destination picker â”€â”€
 
   function handleDestPickerRequest(data) {
     state.destPickerData = data || null;
@@ -5021,7 +5155,7 @@
     if (el.destPickerOverlay) el.destPickerOverlay.classList.add('hidden');
   }
 
-  // ── Home downloads rendering ──
+  // â”€â”€ Home downloads rendering â”€â”€
 
   function renderHomeDownloads() {
     var active = getSourcesBrowserDownloadsList();
@@ -5056,7 +5190,7 @@
   // Update the stub to point to real function
   bridge.deps.renderHomeDownloads = renderHomeDownloads;
 
-  // ── Keyboard shortcuts ──
+  // â”€â”€ Keyboard shortcuts â”€â”€
 
   function handleKeyDown(e) {
     // Only handle when browser view is visible or web mode is active
@@ -5114,7 +5248,8 @@
       }
       if (ctrl && !shift && key === 'j') {
         e.preventDefault();
-        openSourcesBrowserDrawer('downloads');
+        closeSourcesBrowserDrawer();
+        focusSourcesDownloadsPanel(true);
         return;
       }
       if (ctrl && shift && (key === 'A' || key === 'a')) {
@@ -5200,14 +5335,14 @@
 
     if (sourcesActive) return;
 
-    // Ctrl+T — new tab
+    // Ctrl+T â€” new tab
     if (ctrl && !shift && key === 't') {
       e.preventDefault();
       openNewTab();
       return;
     }
 
-    // Ctrl+W — close tab
+    // Ctrl+W â€” close tab
     if (ctrl && !shift && key === 'w') {
       e.preventDefault();
       if (state.browserOpen && tabsState.closeTab) {
@@ -5222,56 +5357,56 @@
       return;
     }
 
-    // Ctrl+Tab / Ctrl+Shift+Tab — cycle tabs
+    // Ctrl+Tab / Ctrl+Shift+Tab â€” cycle tabs
     if (ctrl && key === 'Tab') {
       e.preventDefault();
       if (tabsState.cycleTab) tabsState.cycleTab(shift ? -1 : 1);
       return;
     }
 
-    // Ctrl+L — focus URL bar
+    // Ctrl+L â€” focus URL bar
     if (ctrl && !shift && key === 'l') {
       e.preventDefault();
       if (el.urlBar && state.browserOpen) { el.urlBar.focus(); el.urlBar.select(); }
       return;
     }
 
-    // Ctrl+F — find in page
+    // Ctrl+F â€” find in page
     if (ctrl && !shift && key === 'f') {
       e.preventDefault();
       if (state.browserOpen && find.openFind) find.openFind();
       return;
     }
 
-    // Ctrl+D — bookmark
+    // Ctrl+D â€” bookmark
     if (ctrl && !shift && key === 'd') {
       e.preventDefault();
       if (state.browserOpen && panels.toggleBookmark) panels.toggleBookmark();
       return;
     }
 
-    // Ctrl+H — history
+    // Ctrl+H â€” history
     if (ctrl && !shift && key === 'h') {
       e.preventDefault();
       if (state.browserOpen && panels.showHistoryPanel) panels.showHistoryPanel();
       return;
     }
 
-    // Ctrl+J — downloads
+    // Ctrl+J â€” downloads
     if (ctrl && !shift && key === 'j') {
       e.preventDefault();
       if (state.browserOpen && downloads.showDownloadsPanel) downloads.showDownloadsPanel();
       return;
     }
 
-    // Ctrl+B — bookmarks
+    // Ctrl+B â€” bookmarks
     if (ctrl && !shift && key === 'b') {
       e.preventDefault();
       if (state.browserOpen && panels.showBookmarksPanel) panels.showBookmarksPanel();
       return;
     }
 
-    // Ctrl+R — reload
+    // Ctrl+R â€” reload
     if (ctrl && !shift && key === 'r') {
       e.preventDefault();
       if (state.browserOpen) {
@@ -5281,7 +5416,7 @@
       return;
     }
 
-    // Ctrl+P — print as PDF
+    // Ctrl+P â€” print as PDF
     if (ctrl && !shift && key === 'p') {
       e.preventDefault();
       if (state.browserOpen && api.webBrowserActions && api.webBrowserActions.printPdf) {
@@ -5291,7 +5426,7 @@
       return;
     }
 
-    // Ctrl+Shift+S — screenshot
+    // Ctrl+Shift+S â€” screenshot
     if (ctrl && shift && key === 'S') {
       e.preventDefault();
       if (state.browserOpen && api.webBrowserActions && api.webBrowserActions.capturePage) {
@@ -5301,21 +5436,21 @@
       return;
     }
 
-    // Ctrl+Shift+T — toggle Tor
+    // Ctrl+Shift+T â€” toggle Tor
     if (ctrl && shift && key === 'T') {
       e.preventDefault();
       if (panels.toggleTor) panels.toggleTor();
       return;
     }
 
-    // Ctrl+Shift+Z — reopen closed tab
+    // Ctrl+Shift+Z â€” reopen closed tab
     if (ctrl && shift && key === 'Z') {
       e.preventDefault();
       if (tabsState.reopenClosedTab) tabsState.reopenClosedTab();
       return;
     }
 
-    // Ctrl+Plus/Minus/0 — zoom
+    // Ctrl+Plus/Minus/0 â€” zoom
     if (ctrl && (key === '+' || key === '=')) {
       e.preventDefault();
       if (tabsState.zoomIn) tabsState.zoomIn();
@@ -5332,14 +5467,14 @@
       return;
     }
 
-    // Ctrl+Shift+I — DevTools
+    // Ctrl+Shift+I â€” DevTools
     if (ctrl && shift && key === 'I') {
       e.preventDefault();
       if (tabsState.toggleDevTools) tabsState.toggleDevTools();
       return;
     }
 
-    // Escape — close panels/find/overlay
+    // Escape â€” close panels/find/overlay
     if (key === 'Escape') {
       if (state.findBarOpen && find.closeFind) { find.closeFind(); e.preventDefault(); return; }
       if (state.menuOpen || state.downloadsOpen || state.historyOpen || state.bookmarksOpen) {
@@ -5349,7 +5484,7 @@
       }
     }
 
-    // Alt+Left/Right — navigate
+    // Alt+Left/Right â€” navigate
     if (e.altKey && key === 'ArrowLeft') {
       e.preventDefault();
       var bwv = tabsState.getActiveWebview ? tabsState.getActiveWebview() : null;
@@ -5364,7 +5499,7 @@
     }
   }
 
-  // ── UI binding ──
+  // â”€â”€ UI binding â”€â”€
 
   function bindUI() {
     function setWebviewPointerDisabled(disabled) {
@@ -5749,7 +5884,7 @@
       });
     }
 
-    // Menu overlay click → close panels
+    // Menu overlay click â†’ close panels
     if (el.menuOverlay) {
       el.menuOverlay.addEventListener('click', function () {
         if (panels.hideAllPanels) panels.hideAllPanels();
@@ -6090,7 +6225,7 @@
     });
   }
 
-  // ── Userscript helpers ──
+  // â”€â”€ Userscript helpers â”€â”€
 
   function clearUserscriptForm() {
     if (el.hubUserscriptTitle) el.hubUserscriptTitle.value = '';
@@ -6153,7 +6288,7 @@
     if (el.hubUserscriptInfo) el.hubUserscriptInfo.textContent = 'Editing: ' + (rule.title || 'Script');
   }
 
-  // ── Download sidebar indicator ──
+  // â”€â”€ Download sidebar indicator â”€â”€
 
   function syncDownloadIndicator() {
     var activeCount = 0;
@@ -6169,7 +6304,7 @@
     if (el.sidebarDlRow) el.sidebarDlRow.classList.toggle('hidden', !activeCount);
   }
 
-  // ── Init sequence ──
+  // â”€â”€ Init sequence â”€â”€
 
   try {
     bindUI();
@@ -6232,7 +6367,7 @@
     });
   }
 
-  // ── Public API ──
+  // â”€â”€ Public API â”€â”€
 
   var openDefaultBrowserEntry = standalone.openDefaultBrowserEntry || function () {
     if (state.sourcesTabs.length) {
@@ -6267,6 +6402,7 @@
     hideSourcesBrowserContextMenu();
     if (find.closeFind) find.closeFind();
     if (navOmnibox.hideOmniDropdown) navOmnibox.hideOmniDropdown();
+    enforceSourcesPanelOrder();
     forceSourcesViewVisible();
     setSourcesSubMode(mode === 'downloads' ? 'downloads' : 'search');
     scheduleSourcesBrowserViewportLayout();
@@ -6281,7 +6417,7 @@
         var cfg = state.browserSettings && state.browserSettings.sourcesBrowser ? state.browserSettings.sourcesBrowser : null;
         var lastUrl = String(cfg && cfg.lastUrl || '').trim();
         if (lastUrl === 'about:blank') lastUrl = '';
-        // Home is always the first tab — never skip it even when restoring a session URL
+        // Home is always the first tab â€” never skip it even when restoring a session URL
         openSourcesTab('', { switchTo: !lastUrl, focus: false, persist: false, home: true });
         if (lastUrl) {
           openSourcesTab(lastUrl, { switchTo: true, focus: false, persist: false });
@@ -6292,9 +6428,13 @@
       }
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();
+      loadSourcesDownloadHistory();
+      renderSourcesBrowserDownloadsRows();
+      ensureSourcesBrowserViewportSync();
       if (isButterfly) {
-        // Native Qt browser — hand off to BrowserWidget via bridge; no HTML chrome needed.
+        // Native Qt browser â€” hand off to BrowserWidget via bridge; no HTML chrome needed.
         try { api.webTabManager.openBrowser(); } catch (_eBrowser) {}
+        scheduleSourcesBrowserViewportLayout();
         return;
       }
       scheduleSourcesBrowserViewportLayout();
@@ -6312,14 +6452,10 @@
   function openSourcesDownloads() {
     state.sourcesSubMode = 'downloads';
     openSources();
-    if (!el.sourcesDownloadsView) {
-      var torrentPanel = document.querySelector('#webHomeView .sourcesTorrentPanel');
-      if (torrentPanel && typeof torrentPanel.scrollIntoView === 'function') {
-        setTimeout(function () {
-          try { torrentPanel.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (_e) { torrentPanel.scrollIntoView(); }
-        }, 0);
-      }
-    }
+    setTimeout(function () {
+      closeSourcesBrowserDrawer();
+      focusSourcesDownloadsPanel(true);
+    }, 0);
   }
 
   function openSaveFlowForResult(result) {
@@ -6332,13 +6468,12 @@
     if (window.Tanko.modeRouter && typeof window.Tanko.modeRouter.registerModeHandler === 'function') {
       window.Tanko.modeRouter.registerModeHandler('sources', {
         setMode: function () {
-          if (isButterfly) {
-            // Qt BrowserWidget handles sources mode natively — activate via bridge.
-            // Never render old HTML browser chrome in Butterfly mode.
-            try { api.webTabManager.openBrowser(); } catch (_eBf) {}
-            return Promise.resolve();
-          }
           applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
+          ensureSourcesBrowserViewportSync();
+          if (isButterfly) {
+            try { api.webTabManager.openBrowser(); } catch (_eBf) {}
+          }
+          scheduleSourcesBrowserViewportLayout();
           return Promise.resolve();
         },
         refresh: function () {
@@ -6383,3 +6518,4 @@
   }
 
 })();
+

@@ -1,0 +1,13 @@
+{
+  "generatedAtMs": 0,
+  "files": [
+    "comics_baseline.json",
+    "books_baseline.json",
+    "video_baseline.json"
+  ],
+  "notes": [
+    "Timestamp-like fields are normalized to keep diffs stable.",
+    "Workspace and userData absolute paths are tokenized.",
+    "Scan event ordering is recorded through bridge emitter instrumentation."
+  ]
+}

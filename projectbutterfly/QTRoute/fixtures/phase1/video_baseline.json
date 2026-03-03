@@ -1,0 +1,721 @@
+{
+  "meta": {
+    "capturedAt": 0,
+    "workspace": "<WORKSPACE>",
+    "userData": "<USER_DATA>"
+  },
+  "video": {
+    "initialState": {
+      "videoFolders": [
+        "<WORKSPACE>\\video_root"
+      ],
+      "videoShowFolders": [
+        "<WORKSPACE>\\video_show_folder"
+      ],
+      "videoHiddenShowIds": [],
+      "videoFiles": [
+        "<WORKSPACE>\\video-added.webm"
+      ],
+      "roots": [],
+      "shows": [],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null,
+      "episodes": []
+    },
+    "afterScan": {
+      "videoFolders": [
+        "<WORKSPACE>\\video_root"
+      ],
+      "videoShowFolders": [
+        "<WORKSPACE>\\video_show_folder"
+      ],
+      "videoHiddenShowIds": [],
+      "videoFiles": [
+        "<WORKSPACE>\\video-added.webm"
+      ],
+      "roots": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "name": "video_root",
+          "path": "<WORKSPACE>\\video_root",
+          "displayPath": "<WORKSPACE>\\video_root"
+        },
+        {
+          "id": "__added_show_folders__",
+          "name": "Folders",
+          "path": null,
+          "displayPath": "Folders"
+        },
+        {
+          "id": "__added_files__",
+          "name": "Added Files",
+          "path": null,
+          "displayPath": "Added Files"
+        }
+      ],
+      "shows": [
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+          "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "name": "ShowA",
+          "path": "<WORKSPACE>\\video_root\\ShowA",
+          "displayPath": "<WORKSPACE>\\video_root\\ShowA",
+          "isLoose": false,
+          "thumbPath": null,
+          "folders": [],
+          "episodeCount": 2,
+          "torrentStreamable": false,
+          "sourceKind": "local"
+        },
+        {
+          "id": "eKGveL5StWlV4KIoqRcRurGcwM4",
+          "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "name": "video_root",
+          "path": "<WORKSPACE>\\video_root",
+          "displayPath": "<WORKSPACE>\\video_root",
+          "isLoose": true,
+          "thumbPath": null,
+          "folders": []
+        },
+        {
+          "id": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19zaG93X2ZvbGRlcg",
+          "rootId": "__added_show_folders__",
+          "name": "video_show_folder",
+          "path": "<WORKSPACE>\\video_show_folder",
+          "displayPath": "<WORKSPACE>\\video_show_folder",
+          "isLoose": false,
+          "thumbPath": null,
+          "folders": [],
+          "episodeCount": 1,
+          "torrentStreamable": false,
+          "sourceKind": "local"
+        },
+        {
+          "id": "__added_files_show__",
+          "rootId": "__added_files__",
+          "name": "Added Files",
+          "path": null,
+          "displayPath": "Added Files",
+          "isLoose": true,
+          "thumbPath": null,
+          "folders": []
+        }
+      ],
+      "scanning": false,
+      "lastScanAt": 0,
+      "error": null,
+      "episodes": [
+        {
+          "id": "uTfP6WptWW2sXruYXVIon0HSUAQ",
+          "title": "ep-001",
+          "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "rootName": "",
+          "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+          "showName": "ShowA",
+          "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+          "folderRelPath": "",
+          "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+          "folderId": null,
+          "folderName": null,
+          "path": "<WORKSPACE>\\video_root\\ShowA\\ep-001.mp4",
+          "size": 17,
+          "mtimeMs": 1700000007000.0,
+          "ext": "MP4",
+          "aliasIds": []
+        },
+        {
+          "id": "MrzsYqOsxQXqjCvE3r5MF6UVby4",
+          "title": "ep-002",
+          "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "rootName": "",
+          "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+          "showName": "ShowA",
+          "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+          "folderRelPath": "",
+          "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+          "folderId": null,
+          "folderName": null,
+          "path": "<WORKSPACE>\\video_root\\ShowA\\ep-002.mkv",
+          "size": 17,
+          "mtimeMs": 1700000008000.0,
+          "ext": "MKV",
+          "aliasIds": []
+        },
+        {
+          "id": "1w0vRvyzb8Zu62iRZ4KBlPCTZxI",
+          "title": "loose-video",
+          "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+          "rootName": "video_root",
+          "showId": "eKGveL5StWlV4KIoqRcRurGcwM4",
+          "showName": "video_root",
+          "showRootPath": "<WORKSPACE>\\video_root",
+          "folderRelPath": "",
+          "folderKey": "",
+          "folderId": null,
+          "folderName": null,
+          "path": "<WORKSPACE>\\video_root\\loose-video.avi",
+          "size": 19,
+          "mtimeMs": 1700000009000.0,
+          "ext": "AVI",
+          "aliasIds": []
+        },
+        {
+          "id": "3Wv0-KR6wnfXTqr_Yu9ejokbGh4",
+          "title": "special-001",
+          "rootId": "__added_show_folders__",
+          "rootName": "",
+          "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19zaG93X2ZvbGRlcg",
+          "showName": "video_show_folder",
+          "showRootPath": "<WORKSPACE>\\video_show_folder",
+          "folderRelPath": "",
+          "folderKey": "ONATahDao1QBDJ3BIk1vkhLsHVY",
+          "folderId": null,
+          "folderName": null,
+          "path": "<WORKSPACE>\\video_show_folder\\special-001.mp4",
+          "size": 20,
+          "mtimeMs": 1700000011000.0,
+          "ext": "MP4",
+          "aliasIds": []
+        },
+        {
+          "id": "3rsiZwb0Dy942WvCuBFvou9v04I",
+          "title": "video-added",
+          "rootId": "__added_files__",
+          "rootName": "Added Files",
+          "showId": "__added_files_show__",
+          "showName": "Added Files",
+          "showRootPath": null,
+          "folderRelPath": "",
+          "folderKey": "eH7VpbfFQ8m_VQF-rP5zcFG-kCw",
+          "folderId": null,
+          "folderName": null,
+          "path": "<WORKSPACE>\\video-added.webm",
+          "size": 18,
+          "mtimeMs": 1700000010000.0,
+          "ext": "WEBM",
+          "aliasIds": []
+        }
+      ]
+    },
+    "events": [
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "video_root"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 1,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "video_root"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "video_root"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "video_root"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": ""
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 0,
+            "foldersTotal": 2,
+            "currentFolder": "video_root"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": true,
+          "phase": "scan",
+          "progress": {
+            "foldersDone": 1,
+            "foldersTotal": 2,
+            "currentFolder": "video_show_folder"
+          }
+        }
+      },
+      {
+        "type": "scanStatus",
+        "payload": {
+          "scanning": false,
+          "phase": "scan",
+          "progress": null
+        }
+      },
+      {
+        "type": "updated",
+        "payload": {
+          "args": [],
+          "kwargs": {}
+        }
+      }
+    ],
+    "mutations": {
+      "removeFolder": {
+        "ok": true,
+        "state": {
+          "videoFolders": [],
+          "videoShowFolders": [
+            "<WORKSPACE>\\video_show_folder"
+          ],
+          "videoHiddenShowIds": [],
+          "videoFiles": [
+            "<WORKSPACE>\\video-added.webm"
+          ],
+          "error": null
+        }
+      },
+      "addFolder": {
+        "ok": true,
+        "state": {
+          "videoFolders": [
+            "<WORKSPACE>\\video_root"
+          ],
+          "videoShowFolders": [
+            "<WORKSPACE>\\video_show_folder"
+          ],
+          "videoHiddenShowIds": [],
+          "videoFiles": [
+            "<WORKSPACE>\\video-added.webm"
+          ],
+          "error": null
+        },
+        "folder": "<WORKSPACE>\\video_root"
+      },
+      "addShowFolderPath": {
+        "ok": true,
+        "state": {
+          "videoFolders": [
+            "<WORKSPACE>\\video_root"
+          ],
+          "videoShowFolders": [
+            "<WORKSPACE>\\video_show_folder"
+          ],
+          "videoHiddenShowIds": [],
+          "videoFiles": [
+            "<WORKSPACE>\\video-added.webm"
+          ],
+          "error": null
+        },
+        "folder": "<WORKSPACE>\\video_show_folder"
+      },
+      "addFiles": {
+        "ok": true,
+        "state": {
+          "videoFolders": [
+            "<WORKSPACE>\\video_root"
+          ],
+          "videoShowFolders": [
+            "<WORKSPACE>\\video_show_folder"
+          ],
+          "videoHiddenShowIds": [],
+          "videoFiles": [
+            "<WORKSPACE>\\video-added.webm"
+          ],
+          "error": null
+        }
+      },
+      "removeFile": {
+        "ok": true,
+        "state": {
+          "videoFolders": [
+            "<WORKSPACE>\\video_root"
+          ],
+          "videoShowFolders": [
+            "<WORKSPACE>\\video_show_folder"
+          ],
+          "videoHiddenShowIds": [],
+          "videoFiles": [],
+          "error": null
+        }
+      }
+    },
+    "queries": {
+      "getEpisodesForShow": {
+        "ok": true,
+        "episodes": [
+          {
+            "id": "uTfP6WptWW2sXruYXVIon0HSUAQ",
+            "title": "ep-001",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-001.mp4",
+            "size": 17,
+            "mtimeMs": 1700000007000.0,
+            "ext": "MP4",
+            "aliasIds": []
+          },
+          {
+            "id": "MrzsYqOsxQXqjCvE3r5MF6UVby4",
+            "title": "ep-002",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-002.mkv",
+            "size": 17,
+            "mtimeMs": 1700000008000.0,
+            "ext": "MKV",
+            "aliasIds": []
+          }
+        ]
+      },
+      "getEpisodesForRoot": {
+        "ok": true,
+        "episodes": [
+          {
+            "id": "uTfP6WptWW2sXruYXVIon0HSUAQ",
+            "title": "ep-001",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-001.mp4",
+            "size": 17,
+            "mtimeMs": 1700000007000.0,
+            "ext": "MP4",
+            "aliasIds": []
+          },
+          {
+            "id": "MrzsYqOsxQXqjCvE3r5MF6UVby4",
+            "title": "ep-002",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-002.mkv",
+            "size": 17,
+            "mtimeMs": 1700000008000.0,
+            "ext": "MKV",
+            "aliasIds": []
+          },
+          {
+            "id": "1w0vRvyzb8Zu62iRZ4KBlPCTZxI",
+            "title": "loose-video",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "video_root",
+            "showId": "eKGveL5StWlV4KIoqRcRurGcwM4",
+            "showName": "video_root",
+            "showRootPath": "<WORKSPACE>\\video_root",
+            "folderRelPath": "",
+            "folderKey": "",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\loose-video.avi",
+            "size": 19,
+            "mtimeMs": 1700000009000.0,
+            "ext": "AVI",
+            "aliasIds": []
+          }
+        ]
+      },
+      "getEpisodesByIds": {
+        "ok": true,
+        "episodes": [
+          {
+            "id": "uTfP6WptWW2sXruYXVIon0HSUAQ",
+            "title": "ep-001",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-001.mp4",
+            "size": 17,
+            "mtimeMs": 1700000007000.0,
+            "ext": "MP4",
+            "aliasIds": []
+          },
+          {
+            "id": "MrzsYqOsxQXqjCvE3r5MF6UVby4",
+            "title": "ep-002",
+            "rootId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290",
+            "rootName": "",
+            "showId": "RDpcSGVtYW50aCdzIEZvbGRlclxUYW5rb2Jhbi1NYXgtYnV0dGVyZmx5XHByb2plY3RidXR0ZXJmbHlcUVRSb3V0ZVxmaXh0dXJlc1xwaGFzZTFcX3dvcmtzcGFjZVx2aWRlb19yb290XFNob3dB",
+            "showName": "ShowA",
+            "showRootPath": "<WORKSPACE>\\video_root\\ShowA",
+            "folderRelPath": "",
+            "folderKey": "WuQP2V8vLMdnO4mqYEM5UsxLarw",
+            "folderId": null,
+            "folderName": null,
+            "path": "<WORKSPACE>\\video_root\\ShowA\\ep-002.mkv",
+            "size": 17,
+            "mtimeMs": 1700000008000.0,
+            "ext": "MKV",
+            "aliasIds": []
+          }
+        ]
+      }
+    }
+  }
+}

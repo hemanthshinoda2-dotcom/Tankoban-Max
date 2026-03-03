@@ -1,0 +1,172 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Downloads</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #202124;
+    color: #e8eaed;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 28px;
+  }
+  h1 { font-size: 28px; font-weight: 400; margin-bottom: 18px; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    background: #292a2d;
+    color: #e8eaed;
+    border: 1px solid #5f6368;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .btn:hover { background: rgba(255,255,255,.08); }
+  .btn-danger { color: #ea4335; border-color: rgba(234,67,53,.45); }
+  .list { border: 1px solid #3c4043; border-radius: 10px; overflow: hidden; }
+  .row {
+    display: grid;
+    grid-template-columns: 1.3fr .9fr .6fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid #303134;
+    background: #26272b;
+  }
+  .row:last-child { border-bottom: none; }
+  .name { font-size: 13px; color: #e8eaed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 12px; color: #9aa0a6; }
+  .status { font-size: 12px; color: #8ab4f8; }
+  .actions { display: flex; gap: 6px; }
+  .empty { color: #9aa0a6; padding: 22px; text-align: center; }
+</style>
+</head>
+<body>
+<h1>Downloads</h1>
+<div class="toolbar">
+  <button class="btn" onclick="reloadDownloads()">Refresh</button>
+  <button class="btn btn-danger" onclick="clearDownloads()">Clear Completed</button>
+</div>
+<div id="downloadsList" class="list"></div>
+
+<script>
+  var downloads = [];
+
+  function dispatchCommand(url) {
+    var cmd = String(url || '').trim();
+    if (!cmd) {
+      return;
+    }
+    var frame = document.createElement('iframe');
+    frame.style.display = 'none';
+    frame.src = cmd;
+    frame.onload = frame.onerror = function() {
+      setTimeout(function() { frame.remove(); }, 0);
+    };
+    document.body.appendChild(frame);
+  }
+
+  function fmtBytes(v) {
+    var n = Number(v || 0);
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+    return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+  }
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = String(s || '');
+    return d.innerHTML;
+  }
+
+  function rowStatus(d) {
+    var st = String(d.state || 'unknown');
+    if (st === 'downloading') {
+      var recv = Number(d.receivedBytes || 0);
+      var total = Number(d.totalBytes || 0);
+      if (total > 0) {
+        var pct = Math.max(0, Math.min(100, Math.round((recv * 100) / total)));
+        return 'Downloading ' + pct + '%';
+      }
+      return 'Downloading';
+    }
+    if (st === 'completed') return 'Completed';
+    if (st === 'cancelled') return 'Cancelled';
+    if (st === 'interrupted') return 'Interrupted';
+    return st;
+  }
+
+  function canOpen(d) {
+    return String(d.state || '') === 'completed';
+  }
+
+  function render() {
+    var host = document.getElementById('downloadsList');
+    if (!downloads.length) {
+      host.innerHTML = '<div class="empty">No downloads yet</div>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < downloads.length; i += 1) {
+      var d = downloads[i] || {};
+      var id = encodeURIComponent(String(d.id || ''));
+      var name = esc(d.filename || d.name || d.savePath || 'download');
+      var status = esc(rowStatus(d));
+      var recv = fmtBytes(d.receivedBytes || 0);
+      var total = Number(d.totalBytes || 0) > 0 ? (' / ' + fmtBytes(d.totalBytes || 0)) : '';
+      var meta = esc(recv + total);
+      var canAct = canOpen(d);
+
+      html += '<div class="row">';
+      html += '<div><div class="name" title="' + name + '">' + name + '</div><div class="meta">' + esc(d.downloadUrl || d.url || '') + '</div></div>';
+      html += '<div class="meta">' + meta + '</div>';
+      html += '<div class="status">' + status + '</div>';
+      html += '<div class="actions">';
+      html += '<button class="btn" ' + (canAct ? '' : 'disabled') + ' onclick="openDownload(\'' + id + '\')">Open</button>';
+      html += '<button class="btn" ' + (canAct ? '' : 'disabled') + ' onclick="revealDownload(\'' + id + '\')">Show</button>';
+      html += '<button class="btn btn-danger" onclick="removeDownload(\'' + id + '\')">Remove</button>';
+      html += '</div>';
+      html += '</div>';
+    }
+    host.innerHTML = html;
+  }
+
+  function setDownloadsData(rows) {
+    downloads = Array.isArray(rows) ? rows.slice() : [];
+    downloads.sort(function(a, b) {
+      return Number(b.startedAt || 0) - Number(a.startedAt || 0);
+    });
+    render();
+  }
+
+  function reloadDownloads() {
+    dispatchCommand('tanko-browser://downloads-reload');
+  }
+
+  function clearDownloads() {
+    if (!confirm('Clear completed downloads from history?')) {
+      return;
+    }
+    dispatchCommand('tanko-browser://downloads-clear');
+  }
+
+  function removeDownload(id) {
+    dispatchCommand('tanko-browser://downloads-remove?id=' + id);
+  }
+
+  function openDownload(id) {
+    dispatchCommand('tanko-browser://downloads-open?id=' + id);
+  }
+
+  function revealDownload(id) {
+    dispatchCommand('tanko-browser://downloads-reveal?id=' + id);
+  }
+
+  window.setDownloadsData = setDownloadsData;
+  reloadDownloads();
+</script>
+</body>
+</html>

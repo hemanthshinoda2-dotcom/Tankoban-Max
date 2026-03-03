@@ -219,6 +219,7 @@ class TabButton(QWidget):
 
     def _show_tab_context_menu(self, global_pos):
         """Show right-click context menu on the tab."""
+        bar = self._find_tab_bar()
         menu = QMenu(self)
         menu.setStyleSheet(f"""
             QMenu {{
@@ -250,6 +251,10 @@ class TabButton(QWidget):
 
         if not self._pinned:
             menu.addAction("Close tab", lambda: self.close_clicked.emit(self.tab_id))
+        menu.addAction("Close other tabs", lambda: self._emit_to_bar("close_other_tabs_requested", self.tab_id))
+        menu.addAction("Close tabs to the right", lambda: self._emit_to_bar("close_tabs_right_requested", self.tab_id))
+        if bar and bar.has_closed_tabs:
+            menu.addAction("Reopen closed tab", lambda: self._emit_to_bar("reopen_closed_tab_requested"))
 
         menu.exec(global_pos)
 
@@ -310,7 +315,7 @@ class TabButton(QWidget):
             parent = self.parent()
             while parent and not isinstance(parent, TabBar):
                 parent = parent.parent()
-            if parent:
+            if parent and parent.can_drop(source_id, self.tab_id):
                 parent.tab_reorder_requested.emit(source_id, self.tab_id)
         event.acceptProposedAction()
 
@@ -347,6 +352,9 @@ class TabBar(QWidget):
     tab_pin_requested = Signal(str, bool)     # (tab_id, pin)
     tab_duplicate_requested = Signal(str)     # tab_id
     tab_mute_requested = Signal(str)          # tab_id
+    close_other_tabs_requested = Signal(str)  # anchor tab_id
+    close_tabs_right_requested = Signal(str)  # anchor tab_id
+    reopen_closed_tab_requested = Signal()
     minimize_clicked = Signal()
     maximize_clicked = Signal()
     close_clicked = Signal()
@@ -358,6 +366,7 @@ class TabBar(QWidget):
         self.setStyleSheet(theme.TAB_BAR_STYLE)
 
         self._buttons: dict[str, TabButton] = {}
+        self.has_closed_tabs = False
 
         # Layout: [scroll area with tabs + button] [stretch] [window controls]
         outer = QHBoxLayout(self)
@@ -532,3 +541,34 @@ class TabBar(QWidget):
         if btn:
             btn.pinned = pinned
             self._recalc_tab_widths()
+
+    def set_order(self, tab_ids: list[str]):
+        """Reorder buttons to match the provided tab-id order."""
+        if not isinstance(tab_ids, list):
+            return
+        new_btn_idx = self._tab_layout.indexOf(self._new_btn)
+        if new_btn_idx < 0:
+            return
+        insert_idx = 0
+        for tid in tab_ids:
+            btn = self._buttons.get(str(tid or ""))
+            if not btn:
+                continue
+            self._tab_layout.removeWidget(btn)
+            self._tab_layout.insertWidget(insert_idx, btn)
+            insert_idx += 1
+        self._recalc_tab_widths()
+
+    def set_has_closed_tabs(self, has_closed_tabs: bool):
+        self.has_closed_tabs = bool(has_closed_tabs)
+
+    def is_pinned(self, tab_id: str) -> bool:
+        btn = self._buttons.get(tab_id)
+        return bool(btn and btn.pinned)
+
+    def can_drop(self, source_id: str, target_id: str) -> bool:
+        src = self._buttons.get(source_id)
+        tgt = self._buttons.get(target_id)
+        if not src or not tgt:
+            return False
+        return bool(src.pinned == tgt.pinned)

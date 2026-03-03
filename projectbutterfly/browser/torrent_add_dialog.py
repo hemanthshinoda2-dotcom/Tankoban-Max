@@ -1,12 +1,12 @@
 """
-TorrentAddDialog — metadata-first torrent add dialog.
+TorrentAddDialog â€” metadata-first torrent add dialog.
 
 Mirrors the Electron app's add flow:
-  1. User clicks magnet link → dialog opens immediately
+  1. User clicks magnet link â†’ dialog opens immediately
   2. Metadata resolves in background (name, size, file tree)
   3. User picks destination (Comics/Videos/Books/Browse)
   4. User selects files, sets priorities, toggles sequential/streamable
-  5. Click Download → starts configured torrent
+  5. Click Download â†’ starts configured torrent
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QTimer
@@ -21,7 +22,7 @@ from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTreeWidget, QTreeWidgetItem, QHeaderView,
-    QCheckBox, QComboBox, QFileDialog, QWidget, QProgressBar,
+    QCheckBox, QComboBox, QWidget, QProgressBar,
     QSizePolicy, QSpacerItem, QGroupBox,
 )
 
@@ -196,17 +197,29 @@ class TorrentAddDialog(QDialog):
 
     torrent_started = Signal(str)  # emits torrent ID on successful add
 
-    def __init__(self, magnet_uri: str, bridge_root=None, parent=None):
+    def __init__(self, magnet_uri: str, bridge_root=None, parent=None, manage_torrent=None):
         super().__init__(parent)
         self._magnet = magnet_uri
         self._bridge = bridge_root
+        self._manage_torrent = manage_torrent if isinstance(manage_torrent, dict) else None
+        self._manage_mode = bool(self._manage_torrent)
+        self._torrent_id = str((self._manage_torrent or {}).get("id", "") or "")
         self._resolve_id = None
+        self._resolve_started_ms = 0
+        self._resolve_timeout_ms = 90000
+        self._resolve_poll_timer = QTimer(self)
+        self._resolve_poll_timer.setInterval(350)
+        self._resolve_poll_timer.timeout.connect(self._poll_resolve_status)
         self._files = []
         self._total_size = 0
         self._dest_path = ""
-        self._dest_type = ""  # "comics", "videos", "books", "custom"
+        self._dest_type = ""  # "comics", "videos", "books"
+        self._lib_paths = {"comics": "", "videos": "", "books": ""}
+        self._lib_roots = {"comics": [], "videos": [], "books": []}
+        self._last_dest_by_cat = {}
+        self._dest_mode_value = "standalone"
 
-        self.setWindowTitle("Add Torrent")
+        self.setWindowTitle("Manage Torrent Files" if self._manage_mode else "Add Torrent")
         self.setMinimumSize(620, 520)
         self.resize(680, 600)
         self.setStyleSheet(_DIALOG_STYLE)
@@ -215,10 +228,13 @@ class TorrentAddDialog(QDialog):
         )
 
         self._build_ui()
+        self._load_last_destinations()
         self._load_library_paths()
 
-        # Start metadata resolution in background
-        QTimer.singleShot(100, self._start_resolve)
+        if self._manage_mode:
+            QTimer.singleShot(50, self._load_manage_snapshot)
+        else:
+            QTimer.singleShot(100, self._start_resolve)
 
     # -------------------------------------------------------------------
     # UI construction
@@ -235,13 +251,17 @@ class TorrentAddDialog(QDialog):
         layout.addWidget(src_label)
 
         self._source_input = QLineEdit()
-        self._source_input.setText(self._magnet)
+        if self._manage_mode:
+            self._source_input.setText(str((self._manage_torrent or {}).get("name", "") or self._torrent_id))
+            self._source_input.setPlaceholderText("Existing torrent")
+        else:
+            self._source_input.setText(self._magnet)
+            self._source_input.setPlaceholderText("Magnet URI or .torrent file")
         self._source_input.setReadOnly(True)
-        self._source_input.setPlaceholderText("Magnet URI or .torrent file")
         layout.addWidget(self._source_input)
 
         # -- Status line (resolving / name + size) --
-        self._status_label = QLabel("Resolving metadata...")
+        self._status_label = QLabel("Loading torrent info..." if self._manage_mode else "Resolving metadata...")
         self._status_label.setObjectName("subtext")
         layout.addWidget(self._status_label)
 
@@ -261,18 +281,40 @@ class TorrentAddDialog(QDialog):
         self._btn_comics = QPushButton("Comics")
         self._btn_videos = QPushButton("Videos")
         self._btn_books = QPushButton("Books")
-        self._btn_browse = QPushButton("Browse...")
+        self._btn_standalone = QPushButton("Standalone")
 
-        for btn in (self._btn_comics, self._btn_videos, self._btn_books, self._btn_browse):
+        for btn in (self._btn_comics, self._btn_videos, self._btn_books, self._btn_standalone):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_row.addWidget(btn)
 
         self._btn_comics.clicked.connect(lambda: self._pick_dest("comics"))
         self._btn_videos.clicked.connect(lambda: self._pick_dest("videos"))
         self._btn_books.clicked.connect(lambda: self._pick_dest("books"))
-        self._btn_browse.clicked.connect(lambda: self._pick_dest("custom"))
+        self._btn_standalone.clicked.connect(lambda: self._set_dest_mode("standalone"))
 
         dest_layout.addLayout(btn_row)
+
+        mode_row = QHBoxLayout()
+        mode_row.setSpacing(8)
+        mode_lbl = QLabel("Destination mode")
+        mode_lbl.setObjectName("subtext")
+        self._dest_mode = QComboBox()
+        self._dest_mode.addItem("Standalone download (default)", "standalone")
+        self._dest_mode.addItem("Pick existing folder", "existing")
+        self._dest_mode.addItem("Create new folder", "new")
+        self._dest_mode.currentIndexChanged.connect(self._on_destination_mode_changed)
+        mode_row.addWidget(mode_lbl)
+        mode_row.addWidget(self._dest_mode, 1)
+        dest_layout.addLayout(mode_row)
+
+        self._existing_folder_combo = QComboBox()
+        self._existing_folder_combo.currentIndexChanged.connect(self._on_existing_folder_changed)
+        dest_layout.addWidget(self._existing_folder_combo)
+
+        self._new_folder_input = QLineEdit()
+        self._new_folder_input.setPlaceholderText("Enter new folder name")
+        self._new_folder_input.textChanged.connect(lambda _text: self._recompute_destination())
+        dest_layout.addWidget(self._new_folder_input)
 
         self._dest_display = QLabel("No destination selected")
         self._dest_display.setObjectName("subtext")
@@ -347,7 +389,12 @@ class TorrentAddDialog(QDialog):
         btn_cancel.clicked.connect(self._on_cancel)
         action_row.addWidget(btn_cancel)
 
-        self._btn_download = QPushButton("Download")
+        self._btn_retry = QPushButton("Retry")
+        self._btn_retry.clicked.connect(self._retry_resolve)
+        self._btn_retry.setVisible(False)
+        action_row.addWidget(self._btn_retry)
+
+        self._btn_download = QPushButton("Apply" if self._manage_mode else "Download")
         self._btn_download.setObjectName("downloadBtn")
         self._btn_download.setEnabled(False)
         self._btn_download.clicked.connect(self._on_download)
@@ -360,61 +407,207 @@ class TorrentAddDialog(QDialog):
     # -------------------------------------------------------------------
 
     def _load_library_paths(self):
-        """Read library root folders from storage config files."""
+        """Read library root folders using WebSourcesBridge destinations API."""
         self._lib_paths = {"comics": "", "videos": "", "books": ""}
-        try:
-            from .. import storage
-            # Comics
-            cfg = storage.read_json(storage.data_path("library_config.json"), {})
-            roots = cfg.get("rootFolders", [])
-            if roots:
-                self._lib_paths["comics"] = roots[0]
-            # Videos
-            cfg = storage.read_json(storage.data_path("video_prefs.json"), {})
-            roots = cfg.get("rootFolders", [])
-            if roots:
-                self._lib_paths["videos"] = roots[0]
-            # Books
-            cfg = storage.read_json(storage.data_path("books_settings.json"), {})
-            roots = cfg.get("bookRootFolders", [])
-            if roots:
-                self._lib_paths["books"] = roots[0]
-        except Exception:
-            pass
+        self._lib_roots = {"comics": [], "videos": [], "books": []}
 
-        # Update button tooltips with paths
+        loaded = False
+        if self._bridge and hasattr(self._bridge, "webSources"):
+            try:
+                raw = self._bridge.webSources.getDestinations()
+                data = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(data, dict) and data.get("ok"):
+                    self._lib_roots["comics"] = [str(p) for p in (data.get("allComics") or []) if p]
+                    self._lib_roots["videos"] = [str(p) for p in (data.get("allVideos") or []) if p]
+                    self._lib_roots["books"] = [str(p) for p in (data.get("allBooks") or []) if p]
+                    for key in ("comics", "videos", "books"):
+                        roots = self._lib_roots.get(key, [])
+                        self._lib_paths[key] = str(roots[0]) if roots else ""
+                    loaded = True
+            except Exception:
+                loaded = False
+
+        if not loaded:
+            try:
+                from .. import storage
+                cfg = storage.read_json(storage.data_path("library_state.json"), {})
+                comics = [str(p) for p in (cfg.get("rootFolders") or []) if p]
+                videos = [str(p) for p in (cfg.get("videoFolders") or []) if p]
+                bcfg = storage.read_json(storage.data_path("books_library_state.json"), {})
+                books = [str(p) for p in (bcfg.get("bookRootFolders") or []) if p]
+                self._lib_roots = {"comics": comics, "videos": videos, "books": books}
+                for key in ("comics", "videos", "books"):
+                    roots = self._lib_roots.get(key, [])
+                    self._lib_paths[key] = str(roots[0]) if roots else ""
+            except Exception:
+                pass
+
         for key, btn in [("comics", self._btn_comics), ("videos", self._btn_videos), ("books", self._btn_books)]:
             path = self._lib_paths.get(key, "")
-            if path:
-                btn.setToolTip(path)
-            else:
-                btn.setToolTip("Not configured")
-                btn.setEnabled(False)
+            btn.setEnabled(bool(path))
+            btn.setToolTip(path or "Not configured")
+
+        preferred = "videos" if self._lib_paths.get("videos") else ""
+        if not preferred:
+            for key in ("comics", "books", "videos"):
+                if self._lib_paths.get(key):
+                    preferred = key
+                    break
+        if preferred:
+            self._pick_dest(preferred)
 
     # -------------------------------------------------------------------
     # Destination picking
     # -------------------------------------------------------------------
 
+    def _load_last_destinations(self):
+        self._last_dest_by_cat = {}
+        if not self._bridge or not hasattr(self._bridge, "webBrowserSettings"):
+            return
+        try:
+            raw = self._bridge.webBrowserSettings.get()
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            settings = data.get("settings", {}) if isinstance(data, dict) else {}
+            saved = settings.get("sourcesLastDestinationByCategory", {}) if isinstance(settings, dict) else {}
+            if isinstance(saved, dict):
+                for key in ("comics", "videos", "books"):
+                    path = str(saved.get(key, "") or "").strip()
+                    if path:
+                        self._last_dest_by_cat[key] = path
+        except Exception:
+            self._last_dest_by_cat = {}
+
+    def _save_last_destination(self):
+        if not self._bridge or not hasattr(self._bridge, "webBrowserSettings"):
+            return
+        cat = str(self._dest_type or "").strip()
+        if cat not in ("comics", "videos", "books") or not self._dest_path:
+            return
+        try:
+            raw = self._bridge.webBrowserSettings.get()
+            data = json.loads(raw) if isinstance(raw, str) else raw
+            settings = data.get("settings", {}) if isinstance(data, dict) else {}
+            if not isinstance(settings, dict):
+                settings = {}
+            rows = settings.get("sourcesLastDestinationByCategory", {})
+            if not isinstance(rows, dict):
+                rows = {}
+            rows[cat] = self._dest_path
+            settings["sourcesLastDestinationByCategory"] = rows
+            self._last_dest_by_cat = dict(rows)
+            self._bridge.webBrowserSettings.save(json.dumps(settings))
+        except Exception:
+            pass
+
+    def _set_dest_mode(self, mode: str):
+        val = str(mode or "").strip()
+        if val not in ("standalone", "existing", "new"):
+            val = "standalone"
+        idx = self._dest_mode.findData(val)
+        if idx >= 0 and idx != self._dest_mode.currentIndex():
+            self._dest_mode.setCurrentIndex(idx)
+        self._dest_mode_value = val
+        self._refresh_destination_mode_widgets()
+        self._recompute_destination()
+
+    def _on_destination_mode_changed(self, _index: int):
+        self._dest_mode_value = str(self._dest_mode.currentData() or "standalone")
+        self._refresh_destination_mode_widgets()
+        self._recompute_destination()
+
+    def _refresh_destination_mode_widgets(self):
+        mode = str(self._dest_mode.currentData() or "standalone")
+        self._existing_folder_combo.setVisible(mode == "existing")
+        self._new_folder_input.setVisible(mode == "new")
+
+    def _on_existing_folder_changed(self, _index: int):
+        self._recompute_destination()
+
+    def _reload_existing_folders(self):
+        self._existing_folder_combo.blockSignals(True)
+        self._existing_folder_combo.clear()
+        cat = str(self._dest_type or "").strip()
+        root = str(self._lib_paths.get(cat, "") or "").strip()
+        if not cat or not root:
+            self._existing_folder_combo.blockSignals(False)
+            return
+
+        rows = [{"name": os.path.basename(root) or root, "path": root}]
+        if self._bridge and hasattr(self._bridge, "webSources"):
+            try:
+                raw = self._bridge.webSources.listDestinationFolders(json.dumps({
+                    "mode": cat,
+                    "path": root,
+                }))
+                data = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(data, dict) and data.get("ok"):
+                    for row in (data.get("folders") or []):
+                        if isinstance(row, dict):
+                            p = str(row.get("path", "") or "").strip()
+                            if p:
+                                rows.append({
+                                    "name": str(row.get("name", "") or os.path.basename(p) or p),
+                                    "path": p,
+                                })
+            except Exception:
+                pass
+
+        seen = set()
+        for row in rows:
+            p = os.path.abspath(str(row.get("path", "") or ""))
+            if not p:
+                continue
+            key = p.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            self._existing_folder_combo.addItem(str(row.get("name", "") or os.path.basename(p) or p), p)
+
+        last = str(self._last_dest_by_cat.get(cat, "") or "").strip()
+        if last:
+            last_abs = os.path.abspath(last).lower()
+            for i in range(self._existing_folder_combo.count()):
+                if str(self._existing_folder_combo.itemData(i) or "").lower() == last_abs:
+                    self._existing_folder_combo.setCurrentIndex(i)
+                    break
+        self._existing_folder_combo.blockSignals(False)
+
+    def _recompute_destination(self):
+        cat = str(self._dest_type or "").strip()
+        root = str(self._lib_paths.get(cat, "") or "").strip()
+        mode = str(self._dest_mode.currentData() or "standalone")
+        path = ""
+        if root:
+            if mode == "existing":
+                path = str(self._existing_folder_combo.currentData() or root)
+            elif mode == "new":
+                name = str(self._new_folder_input.text() or "").strip()
+                if name:
+                    safe = "".join(ch if ch not in '<>:"/\\|?*' and ord(ch) >= 32 else "_" for ch in name).strip(" .")
+                    path = os.path.join(root, safe) if safe else root
+                else:
+                    path = root
+            else:
+                path = root
+        self._dest_path = path
+        self._dest_display.setText(path or "No destination selected")
+        if path:
+            self._save_last_destination()
+        self._update_download_enabled()
+
     def _pick_dest(self, dest_type: str):
-        if dest_type == "custom":
-            folder = QFileDialog.getExistingDirectory(
-                self, "Select download folder", self._dest_path or ""
-            )
-            if not folder:
-                return
-            self._dest_path = folder
-        else:
-            path = self._lib_paths.get(dest_type, "")
-            if not path:
-                return
-            self._dest_path = path
+        if dest_type not in ("comics", "videos", "books"):
+            return
+        path = str(self._lib_paths.get(dest_type, "") or "").strip()
+        if not path:
+            return
 
         self._dest_type = dest_type
-        self._dest_display.setText(self._dest_path)
+        self._reload_existing_folders()
+        self._recompute_destination()
 
-        # Update button styles — highlight active
-        for key, btn in [("comics", self._btn_comics), ("videos", self._btn_videos),
-                         ("books", self._btn_books), ("custom", self._btn_browse)]:
+        # Update button styles to highlight active category.
+        for key, btn in [("comics", self._btn_comics), ("videos", self._btn_videos), ("books", self._btn_books)]:
             if key == dest_type:
                 btn.setObjectName("destActive")
             else:
@@ -422,49 +615,219 @@ class TorrentAddDialog(QDialog):
             btn.style().unpolish(btn)
             btn.style().polish(btn)
 
-        self._update_download_enabled()
+        self._chk_streamable.setEnabled(dest_type == "videos")
+        if dest_type != "videos":
+            self._chk_streamable.setChecked(False)
+        last = str(self._last_dest_by_cat.get(dest_type, "") or "").strip()
+        if last:
+            self._set_dest_mode("existing")
+        else:
+            self._set_dest_mode(self._dest_mode_value or "standalone")
 
     # -------------------------------------------------------------------
     # Metadata resolution (background thread)
     # -------------------------------------------------------------------
 
+    def _set_resolve_error(self, message: str, *, allow_retry: bool = True):
+        self._resolve_poll_timer.stop()
+        self._resolve_progress.hide()
+        self._status_label.setText(str(message or "Metadata resolve failed"))
+        if hasattr(self, "_btn_retry"):
+            self._btn_retry.setVisible(bool(allow_retry and not self._manage_mode))
+
+    def _retry_resolve(self):
+        if self._manage_mode:
+            return
+        if self._resolve_id and self._bridge and hasattr(self._bridge, "webTorrent"):
+            try:
+                self._bridge.webTorrent.cancelResolve(
+                    json.dumps({"resolveId": self._resolve_id})
+                )
+            except Exception:
+                pass
+        self._resolve_id = None
+        self._resolve_started_ms = 0
+        self._files = []
+        self._file_tree.clear()
+        self._files_summary.setText("Waiting for metadata...")
+        if hasattr(self, "_btn_retry"):
+            self._btn_retry.setVisible(False)
+        self._btn_download.setEnabled(False)
+        self._start_resolve()
+
     def _start_resolve(self):
         """Start metadata resolution in a background thread."""
         if not self._bridge or not hasattr(self._bridge, "webTorrent"):
-            self._status_label.setText("Bridge not available — cannot resolve metadata")
-            self._resolve_progress.hide()
+            self._set_resolve_error("Bridge not available - cannot resolve metadata", allow_retry=False)
             return
+
+        self._resolve_poll_timer.stop()
+        self._resolve_id = None
+        self._resolve_started_ms = int(time.time() * 1000)
+        if hasattr(self, "_btn_retry"):
+            self._btn_retry.setVisible(False)
+        self._status_label.setText("Resolving metadata... finding peers")
+        self._resolve_progress.setRange(0, 0)
+        self._resolve_progress.show()
 
         def _resolve():
             try:
-                result_json = self._bridge.webTorrent.resolveMetadata(
-                    json.dumps({"source": self._magnet})
-                )
+                if hasattr(self._bridge.webTorrent, "startResolve"):
+                    result_json = self._bridge.webTorrent.startResolve(
+                        json.dumps({
+                            "source": self._magnet,
+                            "timeoutMs": self._resolve_timeout_ms,
+                            "retryAfterMs": 20000,
+                            "maxRetries": 1,
+                        })
+                    )
+                else:
+                    result_json = self._bridge.webTorrent.resolveMetadata(
+                        json.dumps({"source": self._magnet, "timeoutMs": self._resolve_timeout_ms})
+                    )
                 result = json.loads(result_json) if isinstance(result_json, str) else result_json
             except Exception as e:
                 result = {"ok": False, "error": str(e)}
 
-            QTimer.singleShot(0, lambda: self._on_metadata_resolved(result))
+            QTimer.singleShot(0, lambda: self._on_resolve_started(result))
 
         threading.Thread(target=_resolve, daemon=True).start()
 
+    def _on_resolve_started(self, result: dict):
+        if not result.get("ok", False):
+            self._set_resolve_error(f"Failed: {result.get('error', 'Unknown error')}", allow_retry=True)
+            return
+        self._resolve_id = str(result.get("resolveId", "") or "")
+        self._resolve_started_ms = int(time.time() * 1000)
+        state = str(result.get("state", "") or "").strip().lower()
+        if state in ("timeout", "error"):
+            self._set_resolve_error(
+                str(result.get("error", "") or ("Resolve " + state)),
+                allow_retry=True,
+            )
+            return
+        if result.get("done") or result.get("metadataReady") or result.get("files"):
+            self._on_metadata_resolved(result)
+            return
+        self._resolve_poll_timer.start()
+
+    def _poll_resolve_status(self):
+        if not self._resolve_id:
+            self._resolve_poll_timer.stop()
+            return
+        if not self._bridge or not hasattr(self._bridge, "webTorrent"):
+            self._set_resolve_error("Bridge unavailable while resolving", allow_retry=True)
+            return
+        try:
+            raw = self._bridge.webTorrent.getResolveStatus(
+                json.dumps({"resolveId": self._resolve_id})
+            )
+            status = json.loads(raw) if isinstance(raw, str) else raw
+        except Exception as e:
+            status = {"ok": False, "error": str(e)}
+
+        if not status.get("ok", False):
+            self._set_resolve_error(f"Failed: {status.get('error', 'Unknown error')}", allow_retry=True)
+            return
+
+        elapsed_ms = int(status.get("elapsedMs", int(time.time() * 1000) - self._resolve_started_ms) or 0)
+        secs = max(0, elapsed_ms // 1000)
+        state = str(status.get("state", "") or "").strip().lower()
+        if state in ("timeout", "error"):
+            self._set_resolve_error(
+                str(status.get("error", "") or ("Resolve " + state)),
+                allow_retry=True,
+            )
+            return
+        if elapsed_ms >= self._resolve_timeout_ms and not status.get("done", False):
+            self._set_resolve_error(
+                "Metadata resolution timed out. Retry or cancel.",
+                allow_retry=True,
+            )
+            return
+        if not status.get("done", False):
+            retry_count = int(status.get("retryCount", 0) or 0)
+            if secs >= 25:
+                hint = "slow magnet, still trying"
+                if retry_count > 0:
+                    hint = "slow magnet, retry #" + str(retry_count)
+                self._status_label.setText(f"Resolving metadata... {secs}s ({hint})")
+            else:
+                self._status_label.setText(f"Resolving metadata... {secs}s")
+            return
+
+        self._resolve_poll_timer.stop()
+        self._on_metadata_resolved(status)
+
     def _on_metadata_resolved(self, result: dict):
         """Called on main thread when metadata is ready."""
+        self._resolve_poll_timer.stop()
         self._resolve_progress.hide()
 
         if not result.get("ok", False):
             error = result.get("error", "Unknown error")
-            self._status_label.setText(f"Failed: {error}")
+            self._set_resolve_error(f"Failed: {error}", allow_retry=True)
+            return
+
+        state = str(result.get("state", "") or "").strip().lower()
+        if state in ("timeout", "error"):
+            self._set_resolve_error(
+                str(result.get("error", "") or ("Resolve " + state)),
+                allow_retry=True,
+            )
             return
 
         self._resolve_id = result.get("resolveId", "")
         name = result.get("name", "Unknown")
         self._total_size = result.get("totalSize", 0)
         self._files = result.get("files", [])
+        if hasattr(self, "_btn_retry"):
+            self._btn_retry.setVisible(False)
 
         self._status_label.setText(f"{name}  ({_fmt_size(self._total_size)})")
 
         # Populate file tree
+        self._populate_file_tree()
+        self._update_download_enabled()
+
+    def _load_manage_snapshot(self):
+        """Initialize dialog from an existing torrent row for manage mode."""
+        row = self._manage_torrent or {}
+        self._resolve_progress.hide()
+        self._resolve_id = None
+        self._torrent_id = str(row.get("id", "") or self._torrent_id)
+        self._files = row.get("files", []) if isinstance(row.get("files"), list) else []
+        self._total_size = int(row.get("totalSize", 0) or 0)
+        name = str(row.get("name", "") or self._torrent_id or "Torrent")
+        self._status_label.setText(f"Manage: {name}  ({_fmt_size(self._total_size)})")
+
+        if not self._files and self._bridge and hasattr(self._bridge, "webTorrent") and self._torrent_id:
+            try:
+                raw = self._bridge.webTorrent.getActive()
+                data = json.loads(raw) if isinstance(raw, str) else raw
+                for item in (data.get("torrents", []) if isinstance(data, dict) else []):
+                    if isinstance(item, dict) and str(item.get("id", "") or "") == self._torrent_id:
+                        self._files = item.get("files", []) if isinstance(item.get("files"), list) else []
+                        self._total_size = int(item.get("totalSize", self._total_size) or self._total_size)
+                        break
+            except Exception:
+                pass
+
+        save_path = str(row.get("destinationRoot", "") or row.get("savePath", "") or "").strip()
+        if save_path:
+            for key in ("videos", "comics", "books"):
+                roots = self._lib_roots.get(key, [])
+                if any(os.path.abspath(save_path).lower().startswith(os.path.abspath(r).lower()) for r in roots):
+                    self._dest_type = key
+                    break
+            if self._dest_type:
+                self._pick_dest(self._dest_type)
+                self._dest_path = save_path
+                self._dest_display.setText(save_path)
+
+        self._chk_sequential.setChecked(bool(row.get("sequential", True)))
+        self._chk_streamable.setChecked(bool(row.get("videoLibraryStreamable", False)))
+
         self._populate_file_tree()
         self._update_download_enabled()
 
@@ -489,11 +852,15 @@ class TorrentAddDialog(QDialog):
             parts = path.replace("\\", "/").split("/")
             size = f.get("length", 0)
             index = f.get("index", 0)
+            selected = bool(f.get("selected", True))
+            pr = str(f.get("priority", "normal") or "normal").strip().lower()
+            if pr not in ("high", "normal", "low"):
+                pr = "normal"
 
             if len(parts) == 1:
                 # Top-level file
                 item = QTreeWidgetItem()
-                item.setCheckState(0, Qt.CheckState.Checked)
+                item.setCheckState(0, Qt.CheckState.Checked if selected else Qt.CheckState.Unchecked)
                 item.setText(0, parts[0])
                 item.setText(1, _fmt_size(size))
                 item.setData(0, Qt.ItemDataRole.UserRole, index)
@@ -502,7 +869,7 @@ class TorrentAddDialog(QDialog):
                 # Priority combo
                 combo = QComboBox()
                 combo.addItems(["Normal", "High", "Low"])
-                combo.setCurrentIndex(0)
+                combo.setCurrentIndex(1 if pr == "high" else (2 if pr == "low" else 0))
                 self._file_tree.addTopLevelItem(item)
                 self._file_tree.setItemWidget(item, 2, combo)
                 root_items.append(item)
@@ -526,7 +893,7 @@ class TorrentAddDialog(QDialog):
 
                 # Add the file under its folder
                 item = QTreeWidgetItem()
-                item.setCheckState(0, Qt.CheckState.Checked)
+                item.setCheckState(0, Qt.CheckState.Checked if selected else Qt.CheckState.Unchecked)
                 item.setText(0, parts[-1])
                 item.setText(1, _fmt_size(size))
                 item.setData(0, Qt.ItemDataRole.UserRole, index)
@@ -536,7 +903,7 @@ class TorrentAddDialog(QDialog):
 
                 combo = QComboBox()
                 combo.addItems(["Normal", "High", "Low"])
-                combo.setCurrentIndex(0)
+                combo.setCurrentIndex(1 if pr == "high" else (2 if pr == "low" else 0))
                 self._file_tree.setItemWidget(item, 2, combo)
 
         # Expand all
@@ -548,7 +915,7 @@ class TorrentAddDialog(QDialog):
         self._update_files_summary()
 
     def _on_item_changed(self, item: QTreeWidgetItem, column: int):
-        """Handle checkbox changes — propagate to children for folders."""
+        """Handle checkbox changes â€” propagate to children for folders."""
         if column != 0:
             return
         item_type = item.data(0, Qt.ItemDataRole.UserRole + 1)
@@ -624,8 +991,8 @@ class TorrentAddDialog(QDialog):
     def _update_download_enabled(self):
         has_dest = bool(self._dest_path)
         has_files = bool(self._get_selected_files())
-        has_resolve = bool(self._resolve_id)
-        self._btn_download.setEnabled(has_dest and has_files and has_resolve)
+        has_ticket = bool(self._torrent_id) if self._manage_mode else bool(self._resolve_id)
+        self._btn_download.setEnabled(has_dest and has_files and has_ticket)
 
     # -------------------------------------------------------------------
     # Actions
@@ -633,7 +1000,7 @@ class TorrentAddDialog(QDialog):
 
     def _on_download(self):
         """Start the configured torrent download."""
-        if not self._resolve_id or not self._bridge:
+        if not self._bridge:
             return
 
         selected = self._get_selected_files()
@@ -645,43 +1012,60 @@ class TorrentAddDialog(QDialog):
         sequential = self._chk_sequential.isChecked()
         streamable = self._chk_streamable.isChecked()
 
-        # Call startConfigured on the bridge
         try:
-            result_json = self._bridge.webTorrent.startConfigured(json.dumps({
-                "resolveId": self._resolve_id,
-                "savePath": self._dest_path,
-                "selectedFiles": selected_indices,
-                "priorities": priorities,
-                "sequential": sequential,
-                "origin": "browser",
-            }))
-            result = json.loads(result_json) if isinstance(result_json, str) else result_json
-
-            if result.get("ok"):
-                torrent_id = result.get("id", "")
-
-                # If streamable + videos destination, use addToVideoLibrary
-                if streamable and self._dest_type == "videos" and torrent_id:
-                    try:
-                        self._bridge.webTorrent.addToVideoLibrary(json.dumps({
-                            "id": torrent_id,
-                            "destinationRoot": self._dest_path,
-                            "streamable": True,
-                        }))
-                    except Exception:
-                        pass
-
-                self.torrent_started.emit(torrent_id)
-                self.accept()
+            if self._manage_mode:
+                if not self._torrent_id:
+                    self._status_label.setText("Missing torrent id for manage flow")
+                    return
+                result_json = self._bridge.webTorrent.selectFiles(json.dumps({
+                    "id": self._torrent_id,
+                    "selectedIndices": selected_indices,
+                    "priorities": priorities,
+                    "sequential": sequential,
+                    "destinationRoot": self._dest_path,
+                }))
+                result = json.loads(result_json) if isinstance(result_json, str) else result_json
+                if not result.get("ok"):
+                    self._status_label.setText(f"Failed to apply changes: {result.get('error', 'Unknown error')}")
+                    return
+                torrent_id = self._torrent_id
             else:
-                error = result.get("error", "Unknown error")
-                self._status_label.setText(f"Failed to start: {error}")
+                if not self._resolve_id:
+                    return
+                result_json = self._bridge.webTorrent.startConfigured(json.dumps({
+                    "resolveId": self._resolve_id,
+                    "savePath": self._dest_path,
+                    "selectedFiles": selected_indices,
+                    "priorities": priorities,
+                    "sequential": sequential,
+                    "streamableOnly": bool(streamable and self._dest_type == "videos"),
+                    "origin": "browser",
+                }))
+                result = json.loads(result_json) if isinstance(result_json, str) else result_json
+                if not result.get("ok"):
+                    self._status_label.setText(f"Failed to start: {result.get('error', 'Unknown error')}")
+                    return
+                torrent_id = str(result.get("id", "") or "")
+
+            if streamable and self._dest_type == "videos" and torrent_id:
+                try:
+                    self._bridge.webTorrent.addToVideoLibrary(json.dumps({
+                        "id": torrent_id,
+                        "destinationRoot": self._dest_path,
+                        "streamable": True,
+                    }))
+                except Exception:
+                    pass
+
+            self.torrent_started.emit(torrent_id)
+            self.accept()
         except Exception as e:
             self._status_label.setText(f"Error: {e}")
 
     def _on_cancel(self):
         """Cancel and clean up pending resolve."""
-        if self._resolve_id and self._bridge and hasattr(self._bridge, "webTorrent"):
+        self._resolve_poll_timer.stop()
+        if (not self._manage_mode) and self._resolve_id and self._bridge and hasattr(self._bridge, "webTorrent"):
             try:
                 self._bridge.webTorrent.cancelResolve(
                     json.dumps({"resolveId": self._resolve_id})
@@ -694,3 +1078,4 @@ class TorrentAddDialog(QDialog):
         """Clean up on dialog close."""
         self._on_cancel()
         super().closeEvent(event)
+

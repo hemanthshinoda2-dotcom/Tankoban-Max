@@ -1177,6 +1177,79 @@ class MpvContainer(QWidget):
 
     # ── controls visibility (matches run_player.py _set_controls_visible) ─
 
+    def _apply_subtitle_safe_margin(self):
+        """Push subtitles above the bottom HUD when it is visible.
+
+        Ported from run_player.py _apply_subtitle_safe_margin — adapted to
+        access mpv via self._bridge._mpv instead of self._mpv.
+        """
+        try:
+            mpv = getattr(self._bridge, '_mpv', None)
+            if not mpv:
+                return
+            hud_h = 90  # matches hardcoded bottom_hud height in resizeEvent
+            try:
+                live_h = self.bottom_hud.height()
+                if live_h > 0:
+                    hud_h = max(hud_h, live_h)
+            except Exception:
+                pass
+            controls = bool(getattr(self, '_controls_visible', False))
+            extra_lift = 40  # default breathing room above the bar
+            margin = int((hud_h + extra_lift) if controls else 28)
+            margin = max(0, min(400, margin))
+
+            win_h = int(max(1, self.height()))
+            if controls:
+                cover_pct = ((hud_h + extra_lift) / float(win_h)) * 100.0
+                sub_pos = int(round(100.0 - cover_pct))
+            else:
+                sub_pos = 95
+            sub_pos = max(55, min(98, sub_pos))
+
+            try:
+                mpv.command('set', 'sub-ass-force-margins', 'yes')
+            except Exception:
+                try:
+                    mpv.sub_ass_force_margins = 'yes'
+                except Exception:
+                    pass
+
+            try:
+                mpv.command('set', 'sub-use-margins', 'yes')
+            except Exception:
+                try:
+                    mpv.sub_use_margins = 'yes'
+                except Exception:
+                    pass
+
+            ass_mode = 'force' if controls else 'no'
+            try:
+                mpv.command('set', 'sub-ass-override', ass_mode)
+            except Exception:
+                try:
+                    mpv.sub_ass_override = ass_mode
+                except Exception:
+                    pass
+
+            try:
+                mpv.command('set', 'sub-margin-y', str(margin))
+            except Exception:
+                try:
+                    mpv.sub_margin_y = int(margin)
+                except Exception:
+                    pass
+
+            try:
+                mpv.command('set', 'sub-pos', str(sub_pos))
+            except Exception:
+                try:
+                    mpv.sub_pos = int(sub_pos)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     def _set_controls_visible(self, visible):
         self._controls_visible = bool(visible)
         if visible:
@@ -1194,6 +1267,7 @@ class MpvContainer(QWidget):
             # Don't brick the cursor — use a timer so movement brings it back.
             self._show_cursor()
             self._arm_cursor_autohide()
+        self._apply_subtitle_safe_margin()
 
     def _arm_controls_autohide(self):
         """Start/refresh the HUD auto-hide timer unless an overlay is open."""

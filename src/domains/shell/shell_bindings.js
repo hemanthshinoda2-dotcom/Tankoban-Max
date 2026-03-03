@@ -1,4 +1,4 @@
-// Shell (top bar / window controls) bindings extracted from reader HUD
+﻿// Shell (top bar / window controls) bindings extracted from reader HUD
 // Build 7 (Phase 2): keep behavior identical, just relocate wiring.
 
 (function bindShellBindings(){
@@ -32,7 +32,7 @@
     });
   }
 
-  // Theme cycle: dark → light → nord → solarized → gruvbox → catppuccin → dark
+  // Theme cycle: dark â†’ light â†’ nord â†’ solarized â†’ gruvbox â†’ catppuccin â†’ dark
   var APP_THEME_MODE_KEY = 'appThemeMode';
   var APP_THEME_PRESET_KEY = 'appThemePreset';
   var APP_THEME_LEGACY_KEY = 'appTheme';
@@ -59,7 +59,7 @@
       }
     } catch {}
     try { localStorage.setItem(APP_THEME_MODE_KEY, t); } catch {}
-    // Butterfly: push theme to home.html (isolated webmode profile — no shared localStorage)
+    // Butterfly: push theme to home.html (isolated webmode profile â€” no shared localStorage)
     try {
       if (window.__tankoButterfly && window.electronAPI && window.electronAPI.shell) {
         window.electronAPI.shell.setAppTheme(t);
@@ -76,7 +76,7 @@
         }
       } catch {}
       var nextIdx = (APP_THEMES.indexOf(t) + 1) % APP_THEMES.length;
-      el.themeToggleBtn.title = THEME_LABELS[t] + ' — click for ' + THEME_LABELS[APP_THEMES[nextIdx]];
+      el.themeToggleBtn.title = THEME_LABELS[t] + ' â€” click for ' + THEME_LABELS[APP_THEMES[nextIdx]];
     }
   };
   const cycleAppTheme = () => {
@@ -1159,7 +1159,7 @@
     });
   }
 
-  // FIX: Chromium stuck :hover after minimize — briefly toggle pointer-events on focus regain
+  // FIX: Chromium stuck :hover after minimize â€” briefly toggle pointer-events on focus regain
   window.addEventListener('focus', function () {
     var btns = document.querySelectorAll('.winCtrl');
     btns.forEach(function (btn) { btn.style.pointerEvents = 'none'; });
@@ -1213,24 +1213,71 @@
   try { if (typeof syncPlayerFullscreenBtn === 'function') syncPlayerFullscreenBtn().catch(()=>{}); } catch {}
   try { if (typeof syncLibraryFullscreenBtn === 'function') syncLibraryFullscreenBtn().catch(()=>{}); } catch {}
 
-  // --- Tankoweb button (globe icon in tbLeft, opens Qt-native TankoWeb panel via bridge) ---
-  // Note: Tanko.api.shell is set asynchronously by the QWebChannel shim,
-  // so we check at click-time rather than registration-time.
+  // --- Tankoweb button (globe icon in tbLeft) ---
+  // Primary behavior is in-app Sources mode; bridge call is kept for parity/fallback.
+  function openSourcesModeFromShell() {
+    var deferred = window.Tanko && window.Tanko.deferred ? window.Tanko.deferred : null;
+    var ensurePromise = Promise.resolve();
+    try {
+      if (deferred && typeof deferred.ensureWebModulesLoadedLegacy === 'function') {
+        ensurePromise = Promise.resolve(deferred.ensureWebModulesLoadedLegacy());
+      } else if (deferred && typeof deferred.ensureWebModulesLoaded === 'function') {
+        ensurePromise = Promise.resolve(deferred.ensureWebModulesLoaded());
+      }
+    } catch (_eEnsure) {}
+
+    var bridgePromise = Promise.resolve();
+    try {
+      if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openWebMode === 'function') {
+        bridgePromise = Promise.resolve(window.Tanko.api.shell.openWebMode()).catch(function () {});
+      }
+    } catch (_eBridge) {}
+
+    Promise.all([ensurePromise.catch(function () {}), bridgePromise]).then(function () {
+      try {
+        if (window.Tanko && window.Tanko.modeRouter && typeof window.Tanko.modeRouter.setMode === 'function') {
+          window.Tanko.modeRouter.setMode('sources', { force: true }).catch(function () {});
+        } else if (typeof window.setMode === 'function') {
+          window.setMode('sources');
+        }
+      } catch (_eMode) {}
+
+      try {
+        if (window.Tanko && window.Tanko.sources && typeof window.Tanko.sources.openSources === 'function') {
+          window.Tanko.sources.openSources();
+        }
+      } catch (_eSources) {}
+    });
+  }
+
   var tankWebBtn = document.getElementById('tankWebBtn');
   if (tankWebBtn) {
     tankWebBtn.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
-      try {
-        if (window.Tanko && window.Tanko.api && window.Tanko.api.shell && typeof window.Tanko.api.shell.openWebMode === 'function') {
-          Tanko.api.shell.openWebMode();
-        } else {
-          console.warn('[shell] openWebMode not available — bridge not ready or not in Butterfly mode');
-        }
-      } catch (e) { console.error('[shell] openWebMode failed:', e); }
+      openSourcesModeFromShell();
     });
   }
 
+  var modeSourcesBtn = document.getElementById('modeSourcesBtn');
+  if (modeSourcesBtn) {
+    modeSourcesBtn.addEventListener('click', function (e) {
+      if (e.defaultPrevented) return;
+      e.preventDefault();
+      e.stopPropagation();
+      openSourcesModeFromShell();
+    });
+  }
 
-
+  if (Array.isArray(webUtilityBtns) && webUtilityBtns.length) {
+    webUtilityBtns.forEach(function (btn) {
+      if (!btn || typeof btn.addEventListener !== 'function') return;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openSourcesModeFromShell();
+      });
+    });
+  }
 })();
+

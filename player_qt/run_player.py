@@ -1981,7 +1981,9 @@ class ToastHUD(QWidget):
 
     def __init__(self, parent: QWidget):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
+        # No Tool/FramelessWindowHint flags — stay a plain child widget so
+        # move() uses parent-local coordinates and the window manager never
+        # repositions us on show().
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -2007,12 +2009,20 @@ class ToastHUD(QWidget):
 
         self._anim = QPropertyAnimation(self._opacity, b"opacity")
         self._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        # Connect finished once; only hide when actually fading out.
+        self._fading_out = False
+        self._anim.finished.connect(self._on_anim_finished)
 
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self._fade_out)
 
         self.hide()
+
+    def _on_anim_finished(self):
+        if self._fading_out:
+            self._fading_out = False
+            self.hide()
 
     def show_toast(self, text: str, ms: int = 1200):
         try:
@@ -2029,6 +2039,7 @@ class ToastHUD(QWidget):
 
             self.show()
             self.raise_()
+            self._fading_out = False
             self._anim.stop()
             self._anim.setDuration(150)
             self._anim.setStartValue(self._opacity.opacity())
@@ -2042,11 +2053,11 @@ class ToastHUD(QWidget):
 
     def _fade_out(self):
         try:
+            self._fading_out = True
             self._anim.stop()
             self._anim.setDuration(220)
             self._anim.setStartValue(self._opacity.opacity())
             self._anim.setEndValue(0.0)
-            self._anim.finished.connect(self.hide)
             self._anim.start()
         except Exception:
             pass

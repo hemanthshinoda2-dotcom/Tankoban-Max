@@ -2964,8 +2964,9 @@ function closeTracksPanel(){
               }
 
               // Apply UI state
+              // getState() returns { ui: {...}, updatedAt } — unwrap the inner snapshot
               if (uiState && typeof uiState === 'object') {
-                applyVideoUiState(uiState);
+                applyVideoUiState((uiState.ui && typeof uiState.ui === 'object') ? uiState.ui : uiState);
                 // Build 10.5: ensure Video-only toolbar + classes are synced after restoring UI state.
                 applyVideoThumbsClass();
                 syncVideoThumbToggleBtn();
@@ -4105,6 +4106,7 @@ function getContinueVideos() {
     const thumb = pickShowThumb(show);
     // pickShowThumb already returns a usable URL (or EMPTY_IMG). Do not wrap it again.
     img.src = thumb || EMPTY_IMG;
+    if (!thumb || thumb === EMPTY_IMG) cover.classList.add('noThumb');
     attachShowPoster(img, show.id);
     cover.appendChild(img);
 
@@ -5090,8 +5092,7 @@ function getEpisodeById(epId){
   }
 
     function rerenderVideoAfterProgress(){
-    // Video library disabled: no library UI to rerender.
-    return;
+    try { renderContinue(); } catch {}
   }
 
 

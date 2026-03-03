@@ -78,6 +78,9 @@
     shell: {
       revealPath: (...a) => ea.shell?.revealPath ? ea.shell.revealPath(...a) : ea.revealPath(...a),
       openWebMode: (...a) => ea.shell?.openWebMode ? ea.shell.openWebMode(...a) : Promise.resolve(),
+      openSourcesMode: (...a) => ea.shell?.openSourcesMode
+        ? ea.shell.openSourcesMode(...a)
+        : (ea.shell?.openWebMode ? ea.shell.openWebMode(...a) : Promise.resolve()),
     },
 
     // ========================================
@@ -504,6 +507,45 @@ holyGrail: {
     webFind: {
       inPage: (...a) => ea.webFind?.inPage ? ea.webFind.inPage(...a) : Promise.resolve({ ok: false }),
       onResult: (...a) => ea.webFind?.onResult ? ea.webFind.onResult(...a) : undefined,
+    },
+
+    // ========================================
+    // webTabManager.* (Butterfly native sources browser host)
+    // ========================================
+    webTabManager: {
+      createTab: (...a) => ea.webTabManager?.createTab ? ea.webTabManager.createTab(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      closeTab: (...a) => ea.webTabManager?.closeTab ? ea.webTabManager.closeTab(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      switchTab: (...a) => ea.webTabManager?.switchTab ? ea.webTabManager.switchTab(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      navigateTo: (...a) => ea.webTabManager?.navigateTo ? ea.webTabManager.navigateTo(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      goBack: (...a) => ea.webTabManager?.goBack ? ea.webTabManager.goBack(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      goForward: (...a) => ea.webTabManager?.goForward ? ea.webTabManager.goForward(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      reload: (...a) => ea.webTabManager?.reload ? ea.webTabManager.reload(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      stop: (...a) => ea.webTabManager?.stop ? ea.webTabManager.stop(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      getNavState: (...a) => ea.webTabManager?.getNavState ? ea.webTabManager.getNavState(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      setViewportBounds: (...a) => ea.webTabManager?.setViewportBounds ? ea.webTabManager.setViewportBounds(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      openBrowser: (...a) => ea.webTabManager?.openBrowser ? ea.webTabManager.openBrowser(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      closeBrowser: (...a) => ea.webTabManager?.closeBrowser ? ea.webTabManager.closeBrowser(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      setTabHome: (...a) => ea.webTabManager?.setTabHome ? ea.webTabManager.setTabHome(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      getZoomFactor: (...a) => ea.webTabManager?.getZoomFactor ? ea.webTabManager.getZoomFactor(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      setZoomFactor: (...a) => ea.webTabManager?.setZoomFactor ? ea.webTabManager.setZoomFactor(...a) : Promise.resolve({ ok: false, error: 'web_tab_manager_unavailable' }),
+      getTabs: (...a) => ea.webTabManager?.getTabs ? ea.webTabManager.getTabs(...a) : Promise.resolve({ ok: false, tabs: [], activeTabId: '' }),
+      onTabCreated: (...a) => ea.webTabManager?.onTabCreated ? ea.webTabManager.onTabCreated(...a) : undefined,
+      onTabClosed: (...a) => ea.webTabManager?.onTabClosed ? ea.webTabManager.onTabClosed(...a) : undefined,
+      onTabUpdated: (...a) => ea.webTabManager?.onTabUpdated ? ea.webTabManager.onTabUpdated(...a) : undefined,
+      onMagnetRequested: (...a) => ea.webTabManager?.onMagnetRequested ? ea.webTabManager.onMagnetRequested(...a) : undefined,
+    },
+
+    // ========================================
+    // webBrowserActions.*
+    // ========================================
+    webBrowserActions: {
+      ctxAction: (...a) => ea.webBrowserActions?.ctxAction ? ea.webBrowserActions.ctxAction(...a) : Promise.resolve({ ok: false }),
+      printPdf: (...a) => ea.webBrowserActions?.printPdf ? ea.webBrowserActions.printPdf(...a) : Promise.resolve({ ok: false }),
+      capturePage: (...a) => ea.webBrowserActions?.capturePage ? ea.webBrowserActions.capturePage(...a) : Promise.resolve({ ok: false }),
+      downloadOpenFile: (...a) => ea.webBrowserActions?.downloadOpenFile ? ea.webBrowserActions.downloadOpenFile(...a) : Promise.resolve({ ok: false }),
+      downloadShowInFolder: (...a) => ea.webBrowserActions?.downloadShowInFolder ? ea.webBrowserActions.downloadShowInFolder(...a) : Promise.resolve({ ok: false }),
+      onContextMenu: (...a) => ea.webBrowserActions?.onContextMenu ? ea.webBrowserActions.onContextMenu(...a) : undefined,
+      onCreateTab: (...a) => ea.webBrowserActions?.onCreateTab ? ea.webBrowserActions.onCreateTab(...a) : undefined,
     },
 
     // ========================================
