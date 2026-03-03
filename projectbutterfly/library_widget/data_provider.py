@@ -32,6 +32,7 @@ class MediaDataProvider(QObject):
         self._series: list[dict] = []
         self._items: list[dict] = []
         self._config: dict = {}
+        self._progress: dict = {}
 
     @property
     def kind(self) -> MediaKind:
@@ -48,6 +49,10 @@ class MediaDataProvider(QObject):
     @property
     def config(self) -> dict:
         return self._config
+
+    @property
+    def progress(self) -> dict:
+        return self._progress
 
     @property
     def root_folders(self) -> list[str]:
@@ -72,4 +77,66 @@ class MediaDataProvider(QObject):
         self._series = self._adapter.extract_series(raw_index)
         self._items = self._adapter.extract_items(raw_index)
 
+        # Read progress
+        progress_file = {
+            "comics": "progress.json",
+            "books": "books_progress.json",
+            "video": "video_progress.json",
+        }.get(self._kind, "progress.json")
+        self._progress = self._store.read_json(progress_file, {})
+
         self.data_ready.emit()
+
+    def continue_items(self, items: list[dict], max_count: int = 10) -> list[dict]:
+        """Get the most recently read/watched items that aren't finished.
+
+        Returns items enriched with 'percent' and 'updated_at' from progress.
+        One item per series (the most recently updated).
+        """
+        # Enrich items with progress
+        enriched = []
+        for it in items:
+            iid = it.get("id", "")
+            prog = self._progress.get(iid)
+            if not prog or not isinstance(prog, dict):
+                continue
+            if prog.get("finished"):
+                continue
+            updated_at = prog.get("updatedAt", 0)
+            if not updated_at:
+                continue
+
+            # Compute percent
+            page_count = prog.get("pageCount", 0)
+            max_page = prog.get("maxPageIndexSeen", 0)
+            pct = 0
+            if page_count and page_count > 0:
+                pct = min(99, int((max_page / page_count) * 100))
+            # Books use 'percent' or 'locator.fraction'
+            if "percent" in prog:
+                pct = int(prog["percent"])
+            elif isinstance(prog.get("locator"), dict):
+                frac = prog["locator"].get("fraction", 0)
+                pct = min(99, int(frac * 100))
+            # Video uses positionSec/durationSec
+            if "positionSec" in prog and "durationSec" in prog:
+                dur = prog["durationSec"] or 1
+                pct = min(99, int((prog["positionSec"] / dur) * 100))
+
+            enriched.append({
+                **it,
+                "percent": pct,
+                "updated_at": updated_at,
+            })
+
+        # One per series (most recent)
+        by_series: dict[str, dict] = {}
+        for it in enriched:
+            sid = it.get("series_id", "")
+            if not sid:
+                sid = it.get("id", "")
+            if sid not in by_series or it["updated_at"] > by_series[sid]["updated_at"]:
+                by_series[sid] = it
+
+        result = sorted(by_series.values(), key=lambda x: x["updated_at"], reverse=True)
+        return result[:max_count]

@@ -90,6 +90,15 @@ class UnifiedLibraryWidget(QWidget):
         # Populate sidebar
         self._sidebar.populate(self._provider.root_folders, self._all_series)
 
+        # Populate continue shelf
+        continue_items = self._provider.continue_items(self._provider.items)
+        self._home_view.set_continue_items(continue_items)
+        self._request_continue_thumbs(continue_items)
+
+        # Set continue label based on kind
+        labels = {"comics": "Continue Reading", "books": "Continue Reading", "video": "Continue Watching"}
+        self._home_view.set_continue_label(labels.get(self._kind, "Continue"))
+
         # Show all series initially
         self._apply_filter()
 
@@ -162,8 +171,29 @@ class UnifiedLibraryWidget(QWidget):
                     sid, first.get("path", ""), first.get("id", ""),
                 )
 
+    def _request_continue_thumbs(self, continue_items: list[dict]):
+        """Request thumbnails for continue shelf tiles using the item's own ID."""
+        for item in continue_items:
+            item_id = item.get("id", "")
+            path = item.get("path", "")
+            if item_id and path:
+                # Use item_id as the thumb key (prefix with "cont:" to avoid collision)
+                self._thumb_provider.request_thumb(
+                    f"cont:{item_id}", path, item_id,
+                )
+
     def _on_thumb_ready(self, series_id: str, px: QPixmap):
-        """Apply a loaded thumbnail to the matching card."""
+        """Apply a loaded thumbnail to the matching card or continue tile."""
+        # Check continue tiles first
+        if series_id.startswith("cont:"):
+            item_id = series_id[5:]
+            for tile in self._home_view.tiles:
+                if tile.item_data.get("id") == item_id:
+                    tile.set_pixmap(px)
+                    break
+            return
+
+        # Regular series cards
         for card in self._home_view.cards:
             if card.series_data.get("id") == series_id:
                 card.set_pixmap(px)
