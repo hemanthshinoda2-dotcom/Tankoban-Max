@@ -7973,7 +7973,7 @@ class WebTorrentBridge(QObject):
 
                 if finished:
                     if not has_dest:
-                        if entry.get("state") != "completed_pending":
+                        if entry.get("state") not in ("completed_pending", "metadata_ready"):
                             entry["state"] = "completed_pending"
                             entry["finishedAt"] = int(time.time() * 1000)
                             entry["progress"] = 1.0
@@ -8491,6 +8491,45 @@ class WebTorrentBridge(QObject):
         priorities = self._parse_priorities(payload.get("priorities", {}))
         sequential = bool(payload.get("sequential", True))
 
+        # --- Fast path for streamable-only: reuse resolve metadata, skip re-add ---
+        if streamable_only and info.get("files") and info.get("name"):
+            ih = info.get("infoHash", "") or pending.get("info_hash", "")
+            entry = self._create_entry({
+                "destinationRoot": "",
+                "savePath": save_path,
+                "directWrite": False,
+                "origin": str(payload.get("origin", "")),
+                "magnetUri": info.get("magnetUri", ""),
+                "name": info.get("name", ""),
+                "infoHash": ih,
+                "totalSize": info.get("totalSize", 0),
+                "sequential": sequential,
+                "filePriorities": priorities,
+                "videoLibraryStreamable": True,
+                "files": info.get("files", []),
+                "metadataReady": True,
+                "state": "metadata_ready",
+            })
+            # Register ID <-> hash mapping
+            self._id_to_hash[entry["id"]] = ih
+            if ih:
+                self._hash_to_id[ih.lower()] = entry["id"]
+            rec = {"info_hash": ih, "entry": entry}
+            self._active[entry["id"]] = rec
+            # Deselect all files in qBit — don't download anything yet
+            try:
+                file_ids = list(range(len(entry["files"])))
+                if file_ids:
+                    qbit.set_file_priority(ih, file_ids, 0)
+            except Exception:
+                pass
+            self._pending.pop(resolve_id, None)
+            self._upsert_history(entry)
+            self._emit_updated()
+            self._start_poll()
+            return json.dumps({"ok": True, "id": entry["id"]})
+
+        # --- Normal path: delete resolve torrent, re-add with new save path ---
         entry = self._create_entry({
             "destinationRoot": "" if streamable_only else save_path,
             "savePath": save_path,
@@ -9542,6 +9581,7 @@ class WebTorrentBridge(QObject):
 class TorrentSearchBridge(QObject):
     """Torrent search via Jackett or Prowlarr torznab APIs."""
     statusChanged = Signal(str)
+    searchResultsReady = Signal(str)
 
     _DEFAULT_LIMIT = 40
     _MAX_LIMIT = 100
@@ -9557,6 +9597,7 @@ class TorrentSearchBridge(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._search_token = 0
 
     # --- provider config (reads from web_browser_settings.json) ---
 
@@ -10206,6 +10247,54 @@ class TorrentSearchBridge(QObject):
         self.statusChanged.emit(json.dumps(out))
         return json.dumps(out)
 
+    def _run_query_sync(self, chain, cfg_set, payload, requested_provider, envelope):
+        """Execute the search chain synchronously (called from background thread)."""
+        tried = []
+        any_ok_empty = None
+        last_error = ""
+        for provider_key in chain:
+            cfg = self._provider_cfg(cfg_set, provider_key)
+            out = self._query_provider(provider_key, cfg, payload)
+            tried.append({
+                "provider": provider_key,
+                "ok": bool(out.get("ok")),
+                "returned": int(out.get("returned", 0) or 0),
+                "error": str(out.get("error", "") or ""),
+            })
+            if out.get("ok") and out.get("items"):
+                out = dict(out)
+                out["provider"] = requested_provider
+                out["activeProvider"] = provider_key
+                out["fallbackUsed"] = (provider_key != requested_provider)
+                out["fallbackChain"] = chain
+                out["providersTried"] = tried
+                return out
+            if out.get("ok") and any_ok_empty is None:
+                any_ok_empty = dict(out)
+            if not out.get("ok"):
+                last_error = str(out.get("error", "") or last_error)
+
+        if any_ok_empty is not None:
+            any_ok_empty["provider"] = requested_provider
+            any_ok_empty["activeProvider"] = requested_provider
+            any_ok_empty["fallbackUsed"] = False
+            any_ok_empty["fallbackChain"] = chain
+            any_ok_empty["providersTried"] = tried
+            return any_ok_empty
+
+        return {
+            "ok": False,
+            "items": [],
+            "error": last_error or "Search failed",
+            "provider": requested_provider,
+            "activeProvider": "",
+            "fallbackUsed": False,
+            "fallbackChain": chain,
+            "providersTried": tried,
+            **envelope,
+            "returned": 0,
+        }
+
     @Slot(str, result=str)
     def query(self, p):
         try:
@@ -10237,48 +10326,39 @@ class TorrentSearchBridge(QObject):
                 "returned": 0,
             })
 
-        tried = []
-        any_ok_empty = None
-        last_error = ""
-        for provider_key in chain:
-            cfg = self._provider_cfg(cfg_set, provider_key)
-            out = self._query_provider(provider_key, cfg, payload)
-            tried.append({
-                "provider": provider_key,
-                "ok": bool(out.get("ok")),
-                "returned": int(out.get("returned", 0) or 0),
-                "error": str(out.get("error", "") or ""),
-            })
-            if out.get("ok") and out.get("items"):
-                out = dict(out)
-                out["provider"] = requested_provider
-                out["activeProvider"] = provider_key
-                out["fallbackUsed"] = (provider_key != requested_provider)
-                out["fallbackChain"] = chain
-                out["providersTried"] = tried
-                return json.dumps(out)
-            if out.get("ok") and any_ok_empty is None:
-                any_ok_empty = dict(out)
-            if not out.get("ok"):
-                last_error = str(out.get("error", "") or last_error)
+        # Run search in background thread to avoid blocking the UI
+        self._search_token += 1
+        token = self._search_token
 
-        if any_ok_empty is not None:
-            any_ok_empty["provider"] = requested_provider
-            any_ok_empty["activeProvider"] = requested_provider
-            any_ok_empty["fallbackUsed"] = False
-            any_ok_empty["fallbackChain"] = chain
-            any_ok_empty["providersTried"] = tried
-            return json.dumps(any_ok_empty)
+        import threading
+        def _bg():
+            try:
+                result = self._run_query_sync(chain, cfg_set, payload, requested_provider, envelope)
+            except Exception as e:
+                result = {
+                    "ok": False, "items": [], "error": str(e),
+                    "provider": requested_provider, "activeProvider": "",
+                    "fallbackUsed": False, "fallbackChain": chain,
+                    "providersTried": [], **envelope, "returned": 0,
+                }
+            if self._search_token != token:
+                return  # superseded by a newer query
+            try:
+                self.searchResultsReady.emit(json.dumps(result))
+            except Exception:
+                pass
+
+        threading.Thread(target=_bg, daemon=True).start()
 
         return json.dumps({
-            "ok": False,
+            "ok": True,
+            "searching": True,
             "items": [],
-            "error": last_error or "Search failed",
             "provider": requested_provider,
             "activeProvider": "",
             "fallbackUsed": False,
             "fallbackChain": chain,
-            "providersTried": tried,
+            "providersTried": [],
             **envelope,
             "returned": 0,
         })
@@ -10908,8 +10988,12 @@ def create_browser_tab_page(profile, tab_manager, tab_id):
             def _run():
                 try:
                     if bridge and hasattr(bridge, "torrentSearch"):
-                        raw = bridge.torrentSearch.query(json.dumps(payload))
-                        result = json.loads(raw) if isinstance(raw, str) else raw
+                        ts = bridge.torrentSearch
+                        cfg_set = ts._get_provider_config()
+                        req_provider = ts._normalize_provider_key(payload.get("provider") or cfg_set["provider"])
+                        chain = ts._provider_fallback_chain(req_provider)
+                        envelope = {"page": payload.get("page", 0), "limit": payload.get("limit", 60)}
+                        result = ts._run_query_sync(chain, cfg_set, payload, req_provider, envelope)
                         if not isinstance(result, dict):
                             result = {}
                         items = result.get("items", [])
