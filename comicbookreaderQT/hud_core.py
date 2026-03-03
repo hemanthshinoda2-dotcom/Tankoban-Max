@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSlider,
     QVBoxLayout,
     QWidget,
 )
@@ -14,10 +13,20 @@ from PySide6.QtWidgets import (
 MODE_LABELS = {
     "manual": "Manual",
     "twoPage": "Double Page",
-    "twoPageMangaPlus": "Double Page (MangaPlus)",
-    "twoPageScroll": "Double Page (Scroll)",
+    "twoPageMangaPlus": "MangaPlus",
+    "twoPageScroll": "Scroll",
     "autoFlip": "Auto Flip",
 }
+
+# Unicode symbols for HUD buttons
+_SYM_BACK = "\u276E"          # ❮
+_SYM_PREV = "\u23EE"          # ⏮
+_SYM_PLAY = "\u25B6"          # ▶
+_SYM_PAUSE = "\u23F8"         # ⏸
+_SYM_NEXT = "\u23ED"          # ⏭
+_SYM_PREV_VOL = "\u25C2\u25C2"  # ◂◂
+_SYM_NEXT_VOL = "\u25B8\u25B8"  # ▸▸
+_SYM_MODE = "\u2726"          # ✦
 
 
 class TopBar(QFrame):
@@ -38,10 +47,6 @@ class TopBar(QFrame):
               font-size: 14px;
               font-weight: 600;
             }
-            QLabel#topSub {
-              color: #b8b8b8;
-              font-size: 11px;
-            }
             QPushButton#backButton {
               color: #ffffff;
               background: rgba(255,255,255,24);
@@ -60,27 +65,18 @@ class TopBar(QFrame):
         row.setContentsMargins(12, 8, 12, 8)
         row.setSpacing(10)
 
-        self.back_btn = QPushButton("Back", self)
+        self.back_btn = QPushButton(_SYM_BACK, self)
         self.back_btn.setObjectName("backButton")
+        self.back_btn.setToolTip("Back")
         self.back_btn.clicked.connect(self.back_clicked.emit)
         row.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        text_col = QVBoxLayout()
-        text_col.setContentsMargins(0, 0, 0, 0)
-        text_col.setSpacing(1)
-
         self.title = QLabel("-", self)
         self.title.setObjectName("topTitle")
-        self.subtitle = QLabel("-", self)
-        self.subtitle.setObjectName("topSub")
+        row.addWidget(self.title, 1)
 
-        text_col.addWidget(self.title)
-        text_col.addWidget(self.subtitle)
-        row.addLayout(text_col, 1)
-
-    def set_texts(self, title: str, subtitle: str):
+    def set_title(self, title: str):
         self.title.setText(title or "-")
-        self.subtitle.setText(subtitle or "-")
 
     def enterEvent(self, event):
         self.hover_changed.emit(True)
@@ -252,30 +248,27 @@ class BottomHud(QFrame):
             QPushButton.hudBtn:hover {
               background: rgba(255,255,255,44);
             }
-            QPushButton.hudVolBtn {
+            QPushButton.hudSmall {
               color: #b8b8b8;
               background: rgba(255,255,255,14);
               border: 1px solid rgba(255,255,255,36);
               border-radius: 8px;
-              padding: 3px 8px;
-              font-size: 11px;
-              min-height: 20px;
+              padding: 3px 7px;
+              font-size: 13px;
+              min-height: 22px;
+              min-width: 22px;
             }
-            QPushButton.hudVolBtn:hover {
+            QPushButton.hudSmall:hover {
               background: rgba(255,255,255,30);
               color: #ffffff;
             }
-            QPushButton.hudVolBtn:disabled {
-              color: rgba(255,255,255,30);
-              border-color: rgba(255,255,255,14);
+            QPushButton.hudSmall:disabled {
+              color: rgba(255,255,255,20);
+              border-color: rgba(255,255,255,10);
             }
             QLabel#pageText {
               color: #d6d6d6;
               font-size: 12px;
-            }
-            QLabel#modeText {
-              color: #b8b8b8;
-              font-size: 11px;
             }
             """
         )
@@ -291,55 +284,45 @@ class BottomHud(QFrame):
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+        row.setSpacing(5)
 
-        self.prev_vol_btn = QPushButton("\u25C0 Vol", self)
-        self.prev_vol_btn.setProperty("class", "hudVolBtn")
+        self.prev_vol_btn = self._icon_btn(_SYM_PREV_VOL, "hudSmall", "Previous volume")
         self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
         row.addWidget(self.prev_vol_btn, 0)
 
-        self.prev_btn = QPushButton("Prev", self)
-        self.prev_btn.setProperty("class", "hudBtn")
+        self.prev_btn = self._icon_btn(_SYM_PREV, "hudBtn", "Previous page")
         self.prev_btn.clicked.connect(self.prev_clicked.emit)
         row.addWidget(self.prev_btn, 0)
 
-        self.play_btn = QPushButton("Play", self)
-        self.play_btn.setProperty("class", "hudBtn")
+        self.play_btn = self._icon_btn(_SYM_PLAY, "hudBtn", "Play / Pause")
         self.play_btn.clicked.connect(self.play_clicked.emit)
         row.addWidget(self.play_btn, 0)
 
-        self.next_btn = QPushButton("Next", self)
-        self.next_btn.setProperty("class", "hudBtn")
+        self.next_btn = self._icon_btn(_SYM_NEXT, "hudBtn", "Next page")
         self.next_btn.clicked.connect(self.next_clicked.emit)
         row.addWidget(self.next_btn, 0)
 
-        self.next_vol_btn = QPushButton("Vol \u25B6", self)
-        self.next_vol_btn.setProperty("class", "hudVolBtn")
+        self.next_vol_btn = self._icon_btn(_SYM_NEXT_VOL, "hudSmall", "Next volume")
         self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
         row.addWidget(self.next_vol_btn, 0)
 
-        self.mode_btn = QPushButton("Mode", self)
-        self.mode_btn.setProperty("class", "hudBtn")
+        self.mode_btn = self._icon_btn(_SYM_MODE, "hudBtn", "Cycle mode")
         self.mode_btn.clicked.connect(self.mode_clicked.emit)
         row.addWidget(self.mode_btn, 0)
 
         row.addStretch(1)
 
-        text_col = QVBoxLayout()
-        text_col.setContentsMargins(0, 0, 0, 0)
-        text_col.setSpacing(0)
-
         self.page_text = QLabel("-", self)
         self.page_text.setObjectName("pageText")
-        self.mode_text = QLabel("-", self)
-        self.mode_text.setObjectName("modeText")
-        self.mode_text.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-        text_col.addWidget(self.page_text)
-        text_col.addWidget(self.mode_text)
-        row.addLayout(text_col, 0)
+        row.addWidget(self.page_text, 0)
 
         outer.addLayout(row)
+
+    def _icon_btn(self, text: str, cls: str, tooltip: str) -> QPushButton:
+        btn = QPushButton(text, self)
+        btn.setProperty("class", cls)
+        btn.setToolTip(tooltip)
+        return btn
 
     def _on_slider_pressed(self):
         self.scrub_drag_changed.emit(True)
@@ -365,14 +348,13 @@ class BottomHud(QFrame):
 
     def set_mode(self, mode: str):
         label = MODE_LABELS.get(str(mode), "Manual")
-        self.mode_text.setText(label)
-        self.mode_btn.setText(label)
+        self.mode_btn.setToolTip(f"Mode: {label}")
 
     def set_page_text(self, text: str):
         self.page_text.setText(text or "-")
 
     def set_playing(self, playing: bool):
-        self.play_btn.setText("Pause" if bool(playing) else "Play")
+        self.play_btn.setText(_SYM_PAUSE if bool(playing) else _SYM_PLAY)
 
     def enterEvent(self, event):
         self.hover_changed.emit(True)

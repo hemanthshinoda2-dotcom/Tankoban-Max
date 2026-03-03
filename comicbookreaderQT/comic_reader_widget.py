@@ -71,6 +71,7 @@ class ComicReaderWidget(QWidget):
         self._mp_drag_moved = False
         self._mp_last_x = 0.0
         self._mp_last_y = 0.0
+        self._mp_start_x = 0.0
 
         self._two_page_scroll_rows = []
         self._two_page_scroll_sig = None
@@ -570,10 +571,8 @@ class ComicReaderWidget(QWidget):
         self.manual_scroller.raise_()
 
     def _update_hud_state(self):
-        name = os.path.basename(self.state.book_path) if self.state.book_path else "Qt Comic Reader"
-        series = str(self._book_meta.get("series") or "")
-        subtitle = series or self._mode_label(self.get_control_mode())
-        self.top_bar.set_texts(name, subtitle)
+        name = os.path.basename(self.state.book_path) if self.state.book_path else ""
+        self.top_bar.set_title(name)
 
         total = len(self.state.pages)
         self.bottom_hud.set_slider_range(total)
@@ -1604,31 +1603,22 @@ class ComicReaderWidget(QWidget):
 
         return False
 
-    def _handle_flip_click_nav(self, x_pos: int):
+    def _handle_flip_click_nav(self, x_pos):
         zone = self._flip_click_zone(x_pos)
-        if zone == "mid":
-            return False
         invert = self._flip_key_inverted()
-        if zone == "left":
-            go_next = bool(invert)
-        else:
-            go_next = not bool(invert)
+        go_next = bool(invert) if zone == "left" else not bool(invert)
         if go_next:
             self.next_two_page()
         else:
             self.prev_two_page()
-        return True
 
-    def _flip_click_zone(self, x_pos: int):
+    def _flip_click_zone(self, x_pos):
+        """Divide into left half / right half for two-page click navigation."""
         width = max(1, self.width())
-        left_edge = width / 3.0
-        right_edge = (width * 2.0) / 3.0
         x = float(x_pos)
-        if x < left_edge:
+        if x < width / 2.0:
             return "left"
-        if x > right_edge:
-            return "right"
-        return "mid"
+        return "right"
 
     def handle_pointer_press(self, event) -> bool:
         if event.button() != Qt.MouseButton.LeftButton:
@@ -1636,17 +1626,16 @@ class ComicReaderWidget(QWidget):
         if not self._is_flip_mode():
             return False
         pt = event.position().toPoint()
-        zone = self._flip_click_zone(pt.x())
-        if self.is_mangaplus_mode() and self._mangaplus_zoom_pct() > 100 and zone == "mid":
+        # MangaPlus zoomed: start drag tracking on any press
+        if self.is_mangaplus_mode() and self._mangaplus_zoom_pct() > 100:
             self._mp_dragging = True
             self._mp_drag_moved = False
             self._mp_last_x = float(pt.x())
             self._mp_last_y = float(pt.y())
+            self._mp_start_x = float(pt.x())
             self.hud.note_activity()
             return True
-        if zone == "mid":
-            self.toggle_hud_visibility()
-            return True
+        # Normal two-page: left half = prev, right half = next
         self._handle_flip_click_nav(pt.x())
         return True
 
@@ -1673,7 +1662,12 @@ class ComicReaderWidget(QWidget):
         if not self._mp_dragging:
             return self._is_flip_mode()
         self._mp_dragging = False
+        was_drag = self._mp_drag_moved
         self._mp_drag_moved = False
+        if not was_drag:
+            # No drag movement — treat as tap navigation
+            pt = event.position().toPoint()
+            self._handle_flip_click_nav(pt.x())
         return True
 
     def keyPressEvent(self, event):
@@ -1712,21 +1706,26 @@ class ComicReaderWidget(QWidget):
         if self.pointer.handle_mouse_press(event):
             event.accept()
             return
+        # For non-flip modes (manual, twoPageScroll): mid click toggles HUD,
+        # side clicks are disabled (matching Electron behaviour).
         if event.button() == Qt.MouseButton.LeftButton and self.state.pages:
-            x = float(event.position().x())
-            w = max(1.0, float(self.width()))
-            if x >= (w / 3.0) and x <= ((w * 2.0) / 3.0):
-                self.toggle_hud_visibility()
-                event.accept()
-                return
             mode = self.get_control_mode()
-            if mode in ("manual", "twoPageScroll"):
-                if x < (w / 3.0):
-                    self.on_nav_left()
-                elif x > ((w * 2.0) / 3.0):
-                    self.on_nav_right()
+            if mode == "autoFlip":
+                x = float(event.position().x())
+                w = max(1.0, float(self.width()))
+                zone = self._flip_click_zone(x)
+                if zone == "left":
+                    self.prev_two_page()
+                elif zone == "right":
+                    self.next_two_page()
+                else:
+                    self.toggle_hud_visibility()
                 event.accept()
                 return
+            # manual / twoPageScroll: only mid-click for HUD toggle
+            self.toggle_hud_visibility()
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
