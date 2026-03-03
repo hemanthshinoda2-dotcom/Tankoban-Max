@@ -90,7 +90,11 @@ class UnifiedLibraryWidget(QWidget):
         self._home_view.set_item_label(self._adapter.item_label)
         self._home_view.card_clicked.connect(self._on_card_clicked)
         self._home_view.sort_changed.connect(self._on_sort_changed)
+        self._home_view.search_changed.connect(self._on_search_changed)
+        self._home_view.hide_finished_changed.connect(self._on_hide_finished_changed)
         self._sort_index = 0
+        self._search_text = ""
+        self._hide_finished = False
         self._stack.addWidget(self._home_view)
 
         self._detail_view = DetailView()
@@ -185,6 +189,38 @@ class UnifiedLibraryWidget(QWidget):
         self._sort_index = index
         self._apply_filter()
 
+    def _on_search_changed(self, text: str):
+        self._search_text = text.strip().lower()
+        self._apply_filter()
+
+    def _on_hide_finished_changed(self, checked: bool):
+        self._hide_finished = checked
+        if checked:
+            self._build_finished_set()
+        self._apply_filter()
+
+    def _build_finished_set(self):
+        """Compute which series are fully finished based on progress data."""
+        progress = self._provider.progress
+        items = self._provider.items
+        # Group items by series_id
+        items_by_series: dict[str, list[dict]] = {}
+        for it in items:
+            sid = it.get("series_id", "")
+            if sid:
+                items_by_series.setdefault(sid, []).append(it)
+
+        self._finished_series: set[str] = set()
+        for sid, series_items in items_by_series.items():
+            if not series_items:
+                continue
+            all_finished = all(
+                progress.get(it.get("id", ""), {}).get("finished", False)
+                for it in series_items
+            )
+            if all_finished:
+                self._finished_series.add(sid)
+
     def _apply_filter(self):
         if not self._filter_path:
             visible = list(self._all_series)
@@ -193,6 +229,20 @@ class UnifiedLibraryWidget(QWidget):
             visible = [
                 s for s in self._all_series
                 if os.path.normpath(s.get("path", "")).lower().startswith(fp)
+            ]
+
+        # Apply search filter
+        if self._search_text:
+            visible = [
+                s for s in visible
+                if self._search_text in s.get("name", "").lower()
+            ]
+
+        # Apply hide-finished filter
+        if self._hide_finished and hasattr(self, "_finished_series"):
+            visible = [
+                s for s in visible
+                if s.get("id", "") not in self._finished_series
             ]
 
         # Apply sort

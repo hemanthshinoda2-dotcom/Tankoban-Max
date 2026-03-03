@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
+from PySide6.QtWidgets import (
+    QScrollArea, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QLineEdit, QCheckBox,
+)
 
-from constants import BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, CARD_SPACING
+from constants import BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, CARD_SPACING, ACCENT_COLOR
 from flow_layout import FlowLayout
 from series_card import SeriesCard
 from continue_tile import ContinueTile
@@ -24,6 +27,8 @@ class HomeView(QScrollArea):
     card_clicked = Signal(str)  # series ID
     continue_clicked = Signal(str)  # item ID
     sort_changed = Signal(int)  # sort index
+    search_changed = Signal(str)  # search text
+    hide_finished_changed = Signal(bool)  # checked state
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -67,15 +72,62 @@ class HomeView(QScrollArea):
         continue_layout.addWidget(self._continue_scroll)
         self._layout.addWidget(self._continue_section)
 
-        # Sort bar
-        sort_bar = QHBoxLayout()
-        sort_bar.setContentsMargins(0, 0, 0, 0)
-        sort_bar.setSpacing(8)
+        # Toolbar: search + hide finished + sort
+        toolbar = QHBoxLayout()
+        toolbar.setContentsMargins(0, 0, 0, 0)
+        toolbar.setSpacing(12)
+
+        _input_style = f"""
+            QLineEdit {{
+                background-color: #1a2a3e;
+                color: {TEXT_PRIMARY};
+                border: 1px solid #2a3a5e;
+                border-radius: 4px;
+                padding: 5px 8px;
+                font-family: 'Segoe UI';
+                font-size: 10px;
+            }}
+            QLineEdit:focus {{
+                border-color: #4a6a9e;
+            }}
+        """
+
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText("Search...")
+        self._search_input.setFixedWidth(200)
+        self._search_input.setStyleSheet(_input_style)
+        self._search_input.textChanged.connect(self.search_changed)
+        toolbar.addWidget(self._search_input)
+
+        self._hide_finished_cb = QCheckBox("Hide finished")
+        self._hide_finished_cb.setFont(QFont("Segoe UI", 9))
+        self._hide_finished_cb.setStyleSheet(f"""
+            QCheckBox {{
+                color: {TEXT_SECONDARY};
+                background: transparent;
+                spacing: 5px;
+            }}
+            QCheckBox::indicator {{
+                width: 14px;
+                height: 14px;
+                border: 1px solid #4a5a7e;
+                border-radius: 3px;
+                background-color: #1a2a3e;
+            }}
+            QCheckBox::indicator:checked {{
+                background-color: {ACCENT_COLOR};
+                border-color: {ACCENT_COLOR};
+            }}
+        """)
+        self._hide_finished_cb.toggled.connect(self.hide_finished_changed)
+        toolbar.addWidget(self._hide_finished_cb)
+
+        toolbar.addStretch()
 
         sort_label = QLabel("Sort:")
         sort_label.setFont(QFont("Segoe UI", 9))
         sort_label.setStyleSheet(f"color: {TEXT_SECONDARY}; background: transparent;")
-        sort_bar.addWidget(sort_label)
+        toolbar.addWidget(sort_label)
 
         self._sort_combo = QComboBox()
         self._sort_combo.setFixedWidth(160)
@@ -102,10 +154,9 @@ class HomeView(QScrollArea):
             }}
         """)
         self._sort_combo.currentIndexChanged.connect(self.sort_changed)
-        sort_bar.addWidget(self._sort_combo)
-        sort_bar.addStretch()
+        toolbar.addWidget(self._sort_combo)
 
-        self._layout.addLayout(sort_bar)
+        self._layout.addLayout(toolbar)
 
         # Grid area
         self._grid_widget = QWidget()
