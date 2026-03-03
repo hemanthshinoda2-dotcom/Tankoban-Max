@@ -6,9 +6,12 @@ import os
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPixmap
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter, QStackedWidget
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter, QStackedWidget,
+    QPushButton, QProgressBar,
+)
 
-from constants import MediaKind, BG_COLOR, TEXT_PRIMARY
+from constants import MediaKind, BG_COLOR, TEXT_PRIMARY, TEXT_SECONDARY, ACCENT_COLOR
 from data_provider import MediaDataProvider
 from detail_view import DetailView
 from home_view import HomeView
@@ -32,7 +35,11 @@ class UnifiedLibraryWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Header
+        # Header bar
+        header_bar = QHBoxLayout()
+        header_bar.setContentsMargins(0, 0, 8, 0)
+        header_bar.setSpacing(8)
+
         self._header = QLabel(f"  Library — {kind.capitalize()}")
         self._header.setFixedHeight(40)
         self._header.setFont(QFont("Segoe UI", 14, QFont.Bold))
@@ -41,7 +48,32 @@ class UnifiedLibraryWidget(QWidget):
             "padding-left: 16px;"
         )
         self._header.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-        layout.addWidget(self._header)
+        header_bar.addWidget(self._header, 1)
+
+        self._scan_btn = QPushButton("Scan")
+        self._scan_btn.setFixedSize(70, 28)
+        self._scan_btn.setCursor(Qt.PointingHandCursor)
+        self._scan_btn.setFont(QFont("Segoe UI", 9))
+        self._scan_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ACCENT_COLOR};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #f05070;
+            }}
+            QPushButton:disabled {{
+                background-color: #555;
+                color: #999;
+            }}
+        """)
+        self._scan_btn.clicked.connect(self._on_scan_clicked)
+        header_bar.addWidget(self._scan_btn)
+
+        layout.addLayout(header_bar)
 
         # Splitter: sidebar + home view
         self._splitter = QSplitter(Qt.Horizontal)
@@ -74,6 +106,40 @@ class UnifiedLibraryWidget(QWidget):
 
         layout.addWidget(self._splitter)
 
+        # Status bar
+        self._status_bar = QWidget()
+        self._status_bar.setFixedHeight(28)
+        self._status_bar.setStyleSheet(f"background-color: #0f0f23;")
+        self._status_bar.setVisible(False)
+        status_layout = QHBoxLayout(self._status_bar)
+        status_layout.setContentsMargins(12, 0, 12, 0)
+        status_layout.setSpacing(8)
+
+        self._status_label = QLabel("")
+        self._status_label.setFont(QFont("Segoe UI", 9))
+        self._status_label.setStyleSheet(f"color: {TEXT_SECONDARY}; background: transparent;")
+        status_layout.addWidget(self._status_label)
+
+        self._status_progress = QProgressBar()
+        self._status_progress.setFixedWidth(200)
+        self._status_progress.setFixedHeight(14)
+        self._status_progress.setTextVisible(False)
+        self._status_progress.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: #1a1a2e;
+                border: 1px solid #2a2a4e;
+                border-radius: 3px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {ACCENT_COLOR};
+                border-radius: 2px;
+            }}
+        """)
+        status_layout.addWidget(self._status_progress)
+        status_layout.addStretch()
+
+        layout.addWidget(self._status_bar)
+
         # Thumbnail provider
         self._thumb_provider = ThumbProvider(parent=self)
         self._thumb_provider.thumb_ready.connect(self._on_thumb_ready)
@@ -81,10 +147,17 @@ class UnifiedLibraryWidget(QWidget):
         # Data provider
         self._provider = MediaDataProvider(kind, parent=self)
         self._provider.data_ready.connect(self._on_data_ready)
+        self._provider.scan_started.connect(self._on_scan_started)
+        self._provider.scan_progress.connect(self._on_scan_progress)
+        self._provider.scan_finished.connect(self._on_scan_done)
+        self._provider.scan_error.connect(self._on_scan_error)
 
     def load(self):
-        """Trigger data load from disk."""
+        """Trigger data load from disk. Auto-scans if index is empty."""
         self._provider.load()
+        # Auto-scan if no data loaded
+        if not self._provider.series:
+            self._provider.start_scan(force=True)
 
     def _on_data_ready(self):
         self._all_series = list(self._provider.series)
@@ -213,3 +286,36 @@ class UnifiedLibraryWidget(QWidget):
             if card.series_data.get("id") == series_id:
                 card.set_pixmap(px)
                 break
+
+    # ── Scan ─────────────────────────────────────────────────────────
+
+    def _on_scan_clicked(self):
+        self._provider.start_scan(force=True)
+
+    def _on_scan_started(self):
+        self._scan_btn.setEnabled(False)
+        self._scan_btn.setText("Scanning")
+        self._status_bar.setVisible(True)
+        self._status_label.setText("Scanning...")
+        self._status_progress.setValue(0)
+
+    def _on_scan_progress(self, done: int, total: int, current: str):
+        pct = int((done / max(total, 1)) * 100)
+        self._status_progress.setValue(pct)
+        if current:
+            self._status_label.setText(f"Scanning: {current} ({done}/{total})")
+        else:
+            self._status_label.setText(f"Scanning... ({done}/{total})")
+
+    def _on_scan_done(self):
+        self._scan_btn.setEnabled(True)
+        self._scan_btn.setText("Scan")
+        self._status_bar.setVisible(False)
+        # Clear thumb cache so new series get fresh thumbs
+        self._thumb_provider.clear()
+
+    def _on_scan_error(self, msg: str):
+        self._scan_btn.setEnabled(True)
+        self._scan_btn.setText("Scan")
+        self._status_label.setText(f"Scan error: {msg}")
+        # Keep status bar visible for a moment with error
