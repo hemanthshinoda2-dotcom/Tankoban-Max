@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter
 
 from constants import MediaKind, BG_COLOR, TEXT_PRIMARY
 from data_provider import MediaDataProvider
 from home_view import HomeView
+from sidebar_widget import SidebarWidget
 from media_adapter import adapter_for
 
 
@@ -18,6 +21,8 @@ class UnifiedLibraryWidget(QWidget):
         super().__init__(parent)
         self._kind = kind
         self._adapter = adapter_for(kind)
+        self._all_series: list[dict] = []
+        self._filter_path = ""
 
         self.setStyleSheet(f"background-color: {BG_COLOR};")
 
@@ -36,10 +41,23 @@ class UnifiedLibraryWidget(QWidget):
         self._header.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
         layout.addWidget(self._header)
 
-        # Home view (grid)
+        # Splitter: sidebar + home view
+        self._splitter = QSplitter(Qt.Horizontal)
+        self._splitter.setStyleSheet("QSplitter::handle { background-color: #0a0a1a; width: 1px; }")
+
+        self._sidebar = SidebarWidget()
+        self._sidebar.filter_changed.connect(self._on_filter_changed)
+        self._splitter.addWidget(self._sidebar)
+
         self._home_view = HomeView()
         self._home_view.set_item_label(self._adapter.item_label)
-        layout.addWidget(self._home_view)
+        self._splitter.addWidget(self._home_view)
+
+        self._splitter.setStretchFactor(0, 0)  # sidebar: fixed
+        self._splitter.setStretchFactor(1, 1)  # grid: stretch
+        self._splitter.setSizes([220, 980])
+
+        layout.addWidget(self._splitter)
 
         # Data provider
         self._provider = MediaDataProvider(kind, parent=self)
@@ -50,12 +68,39 @@ class UnifiedLibraryWidget(QWidget):
         self._provider.load()
 
     def _on_data_ready(self):
-        series = self._provider.series
-        # Sort alphabetically by name
-        series.sort(key=lambda s: (s.get("name", "").lower(), s.get("id", "")))
-        self._home_view.set_series(series)
+        self._all_series = list(self._provider.series)
+        self._all_series.sort(key=lambda s: (s.get("name", "").lower(), s.get("id", "")))
 
-        count = len(series)
-        self._header.setText(
-            f"  Library — {self._kind.capitalize()} ({count} {self._adapter.series_label})"
-        )
+        # Populate sidebar
+        self._sidebar.populate(self._provider.root_folders, self._all_series)
+
+        # Show all series initially
+        self._apply_filter()
+
+    def _on_filter_changed(self, path: str):
+        self._filter_path = path
+        self._apply_filter()
+
+    def _apply_filter(self):
+        if not self._filter_path:
+            visible = self._all_series
+        else:
+            fp = os.path.normpath(self._filter_path).lower()
+            visible = [
+                s for s in self._all_series
+                if os.path.normpath(s.get("path", "")).lower().startswith(fp)
+            ]
+
+        self._home_view.set_series(visible)
+
+        count = len(visible)
+        total = len(self._all_series)
+        if self._filter_path:
+            folder_name = os.path.basename(self._filter_path) or self._filter_path
+            self._header.setText(
+                f"  Library — {self._kind.capitalize()} · {folder_name} ({count}/{total})"
+            )
+        else:
+            self._header.setText(
+                f"  Library — {self._kind.capitalize()} ({total} {self._adapter.series_label})"
+            )
