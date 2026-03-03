@@ -28,6 +28,7 @@ from state_machine import (
     normalize_settings,
     uses_vertical_scroll,
 )
+from click_flash import ClickFlash
 from end_overlay import EndOfVolumeOverlay
 from goto_page_overlay import GotoPageOverlay
 from loupe_widget import LoupeWidget
@@ -115,6 +116,7 @@ class ComicReaderWidget(QWidget):
         self.loupe = LoupeWidget(self)
         self.end_overlay = EndOfVolumeOverlay(self)
         self.toast = ToastWidget(self)
+        self.click_flash = ClickFlash(self)
         self.mega_settings_overlay.hide()
         self.volume_nav_overlay.hide()
         self.goto_page_overlay.hide()
@@ -296,6 +298,38 @@ class ComicReaderWidget(QWidget):
             self._bookmarks.add(page_idx)
             self._toast(f"Bookmarked \u2022 page {page_idx + 1}")
         self._emit_progress_changed()
+
+    def _spread_override_state(self, idx: int) -> str:
+        """Return 'spread', 'normal', or 'auto' for the current override of a page."""
+        idx = int(idx)
+        if idx in self.state.known_spread_indices:
+            entry = self.bitmap_cache.get_entry(idx) if self.bitmap_cache.has_page(idx) else None
+            if entry is not None and not bool(entry.spread):
+                return "spread"
+        if idx in self.state.known_normal_indices:
+            entry = self.bitmap_cache.get_entry(idx) if self.bitmap_cache.has_page(idx) else None
+            if entry is not None and bool(entry.spread):
+                return "normal"
+        return "auto"
+
+    def _apply_spread_override(self, idx: int, override: str):
+        """Set override to 'spread', 'normal', or 'auto' for a page."""
+        idx = int(idx)
+        if override == "spread":
+            self.state.known_spread_indices.add(idx)
+            self.state.known_normal_indices.discard(idx)
+            self._toast(f"Page {idx + 1} \u2192 spread")
+        elif override == "normal":
+            self.state.known_normal_indices.add(idx)
+            self.state.known_spread_indices.discard(idx)
+            self._toast(f"Page {idx + 1} \u2192 normal")
+        else:
+            self.state.known_spread_indices.discard(idx)
+            self.state.known_normal_indices.discard(idx)
+            self._toast(f"Page {idx + 1} \u2192 auto")
+        self._invalidate_two_page_scroll_rows()
+        self._emit_progress_changed()
+        self.canvas.update()
 
     def _set_two_page_image_fit(self, fit: str):
         value = "width" if str(fit) == "width" else "height"
@@ -520,6 +554,25 @@ class ComicReaderWidget(QWidget):
             qa.triggered.connect(lambda _checked=False, v=q_value: self._set_scale_quality(v))
             q_menu.addAction(qa)
 
+        # Loupe toggle
+        loupe_on = bool(self.state.settings.get("loupe_enabled", False))
+        loupe_action = QAction("Hide loupe  (L)" if loupe_on else "Show loupe  (L)", self)
+        loupe_action.triggered.connect(self.toggle_loupe)
+        menu.addAction(loupe_action)
+
+        menu.addSeparator()
+
+        # Spread override submenu for current page
+        cur_page = int(self.state.page_index)
+        spread_menu = menu.addMenu(f"Page {cur_page + 1} spread")
+        spread_state = self._spread_override_state(cur_page)
+        for s_label, s_value in (("Auto", "auto"), ("Force spread", "spread"), ("Force normal", "normal")):
+            sa = QAction(s_label, self)
+            sa.setCheckable(True)
+            sa.setChecked(spread_state == s_value)
+            sa.triggered.connect(lambda _checked=False, v=s_value, idx=cur_page: self._apply_spread_override(idx, v))
+            spread_menu.addAction(sa)
+
         menu.addSeparator()
 
         save_page = QAction("Save current page...", self)
@@ -534,7 +587,6 @@ class ComicReaderWidget(QWidget):
 
         menu.addSeparator()
 
-        cur_page = int(self.state.page_index)
         b_action = QAction(
             "Remove bookmark" if self._is_bookmarked(cur_page) else "Bookmark this page",
             self,
@@ -1624,10 +1676,21 @@ class ComicReaderWidget(QWidget):
 
         return False
 
+    def _flash_click_zone(self, zone: str, blocked: bool = False):
+        w = max(1, self.width())
+        h = max(1, self.height())
+        half = w // 2
+        if zone == "left":
+            rect = QRect(0, 0, half, h)
+        else:
+            rect = QRect(half, 0, w - half, h)
+        self.click_flash.flash(rect, blocked)
+
     def _handle_flip_click_nav(self, x_pos):
         zone = self._flip_click_zone(x_pos)
         invert = self._flip_key_inverted()
         go_next = bool(invert) if zone == "left" else not bool(invert)
+        self._flash_click_zone("right" if go_next else "left", blocked=False)
         if go_next:
             self.next_two_page()
         else:

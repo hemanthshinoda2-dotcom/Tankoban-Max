@@ -128,7 +128,12 @@ class ReaderStateMachine:
         return nxt
 
     def spread_set_from_cache(self) -> set[int]:
-        return self.bitmap_cache.get_cached_spread_indices()
+        auto = self.bitmap_cache.get_cached_spread_indices()
+        # Merge manual overrides: known_spread adds, known_normal removes
+        merged = set(auto)
+        merged |= self.state.known_spread_indices
+        merged -= self.state.known_normal_indices
+        return merged
 
     def get_flip_pair(self):
         if not self.state.pages:

@@ -204,8 +204,6 @@ class CanvasWidget(QWidget):
         index = int(self._state.page_index)
         y = -float(self._state.y)
 
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-
         for _ in range(6):
             if index < 0 or index >= len(self._state.pages):
                 break
@@ -255,8 +253,6 @@ class CanvasWidget(QWidget):
         self._state.x = pan_x
         self._state.y = pan_y
         zoom = self._get_two_page_zoom_factor()
-
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
         right_entry = self._get_cache_entry(pair.right_index)
         left_entry = None
@@ -401,8 +397,6 @@ class CanvasWidget(QWidget):
         view_w = max(1, self.width())
         view_h = max(1, self.height())
         scroll_y = float(self._state.y)
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-
         lo = 0
         hi = len(rows) - 1
         first = max(0, len(rows) - 1)
