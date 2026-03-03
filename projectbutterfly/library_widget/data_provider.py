@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 import os
+import threading
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Signal, Slot, QTimer
 
 # Add parent dir so we can import storage and QTRoute
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -38,7 +39,7 @@ class MediaDataProvider(QObject):
         self._items: list[dict] = []
         self._config: dict = {}
         self._progress: dict = {}
-        self._scan_thread: QThread | None = None
+        self._scan_thread: threading.Thread | None = None
         self._scan_worker: ScanWorker | None = None
 
     @property
@@ -63,7 +64,7 @@ class MediaDataProvider(QObject):
 
     @property
     def scanning(self) -> bool:
-        return self._scan_thread is not None and self._scan_thread.isRunning()
+        return self._scan_thread is not None and self._scan_thread.is_alive()
 
     @property
     def root_folders(self) -> list[str]:
@@ -119,15 +120,24 @@ class MediaDataProvider(QObject):
         elif self._kind == "books":
             ignore_subs = [s.lower() for s in self._config.get("scanIgnore", []) if s]
 
-        self._scan_thread = QThread()
-        self._scan_worker = ScanWorker(self._kind, folders, ignore_subs)
-        self._scan_worker.moveToThread(self._scan_thread)
+        # Use QTimer.singleShot(0, ...) to safely marshal callbacks to main thread
+        def on_progress(done, total, name):
+            QTimer.singleShot(0, lambda: self.scan_progress.emit(done, total, name))
 
-        self._scan_worker.progress.connect(self.scan_progress)
-        self._scan_worker.finished.connect(self._on_scan_finished)
-        self._scan_worker.error.connect(self._on_scan_error)
+        def on_finished(result):
+            QTimer.singleShot(0, lambda: self._on_scan_finished(result))
 
-        self._scan_thread.started.connect(self._scan_worker.run)
+        def on_error(msg):
+            QTimer.singleShot(0, lambda: self._on_scan_error(msg))
+
+        self._scan_worker = ScanWorker(
+            self._kind, folders, ignore_subs,
+            on_progress=on_progress,
+            on_finished=on_finished,
+            on_error=on_error,
+        )
+
+        self._scan_thread = threading.Thread(target=self._scan_worker.run, daemon=True)
         self.scan_started.emit()
         self._scan_thread.start()
 
@@ -169,23 +179,16 @@ class MediaDataProvider(QObject):
         else:
             self._store.write_index(self._kind, index_data)
 
-        # Cleanup thread
-        if self._scan_thread:
-            self._scan_thread.quit()
-            self._scan_thread.wait()
-            self._scan_thread = None
-            self._scan_worker = None
+        self._scan_thread = None
+        self._scan_worker = None
 
         # Reload from disk
         self.load()
         self.scan_finished.emit()
 
     def _on_scan_error(self, msg: str):
-        if self._scan_thread:
-            self._scan_thread.quit()
-            self._scan_thread.wait()
-            self._scan_thread = None
-            self._scan_worker = None
+        self._scan_thread = None
+        self._scan_worker = None
         self.scan_error.emit(msg)
 
     def continue_items(self, items: list[dict], max_count: int = 10) -> list[dict]:

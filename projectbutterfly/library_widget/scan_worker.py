@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import os
 import threading
-
-from PySide6.QtCore import QObject, QThread, Signal
+from typing import Callable
 
 from constants import MediaKind
 
@@ -28,30 +27,34 @@ def _extensions_for(kind: MediaKind):
     return VIDEO_EXTENSIONS
 
 
-class ScanWorker(QObject):
+class ScanWorker:
     """Walks configured folders and discovers media files.
 
-    Signals:
-        progress(done, total, current_name) — emitted per-folder
-        finished(index_dict) — emitted when scan is complete
-        error(message) — emitted on failure
+    Pure Python worker — no QObject. Callbacks are invoked from the
+    background thread; the caller is responsible for marshalling to
+    the main thread (e.g. via QTimer.singleShot).
     """
 
-    progress = Signal(int, int, str)  # done, total, current folder name
-    finished = Signal(dict)           # {"series": [...], "books/episodes": [...]}
-    error = Signal(str)
-
     def __init__(self, kind: MediaKind, folders: list[str],
-                 ignore_subs: list[str] | None = None):
-        super().__init__()
+                 ignore_subs: list[str] | None = None,
+                 on_progress: Callable[[int, int, str], None] | None = None,
+                 on_finished: Callable[[dict], None] | None = None,
+                 on_error: Callable[[str], None] | None = None):
         self._kind = kind
         self._folders = folders
         self._ignore_subs = ignore_subs or []
         self._cancel = threading.Event()
         self._extensions = _extensions_for(kind)
+        self._on_progress = on_progress
+        self._on_finished = on_finished
+        self._on_error = on_error
 
     def cancel(self):
         self._cancel.set()
+
+    def _emit_progress(self, done: int, total: int, name: str):
+        if self._on_progress:
+            self._on_progress(done, total, name)
 
     def run(self):
         try:
@@ -62,11 +65,11 @@ class ScanWorker(QObject):
             else:
                 result = self._scan_video()
 
-            if not self._cancel.is_set():
-                self.finished.emit(result)
+            if not self._cancel.is_set() and self._on_finished:
+                self._on_finished(result)
         except Exception as exc:
-            if not self._cancel.is_set():
-                self.error.emit(str(exc))
+            if not self._cancel.is_set() and self._on_error:
+                self._on_error(str(exc))
 
     # ── Comics scan ──────────────────────────────────────────────────
 
@@ -80,7 +83,7 @@ class ScanWorker(QObject):
                 return {"series": series_list, "books": books_list}
 
             folder_name = os.path.basename(folder)
-            self.progress.emit(i, total, folder_name)
+            self._emit_progress(i, total, folder_name)
 
             sid = series_id_for_folder(folder)
             folder_books = []
@@ -125,7 +128,7 @@ class ScanWorker(QObject):
                 "newestMtimeMs": newest,
             })
 
-        self.progress.emit(total, total, "")
+        self._emit_progress(total, total, "")
         return {"series": series_list, "books": books_list}
 
     # ── Books scan ───────────────────────────────────────────────────
@@ -140,7 +143,7 @@ class ScanWorker(QObject):
                 return {"series": series_list, "books": books_list}
 
             folder_name = os.path.basename(folder)
-            self.progress.emit(i, total, folder_name)
+            self._emit_progress(i, total, folder_name)
 
             sid = series_id_for_folder(folder)
             folder_books = []
@@ -185,7 +188,7 @@ class ScanWorker(QObject):
                 "newestMtimeMs": newest,
             })
 
-        self.progress.emit(total, total, "")
+        self._emit_progress(total, total, "")
         return {"series": series_list, "books": books_list}
 
     # ── Video scan ───────────────────────────────────────────────────
@@ -200,7 +203,7 @@ class ScanWorker(QObject):
                 return {"shows": shows_list, "episodes": episodes_list}
 
             folder_name = os.path.basename(folder)
-            self.progress.emit(i, total, folder_name)
+            self._emit_progress(i, total, folder_name)
 
             # Each subfolder of the root is a show
             show_dirs = list_immediate_subdirs(folder)
@@ -289,5 +292,5 @@ class ScanWorker(QObject):
                     "isLoose": True,
                 })
 
-        self.progress.emit(total, total, "")
+        self._emit_progress(total, total, "")
         return {"shows": shows_list, "episodes": episodes_list}
