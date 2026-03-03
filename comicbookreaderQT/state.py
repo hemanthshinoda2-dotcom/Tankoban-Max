@@ -24,6 +24,7 @@ def default_reader_settings():
         "image_scale_quality": "off",
         "loupe_zoom": 2.0,
         "loupe_size": 220,
+        "auto_scroll_speed_level": 5,
     }
 
 

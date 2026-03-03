@@ -37,16 +37,25 @@ class KeyboardRouter:
             w._open_goto_page_dialog()
             return True
 
+        if key == Qt.Key.Key_B:
+            w._toggle_bookmark()
+            return True
+        if key == Qt.Key.Key_Comma:
+            w._adjust_auto_scroll_speed(-1)
+            return True
+        if key == Qt.Key.Key_Period:
+            w._adjust_auto_scroll_speed(1)
+            return True
+
         if key in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            mode = w.get_control_mode()
             if w.is_mangaplus_mode() and w.get_mangaplus_zoom_pct() > 100:
                 if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                     w.prev_two_page()
                 else:
                     w.next_two_page()
                 return True
-            if mode == "autoFlip":
-                w.toggle_auto_flip_pause()
+            if w.get_control_mode() == "auto":
+                w.toggle_auto_scroll_pause()
                 return True
 
         if key in (Qt.Key.Key_Left, Qt.Key.Key_PageUp):

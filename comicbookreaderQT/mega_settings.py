@@ -35,7 +35,7 @@ def _mode_label(mode: str) -> str:
         "twoPage": "Double Page",
         "twoPageMangaPlus": "Double Page (MangaPlus)",
         "twoPageScroll": "Double Page (Scroll)",
-        "autoFlip": "Auto Flip",
+        "auto": "Auto Scroll",
     }.get(str(mode), "Manual")
 
 
@@ -45,10 +45,6 @@ def _width_label(pct: float) -> str:
 
 def _fit_label(fit: str) -> str:
     return "Fit Width" if str(fit) == "width" else "Fit Height"
-
-
-def _interval_label(sec: int) -> str:
-    return f"{int(sec)}s"
 
 
 def _shadow_label(strength: float) -> str:
@@ -217,10 +213,6 @@ class MegaSettingsOverlay(QWidget):
         self._row_mode = _MegaRow("Mode", self._main_widget)
         self._row_mode.clicked.connect(lambda: self._open_sub("modes"))
         main_layout.addWidget(self._row_mode)
-
-        self._row_auto_flip = _MegaRow("Auto Flip", self._main_widget)
-        self._row_auto_flip.clicked.connect(lambda: self._open_sub("autoFlip"))
-        main_layout.addWidget(self._row_auto_flip)
 
         self._row_width = _MegaRow("Portrait width", self._main_widget)
         self._row_width.clicked.connect(lambda: self._open_sub("width"))
@@ -440,14 +432,9 @@ class MegaSettingsOverlay(QWidget):
 
         self._row_mode.set_value(_mode_label(mode))
 
-        is_auto = mode == "autoFlip"
-        self._row_auto_flip.setVisible(is_auto)
-        if is_auto:
-            self._row_auto_flip.set_value(_interval_label(int(s.get("auto_flip_interval_sec", 30))))
-
         self._row_width.set_value(_width_label(float(s.get("portrait_width_pct", 1.0))))
 
-        is_flip = mode in ("twoPage", "twoPageMangaPlus", "autoFlip")
+        is_flip = mode in ("twoPage", "twoPageMangaPlus")
         self._row_fit.setVisible(is_flip)
         if is_flip:
             if mode == "twoPageMangaPlus":
@@ -473,7 +460,6 @@ class MegaSettingsOverlay(QWidget):
         self._clear_sub_list()
         builders = {
             "modes": self._build_modes_sub,
-            "autoFlip": self._build_auto_flip_sub,
             "width": self._build_width_sub,
             "imageFit": self._build_image_fit_sub,
             "tools": self._build_tools_sub,
@@ -500,21 +486,11 @@ class MegaSettingsOverlay(QWidget):
             ("twoPage", "Double Page"),
             ("twoPageMangaPlus", "Double Page (MangaPlus)"),
             ("twoPageScroll", "Double Page (Scroll)"),
-            ("autoFlip", "Auto Flip"),
+            ("auto", "Auto Scroll"),
         ]
         for m_id, m_label in modes:
             opt = _MegaOption(m_label, checked=(mode == m_id), parent=self._sub_list_inner)
             opt.clicked.connect(partial(self._set_mode, m_id))
-            self._sub_list_layout.addWidget(opt)
-
-    def _build_auto_flip_sub(self):
-        self._show_sub("autoFlip", "Auto Flip Interval")
-        s = self._settings()
-        cur = int(s.get("auto_flip_interval_sec", 30))
-        intervals = [5, 10, 15, 20, 30, 45, 60, 90, 120]
-        for sec in intervals:
-            opt = _MegaOption(f"{sec}s", checked=(cur == sec), parent=self._sub_list_inner)
-            opt.clicked.connect(partial(self._set_auto_flip_interval, sec))
             self._sub_list_layout.addWidget(opt)
 
     def _build_width_sub(self):
@@ -731,23 +707,15 @@ class MegaSettingsOverlay(QWidget):
         r = self._reader
         if r is not None:
             prev = r.get_control_mode()
+            if prev == "auto":
+                r._stop_auto_scroll()
             r.state_machine.set_mode(mode_id)
-            # handle mode transition cleanup
-            if prev == "autoFlip" and mode_id != "autoFlip":
-                r._auto_flip_paused = False
-                r._stop_auto_flip_timer()
-            if mode_id == "autoFlip":
-                r._auto_flip_paused = False
-                r._restart_auto_flip_timer()
+            if mode_id == "auto":
+                r._auto_scroll_paused = False
+                r._start_auto_scroll()
             r.go_to_page(r.state.page_index, keep_scroll=False)
+            r._toast(r._mode_label(mode_id))
         self.close()
-
-    def _set_auto_flip_interval(self, sec: int):
-        self._apply_setting("auto_flip_interval_sec", sec)
-        r = self._reader
-        if r is not None and r.get_control_mode() == "autoFlip":
-            r._restart_auto_flip_timer()
-        self._go_back()
 
     def _set_portrait_width(self, pct: float):
         self._apply_setting("portrait_width_pct", pct)

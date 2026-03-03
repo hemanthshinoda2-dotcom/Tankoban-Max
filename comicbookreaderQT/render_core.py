@@ -3,7 +3,7 @@ def paint_active_frame(canvas, painter):
     if state is None or not state.pages:
         return
     mode = str(state.settings.get("control_mode", "manual"))
-    if mode in ("twoPage", "twoPageMangaPlus", "autoFlip") and getattr(canvas, "_get_flip_pair", None):
+    if mode in ("twoPage", "twoPageMangaPlus") and getattr(canvas, "_get_flip_pair", None):
         from render_two_page import paint_two_page_frame
         paint_two_page_frame(canvas, painter)
         return

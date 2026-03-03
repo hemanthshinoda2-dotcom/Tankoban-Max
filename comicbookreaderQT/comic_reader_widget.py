@@ -21,6 +21,7 @@ from settings_store import flush_all, read_json, write_json_debounced
 from state import ReaderState
 from state_machine import (
     ReaderStateMachine,
+    is_auto_scroll_mode,
     is_two_page_flip_mode,
     is_two_page_mangaplus_mode,
     is_two_page_scroll_mode,
@@ -30,6 +31,7 @@ from state_machine import (
 from end_overlay import EndOfVolumeOverlay
 from goto_page_overlay import GotoPageOverlay
 from loupe_widget import LoupeWidget
+from toast_widget import ToastWidget
 from volume_nav_overlay import VolumeNavOverlay
 
 
@@ -79,10 +81,13 @@ class ComicReaderWidget(QWidget):
         self._two_page_scroll_pending_sync_index = None
         self._two_page_scroll_pending_scroll_progress01 = None
 
-        self._auto_flip_timer = QTimer(self)
-        self._auto_flip_timer.setSingleShot(True)
-        self._auto_flip_timer.timeout.connect(self._on_auto_flip_timer_tick)
-        self._auto_flip_paused = False
+        self._auto_scroll_timer = QTimer(self)
+        self._auto_scroll_timer.setInterval(16)  # ~60fps
+        self._auto_scroll_timer.timeout.connect(self._on_auto_scroll_tick)
+        self._auto_scroll_paused = False
+        self._auto_scroll_last_ts = 0.0
+        self._auto_scroll_shift_held = False
+        self._auto_scroll_ctrl_held = False
 
         self._db_path = self._default_progress_db_path()
         self._db = read_json(self._db_path, fallback={"books": {}, "series": {}}) or {"books": {}, "series": {}}
@@ -109,6 +114,7 @@ class ComicReaderWidget(QWidget):
         self.goto_page_overlay = GotoPageOverlay(self)
         self.loupe = LoupeWidget(self)
         self.end_overlay = EndOfVolumeOverlay(self)
+        self.toast = ToastWidget(self)
         self.mega_settings_overlay.hide()
         self.volume_nav_overlay.hide()
         self.goto_page_overlay.hide()
@@ -140,6 +146,9 @@ class ComicReaderWidget(QWidget):
         self._update_hud_geometry()
         self._update_hud_state()
 
+    def _toast(self, text: str, duration_ms: int = 1200):
+        self.toast.show_toast(text, duration_ms)
+
     def get_control_mode(self):
         return self.state_machine.mode()
 
@@ -162,7 +171,7 @@ class ComicReaderWidget(QWidget):
             "twoPage": "Double Page",
             "twoPageMangaPlus": "Double Page (MangaPlus)",
             "twoPageScroll": "Double Page (Scroll)",
-            "autoFlip": "Auto Flip",
+            "auto": "Auto Scroll",
         }
         return mapping.get(str(mode), "Manual")
 
@@ -170,8 +179,7 @@ class ComicReaderWidget(QWidget):
         if not self.state.pages:
             return "-"
         total = len(self.state.pages)
-        mode = self.get_control_mode()
-        if self._is_flip_mode() or mode == "autoFlip":
+        if self._is_flip_mode():
             pair = self._get_flip_pair()
             if pair is not None and pair.left_index_or_none is not None:
                 a = int(pair.right_index) + 1
@@ -193,7 +201,7 @@ class ComicReaderWidget(QWidget):
             h = self.canvas.get_scaled_page_height(self.state.page_index)
             if h and h > 0:
                 local = max(0.0, min(1.0, float(self.state.y) / float(h)))
-        elif self._is_flip_mode() or mode == "autoFlip":
+        elif self._is_flip_mode():
             pair = self._get_flip_pair()
             if pair is not None:
                 idx = int(pair.right_index)
@@ -238,15 +246,13 @@ class ComicReaderWidget(QWidget):
         self.close_book()
 
     def _on_hud_prev(self):
-        mode = self.get_control_mode()
-        if self._is_flip_mode() or mode == "autoFlip":
+        if self._is_flip_mode():
             self.prev_two_page()
             return
         self.prev_page()
 
     def _on_hud_next(self):
-        mode = self.get_control_mode()
-        if self._is_flip_mode() or mode == "autoFlip":
+        if self._is_flip_mode():
             self.next_two_page()
             return
         self.next_page()
@@ -271,9 +277,8 @@ class ComicReaderWidget(QWidget):
 
     def _on_hud_play_pause(self):
         mode = self.get_control_mode()
-        if mode == "autoFlip":
-            self.toggle_auto_flip_pause()
-            self._update_hud_state()
+        if mode == "auto":
+            self.toggle_auto_scroll_pause()
             return
 
     def _is_bookmarked(self, idx: int):
@@ -286,8 +291,10 @@ class ComicReaderWidget(QWidget):
         page_idx = max(0, min(len(self.state.pages) - 1, page_idx))
         if page_idx in self._bookmarks:
             self._bookmarks.discard(page_idx)
+            self._toast(f"Bookmark removed \u2022 page {page_idx + 1}")
         else:
             self._bookmarks.add(page_idx)
+            self._toast(f"Bookmarked \u2022 page {page_idx + 1}")
         self._emit_progress_changed()
 
     def _set_two_page_image_fit(self, fit: str):
@@ -452,7 +459,7 @@ class ComicReaderWidget(QWidget):
 
         menu.addSeparator()
 
-        flip_mode = self._is_flip_mode() or self.get_control_mode() == "autoFlip"
+        flip_mode = self._is_flip_mode()
         fit_menu = menu.addMenu("Image fit")
         fit_menu.setEnabled(flip_mode)
         fit_value = (
@@ -579,7 +586,9 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.set_slider_value(int(self.state.page_index))
         self.bottom_hud.set_page_text(self._page_text_for_hud())
         self.bottom_hud.set_mode(self.get_control_mode())
-        playing = bool(self.get_control_mode() == "autoFlip" and self._auto_flip_timer.isActive() and not self._auto_flip_paused)
+        playing = False
+        if self.get_control_mode() == "auto":
+            playing = bool(self._auto_scroll_timer.isActive() and not self._auto_scroll_paused)
         self.bottom_hud.set_playing(playing)
 
         self.bottom_hud.slider.set_bookmarks(self._bookmarks)
@@ -641,7 +650,7 @@ class ComicReaderWidget(QWidget):
         mode = self.get_control_mode()
         seen = int(self.state.max_page_seen)
         seen = max(seen, int(self.state.page_index))
-        if self._is_flip_mode() or mode == "autoFlip":
+        if self._is_flip_mode():
             pair = self._get_flip_pair()
             if pair is not None:
                 seen = max(seen, int(pair.right_index))
@@ -689,46 +698,65 @@ class ComicReaderWidget(QWidget):
             return None
         return dict(settings)
 
-    def _auto_flip_interval_sec(self):
-        raw = float(self.state.settings.get("auto_flip_interval_sec", 30))
-        return int(max(5, min(600, raw)))
+    # --- Auto Scroll ---
 
-    def _stop_auto_flip_timer(self):
-        self._auto_flip_timer.stop()
+    _AUTO_SCROLL_SPEED_TABLE = [24, 48, 72, 96, 120, 160, 200, 260, 340, 440]
+
+    def _auto_scroll_px_per_sec(self) -> float:
+        level = int(self.state.settings.get("auto_scroll_speed_level", 5))
+        level = max(1, min(10, level))
+        base = self._AUTO_SCROLL_SPEED_TABLE[level - 1]
+        if self._auto_scroll_shift_held:
+            base *= 2
+        if self._auto_scroll_ctrl_held:
+            base = max(12, base // 2)
+        return float(base)
+
+    def _start_auto_scroll(self):
+        if self.get_control_mode() != "auto":
+            return
+        if self._auto_scroll_paused:
+            return
+        self.state.playing = True
+        self._auto_scroll_last_ts = time.monotonic()
+        if not self._auto_scroll_timer.isActive():
+            self._auto_scroll_timer.start()
+        self._update_hud_state()
+
+    def _stop_auto_scroll(self):
+        self._auto_scroll_timer.stop()
         self.state.playing = False
         self._update_hud_state()
 
-    def _restart_auto_flip_timer(self):
-        if self.get_control_mode() != "autoFlip":
-            self._stop_auto_flip_timer()
+    def toggle_auto_scroll_pause(self):
+        if self.get_control_mode() != "auto":
             return
-        if self._auto_flip_paused:
-            self._stop_auto_flip_timer()
-            return
-        self.state.playing = True
-        self._auto_flip_timer.start(self._auto_flip_interval_sec() * 1000)
-        self._update_hud_state()
-
-    def toggle_auto_flip_pause(self):
-        if self.get_control_mode() != "autoFlip":
-            return
-        self._auto_flip_paused = not self._auto_flip_paused
-        if self._auto_flip_paused:
-            self._stop_auto_flip_timer()
+        self._auto_scroll_paused = not self._auto_scroll_paused
+        if self._auto_scroll_paused:
+            self._stop_auto_scroll()
         else:
-            self._restart_auto_flip_timer()
-        self._update_hud_state()
+            self._start_auto_scroll()
 
-    def _on_auto_flip_timer_tick(self):
-        if self.get_control_mode() != "autoFlip":
+    def _adjust_auto_scroll_speed(self, delta: int):
+        cur = int(self.state.settings.get("auto_scroll_speed_level", 5))
+        nxt = max(1, min(10, cur + delta))
+        if nxt != cur:
+            self.state.settings["auto_scroll_speed_level"] = nxt
+            self._toast(f"Speed {nxt}/10", 800)
+            self._emit_progress_changed()
+
+    def _on_auto_scroll_tick(self):
+        if self.get_control_mode() != "auto":
+            self._stop_auto_scroll()
             return
-        if self._auto_flip_paused:
+        if self._auto_scroll_paused:
             return
-        before = int(self.state.page_index)
-        self.next_two_page()
-        if int(self.state.page_index) == before:
-            self._stop_auto_flip_timer()
-            return
+        now = time.monotonic()
+        dt = min(0.1, now - self._auto_scroll_last_ts)
+        self._auto_scroll_last_ts = now
+        px = self._auto_scroll_px_per_sec() * dt
+        if px > 0.01:
+            self._scroll_manual(px, max_jumps=1)
 
     def _invalidate_two_page_scroll_rows(self):
         self._two_page_scroll_rows = []
@@ -884,9 +912,9 @@ class ComicReaderWidget(QWidget):
                     self._bookmarks = set()
 
             self.go_to_page(target_idx, keep_scroll=keep_scroll)
-            if self.get_control_mode() == "autoFlip":
-                self._auto_flip_paused = False
-                self._restart_auto_flip_timer()
+            if self.get_control_mode() == "auto":
+                self._auto_scroll_paused = False
+                self._start_auto_scroll()
             self.hud.set_hidden(False)
             self.hud.note_activity()
             self._update_hud_state()
@@ -898,7 +926,7 @@ class ComicReaderWidget(QWidget):
             QMessageBox.critical(self, "Open failed", str(exc))
 
     def close_book(self):
-        self._stop_auto_flip_timer()
+        self._stop_auto_scroll()
         self._save_progress_now()
         self.manual_wheel_pump.clear()
         self._mp_dragging = False
@@ -1147,8 +1175,6 @@ class ComicReaderWidget(QWidget):
         self.bitmap_cache.request_page(self.state.page_index)
         self._prefetch_for_current_mode()
         self._set_title_for_page()
-        if mode == "autoFlip":
-            self._restart_auto_flip_timer()
         self.hud.note_activity()
         self.canvas.update()
         self._emit_progress_changed()
@@ -1268,7 +1294,7 @@ class ComicReaderWidget(QWidget):
 
     def _set_flip_pan(self, x: float | None = None, y: float | None = None, redraw: bool = True):
         mode = self.get_control_mode()
-        if not self._is_flip_mode() and mode != "autoFlip":
+        if not self._is_flip_mode():
             return False
         max_x, max_y = self.canvas.get_flip_pan_bounds()
         old_x = float(self.state.x)
@@ -1288,7 +1314,7 @@ class ComicReaderWidget(QWidget):
 
     def _pan_two_page(self, dx: float = 0.0, dy: float = 0.0, dominant_axis: bool = True, dual_axis: bool = False):
         mode = self.get_control_mode()
-        if (not self._is_flip_mode() and mode != "autoFlip") or not self.state.pages:
+        if not self._is_flip_mode() or not self.state.pages:
             return
         max_x, max_y = self.canvas.get_flip_pan_bounds()
         if max_x <= 0.0 and max_y <= 0.0:
@@ -1345,10 +1371,11 @@ class ComicReaderWidget(QWidget):
         self.hud.note_activity()
         prev_mode = self.get_control_mode()
         next_mode = self.state_machine.cycle_mode()
+        self._toast(self._mode_label(next_mode))
 
-        if prev_mode == "autoFlip" and next_mode != "autoFlip":
-            self._auto_flip_paused = False
-            self._stop_auto_flip_timer()
+        if prev_mode == "auto" and next_mode != "auto":
+            self._auto_scroll_paused = False
+            self._stop_auto_scroll()
 
         if prev_mode == "twoPageScroll" and next_mode != "twoPageScroll":
             row = self._row_index_for_scroll_y(self.state.y)
@@ -1361,7 +1388,7 @@ class ComicReaderWidget(QWidget):
             self._two_page_scroll_pending_scroll_progress01 = None
 
         if next_mode == "twoPageScroll":
-            if is_two_page_flip_mode(prev_mode) or prev_mode == "autoFlip":
+            if is_two_page_flip_mode(prev_mode):
                 self.state.page_index = self.state_machine.snap_current_two_page_index()
                 self._two_page_scroll_hold_single_row_until_sync = True
                 self._two_page_scroll_pending_sync_index = int(self.state.page_index)
@@ -1383,14 +1410,17 @@ class ComicReaderWidget(QWidget):
             self._emit_progress_changed()
             return
 
-        if is_two_page_flip_mode(next_mode) or next_mode == "autoFlip":
+        if is_two_page_flip_mode(next_mode):
             snapped = self.state_machine.snap_current_two_page_index()
             self.state.x = 0.0
             self.state.y = 0.0
             self.go_to_page(snapped, keep_scroll=False)
-            if next_mode == "autoFlip":
-                self._auto_flip_paused = False
-                self._restart_auto_flip_timer()
+            return
+
+        if next_mode == "auto":
+            self.go_to_page(self.state.page_index, keep_scroll=True)
+            self._auto_scroll_paused = False
+            self._start_auto_scroll()
             return
 
         self.go_to_page(self.state.page_index, keep_scroll=False)
@@ -1484,9 +1514,6 @@ class ComicReaderWidget(QWidget):
 
     def on_nav_left(self):
         mode = self.get_control_mode()
-        if mode == "autoFlip":
-            self.next_two_page()
-            return
         if mode == "manual":
             self.prev_page()
             return
@@ -1515,9 +1542,6 @@ class ComicReaderWidget(QWidget):
 
     def on_nav_right(self):
         mode = self.get_control_mode()
-        if mode == "autoFlip":
-            self.prev_two_page()
-            return
         if mode == "manual":
             self.next_page()
             return
@@ -1583,7 +1607,7 @@ class ComicReaderWidget(QWidget):
                 return True
             return False
 
-        if self._is_flip_mode() or mode == "autoFlip":
+        if self._is_flip_mode():
             pd = event.pixelDelta()
             if not pd.isNull():
                 dx = float(pd.x()) * 1.35
@@ -1594,10 +1618,7 @@ class ComicReaderWidget(QWidget):
                 dy = -float(ad.y()) / 120.0 * 112.0
             if abs(dx) > 0.0 or abs(dy) > 0.0:
                 self.hud.note_activity()
-                if self._is_flip_mode():
-                    self._pan_two_page(dx=dx, dy=dy, dominant_axis=True, dual_axis=False)
-                else:
-                    self._pan_two_page(dx=0.0, dy=dy, dominant_axis=False, dual_axis=False)
+                self._pan_two_page(dx=dx, dy=dy, dominant_axis=True, dual_axis=False)
                 return True
             return False
 
@@ -1672,6 +1693,9 @@ class ComicReaderWidget(QWidget):
 
     def keyPressEvent(self, event):
         self.hud.note_activity()
+        # Track Shift/Ctrl for auto scroll speed modifiers
+        self._auto_scroll_shift_held = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        self._auto_scroll_ctrl_held = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
         # Route to active overlay first
         if self.mega_settings_overlay.is_open():
             self.mega_settings_overlay.keyPressEvent(event)
@@ -1709,20 +1733,7 @@ class ComicReaderWidget(QWidget):
         # For non-flip modes (manual, twoPageScroll): mid click toggles HUD,
         # side clicks are disabled (matching Electron behaviour).
         if event.button() == Qt.MouseButton.LeftButton and self.state.pages:
-            mode = self.get_control_mode()
-            if mode == "autoFlip":
-                x = float(event.position().x())
-                w = max(1.0, float(self.width()))
-                zone = self._flip_click_zone(x)
-                if zone == "left":
-                    self.prev_two_page()
-                elif zone == "right":
-                    self.next_two_page()
-                else:
-                    self.toggle_hud_visibility()
-                event.accept()
-                return
-            # manual / twoPageScroll: only mid-click for HUD toggle
+            # manual / twoPageScroll / auto: click = HUD toggle
             self.toggle_hud_visibility()
             event.accept()
             return
@@ -1742,6 +1753,18 @@ class ComicReaderWidget(QWidget):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.toggle_fullscreen_window()
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def keyReleaseEvent(self, event):
+        self._auto_scroll_shift_held = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+        self._auto_scroll_ctrl_held = bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        super().keyReleaseEvent(event)
 
     def contextMenuEvent(self, event):
         self.hud.note_activity()

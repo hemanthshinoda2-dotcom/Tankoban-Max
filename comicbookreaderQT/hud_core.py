@@ -15,7 +15,7 @@ MODE_LABELS = {
     "twoPage": "Double Page",
     "twoPageMangaPlus": "MangaPlus",
     "twoPageScroll": "Scroll",
-    "autoFlip": "Auto Flip",
+    "auto": "Auto Scroll",
 }
 
 # Unicode symbols for HUD buttons
@@ -484,7 +484,7 @@ class HudController(QObject):
 
     def _is_manual_pinned_mode(self):
         mode = self.reader.get_control_mode()
-        return mode in ("manual", "twoPage", "twoPageMangaPlus", "autoFlip")
+        return mode in ("manual", "twoPage", "twoPageMangaPlus")
 
     def _freeze_active(self):
         if self.scrub_dragging:

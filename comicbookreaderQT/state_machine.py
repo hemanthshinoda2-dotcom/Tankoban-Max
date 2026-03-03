@@ -6,7 +6,7 @@ from page_layout import get_two_page_pair, snap_two_page_index
 from state import default_reader_settings
 
 
-CONTROL_MODES = ("manual", "twoPage", "twoPageMangaPlus", "twoPageScroll", "autoFlip")
+CONTROL_MODES = ("manual", "twoPage", "twoPageMangaPlus", "twoPageScroll", "auto")
 
 
 def normalize_control_mode(mode: str) -> str:
@@ -18,6 +18,7 @@ def normalize_control_mode(mode: str) -> str:
         "flip": "twoPage",
         "mangaplus": "twoPageMangaPlus",
         "scroll": "twoPageScroll",
+        "autoFlip": "twoPage",
     }
     return legacy.get(m, "manual")
 
@@ -35,9 +36,13 @@ def is_two_page_scroll_mode(mode: str) -> bool:
     return normalize_control_mode(mode) == "twoPageScroll"
 
 
+def is_auto_scroll_mode(mode: str) -> bool:
+    return normalize_control_mode(mode) == "auto"
+
+
 def uses_vertical_scroll(mode: str) -> bool:
     m = normalize_control_mode(mode)
-    return m in ("manual", "twoPageScroll")
+    return m in ("manual", "twoPageScroll", "auto")
 
 
 def normalize_settings(settings: dict | None) -> dict:
@@ -72,6 +77,7 @@ def normalize_settings(settings: dict | None) -> dict:
     out["two_page_next_on_left"] = bool(out["two_page_next_on_left"])
     out["auto_flip_interval_sec"] = max(5, min(600, int(out["auto_flip_interval_sec"])))
     out["memory_saver"] = bool(out["memory_saver"])
+    out["auto_scroll_speed_level"] = max(1, min(10, int(out.get("auto_scroll_speed_level", 5))))
     if str(out["two_page_flip_image_fit"]) not in ("height", "width"):
         out["two_page_flip_image_fit"] = "height"
     if str(out["two_page_mangaplus_image_fit"]) not in ("height", "width"):
@@ -111,7 +117,7 @@ class ReaderStateMachine:
         return True
 
     def cycle_mode(self):
-        order = ["manual", "twoPage", "twoPageMangaPlus", "twoPageScroll", "autoFlip"]
+        order = ["manual", "twoPage", "twoPageMangaPlus", "twoPageScroll", "auto"]
         cur = self.mode()
         try:
             idx = order.index(cur)

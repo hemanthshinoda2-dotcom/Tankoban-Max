@@ -121,7 +121,7 @@ class CanvasWidget(QWidget):
     def get_flip_pan_bounds(self):
         if self._state is None or self._get_flip_pair is None:
             return 0.0, 0.0
-        if str(self._state.settings.get("control_mode", "manual")) not in ("twoPage", "twoPageMangaPlus", "autoFlip"):
+        if str(self._state.settings.get("control_mode", "manual")) not in ("twoPage", "twoPageMangaPlus"):
             return 0.0, 0.0
 
         pair = self._get_flip_pair()
