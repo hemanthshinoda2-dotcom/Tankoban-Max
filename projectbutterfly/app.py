@@ -356,6 +356,13 @@ class TankobanWindow(QMainWindow):
             QTimer.singleShot(350, self._flush_open_file_queue)
             if self._pending_sources_activate:
                 QTimer.singleShot(0, self.activate_sources_mode)
+            # Periodic compositor keepalive — nudge the QWebEngineView every
+            # 30 s so Chromium never classifies the page as frozen/occluded.
+            # Belt-and-suspenders alongside the --disable-renderer-backgrounding
+            # flags, because Qt's Chromium can still stall on Windows (QTBUG-56016).
+            self._keepalive = QTimer(self)
+            self._keepalive.timeout.connect(self._nudge_web_view)
+            self._keepalive.start(30_000)
         else:
             print(f"[butterfly] Failed to load renderer: {INDEX_HTML}")
             self.show()
@@ -760,6 +767,12 @@ def main():
         # Anti-bot detection: disable automation flags that captcha services
         # (Yandex SmartCaptcha, Cloudflare, hCaptcha) use to fingerprint bots
         "--disable-blink-features=AutomationControlled",
+        # Prevent Chromium from freezing the compositor after ~5 minutes.
+        # Without these, Chromium treats the QWebEngineView as a "background"
+        # page and stops producing visual frames (QTBUG-56016 / QTBUG-50818).
+        "--disable-renderer-backgrounding",
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
     ])
 
     # Init Qt app
