@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSplitter, QStackedWidget
 
 from constants import MediaKind, BG_COLOR, TEXT_PRIMARY
@@ -14,6 +14,7 @@ from detail_view import DetailView
 from home_view import HomeView
 from sidebar_widget import SidebarWidget
 from media_adapter import adapter_for
+from thumb_provider import ThumbProvider
 
 
 class UnifiedLibraryWidget(QWidget):
@@ -70,6 +71,10 @@ class UnifiedLibraryWidget(QWidget):
 
         layout.addWidget(self._splitter)
 
+        # Thumbnail provider
+        self._thumb_provider = ThumbProvider(parent=self)
+        self._thumb_provider.thumb_ready.connect(self._on_thumb_ready)
+
         # Data provider
         self._provider = MediaDataProvider(kind, parent=self)
         self._provider.data_ready.connect(self._on_data_ready)
@@ -103,6 +108,7 @@ class UnifiedLibraryWidget(QWidget):
             ]
 
         self._home_view.set_series(visible)
+        self._request_thumbs()
 
         count = len(visible)
         total = len(self._all_series)
@@ -132,3 +138,33 @@ class UnifiedLibraryWidget(QWidget):
         """Navigate back to the home grid."""
         self._stack.setCurrentIndex(0)
         self._apply_filter()
+
+    def _request_thumbs(self):
+        """Request thumbnails for all visible cards."""
+        items = self._provider.items
+        # Build a map: series_id -> first item (by title sort)
+        first_item_by_series: dict[str, dict] = {}
+        for it in items:
+            sid = it.get("series_id", "")
+            if not sid:
+                continue
+            if sid not in first_item_by_series:
+                first_item_by_series[sid] = it
+            else:
+                if it.get("title", "").lower() < first_item_by_series[sid].get("title", "").lower():
+                    first_item_by_series[sid] = it
+
+        for card in self._home_view.cards:
+            sid = card.series_data.get("id", "")
+            first = first_item_by_series.get(sid)
+            if first:
+                self._thumb_provider.request_thumb(
+                    sid, first.get("path", ""), first.get("id", ""),
+                )
+
+    def _on_thumb_ready(self, series_id: str, px: QPixmap):
+        """Apply a loaded thumbnail to the matching card."""
+        for card in self._home_view.cards:
+            if card.series_data.get("id") == series_id:
+                card.set_pixmap(px)
+                break
