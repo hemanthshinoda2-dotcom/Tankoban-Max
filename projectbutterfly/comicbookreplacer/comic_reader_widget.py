@@ -1915,6 +1915,12 @@ class ComicReaderWidget(QWidget):
 
     def _handle_click_nav(self, x_pos):
         zone = self._flip_click_zone(x_pos)
+
+        # Mid zone → toggle HUD visibility
+        if zone == "mid":
+            self.toggle_hud_visibility()
+            return
+
         invert = self._flip_key_inverted()
         go_next = bool(invert) if zone == "left" else not bool(invert)
 
@@ -1940,12 +1946,14 @@ class ComicReaderWidget(QWidget):
                     self.prev_page()
 
     def _flip_click_zone(self, x_pos):
-        """Divide into left half / right half for two-page click navigation."""
+        """Three-zone split: left 30% / mid 40% / right 30%."""
         width = max(1, self.width())
         x = float(x_pos)
-        if x < width / 2.0:
+        if x < width * 0.30:
             return "left"
-        return "right"
+        if x > width * 0.70:
+            return "right"
+        return "mid"
 
     def _update_pan_cursor(self):
         if self.is_mangaplus_mode() and self._mangaplus_zoom_pct() > 100:
