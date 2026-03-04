@@ -45,13 +45,14 @@ class OutlinedButton(QPushButton):
 
         align = Qt.AlignmentFlag.AlignCenter
 
-        # Black outline: draw text offset in 8 directions
-        p.setPen(QPen(QColor(0, 0, 0, 200), 1))
-        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
-            p.drawText(rect.adjusted(dx, dy, dx, dy), align, text)
-
         # Foreground
         fg = self._fg_color if self.isEnabled() else self._fg_disabled
+
+        # Black outline: draw text offset in 8 directions (skip for disabled)
+        if self.isEnabled():
+            p.setPen(QPen(QColor(0, 0, 0, 200), 1))
+            for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+                p.drawText(rect.adjusted(dx, dy, dx, dy), align, text)
         p.setPen(fg)
         p.drawText(rect, align, text)
         p.end()
