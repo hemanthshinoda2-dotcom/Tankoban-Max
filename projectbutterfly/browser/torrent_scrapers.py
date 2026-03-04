@@ -30,13 +30,42 @@ _HEADERS = {
     "Accept-Language": "en-US,en;q=0.9",
 }
 
-_TIMEOUT = 12  # seconds per request
+_DEFAULT_TIMEOUT = 12  # seconds per request
+_MIN_TIMEOUT = 4
+_MAX_TIMEOUT = 60
+_DEFAULT_1337X_MAGNET_WORKERS = 6
+_MAX_1337X_MAGNET_WORKERS = 12
 
 
-def _fetch(url: str) -> str:
+def _clamp_timeout(timeout_sec) -> int:
+    try:
+        value = int(timeout_sec)
+    except Exception:
+        value = _DEFAULT_TIMEOUT
+    if value < _MIN_TIMEOUT:
+        value = _MIN_TIMEOUT
+    if value > _MAX_TIMEOUT:
+        value = _MAX_TIMEOUT
+    return value
+
+
+def _clamp_workers(workers, default_workers, max_workers) -> int:
+    try:
+        value = int(workers)
+    except Exception:
+        value = int(default_workers)
+    if value < 1:
+        value = 1
+    if value > int(max_workers):
+        value = int(max_workers)
+    return value
+
+
+def _fetch(url: str, timeout_sec: int | None = None) -> str:
     """Fetch a URL and return the response body as text."""
+    timeout = _clamp_timeout(timeout_sec)
     req = urllib.request.Request(url, headers=_HEADERS)
-    with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read()
         # Try to detect encoding
         ct = resp.headers.get("Content-Type", "")
@@ -71,11 +100,11 @@ def _parse_size(size_str: str) -> int:
 _TPB_API = "https://apibay.org/q.php"
 
 
-def search_piratebay(query: str, limit: int = 30) -> list[dict]:
+def search_piratebay(query: str, limit: int = 30, timeout_sec: int | None = None) -> list[dict]:
     """Search PirateBay via the apibay.org API."""
     try:
         url = f"{_TPB_API}?q={urllib.parse.quote_plus(query)}"
-        text = _fetch(url)
+        text = _fetch(url, timeout_sec=timeout_sec)
         data = json.loads(text)
 
         if not isinstance(data, list):
@@ -210,10 +239,10 @@ class _1337xDetailParser(HTMLParser):
                 self.magnet = href
 
 
-def _1337x_get_magnet(detail_path: str) -> str:
+def _1337x_get_magnet(detail_path: str, timeout_sec: int | None = None) -> str:
     """Fetch a 1337x detail page and extract the magnet link."""
     try:
-        html = _fetch(f"{_1337X_BASE}{detail_path}")
+        html = _fetch(f"{_1337X_BASE}{detail_path}", timeout_sec=timeout_sec)
         parser = _1337xDetailParser()
         parser.feed(html)
         return parser.magnet
@@ -221,11 +250,18 @@ def _1337x_get_magnet(detail_path: str) -> str:
         return ""
 
 
-def search_1337x(query: str, limit: int = 20) -> list[dict]:
+def search_1337x(
+    query: str,
+    limit: int = 20,
+    timeout_sec: int | None = None,
+    detail_workers: int | None = None,
+) -> list[dict]:
     """Search 1337x by scraping the search results page."""
     try:
         url = f"{_1337X_BASE}/search/{urllib.parse.quote_plus(query)}/1/"
-        html = _fetch(url)
+        timeout = _clamp_timeout(timeout_sec)
+        workers = _clamp_workers(detail_workers, _DEFAULT_1337X_MAGNET_WORKERS, _MAX_1337X_MAGNET_WORKERS)
+        html = _fetch(url, timeout_sec=timeout)
         parser = _1337xListParser()
         parser.feed(html)
 
@@ -235,12 +271,12 @@ def search_1337x(query: str, limit: int = 20) -> list[dict]:
 
         # Fetch magnet links in parallel (up to 6 concurrent)
         results = []
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {}
             for item in raw:
                 path = item.get("_detail_path", "")
                 if path:
-                    futures[pool.submit(_1337x_get_magnet, path)] = item
+                    futures[pool.submit(_1337x_get_magnet, path, timeout)] = item
 
             for future in as_completed(futures):
                 item = futures[future]
@@ -332,11 +368,11 @@ class _NyaaParser(HTMLParser):
             self._capture_text += data
 
 
-def search_nyaa(query: str, limit: int = 30) -> list[dict]:
+def search_nyaa(query: str, limit: int = 30, timeout_sec: int | None = None) -> list[dict]:
     """Search Nyaa.si by scraping the search results page."""
     try:
         url = f"{_NYAA_BASE}/?f=0&c=0_0&q={urllib.parse.quote_plus(query)}&s=seeders&o=desc"
-        html = _fetch(url)
+        html = _fetch(url, timeout_sec=timeout_sec)
         parser = _NyaaParser()
         parser.feed(html)
 
@@ -361,7 +397,13 @@ def search_nyaa(query: str, limit: int = 30) -> list[dict]:
 # Unified search (all sources in parallel)
 # ---------------------------------------------------------------------------
 
-def search_all(query: str, sites: set[str] | None = None, limit: int = 60) -> list[dict]:
+def search_all(
+    query: str,
+    sites: set[str] | None = None,
+    limit: int = 60,
+    timeout_sec: int | None = None,
+    detail_workers: int | None = None,
+) -> list[dict]:
     """
     Search all enabled sites in parallel and return merged, sorted results.
 
@@ -376,21 +418,27 @@ def search_all(query: str, sites: set[str] | None = None, limit: int = 60) -> li
     """
     if sites is None:
         sites = {"piratebay", "1337x", "nyaa"}
+    timeout = _clamp_timeout(timeout_sec)
+    detail_pool = _clamp_workers(detail_workers, _DEFAULT_1337X_MAGNET_WORKERS, _MAX_1337X_MAGNET_WORKERS)
 
     searchers = []
     if "piratebay" in sites:
-        searchers.append(("piratebay", search_piratebay, query, 30))
+        searchers.append(("piratebay", search_piratebay, {"query": query, "limit": 30, "timeout_sec": timeout}))
     if "1337x" in sites:
-        searchers.append(("1337x", search_1337x, query, 20))
+        searchers.append((
+            "1337x",
+            search_1337x,
+            {"query": query, "limit": 20, "timeout_sec": timeout, "detail_workers": detail_pool},
+        ))
     if "nyaa" in sites:
-        searchers.append(("nyaa", search_nyaa, query, 30))
+        searchers.append(("nyaa", search_nyaa, {"query": query, "limit": 30, "timeout_sec": timeout}))
 
     all_results = []
 
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=max(1, min(3, len(searchers)))) as pool:
         futures = {}
-        for key, fn, q, lim in searchers:
-            futures[pool.submit(fn, q, lim)] = key
+        for key, fn, kwargs in searchers:
+            futures[pool.submit(fn, **kwargs)] = key
 
         for future in as_completed(futures):
             try:

@@ -406,6 +406,8 @@
     hubTorrentFilter: 'active',
     destPickerData: null,
     sourcesSubMode: 'search',
+    // Temporary stabilization mode: keep Sources focused on torrent workspace.
+    sourcesBrowserDisabled: true,
     searchResultsRaw: [],
     searchResults: [],
     searchQuery: '',
@@ -414,6 +416,10 @@
     searchLoading: false,
     searchLoadingMore: false,
     searchRequestToken: 0,
+    searchTimedOutToken: -1,
+    searchPendingMeta: null,
+    searchPendingTimer: 0,
+    searchPendingTimedOut: false,
     searchLimit: 40,
     searchSourceOptions: [],
     pendingMagnet: null,
@@ -424,6 +430,11 @@
     pendingFileSelection: {},
     pendingFilePriorities: {},
     sourcesTorrents: [],
+    sourcesTorrentsRefreshTimer: 0,
+    sourcesTorrentsRefreshInFlight: false,
+    sourcesTorrentsRefreshQueued: false,
+    sourcesTorrentsRefreshLastAt: 0,
+    sourcesTorrentsSnapshotTimer: 0,
     lastSaveCategory: 'comics',
     hiddenSourceTorrentIds: {},
     destinationRoots: { books: null, comics: null, videos: null, allBooks: [], allComics: [], allVideos: [] },
@@ -478,6 +489,11 @@
     sourcesRendererSessionId: 'sources_' + String(Date.now()) + '_' + String(Math.floor(Math.random() * 100000)),
     sourcesDiagEvents: [],
     sourcesDiagLastResult: null,
+    sourcesTorrentDiag: {
+      search: { started: 0, partial: 0, final: 0, timeout: 0, error: 0, lastElapsedMs: 0 },
+      resolve: { started: 0, retrying: 0, ready: 0, timeout: 0, error: 0, lastElapsedMs: 0 },
+      streamable: { started: 0, success: 0, error: 0, lastError: '' },
+    },
     sourcesInitFlags: null,
     sourcesHostAckToken: '',
   };
@@ -623,6 +639,8 @@
       health: feat && typeof feat.health === 'function' ? feat.health : (api.torrentSearch && api.torrentSearch.health ? api.torrentSearch.health : null),
       indexers: feat && typeof feat.indexers === 'function' ? feat.indexers : (api.torrentSearch && api.torrentSearch.indexers ? api.torrentSearch.indexers : null),
       resolveMetadata: feat && typeof feat.resolveMetadata === 'function' ? feat.resolveMetadata : (api.webTorrent && api.webTorrent.resolveMetadata ? api.webTorrent.resolveMetadata : null),
+      startResolve: feat && typeof feat.startResolve === 'function' ? feat.startResolve : (api.webTorrent && api.webTorrent.startResolve ? api.webTorrent.startResolve : null),
+      getResolveStatus: feat && typeof feat.getResolveStatus === 'function' ? feat.getResolveStatus : (api.webTorrent && api.webTorrent.getResolveStatus ? api.webTorrent.getResolveStatus : null),
       startConfigured: feat && typeof feat.startConfigured === 'function' ? feat.startConfigured : (api.webTorrent && api.webTorrent.startConfigured ? api.webTorrent.startConfigured : null),
       cancelResolve: feat && typeof feat.cancelResolve === 'function' ? feat.cancelResolve : (api.webTorrent && api.webTorrent.cancelResolve ? api.webTorrent.cancelResolve : null),
       startMagnet: feat && typeof feat.startMagnet === 'function' ? feat.startMagnet : (api.webTorrent && api.webTorrent.startMagnet ? api.webTorrent.startMagnet : null),
@@ -2014,6 +2032,33 @@
       state.sourcesDiagEvents.splice(0, state.sourcesDiagEvents.length - 100);
     }
     renderSourcesDiagPanel();
+  }
+
+  function ensureSourcesTorrentDiagShape() {
+    if (!state.sourcesTorrentDiag || typeof state.sourcesTorrentDiag !== 'object') {
+      state.sourcesTorrentDiag = {};
+    }
+    if (!state.sourcesTorrentDiag.search || typeof state.sourcesTorrentDiag.search !== 'object') {
+      state.sourcesTorrentDiag.search = { started: 0, partial: 0, final: 0, timeout: 0, error: 0, lastElapsedMs: 0 };
+    }
+    if (!state.sourcesTorrentDiag.resolve || typeof state.sourcesTorrentDiag.resolve !== 'object') {
+      state.sourcesTorrentDiag.resolve = { started: 0, retrying: 0, ready: 0, timeout: 0, error: 0, lastElapsedMs: 0 };
+    }
+    if (!state.sourcesTorrentDiag.streamable || typeof state.sourcesTorrentDiag.streamable !== 'object') {
+      state.sourcesTorrentDiag.streamable = { started: 0, success: 0, error: 0, lastError: '' };
+    }
+  }
+
+  function bumpSourcesTorrentDiag(scope, key, value) {
+    ensureSourcesTorrentDiagShape();
+    var group = state.sourcesTorrentDiag[scope];
+    if (!group || typeof group !== 'object') return;
+    if (typeof value === 'number' && isFinite(value)) {
+      group[key] = value;
+      return;
+    }
+    var prev = Number(group[key] || 0);
+    group[key] = prev + 1;
   }
 
   function sourcesErrorMessage(err, fallback) {
@@ -4124,9 +4169,54 @@
     return String(e.origin || '').toLowerCase() === 'sources_v2';
   }
 
+  function upsertSourcesTorrentFromEvent(entry) {
+    var row = (entry && typeof entry === 'object') ? entry : null;
+    if (!row || !isSourcesV2Torrent(row)) return false;
+    var id = String(row.id || '').trim();
+    if (!id) return false;
+    var next = Object.assign({}, row);
+    var found = false;
+    for (var i = 0; i < state.sourcesTorrents.length; i++) {
+      var existing = state.sourcesTorrents[i];
+      if (!existing || String(existing.id || '') !== id) continue;
+      state.sourcesTorrents[i] = Object.assign({}, existing, next);
+      found = true;
+      break;
+    }
+    if (!found) state.sourcesTorrents.push(next);
+    state.sourcesTorrents.sort(function (a, b) {
+      return Number(b && b.startedAt || 0) - Number(a && a.startedAt || 0);
+    });
+    renderSourcesTorrentRows();
+    return true;
+  }
+
+  function scheduleSourcesTorrentsSnapshotRefresh(delayMs) {
+    var ms = Math.max(200, Number(delayMs || 1200) || 1200);
+    clearTimeout(state.sourcesTorrentsSnapshotTimer);
+    state.sourcesTorrentsSnapshotTimer = setTimeout(function () {
+      state.sourcesTorrentsSnapshotTimer = 0;
+      refreshSourcesTorrents();
+    }, ms);
+  }
+
   function refreshSourcesTorrents() {
+    clearTimeout(state.sourcesTorrentsRefreshTimer);
+    if (state.sourcesTorrentsRefreshInFlight) {
+      state.sourcesTorrentsRefreshQueued = true;
+      return;
+    }
+    var nowMs = Date.now();
+    var sinceLast = nowMs - Number(state.sourcesTorrentsRefreshLastAt || 0);
+    if (sinceLast < 220) {
+      state.sourcesTorrentsRefreshTimer = setTimeout(function () {
+        refreshSourcesTorrents();
+      }, 220 - sinceLast);
+      return;
+    }
     var tor = getTorrentOps();
     if (!tor.getActive && !tor.getHistory) return;
+    state.sourcesTorrentsRefreshInFlight = true;
     var p1 = (typeof tor.getActive === 'function')
       ? tor.getActive()
       : Promise.resolve({ ok: false, torrents: [] });
@@ -4153,7 +4243,17 @@
       out.sort(function (x, y) { return Number(y.startedAt || 0) - Number(x.startedAt || 0); });
       state.sourcesTorrents = out;
       renderSourcesTorrentRows();
-    }).catch(function () {});
+    }).catch(function () {
+    }).finally(function () {
+      state.sourcesTorrentsRefreshInFlight = false;
+      state.sourcesTorrentsRefreshLastAt = Date.now();
+      if (state.sourcesTorrentsRefreshQueued) {
+        state.sourcesTorrentsRefreshQueued = false;
+        state.sourcesTorrentsRefreshTimer = setTimeout(function () {
+          refreshSourcesTorrents();
+        }, 120);
+      }
+    });
   }
 
   function getSourcesTorrentById(id) {
@@ -4270,22 +4370,24 @@
         return;
       }
       var tor = getTorrentOps();
-      if (!tor.remove) return;
+      var hasRemove = typeof tor.remove === 'function';
+      var hasRemoveHistory = typeof tor.removeHistory === 'function';
+      if (!hasRemove && !hasRemoveHistory) return;
       if (action === 'remove-only') {
-        Promise.resolve(tor.remove({ id: id, removeFiles: false, removeFromLibrary: false }))
-          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(hasRemove ? tor.remove({ id: id, removeFiles: false, removeFromLibrary: false }) : { ok: true })
+          .then(function () { return hasRemoveHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
         return;
       }
       if (action === 'remove-lib') {
-        Promise.resolve(tor.remove({ id: id, removeFiles: false, removeFromLibrary: true }))
-          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(hasRemove ? tor.remove({ id: id, removeFiles: false, removeFromLibrary: true }) : { ok: true })
+          .then(function () { return hasRemoveHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
         return;
       }
       if (action === 'remove-delete') {
-        Promise.resolve(tor.remove({ id: id, removeFiles: true, removeFromLibrary: true }))
-          .then(function () { return tor.removeHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
+        Promise.resolve(hasRemove ? tor.remove({ id: id, removeFiles: true, removeFromLibrary: true }) : { ok: true })
+          .then(function () { return hasRemoveHistory ? tor.removeHistory({ id: id }) : { ok: true }; })
           .finally(refreshSourcesTorrents);
       }
     });
@@ -4319,16 +4421,91 @@
     // away from the top now that TankoBrowser is the first panel.
   }
 
+  function ensureSourcesTorrentWorkspaceScaffold() {
+    if (!el.homeView) return;
+    document.body.classList.add('sourcesMinimalTorrentV2');
+
+    var home = el.homeView;
+    var searchPanel = el.sourcesSearchPanel || home.querySelector('.sourcesSearchPanel');
+    var torrentPanel = el.sourcesTorrentPanel || home.querySelector('.sourcesTorrentPanel');
+    var downloadsPanel = el.sourcesBrowserDownloadsPanel || document.getElementById('sourcesBrowserDownloadsPanel');
+    var browserPanel = el.sourcesBrowserPanel || document.getElementById('sourcesBrowserPanel');
+    if (searchPanel && !searchPanel.id) searchPanel.id = 'sourcesSearchPanel';
+    if (torrentPanel && !torrentPanel.id) torrentPanel.id = 'sourcesTorrentPanel';
+    el.sourcesSearchPanel = searchPanel || null;
+    el.sourcesTorrentPanel = torrentPanel || null;
+    el.sourcesBrowserDownloadsPanel = downloadsPanel || null;
+    el.sourcesBrowserPanel = browserPanel || null;
+
+    // Older markup uses #sourcesSearchView inside the search panel body.
+    // We need #sourcesSearchView as the workspace wrapper, so rename inner node.
+    if (el.sourcesSearchView && searchPanel && searchPanel.contains(el.sourcesSearchView)) {
+      try { el.sourcesSearchView.id = 'sourcesSearchInner'; } catch (_eRenameSearchView) {}
+      el.sourcesSearchView = null;
+    }
+
+    if (!el.sourcesSearchView) {
+      var searchView = document.createElement('div');
+      searchView.id = 'sourcesSearchView';
+      searchView.className = 'sourcesWorkspaceView';
+      home.insertBefore(searchView, home.firstChild || null);
+      el.sourcesSearchView = searchView;
+    }
+
+    if (!el.sourcesDownloadsView) {
+      var downloadsView = document.createElement('div');
+      downloadsView.id = 'sourcesDownloadsView';
+      downloadsView.className = 'sourcesWorkspaceView hidden';
+      if (el.sourcesSearchView && el.sourcesSearchView.nextSibling) {
+        home.insertBefore(downloadsView, el.sourcesSearchView.nextSibling);
+      } else {
+        home.appendChild(downloadsView);
+      }
+      el.sourcesDownloadsView = downloadsView;
+    }
+
+    if (searchPanel && searchPanel.parentElement !== el.sourcesSearchView) {
+      el.sourcesSearchView.appendChild(searchPanel);
+    }
+    if (downloadsPanel && downloadsPanel.parentElement !== el.sourcesDownloadsView) {
+      el.sourcesDownloadsView.appendChild(downloadsPanel);
+    }
+    if (torrentPanel && torrentPanel.parentElement !== el.sourcesDownloadsView) {
+      el.sourcesDownloadsView.appendChild(torrentPanel);
+    }
+
+    if (el.sourcesBrowserPanel && el.sourcesBrowserPanel.style) {
+      el.sourcesBrowserPanel.classList.add('hidden');
+      el.sourcesBrowserPanel.style.setProperty('display', 'none', 'important');
+    }
+    if (el.sourcesBrowserHistoryOverlay) el.sourcesBrowserHistoryOverlay.classList.add('hidden');
+    if (el.sourcesBrowserTabSearchOverlay) el.sourcesBrowserTabSearchOverlay.classList.add('hidden');
+    if (el.sourcesBrowserCtxOverlay) el.sourcesBrowserCtxOverlay.classList.add('hidden');
+    if (el.sourcesBrowserCtxMenu) el.sourcesBrowserCtxMenu.classList.add('hidden');
+
+    if (!el.sourcesSearchTabBtn || !el.sourcesDownloadsTabBtn) {
+      var tabs = document.createElement('div');
+      tabs.className = 'sourcesWorkspaceTabs';
+      tabs.innerHTML =
+        '<button id="sourcesSearchTabBtn" class="btn btn-sm active" type="button">Torrent Search</button>' +
+        '<button id="sourcesDownloadsTabBtn" class="btn btn-sm" type="button">Torrent Downloads</button>';
+      home.insertBefore(tabs, home.firstChild || null);
+      el.sourcesSearchTabBtn = tabs.querySelector('#sourcesSearchTabBtn');
+      el.sourcesDownloadsTabBtn = tabs.querySelector('#sourcesDownloadsTabBtn');
+    }
+  }
+
+  function isSourcesBrowserEnabled() {
+    return !(state && state.sourcesBrowserDisabled);
+  }
+
   function enforceSourcesPanelOrder() {
     if (!el.homeView) return;
     var searchPanel = el.homeView.querySelector('.sourcesSearchPanel');
     var torrentPanel = el.homeView.querySelector('.sourcesTorrentPanel');
-    var ordered = [
-      el.sourcesBrowserPanel || null,
-      el.sourcesBrowserDownloadsPanel || null,
-      searchPanel || null,
-      torrentPanel || null,
-    ];
+    var ordered = isSourcesBrowserEnabled()
+      ? [el.sourcesBrowserPanel || null, el.sourcesBrowserDownloadsPanel || null, searchPanel || null, torrentPanel || null]
+      : [el.sourcesSearchView || null, el.sourcesDownloadsView || null];
     for (var i = 0; i < ordered.length; i++) {
       var node = ordered[i];
       if (!node || node.parentElement !== el.homeView) continue;
@@ -4657,19 +4834,44 @@
     if (!torOps || typeof torOps.getActive !== 'function') return Promise.resolve(false);
     var timeout = Math.max(2000, Number(timeoutMs) || 30000);
     var startedAt = Date.now();
+
+    function hasValidatedMetadata(row) {
+      var t = (row && typeof row === 'object') ? row : {};
+      if (t.metadataReady === true) return true;
+      var files = Array.isArray(t.files) ? t.files : [];
+      if (!files.length) return false;
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i] || {};
+        var n = String(f.path || f.name || '').trim();
+        if (n) return true;
+      }
+      return false;
+    }
+
     return new Promise(function (resolve) {
       function tick() {
-        torOps.getActive().then(function (res) {
-          var rows = (res && res.ok && Array.isArray(res.torrents)) ? res.torrents : [];
+        var activeCall = torOps.getActive().catch(function () { return { ok: false, torrents: [] }; });
+        var histCall = (typeof torOps.getHistory === 'function')
+          ? torOps.getHistory().catch(function () { return { ok: false, torrents: [] }; })
+          : Promise.resolve({ ok: false, torrents: [] });
+        Promise.all([activeCall, histCall]).then(function (pair) {
+          var activeRows = (pair[0] && pair[0].ok && Array.isArray(pair[0].torrents)) ? pair[0].torrents : [];
+          var histRows = (pair[1] && pair[1].ok && Array.isArray(pair[1].torrents)) ? pair[1].torrents : [];
+          var rows = activeRows.concat(histRows);
           for (var i = 0; i < rows.length; i++) {
             var t = rows[i] || {};
-            if (String(t.id || '') === id && String(t.state || '') === wanted) return resolve(true);
+            if (String(t.id || '') !== id) continue;
+            if (wanted === 'metadata_ready') {
+              if (hasValidatedMetadata(t)) return resolve(true);
+              continue;
+            }
+            if (String(t.state || '') === wanted) return resolve(true);
           }
           if ((Date.now() - startedAt) >= timeout) return resolve(false);
-          setTimeout(tick, 450);
+          setTimeout(tick, 380);
         }).catch(function () {
           if ((Date.now() - startedAt) >= timeout) return resolve(false);
-          setTimeout(tick, 700);
+          setTimeout(tick, 650);
         });
       }
       tick();
@@ -4732,24 +4934,36 @@
     state.pendingFilePriorities = {};
     state.saveFlowMode = 'onboarding';
     state.managingTorrentId = null;
+    bumpSourcesTorrentDiag('resolve', 'lastElapsedMs', 0);
   }
 
   function resolveFilesForSaveFlow() {
     var row = state.pendingMagnet;
     var srcOps = getSourcesOps();
-    if (!row || !row.magnetUri || typeof srcOps.resolveMetadata !== 'function') {
+    if (!row || !row.magnetUri) {
+      if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
+      renderSaveFlowFiles();
+      updateStreamableButtonState();
+      return;
+    }
+    var canPollResolve = (typeof srcOps.startResolve === 'function' && typeof srcOps.getResolveStatus === 'function');
+    var canLegacyResolve = (typeof srcOps.resolveMetadata === 'function');
+    if (!canPollResolve && !canLegacyResolve) {
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = false;
       renderSaveFlowFiles();
       updateStreamableButtonState();
       return;
     }
     if (el.sourcesSaveFilesList) el.sourcesSaveFilesList.innerHTML = '<div class="muted tiny">Resolving metadata...</div>';
+    bumpSourcesTorrentDiag('resolve', 'started');
+
     function acceptMeta(meta) {
       if (!meta || !meta.ok) throw new Error((meta && meta.error) || 'Metadata resolution failed');
       state.pendingResolveId = meta.resolveId;
       state.pendingResolveFiles = Array.isArray(meta.files) ? meta.files : [];
       state.pendingFileSelection = {};
       state.pendingFilePriorities = {};
+      bumpSourcesTorrentDiag('resolve', 'lastElapsedMs', Number(meta.elapsedMs || 0) || 0);
       for (var i = 0; i < state.pendingResolveFiles.length; i++) {
         state.pendingFileSelection[i] = true;
         state.pendingFilePriorities[i] = 'normal';
@@ -4758,17 +4972,17 @@
       renderSaveFlowFiles();
       updateStreamableButtonState();
       if (!state.pendingResolveFiles.length) throw new Error('No file metadata returned for this torrent.');
+      bumpSourcesTorrentDiag('resolve', 'ready');
     }
 
-    function doResolve(withDestination) {
+    function doLegacyResolve(withDestination) {
       var payload = { source: row.magnetUri };
       if (withDestination) payload.destinationRoot = buildSavePath() || undefined;
       return srcOps.resolveMetadata(payload).then(acceptMeta);
     }
 
-    doResolve(true).catch(function () {
-      return doResolve(false);
-    }).catch(function (err) {
+    function showResolveError(err) {
+      bumpSourcesTorrentDiag('resolve', 'error');
       if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
       updateStreamableButtonState();
       if (el.sourcesSaveFilesList) {
@@ -4778,7 +4992,87 @@
         var retry = document.getElementById('sourcesSaveRetryResolve');
         if (retry) retry.addEventListener('click', function () { resolveFilesForSaveFlow(); });
       }
-    });
+    }
+
+    if (!canPollResolve) {
+      doLegacyResolve(true).catch(function () {
+        return doLegacyResolve(false);
+      }).catch(showResolveError);
+      return;
+    }
+
+    var timeoutMs = 90000;
+    var retryAfterMs = 22000;
+    var maxRetries = 1;
+    var localResolveId = '';
+    var done = false;
+    var startAt = Date.now();
+
+    function setResolveProgress(status) {
+      if (!el.sourcesSaveFilesList) return;
+      var st = String(status && status.state || 'resolving');
+      var elapsed = Math.max(0, Number(status && status.elapsedMs || (Date.now() - startAt)) || 0);
+      var retryCount = Math.max(0, Number(status && status.retryCount || 0) || 0);
+      var secs = Math.floor(elapsed / 1000);
+      var line = 'Resolving metadata... (' + secs + 's)';
+      if (st === 'timeout') line = 'Metadata resolve timed out (' + secs + 's).';
+      if (st === 'error') line = String(status && status.error || 'Metadata resolve failed');
+      if (retryCount > 0 && st === 'resolving') {
+        line = 'Resolving metadata... retry ' + String(retryCount) + ' (' + secs + 's)';
+        bumpSourcesTorrentDiag('resolve', 'retrying');
+      }
+      el.sourcesSaveFilesList.innerHTML = '<div class="muted tiny">' + escapeHtml(line) + '</div>';
+      bumpSourcesTorrentDiag('resolve', 'lastElapsedMs', elapsed);
+    }
+
+    function pollStatus() {
+      if (done) return;
+      if (!state.pendingResolveId || (localResolveId && state.pendingResolveId !== localResolveId)) return;
+      srcOps.getResolveStatus({ resolveId: localResolveId }).then(function (status) {
+        if (done) return;
+        if (!status || !status.ok) {
+          done = true;
+          showResolveError((status && status.error) || 'Could not get metadata status');
+          return;
+        }
+        setResolveProgress(status);
+        if (status.done) {
+          if (status.metadataReady) {
+            done = true;
+            acceptMeta(status);
+            return;
+          }
+          done = true;
+          if (String(status.state || '').toLowerCase() === 'timeout') bumpSourcesTorrentDiag('resolve', 'timeout');
+          showResolveError((status && status.error) || 'Could not resolve files');
+          return;
+        }
+        setTimeout(pollStatus, 420);
+      }).catch(function (err) {
+        if (done) return;
+        done = true;
+        showResolveError(err);
+      });
+    }
+
+    srcOps.startResolve({
+      source: row.magnetUri,
+      timeoutMs: timeoutMs,
+      retryAfterMs: retryAfterMs,
+      maxRetries: maxRetries,
+    }).then(function (started) {
+      if (!started || !started.ok) throw new Error((started && started.error) || 'Metadata resolve start failed');
+      localResolveId = String(started.resolveId || '');
+      if (!localResolveId) throw new Error('Resolve id missing');
+      state.pendingResolveId = localResolveId;
+      if (started.done && started.metadataReady) {
+        done = true;
+        acceptMeta(started);
+        return;
+      }
+      setResolveProgress(started);
+      setTimeout(pollStatus, 220);
+    }).catch(showResolveError);
   }
 
   function inferSaveCategoryFromRow(row) {
@@ -5000,6 +5294,7 @@
 
     if (el.sourcesSaveStart) el.sourcesSaveStart.disabled = true;
     if (el.sourcesSaveStream) el.sourcesSaveStream.disabled = true;
+    bumpSourcesTorrentDiag('streamable', 'started');
 
     function persistDestinationChoice() {
       state.lastSaveCategory = 'videos';
@@ -5046,8 +5341,12 @@
       forceSourcesViewVisible();
       if (hub && typeof hub.refreshTorrentState === 'function') hub.refreshTorrentState();
       showToast('Streamable folder added to Video Library');
+      bumpSourcesTorrentDiag('streamable', 'success');
     }).catch(function (err) {
       var msg = String((err && err.message) || err || 'Failed to add streamable folder');
+      bumpSourcesTorrentDiag('streamable', 'error');
+      ensureSourcesTorrentDiagShape();
+      state.sourcesTorrentDiag.streamable.lastError = msg;
       if (el.sourcesSearchStatus) el.sourcesSearchStatus.textContent = msg;
       showToast(msg);
     }).finally(function () {
@@ -5077,6 +5376,10 @@
 
   function resetSourcesSearchState() {
     state.searchRequestToken += 1;
+    state.searchTimedOutToken = -1;
+    state.searchPendingMeta = null;
+    clearTimeout(state.searchPendingTimer);
+    state.searchPendingTimedOut = false;
     state.searchQuery = '';
     state.searchPage = 0;
     state.searchHasMore = false;
@@ -5087,6 +5390,80 @@
     renderSearchTypeOptions();
     renderSourcesSearchRows();
     setSourcesSearchStatus('');
+  }
+
+  function getSourcesSearchMaxWaitMs() {
+    var s = state.browserSettings || {};
+    var providerKey = String(s.torrentSearch && s.torrentSearch.provider || 'jackett').trim().toLowerCase();
+    var providerCfg = {};
+    if (providerKey === 'prowlarr') providerCfg = (s.prowlarr && typeof s.prowlarr === 'object') ? s.prowlarr : {};
+    else if (providerKey === 'tankorent') providerCfg = (s.tankorent && typeof s.tankorent === 'object') ? s.tankorent : ((s.torrentSearch && s.torrentSearch.tankorent) || {});
+    else providerCfg = (s.jackett && typeof s.jackett === 'object') ? s.jackett : {};
+    var providerMs = Number(providerCfg.timeoutMs || 12000);
+    if (!isFinite(providerMs) || providerMs <= 0) providerMs = 12000;
+    var explicit = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
+    var value = explicit > 0 ? explicit : (providerMs * 3);
+    value = Math.max(6000, Math.min(45000, Math.round(value)));
+    return value;
+  }
+
+  function applySourcesSearchResponse(meta, res) {
+    var ctx = (meta && typeof meta === 'object') ? meta : {};
+    var token = Number(ctx.token || 0) || 0;
+    var append = !!ctx.append;
+    var page = Number(ctx.page || 0) || 0;
+    if (token !== state.searchRequestToken) return;
+    if (token === state.searchTimedOutToken) return;
+
+    var progressive = !!(res && res.searching && res.done === false);
+    if (!progressive) {
+      clearTimeout(state.searchPendingTimer);
+      state.searchPendingMeta = null;
+      state.searchPendingTimedOut = false;
+    }
+
+    if (!res || !res.ok) {
+      bumpSourcesTorrentDiag('search', 'error');
+      state.searchHasMore = false;
+      if (!append) {
+        state.searchResultsRaw = [];
+        state.searchResults = [];
+        renderSearchTypeOptions();
+        renderSourcesSearchRows();
+      }
+      setSourcesSearchStatus((res && res.error) || 'Search failed');
+      state.searchLoading = false;
+      state.searchLoadingMore = false;
+      return;
+    }
+
+    var items = Array.isArray(res.items) ? res.items : [];
+    if (!append && (!progressive || !state.searchResultsRaw.length)) state.searchResultsRaw = [];
+    appendSearchResults(items);
+    if (!progressive) {
+      state.searchPage = page + 1;
+      state.searchHasMore = !!(res.hasMore || items.length > 0);
+    } else {
+      state.searchHasMore = true;
+    }
+    renderSearchTypeOptions();
+    applySourcesSearchView();
+
+    if (progressive) {
+      bumpSourcesTorrentDiag('search', 'partial');
+      var count = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
+      setSourcesSearchStatus('Searching... ' + String(count) + ' result(s) so far');
+      state.searchLoading = true;
+      state.searchLoadingMore = !!append;
+      return;
+    }
+
+    bumpSourcesTorrentDiag('search', 'final');
+    bumpSourcesTorrentDiag('search', 'lastElapsedMs', Number(res && res.elapsedMs || 0) || 0);
+    updateSourcesSearchStatusTail();
+    state.searchLoading = false;
+    state.searchLoadingMore = false;
+    setTimeout(ensureSourcesSearchViewportFilled, 0);
   }
 
   function runSourcesSearch(opts) {
@@ -5111,6 +5488,11 @@
       state.searchResultsRaw = [];
       state.searchResults = [];
       state.searchRequestToken += 1;
+      state.searchTimedOutToken = -1;
+      clearTimeout(state.searchPendingTimer);
+      state.searchPendingMeta = null;
+      state.searchPendingTimedOut = false;
+      bumpSourcesTorrentDiag('search', 'started');
       renderSourcesSearchRows();
       renderSearchTypeOptions();
     } else {
@@ -5134,32 +5516,34 @@
 
     function handleSearchResponse(res) {
       if (token !== state.searchRequestToken) return;
-      if (!res || !res.ok) {
-        state.searchHasMore = false;
-        if (!append) {
-          state.searchResultsRaw = [];
-          state.searchResults = [];
-          renderSearchTypeOptions();
-          renderSourcesSearchRows();
-        }
-        setSourcesSearchStatus((res && res.error) || 'Search failed');
-        state.searchLoading = false;
-        state.searchLoadingMore = false;
+      if (token === state.searchTimedOutToken) return;
+      if (res && res.searching) {
+        var reqId = String(res.requestId || '');
+        state.searchPendingMeta = { token: token, append: append, page: page, requestId: reqId };
+        state.searchPendingTimedOut = false;
+        clearTimeout(state.searchPendingTimer);
+        var waitMs = getSourcesSearchMaxWaitMs();
+        state.searchPendingTimer = setTimeout(function () {
+          var pending = state.searchPendingMeta;
+          if (!pending || pending.token !== token) return;
+          state.searchTimedOutToken = token;
+          state.searchPendingMeta = null;
+          state.searchPendingTimedOut = true;
+          state.searchHasMore = false;
+          state.searchLoading = false;
+          state.searchLoadingMore = false;
+          bumpSourcesTorrentDiag('search', 'timeout');
+          var existing = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
+          var timeoutSec = Math.max(1, Math.round(waitMs / 1000));
+          if (existing > 0) {
+            setSourcesSearchStatus('Search timed out after ' + String(timeoutSec) + 's; showing partial results (' + String(existing) + ').');
+          } else {
+            setSourcesSearchStatus('Search timed out after ' + String(timeoutSec) + 's. Try fewer sources or retry.');
+          }
+        }, waitMs);
         return;
       }
-      if (res.searching) return; // async — results arrive via searchResultsReady signal
-
-      var items = Array.isArray(res.items) ? res.items : [];
-      if (!append) state.searchResultsRaw = [];
-      appendSearchResults(items);
-      state.searchPage = page + 1;
-      state.searchHasMore = items.length > 0;
-      renderSearchTypeOptions();
-      applySourcesSearchView();
-      updateSourcesSearchStatusTail();
-      state.searchLoading = false;
-      state.searchLoadingMore = false;
-      setTimeout(ensureSourcesSearchViewportFilled, 0);
+      applySourcesSearchResponse({ token: token, append: append, page: page }, res);
     }
 
     srcOps.search({
@@ -5167,19 +5551,20 @@
       category: 'all',
       source: source,
       limit: state.searchLimit,
-      page: page
+      page: page,
+      requestId: 'sources_' + String(token) + '_' + String(page) + '_' + String(Date.now()),
+      async: true,
     }).then(handleSearchResponse).catch(function (err) {
       if (token !== state.searchRequestToken) return;
-      state.searchHasMore = false;
-      if (!append) {
-        state.searchResultsRaw = [];
-        state.searchResults = [];
-        renderSearchTypeOptions();
-        renderSourcesSearchRows();
-      }
-      setSourcesSearchStatus(String((err && err.message) || err || 'Search failed'));
-      state.searchLoading = false;
-      state.searchLoadingMore = false;
+      if (token === state.searchTimedOutToken) return;
+      clearTimeout(state.searchPendingTimer);
+      state.searchPendingMeta = null;
+      state.searchPendingTimedOut = false;
+      bumpSourcesTorrentDiag('search', 'error');
+      applySourcesSearchResponse({ token: token, append: append, page: page }, {
+        ok: false,
+        error: String((err && err.message) || err || 'Search failed'),
+      });
     });
   }
 
@@ -5404,6 +5789,9 @@
     var clearOnExit = (privacy.clearOnExit && typeof privacy.clearOnExit === 'object') ? privacy.clearOnExit : {};
     var jackett = (src.jackett && typeof src.jackett === 'object') ? src.jackett : {};
     var prowlarr = (src.prowlarr && typeof src.prowlarr === 'object') ? src.prowlarr : {};
+    var torrent = (src.torrent && typeof src.torrent === 'object') ? src.torrent : {};
+    var torrentSidecar = (torrent.sidecar && typeof torrent.sidecar === 'object') ? torrent.sidecar : {};
+    var torrentSearchRuntime = (torrent.search && typeof torrent.search === 'object') ? torrent.search : {};
     var torrentSearch = (src.torrentSearch && typeof src.torrentSearch === 'object') ? src.torrentSearch : {};
     var sourcesBrowser = (src.sourcesBrowser && typeof src.sourcesBrowser === 'object') ? src.sourcesBrowser : {};
     var provider = String(torrentSearch.provider || src.torrentSearchProvider || 'jackett').trim().toLowerCase();
@@ -5443,7 +5831,17 @@
         timeoutMs: Number(prowlarr.timeoutMs || src.prowlarrTimeoutMs || 30000) || 30000,
         indexersByCategory: prowlarr.indexersByCategory && typeof prowlarr.indexersByCategory === 'object' ? prowlarr.indexersByCategory : { all: 'all', comics: 'all', books: 'all', tv: 'all' }
       },
-      torrentSearch: { provider: provider }
+      torrentSearch: { provider: provider },
+      torrent: {
+        backendMode: String(torrent.backendMode || src.torrentBackendMode || 'qbit').trim().toLowerCase() || 'qbit',
+        sidecar: {
+          enabled: !!torrentSidecar.enabled,
+          port: Number(torrentSidecar.port || 8765) || 8765
+        },
+        search: {
+          maxWaitMs: Number(torrentSearchRuntime.maxWaitMs || 45000) || 45000
+        }
+      }
     };
   }
 
@@ -5945,26 +6343,25 @@
         var res;
         try { res = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (_e) { res = null; }
         if (!res) return;
-        var items = Array.isArray(res.items) ? res.items : [];
-        if (!res.ok) {
-          state.searchHasMore = false;
-          state.searchResultsRaw = [];
-          state.searchResults = [];
-          renderSearchTypeOptions();
-          renderSourcesSearchRows();
-          setSourcesSearchStatus((res && res.error) || 'Search failed');
-        } else {
-          state.searchResultsRaw = [];
-          appendSearchResults(items);
-          state.searchPage = 1;
-          state.searchHasMore = items.length > 0;
-          renderSearchTypeOptions();
-          applySourcesSearchView();
-          updateSourcesSearchStatusTail();
+        var pending = state.searchPendingMeta;
+        var got = String((res && res.requestId) || '');
+        if (!pending) {
+          var token = 0;
+          var m = got.match(/^sources_(\d+)_/);
+          if (m && m[1]) token = Number(m[1]) || 0;
+          if (!token) token = Number(state.searchRequestToken || 0) || 0;
+          if (token !== state.searchRequestToken) return;
+          pending = {
+            token: token,
+            append: false,
+            page: Number(state.searchPage || 0) || 0,
+            requestId: got,
+          };
         }
-        state.searchLoading = false;
-        state.searchLoadingMore = false;
-        setTimeout(ensureSourcesSearchViewportFilled, 0);
+        if (Number(pending.token || 0) === Number(state.searchTimedOutToken || -1)) return;
+        var expected = String(pending.requestId || '');
+        if (expected && got && expected !== got) return;
+        applySourcesSearchResponse(pending, res || {});
       });
     }
 
@@ -6378,21 +6775,21 @@
 
     // IPC: torrent events
     var torrentOps = getTorrentOps();
-    if (torrentOps.onStarted) torrentOps.onStarted(function () {
+    if (torrentOps.onStarted) torrentOps.onStarted(function (info) {
       if (hub.refreshTorrentState) hub.refreshTorrentState();
-      refreshSourcesTorrents();
+      if (!upsertSourcesTorrentFromEvent(info)) scheduleSourcesTorrentsSnapshotRefresh(300);
     });
-    if (torrentOps.onMetadata) torrentOps.onMetadata(function () {
+    if (torrentOps.onMetadata) torrentOps.onMetadata(function (info) {
       if (hub.refreshTorrentState) hub.refreshTorrentState();
-      refreshSourcesTorrents();
+      if (!upsertSourcesTorrentFromEvent(info)) scheduleSourcesTorrentsSnapshotRefresh(500);
     });
-    if (torrentOps.onProgress) torrentOps.onProgress(function () {
+    if (torrentOps.onProgress) torrentOps.onProgress(function (info) {
       if (hub.renderHubTorrentActive) hub.renderHubTorrentActive();
-      refreshSourcesTorrents();
+      if (!upsertSourcesTorrentFromEvent(info)) scheduleSourcesTorrentsSnapshotRefresh(1200);
     });
     if (torrentOps.onCompleted) torrentOps.onCompleted(function (info) {
       if (hub.refreshTorrentState) hub.refreshTorrentState();
-      refreshSourcesTorrents();
+      if (!upsertSourcesTorrentFromEvent(info)) scheduleSourcesTorrentsSnapshotRefresh(400);
       var label = (info && info.name) ? String(info.name) : '';
       var stateName = String(info && info.state || '').toLowerCase();
       if (stateName === 'completed' || stateName === 'completed_with_errors') {
@@ -6707,6 +7104,7 @@
   // Ã¢â€â‚¬Ã¢â€â‚¬ Init sequence Ã¢â€â‚¬Ã¢â€â‚¬
 
   try {
+    ensureSourcesTorrentWorkspaceScaffold();
     bindUI();
   } catch (e) {
     console.warn('[web.js] bindUI failed', e);
@@ -6797,6 +7195,7 @@
   function applySourcesWorkspace(mode) {
     state.browserOpen = false;
     state.showBrowserHome = false;
+    ensureSourcesTorrentWorkspaceScaffold();
     if (panels.hideAllPanels) panels.hideAllPanels();
     if (contextMenu.hideContextMenu) contextMenu.hideContextMenu();
     hideSourcesBrowserContextMenu();
@@ -6805,7 +7204,7 @@
     enforceSourcesPanelOrder();
     forceSourcesViewVisible();
     setSourcesSubMode(mode === 'downloads' ? 'downloads' : 'search');
-    scheduleSourcesBrowserViewportLayout();
+    if (isSourcesBrowserEnabled()) scheduleSourcesBrowserViewportLayout();
   }
 
   function activateSourcesWorkspace(opts) {
@@ -6816,26 +7215,30 @@
     state.sourcesSubMode = mode;
     return activatePromise.then(function () {
       applySourcesWorkspace(mode);
-      initSourcesBrowser();
-      ensureSourcesBrowserViewportSync();
-      if (isButterfly) {
-        return ensureSourcesBrowserHostReady().catch(function () {
-          return null;
-        });
+      if (isSourcesBrowserEnabled()) {
+        initSourcesBrowser();
+        ensureSourcesBrowserViewportSync();
+        if (isButterfly) {
+          return ensureSourcesBrowserHostReady().catch(function () {
+            return null;
+          });
+        }
       }
       return null;
     }).then(function () {
-      if (!state.sourcesTabs.length) {
-        openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
-      } else {
-        var active = getSourcesActiveTab() || state.sourcesTabs[0];
-        if (active) switchSourcesTab(active.id, { focus: false });
+      if (isSourcesBrowserEnabled()) {
+        if (!state.sourcesTabs.length) {
+          openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
+        } else {
+          var active = getSourcesActiveTab() || state.sourcesTabs[0];
+          if (active) switchSourcesTab(active.id, { focus: false });
+        }
       }
       loadSourcesSearchIndexers();
       refreshSourcesTorrents();
       loadSourcesDownloadHistory();
       renderSourcesBrowserDownloadsRows();
-      scheduleSourcesBrowserViewportLayout();
+      if (isSourcesBrowserEnabled()) scheduleSourcesBrowserViewportLayout();
       if (el.homeView && mode === 'search') {
         try { el.homeView.scrollTop = 0; } catch (_eScrollTop) {}
       }
@@ -6961,6 +7364,7 @@
         }),
         diagnostics: Array.isArray(state.sourcesDiagEvents) ? state.sourcesDiagEvents.slice() : [],
         lastResult: state.sourcesDiagLastResult || null,
+        torrentDiag: state.sourcesTorrentDiag || null,
       };
     }
   };

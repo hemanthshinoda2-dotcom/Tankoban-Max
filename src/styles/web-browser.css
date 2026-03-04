@@ -170,7 +170,17 @@
 
 #sourcesSearchTabBtn,
 #sourcesDownloadsTabBtn {
-  display: none !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+}
+
+.sourcesWorkspaceTabs {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 10px;
 }
 
 #webHomeView .sourcesSearchPanel .panelTitleRow .panelActions .btn {
@@ -237,6 +247,23 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 .sourcesBrowserPanel,
 .sourcesBrowserDownloadsPanel {
   margin-bottom: 10px;
+}
+
+body.sourcesMinimalTorrentV2 #webHomeView .sourcesBrowserPanel,
+body.sourcesMinimalTorrentV2 #webHomeView > .continuePanel,
+body.sourcesMinimalTorrentV2 #webHomeDownloadsPanel,
+body.sourcesMinimalTorrentV2 #webHomeView > .panel.seriesPanel {
+  display: none !important;
+}
+
+body.sourcesMinimalTorrentV2 #sourcesSearchView,
+body.sourcesMinimalTorrentV2 #sourcesDownloadsView {
+  display: block;
+}
+
+body.sourcesMinimalTorrentV2 #sourcesSearchView.hidden,
+body.sourcesMinimalTorrentV2 #sourcesDownloadsView.hidden {
+  display: none !important;
 }
 
 .sourcesBrowserTabStrip {
