@@ -79,6 +79,50 @@ class OutlinedLabel(QLabel):
         p.end()
 
 
+class WindowControlButton(QPushButton):
+    """Draws minimize/maximize/close icons matching the main Tankoban app's SVG shapes."""
+
+    def __init__(self, kind: str, parent=None):
+        super().__init__("", parent)
+        self._kind = kind  # "minimize", "maximize", "close"
+        self.setFixedSize(36, 28)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            "QPushButton { background: transparent; border: none; }"
+            "QPushButton:hover { background: rgba(255,255,255,30); }"
+        )
+        if kind == "close":
+            self.setStyleSheet(
+                "QPushButton { background: transparent; border: none; }"
+                "QPushButton:hover { background: rgba(232,17,35,200); }"
+            )
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        # Outline
+        pen_outline = QPen(QColor(0, 0, 0, 180), 2.4)
+        pen_outline.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen_fg = QPen(QColor(255, 255, 255), 1.2)
+        pen_fg.setCapStyle(Qt.PenCapStyle.RoundCap)
+        cx, cy = self.width() / 2, self.height() / 2
+        if self._kind == "minimize":
+            for pen in (pen_outline, pen_fg):
+                p.setPen(pen)
+                p.drawLine(int(cx - 5), int(cy), int(cx + 5), int(cy))
+        elif self._kind == "maximize":
+            for pen in (pen_outline, pen_fg):
+                p.setPen(pen)
+                p.drawRect(int(cx - 5), int(cy - 5), 10, 10)
+        elif self._kind == "close":
+            for pen in (pen_outline, pen_fg):
+                p.setPen(pen)
+                p.drawLine(int(cx - 4), int(cy - 4), int(cx + 4), int(cy + 4))
+                p.drawLine(int(cx + 4), int(cy - 4), int(cx - 4), int(cy + 4))
+        p.end()
+
+
 MODE_LABELS = {
     "manual": "Manual",
     "twoPage": "Double Page",
@@ -100,6 +144,9 @@ _SYM_MODE = "*"
 
 class TopBar(QFrame):
     back_clicked = Signal()
+    minimize_clicked = Signal()
+    fullscreen_clicked = Signal()
+    close_clicked = Signal()
     hover_changed = Signal(bool)
 
     def __init__(self, parent=None):
@@ -154,6 +201,22 @@ class TopBar(QFrame):
         )
         self.bookmark_icon.setVisible(False)
         row.addWidget(self.bookmark_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        # Window controls (right side, matching main app)
+        self.min_btn = WindowControlButton("minimize", self)
+        self.min_btn.setToolTip("Minimize")
+        self.min_btn.clicked.connect(self.minimize_clicked.emit)
+        row.addWidget(self.min_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.max_btn = WindowControlButton("maximize", self)
+        self.max_btn.setToolTip("Maximize / Restore")
+        self.max_btn.clicked.connect(self.fullscreen_clicked.emit)
+        row.addWidget(self.max_btn, 0, Qt.AlignmentFlag.AlignVCenter)
+
+        self.close_btn = WindowControlButton("close", self)
+        self.close_btn.setToolTip("Close")
+        self.close_btn.clicked.connect(self.close_clicked.emit)
+        row.addWidget(self.close_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
     def set_title(self, title: str):
         self.title.setText(title or "-")
@@ -357,9 +420,6 @@ class BottomHud(QFrame):
     fit_clicked = Signal()
     width_clicked = Signal()
     gap_changed = Signal(int)
-    minimize_clicked = Signal()
-    fullscreen_clicked = Signal()
-    close_clicked = Signal()
     seek_preview = Signal(int)
     seek_commit = Signal(int)
     scrub_drag_changed = Signal(bool)
@@ -491,25 +551,13 @@ class BottomHud(QFrame):
         controls_row.addStretch(1)
 
         # Right controls
-        self.prev_vol_btn = self._icon_btn("\u2190", "hudSmall", "Previous volume")  # ←
+        self.prev_vol_btn = self._icon_btn("\u2190", "hudBtn", "Previous volume")  # ←
         self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
         controls_row.addWidget(self.prev_vol_btn, 0)
 
-        self.next_vol_btn = self._icon_btn("\u2192", "hudSmall", "Next volume")  # →
+        self.next_vol_btn = self._icon_btn("\u2192", "hudBtn", "Next volume")  # →
         self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
         controls_row.addWidget(self.next_vol_btn, 0)
-
-        self.min_btn = self._icon_btn("_", "hudSmall", "Minimize")
-        self.min_btn.clicked.connect(self.minimize_clicked.emit)
-        controls_row.addWidget(self.min_btn, 0)
-
-        self.fs_btn = self._icon_btn("\u26f6", "hudSmall", "Fullscreen")  # ⛶
-        self.fs_btn.clicked.connect(self.fullscreen_clicked.emit)
-        controls_row.addWidget(self.fs_btn, 0)
-
-        self.close_btn = self._icon_btn("\u00d7", "hudSmall", "Close")  # ×
-        self.close_btn.clicked.connect(self.close_clicked.emit)
-        controls_row.addWidget(self.close_btn, 0)
 
         outer.addLayout(controls_row)
 

@@ -157,9 +157,9 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.fit_clicked.connect(self._toggle_image_fit)
         self.bottom_hud.width_clicked.connect(self._cycle_portrait_width)
         self.bottom_hud.gap_changed.connect(self._on_hud_gap_changed)
-        self.bottom_hud.minimize_clicked.connect(self._on_hud_minimize)
-        self.bottom_hud.fullscreen_clicked.connect(self.toggle_fullscreen_window)
-        self.bottom_hud.close_clicked.connect(self._on_hud_close)
+        self.top_bar.minimize_clicked.connect(self._on_hud_minimize)
+        self.top_bar.fullscreen_clicked.connect(self.toggle_fullscreen_window)
+        self.top_bar.close_clicked.connect(self._on_hud_close)
         self.manual_scroller.drag_progress.connect(self._on_manual_scroller_drag_progress)
 
         # Context menu: DefaultContextMenu so contextMenuEvent fires on right-click
