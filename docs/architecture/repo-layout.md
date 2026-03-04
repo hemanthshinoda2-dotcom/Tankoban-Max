@@ -35,3 +35,9 @@ This document is the canonical high-level filesystem map.
 - `legacy`: compatibility runtime, still runnable but non-default
 - `experimental`: not default, can be enabled intentionally
 - `archive`: historical reference, not active
+
+## Module Contracts
+
+- Module inventory: `docs/architecture/module-index.yaml`
+- Dependency boundaries: `docs/architecture/dependency-boundaries.yaml`
+- Path lifecycle map: `docs/architecture/path-status.yaml`

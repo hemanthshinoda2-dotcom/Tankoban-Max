@@ -1,0 +1,130 @@
+﻿{
+  "modules": [
+    {
+      "module_id": "qt.app",
+      "entrypoint": "projectbutterfly/app.py",
+      "public_api": ["main()", "TankobanWindow"],
+      "owner": "qt-runtime",
+      "status": "active"
+    },
+    {
+      "module_id": "qt.bridge_root",
+      "entrypoint": "projectbutterfly/bridge_root.py",
+      "public_api": ["BridgeRoot", "setup_bridge"],
+      "owner": "qt-runtime",
+      "status": "active"
+    },
+    {
+      "module_id": "qt.bridges",
+      "entrypoint": "projectbutterfly/bridges/__init__.py",
+      "public_api": ["WindowBridge", "WebTorrentBridge", "TorrentSearchBridge"],
+      "owner": "qt-runtime",
+      "status": "active"
+    },
+    {
+      "module_id": "qt.browser",
+      "entrypoint": "projectbutterfly/browser/chrome_browser.py",
+      "public_api": ["ChromeBrowser"],
+      "owner": "qt-runtime",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.shell",
+      "entrypoint": "src/domains/shell/index.js",
+      "public_api": ["window.Tanko.shell"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.library",
+      "entrypoint": "src/domains/library/index.js",
+      "public_api": ["window.Tanko.library"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.reader",
+      "entrypoint": "src/domains/reader/index.js",
+      "public_api": ["window.Tanko.reader"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.books",
+      "entrypoint": "src/domains/books/index.js",
+      "public_api": ["window.__tankoBooksLibShared"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.video",
+      "entrypoint": "src/domains/video/index.js",
+      "public_api": ["window.__tankoVideoShared", "window.__tankoVideoSearch"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.web_sources",
+      "entrypoint": "src/domains/web/index.js",
+      "public_api": ["window.Tanko.sources", "window.Tanko.web"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "renderer.browser_host",
+      "entrypoint": "src/domains/browser_host/index.js",
+      "public_api": ["window.__ASPECT_TANKO_BRIDGE__"],
+      "owner": "renderer",
+      "status": "active"
+    },
+    {
+      "module_id": "legacy.electron_runtime",
+      "entrypoint": "runtime/electron_legacy/main.js",
+      "public_api": ["main/index.js runtime boot"],
+      "owner": "electron-legacy",
+      "status": "legacy"
+    },
+    {
+      "module_id": "legacy.preload",
+      "entrypoint": "runtime/electron_legacy/preload.js",
+      "public_api": ["window.Tanko.api (legacy preload)"],
+      "owner": "electron-legacy",
+      "status": "legacy"
+    },
+    {
+      "module_id": "player.qt_runtime",
+      "entrypoint": "player_qt/run_player.py",
+      "public_api": ["TankobanPlayer.exe"],
+      "owner": "video-runtime",
+      "status": "active"
+    },
+    {
+      "module_id": "tooling.repo_contracts",
+      "entrypoint": "tools/check_path_status.js",
+      "public_api": ["npm run repo:contracts"],
+      "owner": "tooling",
+      "status": "active"
+    },
+    {
+      "module_id": "tooling.docs",
+      "entrypoint": "tools/check_docs_links.js",
+      "public_api": ["npm run check:docs-links"],
+      "owner": "tooling",
+      "status": "active"
+    },
+    {
+      "module_id": "experiments.holy_grail",
+      "entrypoint": "experiments/holy-grail/README.md",
+      "public_api": ["experimental only"],
+      "owner": "experiments",
+      "status": "experimental"
+    },
+    {
+      "module_id": "archive.history",
+      "entrypoint": "archive/README.md",
+      "public_api": ["historical reference"],
+      "owner": "repo-governance",
+      "status": "archive"
+    }
+  ]
+}

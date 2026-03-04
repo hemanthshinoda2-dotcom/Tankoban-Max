@@ -6,6 +6,8 @@
 2. `architecture/repo-layout.md`
 3. `architecture/path-status.yaml`
 4. `architecture/ownership-map.md`
+5. `architecture/module-index.yaml`
+6. `architecture/dependency-boundaries.yaml`
 
 ## Agent Docs
 

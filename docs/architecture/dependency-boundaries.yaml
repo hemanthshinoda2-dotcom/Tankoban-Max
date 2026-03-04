@@ -1,0 +1,22 @@
+﻿{
+  "rules": [
+    {
+      "id": "active-src-cannot-import-legacy-runtime",
+      "source_prefixes": ["src/", "projectbutterfly/"],
+      "disallow_prefixes": ["runtime/electron_legacy/"],
+      "exclude_sources": ["projectbutterfly/bridge.py"]
+    },
+    {
+      "id": "legacy-runtime-cannot-import-qt-runtime",
+      "source_prefixes": ["runtime/electron_legacy/"],
+      "disallow_prefixes": ["projectbutterfly/"],
+      "exclude_sources": []
+    },
+    {
+      "id": "active-runtime-cannot-import-experiments",
+      "source_prefixes": ["src/", "projectbutterfly/"],
+      "disallow_prefixes": ["experiments/", "archive/"],
+      "exclude_sources": []
+    }
+  ]
+}

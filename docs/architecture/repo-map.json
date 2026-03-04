@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-04T12:53:04.719Z",
+  "generatedAt": "2026-03-04T13:25:49.960Z",
   "source": "git ls-files",
   "entries": [
     {
@@ -21,6 +21,16 @@
       "path": "runtime/electron_legacy/shared/ipc.js",
       "purpose": "Electron legacy IPC contract constants.",
       "danger": "high"
+    },
+    {
+      "path": "main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "preload.js",
+      "purpose": "Root compatibility shim to legacy preload.",
+      "danger": "low"
     },
     {
       "path": ".github/workflows/browser-ui-visual-qa.yml",
@@ -49,6 +59,11 @@
     },
     {
       "path": "HG_RESTORE_README.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -373,6 +388,16 @@
       "danger": "low"
     },
     {
+      "path": "audiobook_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "books_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "build/icon.ico",
       "purpose": "Project file.",
       "danger": "low"
@@ -443,12 +468,72 @@
       "danger": "low"
     },
     {
+      "path": "docs/architecture/ownership-map.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/architecture/path-status.yaml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/architecture/repo-layout.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/architecture/repo-map.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/architecture/runtime-contract.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "docs/browser-build0/generated_baseline_report.md",
       "purpose": "Project file.",
       "danger": "low"
     },
     {
       "path": "docs/browser-build0/manual_parity_checklist.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/audiobook.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/book.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/browser.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/comic.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/library.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/torrent.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/ownership/video.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -473,37 +558,22 @@
       "danger": "low"
     },
     {
-      "path": "docs/ownership/audiobook.md",
+      "path": "docs/migration/baseline-runtime-command-matrix.txt",
       "purpose": "Project file.",
       "danger": "low"
     },
     {
-      "path": "docs/ownership/book.md",
+      "path": "docs/migration/baseline-top-level-dirs.txt",
       "purpose": "Project file.",
       "danger": "low"
     },
     {
-      "path": "docs/ownership/browser.md",
+      "path": "docs/migration/baseline-tracked-files.txt",
       "purpose": "Project file.",
       "danger": "low"
     },
     {
-      "path": "docs/ownership/comic.md",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "docs/ownership/library.md",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "docs/ownership/torrent.md",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "docs/ownership/video.md",
+      "path": "docs/migration/repo-overhaul-playbook.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -859,6 +929,11 @@
     },
     {
       "path": "install_and_run.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "library_scan_worker.js",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -1793,6 +1868,5431 @@
       "danger": "low"
     },
     {
+      "path": "resources/manifests/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/manifests/vendor-manifest.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Accessibility.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/AngleSharp.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/AngleSharp.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Azure.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Azure.Identity.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/BouncyCastle.Cryptography.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/D3DCompiler_47_cor3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Dapper.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Diacritical.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/DirectWriteForwarder.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/DryIoc.Microsoft.DependencyInjection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/DryIoc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Dynamitey.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Extensions.Oracle.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Extensions.Postgres.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Extensions.SqlAnywhere.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Extensions.SqlServer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Db2.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Firebird.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Hana.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.MySql.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Oracle.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Postgres.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.Redshift.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.SQLite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.SqlAnywhere.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.SqlServer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.SqlServerCe.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.Runner.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentMigrator.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/FluentValidation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ICSharpCode.SharpZipLib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/IPAddressRange.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ImpromptuInterface.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/LICENSE",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ar.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/bg.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/bn.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/bs.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ca.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/cs.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/da.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/de.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/el.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/en.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/es.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/es_MX.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/et.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/fa.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/fi.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/fr.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/he.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/hi.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/hr.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/hu.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/id.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/is.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/it.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ja.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ko.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/lt.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/lv.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/nb_NO.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/nl.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/pl.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/pt.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/pt_BR.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ro.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ru.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/sk.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/sr.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/sv.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/ta.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/th.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/tr.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/uk.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/vi.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/zh_CN.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/zh_Hans.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Localization/Core/zh_TW.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/MailKit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Antiforgery.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.BearerToken.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.Cookies.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.OAuth.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authentication.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authorization.Policy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Authorization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.Authorization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.Endpoints.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.Forms.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.Server.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Components.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Connections.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.CookiePolicy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Cors.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Cryptography.Internal.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Cryptography.KeyDerivation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.DataProtection.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.DataProtection.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.DataProtection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Diagnostics.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Diagnostics.HealthChecks.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Diagnostics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.HostFiltering.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Hosting.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Hosting.Server.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Hosting.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Html.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Connections.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Connections.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Features.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.Results.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Http.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.HttpLogging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.HttpOverrides.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.HttpsPolicy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Identity.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Localization.Routing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Localization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Metadata.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.ApiExplorer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Cors.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.DataAnnotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Formatters.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Formatters.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Localization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.Razor.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.RazorPages.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.TagHelpers.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.ViewFeatures.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Mvc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.OutputCaching.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.RateLimiting.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Razor.Runtime.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Razor.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.RequestDecompression.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.ResponseCaching.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.ResponseCaching.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.ResponseCompression.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Rewrite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Routing.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Routing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.HttpSys.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.IIS.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.IISIntegration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.Kestrel.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.Kestrel.Transport.NamedPipes.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.Kestrel.Transport.Quic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Server.Kestrel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.Session.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.SignalR.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.SignalR.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.SignalR.Protocols.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.SignalR.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.StaticFiles.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.WebSockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.WebUtilities.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.AspNetCore.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Bcl.AsyncInterfaces.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Bcl.Cryptography.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.CSharp.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Data.SqlClient.SNI.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Data.SqlClient.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.DiaSymReader.Native.amd64.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Caching.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Caching.Memory.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.Binder.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.CommandLine.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.FileExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.Ini.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.KeyPerFile.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.UserSecrets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.DependencyInjection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Diagnostics.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Diagnostics.HealthChecks.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Diagnostics.HealthChecks.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Diagnostics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Features.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.FileProviders.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.FileProviders.Composite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.FileProviders.Embedded.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.FileProviders.Physical.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.FileSystemGlobbing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Hosting.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Hosting.WindowsServices.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Hosting.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Http.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Identity.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Identity.Stores.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Localization.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Localization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.Console.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.Debug.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.EventLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.EventSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.TraceSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Logging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.ObjectPool.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Options.ConfigurationExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Options.DataAnnotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Options.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Extensions.WebEncoders.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Identity.Client.Extensions.Msal.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Identity.Client.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.JsonWebTokens.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.Logging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.Protocols.OpenIdConnect.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.Protocols.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.IdentityModel.Tokens.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.JSInterop.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Net.Http.Headers.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.OpenApi.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.SqlServer.Server.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.VisualBasic.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.VisualBasic.Forms.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.VisualBasic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Win32.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Win32.Registry.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Win32.Registry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Microsoft.Win32.SystemEvents.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/MimeKit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Mono.Nat.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/MonoTorrent.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/NLog.Extensions.Logging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/NLog.Layouts.ClefJsonLayout.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/NLog.Targets.Syslog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/NLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Newtonsoft.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Npgsql.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PenImc_cor3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Polly.Contrib.WaitAndRetry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Polly.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Polly.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationCore.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework-SystemCore.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework-SystemData.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework-SystemDrawing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework-SystemXml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework-SystemXmlLinq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.Aero.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.Aero2.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.AeroLite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.Classic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.Luna.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.Royale.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationFramework.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationNative_cor3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/PresentationUI.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Api.V1.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Api.V1.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Api.V1.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Api.V1.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Common.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Common.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Common.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.runtimeconfig.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Console.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Core.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Core.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Core.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Host.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Host.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Host.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Host.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Http.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Http.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Http.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Http.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.SignalR.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.SignalR.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.SignalR.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.SignalR.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/DryIoc.Microsoft.DependencyInjection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/DryIoc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/ICSharpCode.SharpZipLib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/IPAddressRange.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.CSharp.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.DiaSymReader.Native.amd64.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.Binder.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.CommandLine.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.FileExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.UserSecrets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.DependencyInjection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Diagnostics.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Diagnostics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.FileProviders.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.FileProviders.Physical.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.FileSystemGlobbing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Hosting.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Hosting.WindowsServices.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Hosting.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.Abstractions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.Console.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.Debug.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.EventLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.EventSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Logging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Options.ConfigurationExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Options.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Extensions.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.VisualBasic.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.VisualBasic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Win32.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Microsoft.Win32.Registry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/NLog.Extensions.Logging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/NLog.Layouts.ClefJsonLayout.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/NLog.Targets.Syslog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/NLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Newtonsoft.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Npgsql.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Polly.Contrib.WaitAndRetry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Common.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Common.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.dll.config",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.runtimeconfig.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Update.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Windows.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Windows.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Prowlarr.Windows.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/Sentry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.AppContext.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Buffers.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Collections.Concurrent.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Collections.Immutable.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Collections.NonGeneric.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Collections.Specialized.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Collections.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.Annotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.DataAnnotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.EventBasedAsync.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.TypeConverter.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ComponentModel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Configuration.ConfigurationManager.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Console.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Data.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Data.DataSetExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Data.SQLite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Data.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.Contracts.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.Debug.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.DiagnosticSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.EventLog.Messages.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.EventLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.FileVersionInfo.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.Process.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.StackTrace.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.TextWriterTraceListener.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.Tools.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.TraceSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Diagnostics.Tracing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Drawing.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Drawing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Dynamic.Runtime.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Formats.Asn1.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Formats.Tar.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Globalization.Calendars.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Globalization.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Globalization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Compression.Brotli.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Compression.FileSystem.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Compression.Native.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Compression.ZipFile.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Compression.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.FileSystem.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.FileSystem.DriveInfo.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.FileSystem.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.FileSystem.Watcher.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.FileSystem.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.IsolatedStorage.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.MemoryMappedFiles.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Pipes.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.Pipes.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.UnmanagedMemoryStream.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.IO.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Linq.Expressions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Linq.Parallel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Linq.Queryable.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Memory.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Http.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Http.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.HttpListener.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Mail.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.NameResolution.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.NetworkInformation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Ping.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Quic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Requests.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Security.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.ServicePoint.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.Sockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.WebClient.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.WebHeaderCollection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.WebProxy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.WebSockets.Client.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.WebSockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Net.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Numerics.Vectors.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Numerics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ObjectModel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Private.CoreLib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Private.DataContractSerialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Private.Uri.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Private.Xml.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Private.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.DispatchProxy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Emit.ILGeneration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Emit.Lightweight.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Emit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Metadata.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.TypeExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Reflection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Resources.Reader.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Resources.ResourceManager.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Resources.Writer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.CompilerServices.Unsafe.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.CompilerServices.VisualC.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Handles.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.InteropServices.JavaScript.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.InteropServices.RuntimeInformation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.InteropServices.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Intrinsics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Loader.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Numerics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Serialization.Formatters.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Serialization.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Serialization.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Serialization.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.Serialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Runtime.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Claims.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.Algorithms.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.Cng.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.Csp.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.Encoding.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.OpenSsl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.ProtectedData.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.X509Certificates.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Cryptography.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Principal.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.Principal.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.SecureString.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Security.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ServiceModel.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ServiceProcess.ServiceController.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ServiceProcess.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.Encoding.CodePages.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.Encoding.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.Encoding.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.Encodings.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Text.RegularExpressions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Channels.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Overlapped.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Tasks.Dataflow.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Tasks.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Tasks.Parallel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Tasks.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Thread.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.ThreadPool.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.Timer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Threading.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Transactions.Local.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Transactions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.ValueTuple.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Web.HttpUtility.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.ReaderWriter.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.Serialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.XDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.XPath.XDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.XPath.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.XmlDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.XmlSerializer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/System.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/WindowsBase.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/clretwrc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/clrgc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/clrjit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/coreclr.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/createdump.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/e_sqlite3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/hostfxr.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/hostpolicy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/mscordaccore.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/mscordaccore_amd64_amd64_8.0.1224.60305.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/mscordbi.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/mscorlib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/mscorrc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/msquic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Update/netstandard.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Windows.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Windows.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.Windows.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.runtimeconfig.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Prowlarr.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ReachFramework.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ReusableTasks.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Sentry.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.dll.config",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.runtimeconfig.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceInstall.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.deps.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.dll.config",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.pdb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.runtimeconfig.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ServiceUninstall.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Swashbuckle.AspNetCore.Swagger.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/Swashbuckle.AspNetCore.SwaggerGen.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.AppContext.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Buffers.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ClientModel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.CodeDom.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Collections.Concurrent.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Collections.Immutable.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Collections.NonGeneric.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Collections.Specialized.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Collections.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.Annotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.DataAnnotations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.EventBasedAsync.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.TypeConverter.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ComponentModel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Configuration.ConfigurationManager.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Configuration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Console.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Core.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Data.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Data.DataSetExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Data.SQLite.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Data.SqlServerCe.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Data.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Design.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.Contracts.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.Debug.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.DiagnosticSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.EventLog.Messages.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.EventLog.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.FileVersionInfo.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.PerformanceCounter.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.Process.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.StackTrace.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.TextWriterTraceListener.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.Tools.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.TraceSource.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Diagnostics.Tracing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.DirectoryServices.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Drawing.Common.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Drawing.Design.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Drawing.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Drawing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Dynamic.Runtime.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Formats.Asn1.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Formats.Tar.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Globalization.Calendars.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Globalization.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Globalization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Compression.Brotli.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Compression.FileSystem.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Compression.Native.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Compression.ZipFile.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Compression.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.FileSystem.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.FileSystem.DriveInfo.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.FileSystem.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.FileSystem.Watcher.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.FileSystem.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.IsolatedStorage.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.MemoryMappedFiles.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Packaging.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Pipelines.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Pipes.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.Pipes.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.UnmanagedMemoryStream.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IO.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.IdentityModel.Tokens.Jwt.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Linq.Expressions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Linq.Parallel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Linq.Queryable.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Memory.Data.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Memory.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Http.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Http.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.HttpListener.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Mail.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.NameResolution.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.NetworkInformation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Ping.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Quic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Requests.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Security.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.ServicePoint.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.Sockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.WebClient.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.WebHeaderCollection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.WebProxy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.WebSockets.Client.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.WebSockets.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Net.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Numerics.Vectors.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Numerics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ObjectModel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Printing.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Private.CoreLib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Private.DataContractSerialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Private.Uri.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Private.Xml.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Private.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.DispatchProxy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Emit.ILGeneration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Emit.Lightweight.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Emit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Metadata.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.TypeExtensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Reflection.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Resources.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Resources.Reader.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Resources.ResourceManager.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Resources.Writer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.CompilerServices.Unsafe.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.CompilerServices.VisualC.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Handles.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.InteropServices.JavaScript.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.InteropServices.RuntimeInformation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.InteropServices.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Intrinsics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Loader.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Numerics.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Serialization.Formatters.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Serialization.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Serialization.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Serialization.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.Serialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Runtime.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Claims.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Algorithms.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Cng.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Csp.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Encoding.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.OpenSsl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Pkcs.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.ProtectedData.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.X509Certificates.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Cryptography.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Permissions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Principal.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.Principal.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.SecureString.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Security.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ServiceModel.Syndication.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ServiceModel.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ServiceProcess.ServiceController.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ServiceProcess.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.Encoding.CodePages.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.Encoding.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.Encoding.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.Encodings.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.Json.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Text.RegularExpressions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.AccessControl.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Channels.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Overlapped.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.RateLimiting.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Tasks.Dataflow.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Tasks.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Tasks.Parallel.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Tasks.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Thread.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.ThreadPool.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.Timer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Threading.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Transactions.Local.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Transactions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.ValueTuple.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Web.HttpUtility.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Web.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Controls.Ribbon.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Extensions.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Forms.Design.Editors.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Forms.Design.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Forms.Primitives.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Forms.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Input.Manipulations.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.Presentation.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Windows.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xaml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.Linq.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.ReaderWriter.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.Serialization.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.XDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.XPath.XDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.XPath.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.XmlDocument.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.XmlSerializer.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.Xml.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/System.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/194-74921861e81ae7f57cdf.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/194-74921861e81ae7f57cdf.js.LICENSE.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/194-74921861e81ae7f57cdf.js.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/195-9b5e92c9172ec7406271.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/195-9b5e92c9172ec7406271.js.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/195-429be677181e931bd77f.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/195-429be677181e931bd77f.css.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Light.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Light.woff",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Light.woff2",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Regular.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Regular.woff",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/Roboto-Regular.woff2",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/UbuntuMono-Regular.eot",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/UbuntuMono-Regular.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/UbuntuMono-Regular.woff",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Fonts/fonts.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/404.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/android-chrome-192x192.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/android-chrome-512x512.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/apple-touch-icon.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/browserconfig.xml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon-16x16.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon-32x32.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon-debug-16x16.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon-debug-32x32.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon-debug.ico",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/favicon.ico",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/logo-lidarr.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/logo-prowlarr.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/logo-radarr.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/logo-readarr.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/logo-sonarr.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/manifest.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/mstile-144x144.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/mstile-150x150.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/mstile-310x150.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/mstile-310x310.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/mstile-70x70.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/Icons/safari-pinned-tab.svg",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/error.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/logo-full.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/logo.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/logo.svg",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/Images/poster-dark.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/robots.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/styles.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/Content/styles.css.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/index-080df03727d73fef7848.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/index-080df03727d73fef7848.js.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/index.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/login.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UI/oauth.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UIAutomationClient.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UIAutomationClientSideProviders.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UIAutomationProvider.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/UIAutomationTypes.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/WindowsBase.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/WindowsFormsIntegration.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/YamlDotNet.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/aspnetcorev2_inprocess.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/clretwrc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/clrgc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/clrjit.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/coreclr.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/createdump.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/cs/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de-DE/FluentMigrator.Abstractions.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/de/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/e_sqlite3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/es/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/fr/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/hostfxr.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/hostpolicy.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/it/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ja/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ko/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/mscordaccore.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/mscordaccore_amd64_amd64_8.0.1224.60305.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/mscordbi.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/mscorlib.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/mscorrc.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/msquic.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/netstandard.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pl/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/pt-BR/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/ru/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/tr/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/vcruntime140_cor3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/web.config",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/wpfgfx_cor3.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hans/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/Microsoft.Data.SqlClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/Microsoft.VisualBasic.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/PresentationCore.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/PresentationFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/PresentationUI.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/ReachFramework.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Windows.Controls.Ribbon.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Windows.Forms.Design.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Windows.Forms.Primitives.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Windows.Forms.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Windows.Input.Manipulations.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/System.Xaml.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/UIAutomationClient.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/UIAutomationClientSideProviders.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/UIAutomationProvider.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/UIAutomationTypes.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/WindowsBase.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/prowlarr/zh-Hant/WindowsFormsIntegration.resources.dll",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/qbittorrent/qbittorrent.exe",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "resources/qbittorrent/qt.conf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "run_portable.bat",
       "purpose": "Project file.",
       "danger": "low"
@@ -2589,6 +8089,16 @@
     },
     {
       "path": "runtime/electron_legacy/workers/video_scan_worker_impl.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/run/start_electron_legacy.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/run/start_qt.bat",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -4293,6 +9803,16 @@
       "danger": "low"
     },
     {
+      "path": "tools/check_docs_links.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/check_path_status.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "tools/css_usage_check.js",
       "purpose": "Project file.",
       "danger": "low"
@@ -4314,6 +9834,11 @@
     },
     {
       "path": "tools/fetch_tor.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/fetch_vendor.js",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -4429,6 +9954,11 @@
     },
     {
       "path": "types/tanko-contracts.d.ts",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "video_scan_worker.js",
       "purpose": "Project file.",
       "danger": "low"
     }

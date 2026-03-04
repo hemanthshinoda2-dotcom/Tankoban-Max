@@ -36,6 +36,9 @@
         "map": "node tools/repo_map.js",
         "check:path-status": "node tools/check_path_status.js",
         "check:docs-links": "node tools/check_docs_links.js",
+        "check:module-contracts": "node tools/check_module_contracts.js",
+        "check:dependency-boundaries": "node tools/check_dependency_boundaries.js",
+        "check:file-size-budget": "node tools/check_file_size_budget.js",
         "smoke": "node tools/smoke_check.js",
         "smoke:library": "node tools/section_smoke.js --section=library",
         "smoke:comic": "node tools/section_smoke.js --section=comic",
@@ -83,7 +86,7 @@
         "browser:nav:audit": "node tools/browser_nav_shortcut_audit.js",
         "browser:tabs:audit": "node tools/browser_tabs_polish_audit.js",
         "browser:omni:audit": "node tools/browser_omni_build7_audit.js",
-        "repo:contracts": "npm run check:path-status && npm run check:docs-links"
+        "repo:contracts": "npm run check:path-status && npm run check:docs-links && npm run check:module-contracts && npm run check:dependency-boundaries && npm run check:file-size-budget"
     },
     "devDependencies": {
         "electron": "^40.6.0",

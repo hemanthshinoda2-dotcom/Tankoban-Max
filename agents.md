@@ -7,6 +7,8 @@ For high-level repo topology and path lifecycle, start with:
 - `docs/architecture/runtime-contract.md`
 - `docs/architecture/repo-layout.md`
 - `docs/architecture/path-status.yaml`
+- `docs/architecture/module-index.yaml`
+- `docs/architecture/dependency-boundaries.yaml`
 
 ## 1. Runtime Ownership
 
@@ -30,6 +32,11 @@ No build system. Renderer scripts are loaded by `<script>` tags in `src/index.ht
 - Domain modules are loaded when their mode is activated.
 
 If a feature depends on a deferred domain, ensure its loader has executed.
+
+### Modularization Rule
+
+- Domain entrypoints are now documented under `src/domains/*/index.js`.
+- Use the per-domain README in `src/domains/*/README.md` before editing.
 
 ## 3. `el` Objects Are Domain-Scoped
 
@@ -103,6 +110,15 @@ Holy Grail code is archival/experimental and not default runtime.
 - Main-process legacy issues: add explicit file logging.
 - IPC issues: log both preload and main sides.
 - CSS issues: validate selector collisions in load order.
+
+## 12. Contract Checks
+
+Run these before merge when restructuring modules:
+
+- `npm run check:module-contracts`
+- `npm run check:dependency-boundaries`
+- `npm run check:file-size-budget`
+- `npm run repo:contracts`
 
 ## 11. Code Style
 

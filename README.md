@@ -41,6 +41,8 @@ npm run start:electron-legacy
 - Repo layout contract: `docs/architecture/repo-layout.md`
 - Path status map: `docs/architecture/path-status.yaml`
 - Ownership map: `docs/architecture/ownership-map.md`
+- Module index: `docs/architecture/module-index.yaml`
+- Dependency boundaries: `docs/architecture/dependency-boundaries.yaml`
 
 ## Validation Commands
 
@@ -48,6 +50,10 @@ npm run start:electron-legacy
 npm run doctor
 npm run check:path-status
 npm run check:docs-links
+npm run check:module-contracts
+npm run check:dependency-boundaries
+npm run check:file-size-budget
+npm run repo:contracts
 npm run map
 ```
 

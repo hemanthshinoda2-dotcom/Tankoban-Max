@@ -7,6 +7,7 @@
 - Language/runtime: Python + Qt
 - Entrypoint: `projectbutterfly/app.py`
 - Startup command: `npm start` / `npm run start:qt`
+- Bridge composition entrypoint: `projectbutterfly/bridge_root.py`
 
 ## Legacy Runtime
 
@@ -34,3 +35,9 @@ These root files are intentional wrappers for legacy tooling and packaging:
 - `audiobook_scan_worker.js`
 
 Do not place new runtime logic in those shim files.
+
+## Modularization Contract
+
+- Domain/module index: `docs/architecture/module-index.yaml`
+- Dependency boundaries: `docs/architecture/dependency-boundaries.yaml`
+- Bridge implementation modules: `projectbutterfly/bridges/`

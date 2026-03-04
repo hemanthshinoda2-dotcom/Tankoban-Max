@@ -1,8 +1,8 @@
-/**
- * TankobanPlus — Preload Entry (Build 79, Phase 5)
- * 
- * Thin wrapper that delegates to organized preload implementation.
- * This file remains the preload entry point referenced by main.
- */
+﻿/*
+Legacy Electron preload entrypoint.
+
+Canonical active runtime is Qt (Project Butterfly).
+This file remains for legacy compatibility.
+*/
 
 require('./preload/index.js');

@@ -24,3 +24,9 @@
 
 - Owner area: `tools/`, `contracts/`, `types/`, `docs/architecture/`
 - Responsibility: validation, generation, repo governance
+
+## Required Ownership Artifacts
+
+- `docs/architecture/module-index.yaml` defines module-level ownership.
+- `docs/architecture/path-status.yaml` defines top-level lifecycle ownership.
+- `docs/architecture/dependency-boundaries.yaml` defines allowed module edges.
