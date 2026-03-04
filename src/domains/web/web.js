@@ -5404,11 +5404,16 @@
     var providerKey = String(s.torrentSearch && s.torrentSearch.provider || 'tankorent').trim().toLowerCase();
     var providerCfg = {};
     if (providerKey === 'tankorent') providerCfg = (s.tankorent && typeof s.tankorent === 'object') ? s.tankorent : ((s.torrentSearch && s.torrentSearch.tankorent) || {});
-    var providerMs = Number(providerCfg.timeoutMs || 12000);
-    if (!isFinite(providerMs) || providerMs <= 0) providerMs = 12000;
+    var providerMs = Number(providerCfg.timeoutMs || 0);
+    if (!isFinite(providerMs) || providerMs <= 0) providerMs = 18000;
+    providerMs = Math.max(8000, Math.min(45000, Math.round(providerMs)));
     var explicit = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
-    var value = explicit > 0 ? explicit : (providerMs * 2);
-    value = Math.max(8000, Math.min(20000, Math.round(value)));
+    if (!isFinite(explicit) || explicit <= 0) explicit = 0;
+    if (explicit > 0) explicit = Math.max(8000, Math.min(45000, Math.round(explicit)));
+    // Legacy defaults wrote 45000 for both values; keep runtime fast by default.
+    if (explicit === 45000 && providerMs === 45000) return 18000;
+    var value = explicit > 0 ? Math.min(explicit, providerMs) : providerMs;
+    value = Math.max(8000, Math.min(45000, Math.round(value)));
     return value;
   }
 
@@ -5465,7 +5470,14 @@
 
     bumpSourcesTorrentDiag('search', 'final');
     bumpSourcesTorrentDiag('search', 'lastElapsedMs', Number(res && res.elapsedMs || 0) || 0);
-    updateSourcesSearchStatusTail();
+    if (res && res.partial) {
+      var partialCount = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
+      var elapsedMs = Number(res && res.elapsedMs || 0) || 0;
+      var elapsedText = elapsedMs > 0 ? (' in ' + String(Math.max(1, Math.round(elapsedMs / 1000))) + 's') : '';
+      setSourcesSearchStatus('Partial results (' + String(partialCount) + ')' + elapsedText + ' • some sources timed out or were skipped.');
+    } else {
+      updateSourcesSearchStatusTail();
+    }
     state.searchLoading = false;
     state.searchLoadingMore = false;
     setTimeout(ensureSourcesSearchViewportFilled, 0);
@@ -5731,11 +5743,13 @@
       saveBrowserSettings({
         torrentSearch: { provider: 'tankorent' },
         tankorent: { importPath: folderPath }
-      });
-      setTimeout(function () {
+      }).then(function () {
+        return loadBrowserSettings();
+      }).then(function () {
+        updateTankorentImportedCount();
         loadSourcesSearchIndexers();
         runActiveProviderHealthCheck({ silent: true });
-      }, 120);
+      });
     }).catch(function (err) {
       showToast('Indexer import failed: ' + String((err && err.message) || err || 'unknown error'));
     });
@@ -5813,10 +5827,13 @@
     var torrentSidecar = (torrent.sidecar && typeof torrent.sidecar === 'object') ? torrent.sidecar : {};
     var torrentSearchRuntime = (torrent.search && typeof torrent.search === 'object') ? torrent.search : {};
     var torrentSearch = (src.torrentSearch && typeof src.torrentSearch === 'object') ? src.torrentSearch : {};
+    var tsTankorent = (torrentSearch.tankorent && typeof torrentSearch.tankorent === 'object') ? torrentSearch.tankorent : {};
     var sourcesBrowser = (src.sourcesBrowser && typeof src.sourcesBrowser === 'object') ? src.sourcesBrowser : {};
     var provider = 'tankorent';
     var sites = (tankorent.sites && typeof tankorent.sites === 'object') ? tankorent.sites : {};
-    var imported = Array.isArray(tankorent.importedIndexers) ? tankorent.importedIndexers : [];
+    var imported = Array.isArray(tankorent.importedIndexers)
+      ? tankorent.importedIndexers
+      : (Array.isArray(tsTankorent.importedIndexers) ? tsTankorent.importedIndexers : []);
     return {
       defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
       parityV1Enabled: src.parityV1Enabled !== false,
@@ -5840,7 +5857,7 @@
       privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } },
       tankorent: {
         enabled: tankorent.enabled !== false,
-        timeoutMs: Number(tankorent.timeoutMs || torrentSearchRuntime.maxWaitMs || 45000) || 45000,
+        timeoutMs: Number(tankorent.timeoutMs || torrentSearchRuntime.maxWaitMs || 18000) || 18000,
         importPath: String(tankorent.importPath || src.tankorentImportPath || 'C:\\ProgramData\\Jackett\\Indexers').trim(),
         sites: {
           piratebay: sites.piratebay !== false,
@@ -5857,7 +5874,7 @@
           port: Number(torrentSidecar.port || 8765) || 8765
         },
         search: {
-          maxWaitMs: Number(torrentSearchRuntime.maxWaitMs || 45000) || 45000
+          maxWaitMs: Number(torrentSearchRuntime.maxWaitMs || 18000) || 18000
         }
       }
     };
@@ -5918,9 +5935,9 @@
 
   function saveBrowserSettings(patch) {
     var browserOps = getBrowserOps();
-    if (typeof browserOps.saveSettings !== 'function') return;
+    if (typeof browserOps.saveSettings !== 'function') return Promise.resolve(null);
     var payload = (patch && typeof patch === 'object') ? patch : {};
-    browserOps.saveSettings(payload).then(function (res) {
+    return browserOps.saveSettings(payload).then(function (res) {
       if (!res || !res.ok || !res.settings) return;
       state.browserSettings = normalizeBrowserSettingsForUi(res.settings);
       state.restoreLastSession = state.browserSettings.restoreLastSession !== false;
@@ -5928,7 +5945,8 @@
       if (navOmnibox.syncOmniPlaceholder) navOmnibox.syncOmniPlaceholder();
       syncBrowserSettingsControls();
       if (tabsState.scheduleSessionSave) tabsState.scheduleSessionSave();
-    }).catch(function () {});
+      return res;
+    }).catch(function () { return null; });
   }
 
   // Ã¢â€â‚¬Ã¢â€â‚¬ Download destination picker Ã¢â€â‚¬Ã¢â€â‚¬
@@ -6357,30 +6375,37 @@
     }
 
     // Async search results from background thread (Tankorent/butterfly)
-    if (api.torrentSearch && api.torrentSearch.searchResultsReady && typeof api.torrentSearch.searchResultsReady.connect === 'function') {
+    function handleAsyncSourcesSearchResult(res) {
+      if (!res) return;
+      var pending = state.searchPendingMeta;
+      var got = String((res && res.requestId) || '');
+      if (!pending) {
+        var token = 0;
+        var m = got.match(/^sources_(\d+)_/);
+        if (m && m[1]) token = Number(m[1]) || 0;
+        if (!token) token = Number(state.searchRequestToken || 0) || 0;
+        if (token !== state.searchRequestToken) return;
+        pending = {
+          token: token,
+          append: false,
+          page: Number(state.searchPage || 0) || 0,
+          requestId: got,
+        };
+      }
+      if (Number(pending.token || 0) === Number(state.searchTimedOutToken || -1)) return;
+      var expected = String(pending.requestId || '');
+      if (expected && got && expected !== got) return;
+      applySourcesSearchResponse(pending, res || {});
+    }
+    if (api.torrentSearch && typeof api.torrentSearch.onSearchResultsReady === 'function') {
+      api.torrentSearch.onSearchResultsReady(function (res) {
+        handleAsyncSourcesSearchResult(res);
+      });
+    } else if (api.torrentSearch && api.torrentSearch.searchResultsReady && typeof api.torrentSearch.searchResultsReady.connect === 'function') {
       api.torrentSearch.searchResultsReady.connect(function (jsonStr) {
         var res;
         try { res = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (_e) { res = null; }
-        if (!res) return;
-        var pending = state.searchPendingMeta;
-        var got = String((res && res.requestId) || '');
-        if (!pending) {
-          var token = 0;
-          var m = got.match(/^sources_(\d+)_/);
-          if (m && m[1]) token = Number(m[1]) || 0;
-          if (!token) token = Number(state.searchRequestToken || 0) || 0;
-          if (token !== state.searchRequestToken) return;
-          pending = {
-            token: token,
-            append: false,
-            page: Number(state.searchPage || 0) || 0,
-            requestId: got,
-          };
-        }
-        if (Number(pending.token || 0) === Number(state.searchTimedOutToken || -1)) return;
-        var expected = String(pending.requestId || '');
-        if (expected && got && expected !== got) return;
-        applySourcesSearchResponse(pending, res || {});
+        handleAsyncSourcesSearchResult(res);
       });
     }
 

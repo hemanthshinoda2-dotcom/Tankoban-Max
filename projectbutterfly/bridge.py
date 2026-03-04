@@ -6403,6 +6403,18 @@ class WebBrowserSettingsBridge(QObject, JsonCrudMixin):
                 data[key] = default
         return cls._normalize_host_policy(data)
 
+    @classmethod
+    def _deep_merge_settings(cls, base, patch):
+        src = dict(base) if isinstance(base, dict) else {}
+        upd = patch if isinstance(patch, dict) else {}
+        out = dict(src)
+        for key, val in upd.items():
+            if isinstance(val, dict) and isinstance(out.get(key), dict):
+                out[key] = cls._deep_merge_settings(out.get(key), val)
+            else:
+                out[key] = val
+        return out
+
     def _read_document(self):
         raw = storage.read_json(self._crud_path(), {}) or {}
         wrapped = isinstance(raw.get("settings"), dict)
@@ -6432,12 +6444,13 @@ class WebBrowserSettingsBridge(QObject, JsonCrudMixin):
         payload = json.loads(payload_json) if payload_json else {}
         if not isinstance(payload, dict):
             payload = {}
-        raw_doc, _existing, wrapped = self._read_document()
+        raw_doc, existing, wrapped = self._read_document()
         payload_settings = payload.get("settings") if isinstance(payload.get("settings"), dict) else payload
-        normalized = self._normalize_settings(payload_settings)
+        merged = self._deep_merge_settings(existing, payload_settings)
+        normalized = self._normalize_settings(merged)
         use_wrapped = wrapped or isinstance(payload.get("settings"), dict)
         self._write_document(raw_doc, normalized, use_wrapped)
-        return json.dumps(_ok())
+        return json.dumps(_ok({"settings": normalized}))
 
 
 class WebHistoryBridge(QObject):
@@ -9655,9 +9668,9 @@ class TorrentSearchBridge(QObject):
     @staticmethod
     def _normalize_tankorent_config(src):
         s = src if isinstance(src, dict) else {}
-        timeout = int(s.get("timeoutMs") or 45000)
+        timeout = int(s.get("timeoutMs") or 18000)
         if timeout <= 0:
-            timeout = 45000
+            timeout = 18000
         sites = s.get("sites") if isinstance(s.get("sites"), dict) else {}
         imported = s.get("importedIndexers") if isinstance(s.get("importedIndexers"), list) else []
         indexers_by_id = s.get("indexersById") if isinstance(s.get("indexersById"), dict) else {}
@@ -10317,7 +10330,31 @@ class TorrentSearchBridge(QObject):
                 from projectbutterfly.browser.torrent_scrapers import search_all
 
             req_limit = min(200, max(limit, (page + 1) * limit))
-            rows = search_all(query_text, sites=sites, limit=req_limit) if sites else []
+            timeout_ms = int(cfg.get("timeoutMs") or 18000)
+            if timeout_ms < 6000:
+                timeout_ms = 6000
+            if timeout_ms > 45000:
+                timeout_ms = 45000
+            timeout_sec = max(6, min(30, int(round(timeout_ms / 1000.0))))
+            global_budget_sec = min(max(timeout_sec + 2, 8), 24)
+
+            rows = []
+            scrape_meta = {}
+            if sites:
+                search_out = search_all(
+                    query_text,
+                    sites=sites,
+                    limit=req_limit,
+                    timeout_sec=timeout_sec,
+                    detail_workers=4,
+                    return_meta=True,
+                    global_budget_sec=global_budget_sec,
+                )
+                if isinstance(search_out, tuple) and len(search_out) == 2:
+                    rows, scrape_meta = search_out
+                else:
+                    rows = search_out if isinstance(search_out, list) else []
+                    scrape_meta = {}
             start = page * limit
             rows = rows[start:start + limit]
 
@@ -10368,7 +10405,22 @@ class TorrentSearchBridge(QObject):
                     if key:
                         by_key[key] = True
                     items.append(item)
-            return {"ok": True, "items": items, "provider": "tankorent", **envelope, "returned": len(items)}
+            elapsed_ms = int(scrape_meta.get("elapsedMs") or 0) if isinstance(scrape_meta, dict) else 0
+            site_status = scrape_meta.get("siteStatus") if isinstance(scrape_meta, dict) else {}
+            partial = bool(scrape_meta.get("partial")) if isinstance(scrape_meta, dict) else False
+            if imported_rows and not imported_items:
+                # Imported indexers are present but not runtime-capable yet.
+                partial = True
+            return {
+                "ok": True,
+                "items": items,
+                "provider": "tankorent",
+                "partial": partial,
+                "elapsedMs": elapsed_ms,
+                "siteStatus": site_status if isinstance(site_status, dict) else {},
+                **envelope,
+                "returned": len(items),
+            }
         except Exception as e:
             return {"ok": False, "items": [], "error": str(e), "provider": "tankorent", **envelope, "returned": 0}
 
@@ -10512,6 +10564,7 @@ class TorrentSearchBridge(QObject):
 
     def _run_query_sync(self, chain, cfg_set, payload, requested_provider, envelope):
         """Execute the search chain synchronously (called from background thread)."""
+        started = time.time()
         tried = []
         any_ok_empty = None
         last_error = ""
@@ -10531,6 +10584,8 @@ class TorrentSearchBridge(QObject):
                 out["fallbackUsed"] = (provider_key != requested_provider)
                 out["fallbackChain"] = chain
                 out["providersTried"] = tried
+                out["elapsedMs"] = int(out.get("elapsedMs") or ((time.time() - started) * 1000))
+                out["partial"] = bool(out.get("partial", False))
                 return out
             if out.get("ok") and any_ok_empty is None:
                 any_ok_empty = dict(out)
@@ -10543,6 +10598,8 @@ class TorrentSearchBridge(QObject):
             any_ok_empty["fallbackUsed"] = False
             any_ok_empty["fallbackChain"] = chain
             any_ok_empty["providersTried"] = tried
+            any_ok_empty["elapsedMs"] = int(any_ok_empty.get("elapsedMs") or ((time.time() - started) * 1000))
+            any_ok_empty["partial"] = bool(any_ok_empty.get("partial", False))
             return any_ok_empty
 
         return {
@@ -10554,6 +10611,8 @@ class TorrentSearchBridge(QObject):
             "fallbackUsed": False,
             "fallbackChain": chain,
             "providersTried": tried,
+            "partial": False,
+            "elapsedMs": int((time.time() - started) * 1000),
             **envelope,
             "returned": 0,
         }
@@ -10574,6 +10633,10 @@ class TorrentSearchBridge(QObject):
         payload = dict(payload)
         payload["limit"] = limit
         payload["page"] = page
+        request_id = str(payload.get("requestId") or "").strip()
+        if not request_id:
+            request_id = "sources_" + str(int(time.time() * 1000)) + "_" + str(page)
+        payload["requestId"] = request_id
 
         query_text = str(payload.get("query") or "").strip()
         if not query_text:
@@ -10585,6 +10648,7 @@ class TorrentSearchBridge(QObject):
                 "fallbackUsed": False,
                 "fallbackChain": chain,
                 "providersTried": [],
+                "requestId": request_id,
                 **envelope,
                 "returned": 0,
             })
@@ -10602,11 +10666,15 @@ class TorrentSearchBridge(QObject):
                     "ok": False, "items": [], "error": str(e),
                     "provider": requested_provider, "activeProvider": "",
                     "fallbackUsed": False, "fallbackChain": chain,
-                    "providersTried": [], **envelope, "returned": 0,
+                    "providersTried": [], "requestId": request_id, **envelope, "returned": 0,
                 }
             if self._search_token != token:
                 return  # superseded by a newer query
             try:
+                if not isinstance(result, dict):
+                    result = {"ok": False, "items": [], "error": "Invalid search result"}
+                if not result.get("requestId"):
+                    result["requestId"] = request_id
                 self.searchResultsReady.emit(json.dumps(result))
             except Exception:
                 pass
@@ -10622,6 +10690,7 @@ class TorrentSearchBridge(QObject):
             "fallbackUsed": False,
             "fallbackChain": chain,
             "providersTried": [],
+            "requestId": request_id,
             **envelope,
             "returned": 0,
         })
@@ -13152,6 +13221,7 @@ BRIDGE_SHIM_JS = r"""
         saveSettings:    wrap(b.torrentSearch.saveSettings, b.torrentSearch),
         getConfig:       wrap(b.torrentSearch.getConfig, b.torrentSearch),
         onStatusChanged: onEvent(b.torrentSearch.statusChanged),
+        onSearchResultsReady: onEvent(b.torrentSearch.searchResultsReady),
       },
 
       // torProxy

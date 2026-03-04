@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.request
 import urllib.parse
 import urllib.error
 from html.parser import HTMLParser
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 
 
 # ---------------------------------------------------------------------------
@@ -255,46 +256,76 @@ def search_1337x(
     limit: int = 20,
     timeout_sec: int | None = None,
     detail_workers: int | None = None,
+    detail_timeout_sec: int | None = None,
+    detail_budget_sec: float | None = None,
 ) -> list[dict]:
     """Search 1337x by scraping the search results page."""
     try:
         url = f"{_1337X_BASE}/search/{urllib.parse.quote_plus(query)}/1/"
         timeout = _clamp_timeout(timeout_sec)
+        list_timeout = _clamp_timeout(min(timeout, 10))
+        detail_timeout = _clamp_timeout(detail_timeout_sec if detail_timeout_sec is not None else min(timeout, 6))
         workers = _clamp_workers(detail_workers, _DEFAULT_1337X_MAGNET_WORKERS, _MAX_1337X_MAGNET_WORKERS)
-        html = _fetch(url, timeout_sec=timeout)
+        budget = float(detail_budget_sec) if detail_budget_sec is not None else float(min(max(timeout * 0.65, 4), 12))
+        if budget < 2.0:
+            budget = 2.0
+        if budget > 20.0:
+            budget = 20.0
+        html = _fetch(url, timeout_sec=list_timeout)
         parser = _1337xListParser()
         parser.feed(html)
 
-        raw = parser.results[:limit]
+        # Cap detail page fan-out: this is the expensive path for 1337x.
+        max_detail_rows = min(max(1, int(limit)), 16)
+        raw = parser.results[:max_detail_rows]
         if not raw:
             return []
 
-        # Fetch magnet links in parallel (up to 6 concurrent)
+        # Fetch magnet links in parallel, but with a strict time budget to avoid
+        # one slow source dominating overall query latency.
         results = []
-        with ThreadPoolExecutor(max_workers=workers) as pool:
+        start = time.monotonic()
+        pool = ThreadPoolExecutor(max_workers=workers)
+        try:
             futures = {}
             for item in raw:
                 path = item.get("_detail_path", "")
                 if path:
-                    futures[pool.submit(_1337x_get_magnet, path, timeout)] = item
+                    futures[pool.submit(_1337x_get_magnet, path, detail_timeout)] = item
 
-            for future in as_completed(futures):
-                item = futures[future]
-                magnet = ""
-                try:
-                    magnet = future.result()
-                except Exception:
-                    pass
-                if magnet:
-                    results.append({
-                        "title": item.get("title", ""),
-                        "magnetUri": magnet,
-                        "sizeBytes": item.get("sizeBytes", 0),
-                        "seeders": item.get("seeders", 0),
-                        "leechers": item.get("leechers", 0),
-                        "sourceName": "1337x",
-                        "sourceKey": "1337x",
-                    })
+            remaining = budget
+            try:
+                for future in as_completed(futures, timeout=max(0.2, remaining)):
+                    item = futures[future]
+                    magnet = ""
+                    try:
+                        magnet = future.result()
+                    except Exception:
+                        pass
+                    if magnet:
+                        results.append({
+                            "title": item.get("title", ""),
+                            "magnetUri": magnet,
+                            "sizeBytes": item.get("sizeBytes", 0),
+                            "seeders": item.get("seeders", 0),
+                            "leechers": item.get("leechers", 0),
+                            "sourceName": "1337x",
+                            "sourceKey": "1337x",
+                        })
+                    remaining = budget - (time.monotonic() - start)
+                    if remaining <= 0:
+                        break
+            except FuturesTimeout:
+                pass
+            finally:
+                for future in futures:
+                    if not future.done():
+                        future.cancel()
+        finally:
+            try:
+                pool.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                pool.shutdown(wait=False)
 
         return results
     except Exception:
@@ -403,6 +434,8 @@ def search_all(
     limit: int = 60,
     timeout_sec: int | None = None,
     detail_workers: int | None = None,
+    return_meta: bool = False,
+    global_budget_sec: float | None = None,
 ) -> list[dict]:
     """
     Search all enabled sites in parallel and return merged, sorted results.
@@ -420,6 +453,13 @@ def search_all(
         sites = {"piratebay", "1337x", "nyaa"}
     timeout = _clamp_timeout(timeout_sec)
     detail_pool = _clamp_workers(detail_workers, _DEFAULT_1337X_MAGNET_WORKERS, _MAX_1337X_MAGNET_WORKERS)
+    started = time.monotonic()
+    if global_budget_sec is None:
+        global_budget = float(min(max(timeout + 2, 8), 24))
+    else:
+        global_budget = float(global_budget_sec)
+    if global_budget < 4.0:
+        global_budget = 4.0
 
     searchers = []
     if "piratebay" in sites:
@@ -428,24 +468,57 @@ def search_all(
         searchers.append((
             "1337x",
             search_1337x,
-            {"query": query, "limit": 20, "timeout_sec": timeout, "detail_workers": detail_pool},
+            {
+                "query": query,
+                "limit": 20,
+                "timeout_sec": min(timeout, 10),
+                "detail_workers": detail_pool,
+                "detail_timeout_sec": min(timeout, 6),
+                "detail_budget_sec": min(max(timeout * 0.65, 4), 12),
+            },
         ))
     if "nyaa" in sites:
         searchers.append(("nyaa", search_nyaa, {"query": query, "limit": 30, "timeout_sec": timeout}))
 
     all_results = []
+    site_status = {}
+    partial = False
 
-    with ThreadPoolExecutor(max_workers=max(1, min(3, len(searchers)))) as pool:
+    pool = ThreadPoolExecutor(max_workers=max(1, min(3, len(searchers))))
+    try:
         futures = {}
+        starts = {}
         for key, fn, kwargs in searchers:
-            futures[pool.submit(fn, **kwargs)] = key
+            fut = pool.submit(fn, **kwargs)
+            futures[fut] = key
+            starts[fut] = time.monotonic()
 
-        for future in as_completed(futures):
-            try:
-                results = future.result()
-                all_results.extend(results)
-            except Exception:
-                pass
+        try:
+            for future in as_completed(futures, timeout=global_budget):
+                key = futures[future]
+                elapsed_ms = int((time.monotonic() - starts.get(future, started)) * 1000)
+                try:
+                    results = future.result()
+                    if not isinstance(results, list):
+                        results = []
+                    all_results.extend(results)
+                    site_status[key] = {"ok": True, "count": len(results), "elapsedMs": elapsed_ms}
+                except Exception as e:
+                    site_status[key] = {"ok": False, "count": 0, "elapsedMs": elapsed_ms, "error": str(e)}
+                    partial = True
+        except FuturesTimeout:
+            partial = True
+        finally:
+            for future, key in futures.items():
+                if not future.done():
+                    future.cancel()
+                    site_status[key] = {"ok": False, "count": 0, "elapsedMs": int(global_budget * 1000), "error": "timeout"}
+                    partial = True
+    finally:
+        try:
+            pool.shutdown(wait=False, cancel_futures=True)
+        except TypeError:
+            pool.shutdown(wait=False)
 
     # Sort by seeders descending
     all_results.sort(key=lambda r: r.get("seeders", 0), reverse=True)
@@ -464,4 +537,13 @@ def search_all(
             seen_hashes.add(ih)
             deduped.append(r)
 
-    return deduped[:limit]
+    out_rows = deduped[:limit]
+    if return_meta:
+        return out_rows, {
+            "partial": bool(partial),
+            "siteStatus": site_status,
+            "elapsedMs": int((time.monotonic() - started) * 1000),
+            "globalBudgetMs": int(global_budget * 1000),
+            "timeoutSec": int(timeout),
+        }
+    return out_rows

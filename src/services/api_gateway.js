@@ -582,6 +582,7 @@ holyGrail: {
       indexers: (...a) => ea.torrentSearch?.indexers ? ea.torrentSearch.indexers(...a) : Promise.resolve({ ok: false, indexers: [], error: 'torrentSearch unavailable' }),
       importLocalIndexers: (...a) => ea.torrentSearch?.importLocalIndexers ? ea.torrentSearch.importLocalIndexers(...a) : Promise.resolve({ ok: false, error: 'import unavailable' }),
       onStatusChanged: (...a) => ea.torrentSearch?.onStatusChanged ? ea.torrentSearch.onStatusChanged(...a) : undefined,
+      onSearchResultsReady: (...a) => ea.torrentSearch?.onSearchResultsReady ? ea.torrentSearch.onSearchResultsReady(...a) : undefined,
     },
 
     // ========================================
