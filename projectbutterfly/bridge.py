@@ -9603,7 +9603,7 @@ class TorrentSearchBridge(QObject):
 
     def _read_settings(self):
         try:
-            p = _data_path("web_browser_settings.json")
+            p = storage.data_path("web_browser_settings.json")
             with open(p, "r", encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict) and isinstance(raw.get("settings"), dict):
@@ -9614,7 +9614,7 @@ class TorrentSearchBridge(QObject):
 
     def _read_settings_document(self):
         try:
-            p = _data_path("web_browser_settings.json")
+            p = storage.data_path("web_browser_settings.json")
             with open(p, "r", encoding="utf-8") as f:
                 raw = json.load(f)
             if isinstance(raw, dict) and isinstance(raw.get("settings"), dict):
@@ -9888,7 +9888,7 @@ class TorrentSearchBridge(QObject):
                         cfg["tankorent"] = {}
                     if isinstance(cfg.get("tankorent"), dict):
                         cfg["tankorent"]["importedIndexers"] = seed
-                    path = _data_path("web_browser_settings.json")
+                    path = storage.data_path("web_browser_settings.json")
                     out_doc = raw_doc if isinstance(raw_doc, dict) else {}
                     if wrapped:
                         out_doc["settings"] = cfg
@@ -10732,7 +10732,7 @@ class TorrentSearchBridge(QObject):
             if "fallbackPolicy" in data and isinstance(data.get("fallbackPolicy"), dict):
                 ts["fallbackPolicy"] = data.get("fallbackPolicy")
 
-            path = _data_path("web_browser_settings.json")
+            path = storage.data_path("web_browser_settings.json")
             out_doc = raw_doc if isinstance(raw_doc, dict) else {}
             if wrapped:
                 out_doc["settings"] = cfg
@@ -10785,7 +10785,7 @@ class TorrentSearchBridge(QObject):
                 out_doc["settings"] = cfg
             else:
                 out_doc = cfg
-            with open(_data_path("web_browser_settings.json"), "w", encoding="utf-8") as f:
+            with open(storage.data_path("web_browser_settings.json"), "w", encoding="utf-8") as f:
                 json.dump(out_doc, f, ensure_ascii=False, indent=2)
 
             return json.dumps({
