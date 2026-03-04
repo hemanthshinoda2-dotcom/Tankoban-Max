@@ -142,39 +142,36 @@ class ArrowButton(QPushButton):
             "QPushButton:hover { background: rgba(255,255,255,30); }"
         )
 
+    def _draw_chevron(self, p: QPainter, cx: float, cy: float):
+        """Draw a simple > or < chevron centered at (cx, cy)."""
+        sign = 1 if self._direction == "right" else -1
+        # Three points: top-back, tip, bottom-back
+        tip_x = cx + sign * 6
+        back_x = cx - sign * 6
+        p.drawLine(int(back_x), int(cy - 7), int(tip_x), int(cy))
+        p.drawLine(int(tip_x), int(cy), int(back_x), int(cy + 7))
+
     def paintEvent(self, event):
         super().paintEvent(event)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         cx, cy = self.width() / 2, self.height() / 2
-        # Arrow: shaft + chevron head
-        sign = -1 if self._direction == "left" else 1
-        # Shaft endpoints
-        x1, x2 = cx - sign * 8, cx + sign * 8
-        # Chevron head points
-        hx = cx + sign * 8  # tip
-        hy_top, hy_bot = cy - 5, cy + 5
-        hx_back = cx + sign * 3  # base of chevron
 
         fg = QColor(255, 255, 255) if self.isEnabled() else QColor(255, 255, 255, 80)
 
         if self.isEnabled():
-            outline_pen = QPen(QColor(0, 0, 0, 200), 1.2)
+            outline_pen = QPen(QColor(0, 0, 0, 200), 2.0)
             outline_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             outline_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
             for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
                 p.setPen(outline_pen)
-                p.drawLine(int(x1 + dx), int(cy + dy), int(x2 + dx), int(cy + dy))
-                p.drawLine(int(hx_back + dx), int(hy_top + dy), int(hx + dx), int(cy + dy))
-                p.drawLine(int(hx_back + dx), int(hy_bot + dy), int(hx + dx), int(cy + dy))
+                self._draw_chevron(p, cx + dx, cy + dy)
 
-        fg_pen = QPen(fg, 1.6)
+        fg_pen = QPen(fg, 2.0)
         fg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         fg_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         p.setPen(fg_pen)
-        p.drawLine(int(x1), int(cy), int(x2), int(cy))
-        p.drawLine(int(hx_back), int(hy_top), int(hx), int(cy))
-        p.drawLine(int(hx_back), int(hy_bot), int(hx), int(cy))
+        self._draw_chevron(p, cx, cy)
         p.end()
 
 
