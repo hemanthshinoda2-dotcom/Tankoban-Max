@@ -17,7 +17,7 @@ class OutlinedButton(QPushButton):
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
         self._fg_color = QColor(255, 255, 255)
-        self._fg_disabled = QColor(255, 255, 255, 40)
+        self._fg_disabled = QColor(255, 255, 255, 80)
 
     def set_fg_color(self, color: QColor):
         self._fg_color = color
@@ -97,29 +97,34 @@ class WindowControlButton(QPushButton):
                 "QPushButton:hover { background: rgba(232,17,35,200); }"
             )
 
+    def _draw_icon(self, p: QPainter, cx: float, cy: float):
+        if self._kind == "minimize":
+            p.drawLine(int(cx - 5), int(cy), int(cx + 5), int(cy))
+        elif self._kind == "maximize":
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRect(int(cx - 5), int(cy - 5), 10, 10)
+        elif self._kind == "close":
+            p.drawLine(int(cx - 4), int(cy - 4), int(cx + 4), int(cy + 4))
+            p.drawLine(int(cx + 4), int(cy - 4), int(cx - 4), int(cy + 4))
+
     def paintEvent(self, event):
         super().paintEvent(event)
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        # Outline
-        pen_outline = QPen(QColor(0, 0, 0, 180), 2.4)
-        pen_outline.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen_fg = QPen(QColor(255, 255, 255), 1.2)
-        pen_fg.setCapStyle(Qt.PenCapStyle.RoundCap)
         cx, cy = self.width() / 2, self.height() / 2
-        if self._kind == "minimize":
-            for pen in (pen_outline, pen_fg):
-                p.setPen(pen)
-                p.drawLine(int(cx - 5), int(cy), int(cx + 5), int(cy))
-        elif self._kind == "maximize":
-            for pen in (pen_outline, pen_fg):
-                p.setPen(pen)
-                p.drawRect(int(cx - 5), int(cy - 5), 10, 10)
-        elif self._kind == "close":
-            for pen in (pen_outline, pen_fg):
-                p.setPen(pen)
-                p.drawLine(int(cx - 4), int(cy - 4), int(cx + 4), int(cy + 4))
-                p.drawLine(int(cx + 4), int(cy - 4), int(cx - 4), int(cy + 4))
+
+        # Black outline: draw icon offset in 8 directions
+        outline_pen = QPen(QColor(0, 0, 0, 200), 1.2)
+        outline_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+            p.setPen(outline_pen)
+            self._draw_icon(p, cx + dx, cy + dy)
+
+        # White foreground
+        fg_pen = QPen(QColor(255, 255, 255), 1.2)
+        fg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(fg_pen)
+        self._draw_icon(p, cx, cy)
         p.end()
 
 
