@@ -54,7 +54,6 @@ COMMON ANCHORS
         <button id="libBackBtn" class="iconBtn" title="Back" aria-label="Back">Back</button>
         <button id="libForwardBtn" class="iconBtn" title="Forward" aria-label="Forward" disabled>Forward</button>
         <button id="refreshBtn" class="iconBtn" title="Refresh" aria-label="Refresh">Refresh</button>
-        <button id="tankWebBtn" class="iconBtn" title="Web" aria-label="Web">Web</button>
       </div>
 
       <div class="tbCenter">        <!-- AI_HEADER: Top bar / mode switch markup starts around here. -->
@@ -1229,7 +1228,6 @@ COMMON ANCHORS
             <div class="navSep"></div>
             <div class="navSection navSectionUtility">
               <div class="navItems">
-                <sl-button id="webUtilityBtnSources" class="navBtn webUtilityBtn" title="Open Browser">Web</sl-button>
                 <sl-button id="webUtilityTorrentProvidersBtn" class="navBtn webUtilityBtn" title="Configure Tankorent">Providers</sl-button>
               </div>
             </div>
@@ -1260,6 +1258,8 @@ COMMON ANCHORS
                 <label class="settingsLabel" for="webTankorentImportPath">Indexer JSON folder</label>
                 <input id="webTankorentImportPath" class="search" type="text" placeholder="C:\ProgramData\Jackett\Indexers" autocomplete="off" />
                 <div class="webProvidersSidebarHint muted tiny">Imported indexers: <span id="webTankorentImportedCount">0</span></div>
+                <div id="webTankorentIndexerList" class="webTankorentIndexerList"></div>
+                <div id="webTankorentIndexerEmpty" class="muted tiny hidden">No imported indexers.</div>
 
                 <div class="settingsActions">
                   <button id="webTankorentImportBtn" class="btn btn-ghost btn-sm" type="button">Import JSON folder</button>

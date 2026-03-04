@@ -152,6 +152,8 @@
     tankorentImportPath: qs('webTankorentImportPath'),
     tankorentImportBtn: qs('webTankorentImportBtn'),
     tankorentImportedCount: qs('webTankorentImportedCount'),
+    tankorentIndexerList: qs('webTankorentIndexerList'),
+    tankorentIndexerEmpty: qs('webTankorentIndexerEmpty'),
 
     // Settings hub elements
     hubSourcesList:  qs('webHubSourcesList'),
@@ -5405,8 +5407,8 @@
     var providerMs = Number(providerCfg.timeoutMs || 12000);
     if (!isFinite(providerMs) || providerMs <= 0) providerMs = 12000;
     var explicit = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
-    var value = explicit > 0 ? explicit : (providerMs * 3);
-    value = Math.max(6000, Math.min(45000, Math.round(value)));
+    var value = explicit > 0 ? explicit : (providerMs * 2);
+    value = Math.max(8000, Math.min(20000, Math.round(value)));
     return value;
   }
 
@@ -5683,6 +5685,30 @@
       ? state.browserSettings.tankorent.importedIndexers
       : [];
     el.tankorentImportedCount.textContent = String(imported.length || 0);
+    renderTankorentIndexerList(imported);
+  }
+
+  function renderTankorentIndexerList(importedRows) {
+    if (!el.tankorentIndexerList || !el.tankorentIndexerEmpty) return;
+    var rows = Array.isArray(importedRows) ? importedRows : [];
+    if (!rows.length) {
+      el.tankorentIndexerList.innerHTML = '';
+      el.tankorentIndexerEmpty.classList.remove('hidden');
+      return;
+    }
+    el.tankorentIndexerEmpty.classList.add('hidden');
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      var name = escapeHtml(String(row.name || row.id || 'indexer'));
+      var status = String(row.status || '').trim().toLowerCase();
+      var label = status === 'active' ? 'active' : (status || 'unsupported');
+      html += '<div class="webTankorentIndexerRow">'
+        + '<span class="webTankorentIndexerName">' + name + '</span>'
+        + '<span class="webTankorentIndexerStatus status-' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
+        + '</div>';
+    }
+    el.tankorentIndexerList.innerHTML = html;
   }
 
   function importTankorentIndexersFromFolder() {

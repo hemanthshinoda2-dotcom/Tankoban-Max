@@ -9790,14 +9790,11 @@ class TorrentSearchBridge(QObject):
                         v = str(value or "").strip()
                         if v:
                             base_url = v
-                if base_url:
-                    status = "active"
-                    reason = ""
-                    adapter_type = "torznab"
-                else:
-                    status = "unsupported"
-                    reason = "settings_file_only"
-                    adapter_type = "unsupported"
+                # Jackett indexer JSONs are settings snapshots, not direct runtime
+                # Torznab endpoints; keep them visible but non-runtime by default.
+                status = "unsupported"
+                reason = "settings_file_only"
+                adapter_type = "unsupported"
         except Exception:
             return None
 
@@ -10261,7 +10258,8 @@ class TorrentSearchBridge(QObject):
         for idx in imported:
             if not isinstance(idx, dict):
                 continue
-            if str(idx.get("adapterType") or "").strip().lower() == "unsupported":
+            adapter_type = str(idx.get("adapterType") or "").strip().lower()
+            if adapter_type != "torznab_runtime":
                 continue
             base_url = str(idx.get("baseUrl") or "").strip().rstrip("/")
             if not base_url:
