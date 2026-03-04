@@ -2,7 +2,7 @@
 
 ## Context
 
-The three JS library UIs (comics, books, video) share a near-identical two-level layout: home grid + detail table. Rather than porting each separately, we build **one native PySide6 library widget** parameterized by `MediaKind` that handles all three. This is an isolated experiment in `projectbutterfly/library_widget/` — no readers, no players, no changes to existing Electron code. The QTRoute backend (scan/state/config services) is already complete and will be reused for data access.
+The three JS library UIs (comics, books, video) share a near-identical two-level layout: home grid + detail table. Rather than porting each separately, we build **one native PySide6 library widget** parameterized by `MediaKind` that handles all three. This is an isolated experiment in `experiments/library_widget_qt/` — no readers, no players, no changes to existing Electron code. The QTRoute backend (scan/state/config services) is already complete and will be reused for data access.
 
 ## Scope: Libraries ONLY
 
@@ -17,7 +17,7 @@ The three JS library UIs (comics, books, video) share a near-identical two-level
 ## Module Structure
 
 ```
-projectbutterfly/library_widget/
+experiments/library_widget_qt/
     __init__.py
     launcher.py              # Standalone QApplication entry point
     plan.md / progress.md    # Tracking docs

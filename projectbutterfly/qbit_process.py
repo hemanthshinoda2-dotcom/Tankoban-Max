@@ -26,8 +26,9 @@ import storage
 
 # Port range — avoids conflict with user's own qBittorrent (8080)
 _PORT_START = 18080
-_PORT_END = 18089
-_STARTUP_TIMEOUT_S = 15
+# Keep range tight to avoid long startup stalls when qBit fails to bootstrap.
+_PORT_END = 18082
+_STARTUP_TIMEOUT_S = 8
 _POLL_INTERVAL_S = 0.4
 
 _WEBUI_USERNAME = "admin"
@@ -58,6 +59,36 @@ def _probe_webui(port):
             return 200 <= resp.status < 400
     except Exception:
         return False
+
+
+def _hide_process_windows(pid):
+    """Best-effort: hide top-level windows for a process (Windows only)."""
+    if os.name != "nt" or not pid:
+        return
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        enum_windows = user32.EnumWindows
+        is_visible = user32.IsWindowVisible
+        get_window_pid = user32.GetWindowThreadProcessId
+        show_window = user32.ShowWindow
+        SW_HIDE = 0
+
+        WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+        def _cb(hwnd, _lparam):
+            try:
+                owner = ctypes.c_ulong(0)
+                get_window_pid(hwnd, ctypes.byref(owner))
+                if int(owner.value) == int(pid) and is_visible(hwnd):
+                    show_window(hwnd, SW_HIDE)
+            except Exception:
+                pass
+            return True
+
+        enum_windows(WNDENUMPROC(_cb), 0)
+    except Exception:
+        pass
 
 
 class QBitProcessManager(QObject):
@@ -162,48 +193,67 @@ class QBitProcessManager(QObject):
         ]
 
         creation_flags = 0
+        startupinfo = None
+        spawn_env = os.environ.copy()
+        # Prefer a headless Qt platform first to avoid visible qBit windows.
+        spawn_env.setdefault("QT_QPA_PLATFORM", "minimal")
+        spawn_env.setdefault("QT_LOGGING_RULES", "qt.qpa.*=false")
+
         if os.name == "nt":
             creation_flags = subprocess.CREATE_NO_WINDOW
+            try:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0
+            except Exception:
+                startupinfo = None
 
-        try:
-            proc = subprocess.Popen(
-                args,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-                creationflags=creation_flags,
-            )
-        except Exception as e:
-            print(f"[qbit] Spawn error on port {port}: {e}")
-            return False
+        attempts = [
+            (spawn_env, min(4.0, float(_STARTUP_TIMEOUT_S))),
+            (os.environ.copy(), float(_STARTUP_TIMEOUT_S)),
+        ]
+        last_spawn_error = None
 
-        # Poll for WebUI readiness
-        deadline = time.time() + _STARTUP_TIMEOUT_S
-        while time.time() < deadline:
-            # Check if process died
-            if proc.poll() is not None:
-                print(f"[qbit] Process exited with code {proc.returncode} on port {port}")
-                return False
+        for env, wait_budget_s in attempts:
+            proc = None
+            try:
+                proc = subprocess.Popen(
+                    args,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    stdin=subprocess.DEVNULL,
+                    creationflags=creation_flags,
+                    startupinfo=startupinfo,
+                    env=env,
+                )
+            except Exception as e:
+                last_spawn_error = e
+                continue
 
-            if _probe_webui(port):
-                self._process = proc
-                self._port = port
-                self._ready = True
-                self._message = f"qBittorrent ready (port {port})"
-                self._emit_status()
-                print(f"[qbit] WebUI ready on port {port}")
+            deadline = time.time() + max(1.5, float(wait_budget_s))
+            while time.time() < deadline:
+                if proc.poll() is not None:
+                    break
+                _hide_process_windows(proc.pid)
+                if _probe_webui(port):
+                    self._process = proc
+                    self._port = port
+                    self._ready = True
+                    self._message = f"qBittorrent ready (port {port})"
+                    self._emit_status()
+                    print(f"[qbit] WebUI ready on port {port}")
+                    threading.Thread(target=self._watch_process, daemon=True).start()
+                    return True
+                time.sleep(_POLL_INTERVAL_S)
 
-                # Watch for unexpected exit
-                threading.Thread(target=self._watch_process, daemon=True).start()
-                return True
+            if proc and proc.poll() is None:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
-            time.sleep(_POLL_INTERVAL_S)
-
-        # Timeout — kill the process
-        try:
-            proc.kill()
-        except Exception:
-            pass
+        if last_spawn_error is not None:
+            print(f"[qbit] Spawn error on port {port}: {last_spawn_error}")
         print(f"[qbit] Startup timeout on port {port}")
         return False
 

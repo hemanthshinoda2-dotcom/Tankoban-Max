@@ -1067,9 +1067,14 @@ class MpvContainer(QWidget):
         # ── Control widgets (direct children, positioned absolutely) ────
         self.top_strip = TopStrip(self)
         self.bottom_hud = BottomHUD(self)
-        self.volume_hud = VolumeHUD(self)
-        self.center_flash = CenterFlash(self)
-        self.toast = ToastHUD(self)
+        # Overlay widgets are children of render_host (the native HWND), not of
+        # MpvContainer.  On Windows, alien Qt widgets cannot paint above a native
+        # child HWND sibling.  By parenting overlays to render_host they become
+        # native HWNDs inside it and raise_() correctly puts them above mpv's
+        # own rendering surface.
+        self.volume_hud = VolumeHUD(self.render_host)
+        self.center_flash = CenterFlash(self.render_host)
+        self.toast = ToastHUD(self.render_host)
         self.tracks_drawer = TracksDrawer(self)
         self.playlist_drawer = PlaylistDrawer(self)
 

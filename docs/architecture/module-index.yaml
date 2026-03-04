@@ -120,6 +120,20 @@
       "status": "experimental"
     },
     {
+      "module_id": "experiments.comicbookreplacer_qt",
+      "entrypoint": "experiments/comicbookreplacer_qt/launcher.py",
+      "public_api": ["experimental only"],
+      "owner": "experiments",
+      "status": "experimental"
+    },
+    {
+      "module_id": "experiments.library_widget_qt",
+      "entrypoint": "experiments/library_widget_qt/launcher.py",
+      "public_api": ["experimental only"],
+      "owner": "experiments",
+      "status": "experimental"
+    },
+    {
       "module_id": "archive.history",
       "entrypoint": "archive/README.md",
       "public_api": ["historical reference"],

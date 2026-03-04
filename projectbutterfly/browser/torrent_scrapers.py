@@ -436,6 +436,7 @@ def search_all(
     detail_workers: int | None = None,
     return_meta: bool = False,
     global_budget_sec: float | None = None,
+    on_partial=None,
 ) -> list[dict]:
     """
     Search all enabled sites in parallel and return merged, sorted results.
@@ -455,34 +456,65 @@ def search_all(
     detail_pool = _clamp_workers(detail_workers, _DEFAULT_1337X_MAGNET_WORKERS, _MAX_1337X_MAGNET_WORKERS)
     started = time.monotonic()
     if global_budget_sec is None:
-        global_budget = float(min(max(timeout + 2, 8), 24))
+        global_budget = float(min(max(timeout + 3, 10), 45))
     else:
         global_budget = float(global_budget_sec)
     if global_budget < 4.0:
         global_budget = 4.0
 
     searchers = []
+    site_timeout = max(6, min(timeout, 8))
     if "piratebay" in sites:
-        searchers.append(("piratebay", search_piratebay, {"query": query, "limit": 30, "timeout_sec": timeout}))
+        searchers.append(("piratebay", search_piratebay, {"query": query, "limit": 30, "timeout_sec": site_timeout}))
     if "1337x" in sites:
+        detail_timeout = max(4, min(site_timeout, 5))
+        detail_budget = min(max(site_timeout * 0.8, 4), 6)
         searchers.append((
             "1337x",
             search_1337x,
             {
                 "query": query,
                 "limit": 20,
-                "timeout_sec": min(timeout, 10),
+                "timeout_sec": site_timeout,
                 "detail_workers": detail_pool,
-                "detail_timeout_sec": min(timeout, 6),
-                "detail_budget_sec": min(max(timeout * 0.65, 4), 12),
+                "detail_timeout_sec": detail_timeout,
+                "detail_budget_sec": detail_budget,
             },
         ))
     if "nyaa" in sites:
-        searchers.append(("nyaa", search_nyaa, {"query": query, "limit": 30, "timeout_sec": timeout}))
+        searchers.append(("nyaa", search_nyaa, {"query": query, "limit": 30, "timeout_sec": site_timeout}))
 
     all_results = []
     site_status = {}
     partial = False
+
+    def _emit_partial():
+        if not callable(on_partial):
+            return
+        try:
+            merged = sorted(all_results, key=lambda r: r.get("seeders", 0), reverse=True)
+            seen_hashes: set[str] = set()
+            deduped = []
+            for r in merged:
+                magnet = r.get("magnetUri", "")
+                m = re.search(r"btih:([a-fA-F0-9]{40})", magnet)
+                if not m:
+                    m = re.search(r"btih:([a-zA-Z2-7]{32})", magnet)
+                ih = m.group(1).lower() if m else magnet
+                if ih not in seen_hashes:
+                    seen_hashes.add(ih)
+                    deduped.append(r)
+            on_partial({
+                "items": deduped[:limit],
+                "partial": True,
+                "done": False,
+                "siteStatus": dict(site_status),
+                "elapsedMs": int((time.monotonic() - started) * 1000),
+                "globalBudgetMs": int(global_budget * 1000),
+                "timeoutSec": int(timeout),
+            })
+        except Exception:
+            pass
 
     pool = ThreadPoolExecutor(max_workers=max(1, min(3, len(searchers))))
     try:
@@ -506,6 +538,7 @@ def search_all(
                 except Exception as e:
                     site_status[key] = {"ok": False, "count": 0, "elapsedMs": elapsed_ms, "error": str(e)}
                     partial = True
+                _emit_partial()
         except FuturesTimeout:
             partial = True
         finally:
@@ -514,6 +547,7 @@ def search_all(
                     future.cancel()
                     site_status[key] = {"ok": False, "count": 0, "elapsedMs": int(global_budget * 1000), "error": "timeout"}
                     partial = True
+            _emit_partial()
     finally:
         try:
             pool.shutdown(wait=False, cancel_futures=True)

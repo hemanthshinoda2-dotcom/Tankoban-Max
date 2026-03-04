@@ -7903,7 +7903,12 @@ class WebTorrentBridge(QObject):
     def _ensure_qbit(self):
         """Lazy-start qBittorrent process and create API client."""
         if self._qbit is not None:
-            return self._qbit
+            try:
+                if self._qbit.app_version():
+                    return self._qbit
+            except Exception:
+                pass
+            self._qbit = None
         from qbit_process import QBitProcessManager
         from torrent_service import QBitClient
         if self._qbit_mgr is None:
@@ -7912,9 +7917,43 @@ class WebTorrentBridge(QObject):
             print("[WebTorrentBridge] qBittorrent failed to start: " +
                   str(self._qbit_mgr.get_status().get("message", "")))
             return None
-        self._qbit = QBitClient(self._qbit_mgr.base_url)
+        candidate = QBitClient(self._qbit_mgr.base_url)
         from qbit_process import _WEBUI_USERNAME, _WEBUI_PASSWORD
-        self._qbit.login(_WEBUI_USERNAME, _WEBUI_PASSWORD)
+        credential_candidates = [
+            (_WEBUI_USERNAME, _WEBUI_PASSWORD),
+            ("admin", "adminadmin"),
+            ("admin", ""),
+        ]
+
+        logged_in = False
+        for user, pw in credential_candidates:
+            try:
+                if candidate.login(user, pw):
+                    logged_in = True
+                    break
+            except Exception:
+                pass
+
+        if not logged_in:
+            # Re-apply expected WebUI auth/bypass settings for our profile and retry.
+            try:
+                self._qbit_mgr._configure_webui(self._qbit_mgr.port)  # noqa: SLF001
+            except Exception:
+                pass
+            for user, pw in credential_candidates:
+                try:
+                    if candidate.login(user, pw):
+                        logged_in = True
+                        break
+                except Exception:
+                    pass
+
+        if not logged_in:
+            print("[WebTorrentBridge] qBittorrent authentication failed on " +
+                  str(self._qbit_mgr.base_url))
+            return None
+
+        self._qbit = candidate
         return self._qbit
 
     def _start_poll(self):
@@ -10395,7 +10434,7 @@ class TorrentSearchBridge(QObject):
                 out.append(item)
         return out
 
-    def _query_tankorent(self, cfg, payload):
+    def _query_tankorent(self, cfg, payload, progress_cb=None):
         limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
         page = max(0, int(payload.get("page") or 0))
         envelope = {"page": page, "limit": limit}
@@ -10424,11 +10463,67 @@ class TorrentSearchBridge(QObject):
                 timeout_ms = 6000
             if timeout_ms > 45000:
                 timeout_ms = 45000
-            timeout_sec = max(6, min(30, int(round(timeout_ms / 1000.0))))
-            global_budget_sec = min(max(timeout_sec + 2, 8), 24)
+            timeout_sec = max(6, min(45, int(round(timeout_ms / 1000.0))))
+            global_budget_sec = min(max(timeout_sec + 3, 10), 45)
 
             rows = []
             scrape_meta = {}
+            category = str(payload.get("category") or "").strip().lower()
+            type_map = {
+                "comics": ("comics", "Comics"),
+                "books": ("books", "Books"),
+                "tv": ("tv", "TV"),
+            }
+            t_key, t_label = type_map.get(category, ("", ""))
+
+            def _rows_to_items(src_rows):
+                out_items = []
+                for row in (src_rows if isinstance(src_rows, list) else []):
+                    if not isinstance(row, dict):
+                        continue
+                    title = str(row.get("title", "") or "").strip()
+                    magnet = str(row.get("magnetUri", "") or "").strip()
+                    if not title or not magnet.lower().startswith("magnet:"):
+                        continue
+                    source_name = str(row.get("sourceName") or row.get("source") or "Tankorent").strip()
+                    source_key = self._normalize_source_key(row.get("sourceKey") or source_name)
+                    stable_id = "tankorent_" + str(self._hash_string("::".join([title, magnet, source_key])))
+                    out_items.append({
+                        "id": stable_id,
+                        "title": title,
+                        "sizeBytes": int(row.get("sizeBytes", 0) or 0) or None,
+                        "fileCount": None,
+                        "seeders": max(0, int(row.get("seeders", 0) or 0)),
+                        "magnetUri": magnet,
+                        "sourceName": source_name,
+                        "sourceKey": source_key,
+                        "sourceUrl": str(row.get("sourceUrl", "") or "").strip() or None,
+                        "publishedAt": str(row.get("publishedAt", "") or "").strip() or None,
+                        "typeKeys": [t_key] if t_key else [],
+                        "typeLabels": [t_label] if t_label else [],
+                    })
+                return out_items
+
+            def _on_partial(meta):
+                if not callable(progress_cb):
+                    return
+                if not isinstance(meta, dict):
+                    return
+                items_src = meta.get("items") if isinstance(meta.get("items"), list) else []
+                items = _rows_to_items(items_src)
+                progress_cb({
+                    "ok": True,
+                    "items": items,
+                    "provider": "tankorent",
+                    "partial": True,
+                    "done": False,
+                    "phase": "partial",
+                    "elapsedMs": int(meta.get("elapsedMs") or 0),
+                    "siteStatus": meta.get("siteStatus") if isinstance(meta.get("siteStatus"), dict) else {},
+                    **envelope,
+                    "returned": len(items),
+                })
+
             if sites:
                 search_out = search_all(
                     query_text,
@@ -10438,6 +10533,7 @@ class TorrentSearchBridge(QObject):
                     detail_workers=4,
                     return_meta=True,
                     global_budget_sec=global_budget_sec,
+                    on_partial=_on_partial if callable(progress_cb) else None,
                 )
                 if isinstance(search_out, tuple) and len(search_out) == 2:
                     rows, scrape_meta = search_out
@@ -10446,40 +10542,7 @@ class TorrentSearchBridge(QObject):
                     scrape_meta = {}
             start = page * limit
             rows = rows[start:start + limit]
-
-            category = str(payload.get("category") or "").strip().lower()
-            type_map = {
-                "comics": ("comics", "Comics"),
-                "books": ("books", "Books"),
-                "tv": ("tv", "TV"),
-            }
-            t_key, t_label = type_map.get(category, ("", ""))
-
-            items = []
-            for row in (rows if isinstance(rows, list) else []):
-                if not isinstance(row, dict):
-                    continue
-                title = str(row.get("title", "") or "").strip()
-                magnet = str(row.get("magnetUri", "") or "").strip()
-                if not title or not magnet.lower().startswith("magnet:"):
-                    continue
-                source_name = str(row.get("sourceName") or row.get("source") or "Tankorent").strip()
-                source_key = self._normalize_source_key(row.get("sourceKey") or source_name)
-                stable_id = "tankorent_" + str(self._hash_string("::".join([title, magnet, source_key])))
-                items.append({
-                    "id": stable_id,
-                    "title": title,
-                    "sizeBytes": int(row.get("sizeBytes", 0) or 0) or None,
-                    "fileCount": None,
-                    "seeders": max(0, int(row.get("seeders", 0) or 0)),
-                    "magnetUri": magnet,
-                    "sourceName": source_name,
-                    "sourceKey": source_key,
-                    "sourceUrl": str(row.get("sourceUrl", "") or "").strip() or None,
-                    "publishedAt": str(row.get("publishedAt", "") or "").strip() or None,
-                    "typeKeys": [t_key] if t_key else [],
-                    "typeLabels": [t_label] if t_label else [],
-                })
+            items = _rows_to_items(rows)
             imported_items = self._query_tankorent_imported(cfg or {}, payload)
             if imported_items:
                 by_key = {}
@@ -10517,10 +10580,10 @@ class TorrentSearchBridge(QObject):
         except Exception as e:
             return {"ok": False, "items": [], "error": str(e), "provider": "tankorent", **envelope, "returned": 0}
 
-    def _query_provider(self, provider_key, cfg, payload):
+    def _query_provider(self, provider_key, cfg, payload, progress_cb=None):
         provider = self._normalize_provider_key(provider_key)
         if provider == "tankorent":
-            return self._query_tankorent(cfg if isinstance(cfg, dict) else {}, payload)
+            return self._query_tankorent(cfg if isinstance(cfg, dict) else {}, payload, progress_cb=progress_cb)
 
         limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
         page = max(0, int(payload.get("page") or 0))
@@ -10660,7 +10723,7 @@ class TorrentSearchBridge(QObject):
         self.statusChanged.emit(json.dumps(out))
         return json.dumps(out)
 
-    def _run_query_sync(self, chain, cfg_set, payload, requested_provider, envelope):
+    def _run_query_sync(self, chain, cfg_set, payload, requested_provider, envelope, progress_cb=None):
         """Execute the search chain synchronously (called from background thread)."""
         started = time.time()
         tried = []
@@ -10668,12 +10731,28 @@ class TorrentSearchBridge(QObject):
         last_error = ""
         for provider_key in chain:
             cfg = self._provider_cfg(cfg_set, provider_key)
-            out = self._query_provider(provider_key, cfg, payload)
+            provider_started = time.time()
+            def _emit_progress(partial_out):
+                if not callable(progress_cb):
+                    return
+                if not isinstance(partial_out, dict):
+                    return
+                out_partial = dict(partial_out)
+                out_partial["provider"] = requested_provider
+                out_partial["activeProvider"] = provider_key
+                out_partial["fallbackUsed"] = (provider_key != requested_provider)
+                out_partial["fallbackChain"] = chain
+                out_partial["providersTried"] = list(tried)
+                if not out_partial.get("elapsedMs"):
+                    out_partial["elapsedMs"] = int((time.time() - started) * 1000)
+                progress_cb(out_partial)
+            out = self._query_provider(provider_key, cfg, payload, progress_cb=_emit_progress)
             tried.append({
                 "provider": provider_key,
                 "ok": bool(out.get("ok")),
                 "returned": int(out.get("returned", 0) or 0),
                 "error": str(out.get("error", "") or ""),
+                "elapsedMs": int(out.get("elapsedMs") or ((time.time() - provider_started) * 1000)),
             })
             if out.get("ok") and out.get("items"):
                 out = dict(out)
@@ -10757,8 +10836,22 @@ class TorrentSearchBridge(QObject):
 
         import threading
         def _bg():
+            def _emit_partial(partial_payload):
+                if self._search_token != token:
+                    return
+                try:
+                    out = dict(partial_payload) if isinstance(partial_payload, dict) else {}
+                    out["ok"] = True
+                    out["searching"] = True
+                    out["done"] = False
+                    out["phase"] = "partial"
+                    if not out.get("requestId"):
+                        out["requestId"] = request_id
+                    self.searchResultsReady.emit(json.dumps(out))
+                except Exception:
+                    pass
             try:
-                result = self._run_query_sync(chain, cfg_set, payload, requested_provider, envelope)
+                result = self._run_query_sync(chain, cfg_set, payload, requested_provider, envelope, progress_cb=_emit_partial)
             except Exception as e:
                 result = {
                     "ok": False, "items": [], "error": str(e),
@@ -10773,6 +10866,9 @@ class TorrentSearchBridge(QObject):
                     result = {"ok": False, "items": [], "error": "Invalid search result"}
                 if not result.get("requestId"):
                     result["requestId"] = request_id
+                result["done"] = True
+                result["phase"] = "final"
+                result["searching"] = False
                 self.searchResultsReady.emit(json.dumps(result))
             except Exception:
                 pass

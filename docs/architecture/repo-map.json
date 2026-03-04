@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-03-04T13:25:49.960Z",
+  "generatedAt": "2026-03-04T14:14:16.928Z",
   "source": "git ls-files",
   "entries": [
     {
@@ -74,6 +74,11 @@
     },
     {
       "path": "agents.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -468,6 +473,16 @@
       "danger": "low"
     },
     {
+      "path": "docs/architecture/dependency-boundaries.yaml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/architecture/module-index.yaml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "docs/architecture/ownership-map.md",
       "purpose": "Project file.",
       "danger": "low"
@@ -569,6 +584,11 @@
     },
     {
       "path": "docs/migration/baseline-tracked-files.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/migration/modularization-playbook.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -788,6 +808,171 @@
       "danger": "low"
     },
     {
+      "path": "experiments/comicbookreplacer_qt/archive_session.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/bitmap_cache.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/canvas_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/click_flash.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/comic_reader_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/end_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/goto_page_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/hud/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/hud_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/image_filters.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/input_keyboard.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/input_pointer.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/keys_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/launcher.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/loupe_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/mega_settings.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/overlay_anim.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/page_layout.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/path_picker.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/reader_constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/render_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/render_portrait.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/render_two_page.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/requirements.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/scroll_physics.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/settings_store.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/speed_slider_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/state.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/state_machine.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/toast_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreplacer_qt/volume_nav_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "experiments/holy-grail/native_holy_grail/binding.gyp",
       "purpose": "Project file.",
       "danger": "low"
@@ -928,6 +1113,96 @@
       "danger": "low"
     },
     {
+      "path": "experiments/library_widget_qt/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/context_menu.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/continue_tile.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/data_provider.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/detail_view.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/flow_layout.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/home_view.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/launcher.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/media_adapter.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/progress.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/scan_worker.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/series_card.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/sidebar_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/thumb_extractor.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/thumb_provider.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/library_widget_qt/unified_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "install_and_run.bat",
       "purpose": "Project file.",
       "danger": "low"
@@ -944,6 +1219,11 @@
     },
     {
       "path": "package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -1074,6 +1354,11 @@
     },
     {
       "path": "projectbutterfly/QTRoute/src/types.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -1209,6 +1494,86 @@
     },
     {
       "path": "projectbutterfly/bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridge_root.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/_legacy_bridge_impl.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/books_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/common.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/data/player_settings.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/library_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/shell_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/torrent_search_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/video_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/web_sources_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/web_tab_manager_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/web_torrent_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridges/window_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -1363,166 +1728,6 @@
       "danger": "low"
     },
     {
-      "path": "projectbutterfly/comicbookreplacer/archive_session.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/bitmap_cache.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/canvas_widget.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/click_flash.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/comic_reader_widget.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/constants.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/end_overlay.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/goto_page_overlay.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/hud/__init__.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/hud_core.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/image_filters.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/input_keyboard.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/input_pointer.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/keys_overlay.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/launcher.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/loupe_widget.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/mega_settings.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/overlay_anim.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/page_layout.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/path_picker.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/reader_constants.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/render_core.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/render_portrait.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/render_two_page.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/requirements.txt",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/scroll_physics.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/settings_store.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/speed_slider_overlay.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/state.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/state_machine.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/toast_widget.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/comicbookreplacer/volume_nav_overlay.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
       "path": "projectbutterfly/data/player_settings.json",
       "purpose": "Project file.",
       "danger": "low"
@@ -1534,96 +1739,6 @@
     },
     {
       "path": "projectbutterfly/flaresolverr_bridge.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/__init__.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/constants.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/context_menu.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/continue_tile.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/data_provider.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/detail_view.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/flow_layout.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/home_view.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/launcher.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/media_adapter.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/plan.md",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/progress.md",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/scan_worker.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/series_card.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/sidebar_widget.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/thumb_extractor.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/thumb_provider.py",
-      "purpose": "Project file.",
-      "danger": "low"
-    },
-    {
-      "path": "projectbutterfly/library_widget/unified_widget.py",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8133,6 +8248,11 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/books/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/books/audiobook_player_overlay.js",
       "purpose": "Project file.",
       "danger": "low"
@@ -8143,7 +8263,17 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/books/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/books/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/library/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8283,6 +8413,16 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/books/sources/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/browser_host/aspect_embed/host_bridge_bootstrap.js",
       "purpose": "Project file.",
       "danger": "low"
@@ -8313,7 +8453,27 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/browser_host/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/library/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/library/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/library/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8329,6 +8489,11 @@
     },
     {
       "path": "src/domains/reader/hud_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/index.js",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8383,7 +8548,22 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/shell/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/shell/bindings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/shell/core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/shell/index.js",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8393,7 +8573,47 @@
       "danger": "low"
     },
     {
+      "path": "src/domains/shell/state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "src/domains/video/build14_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/library/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/player/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/routing/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/search/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/state/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -8409,6 +8629,46 @@
     },
     {
       "path": "src/domains/video/video_utils.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/apps/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/browser/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/diagnostics/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/providers/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/state/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/torrents/README.md",
       "purpose": "Project file.",
       "danger": "low"
     },
@@ -9753,6 +10013,11 @@
       "danger": "low"
     },
     {
+      "path": "tools/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "tools/books_phase8_verify.js",
       "purpose": "Project file.",
       "danger": "low"
@@ -9803,7 +10068,22 @@
       "danger": "low"
     },
     {
+      "path": "tools/check_dependency_boundaries.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
       "path": "tools/check_docs_links.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/check_file_size_budget.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/check_module_contracts.js",
       "purpose": "Project file.",
       "danger": "low"
     },

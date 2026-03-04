@@ -3200,6 +3200,7 @@ body:has(.webBrowserView:not(.hidden)) .topbar { display: none !important; }
   padding: 4px 0;
   box-shadow: 0 4px 16px var(--wb-shadow);
   min-width: 180px;
+  overflow: visible;
 }
 
 #tt-ctx-menu .tt-ctx-item,

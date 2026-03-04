@@ -426,6 +426,7 @@
     searchTimedOutToken: -1,
     searchPendingMeta: null,
     searchPendingTimer: 0,
+    searchPendingSoftTimer: 0,
     searchPendingTimedOut: false,
     searchLimit: 40,
     searchSourceOptions: [],
@@ -4330,6 +4331,12 @@
     document.body.appendChild(menu);
     menu.style.left = Math.max(8, x) + 'px';
     menu.style.top = Math.max(8, y) + 'px';
+    var parentWrap = menu.querySelector('.tt-ctx-parent-wrap');
+    var submenu = parentWrap ? parentWrap.querySelector('.tt-ctx-submenu') : null;
+    if (parentWrap && submenu) {
+      parentWrap.addEventListener('mouseenter', function () { submenu.style.display = 'block'; });
+      parentWrap.addEventListener('mouseleave', function () { submenu.style.display = 'none'; });
+    }
     var cleanup = function () {
       if (menu && menu.parentElement) menu.parentElement.removeChild(menu);
       document.removeEventListener('mousedown', onDocDown, true);
@@ -5386,6 +5393,7 @@
     state.searchTimedOutToken = -1;
     state.searchPendingMeta = null;
     clearTimeout(state.searchPendingTimer);
+    clearTimeout(state.searchPendingSoftTimer);
     state.searchPendingTimedOut = false;
     state.searchQuery = '';
     state.searchPage = 0;
@@ -5399,22 +5407,20 @@
     setSourcesSearchStatus('');
   }
 
-  function getSourcesSearchMaxWaitMs() {
+  function getSourcesSearchTimeouts() {
     var s = state.browserSettings || {};
     var providerKey = String(s.torrentSearch && s.torrentSearch.provider || 'tankorent').trim().toLowerCase();
     var providerCfg = {};
     if (providerKey === 'tankorent') providerCfg = (s.tankorent && typeof s.tankorent === 'object') ? s.tankorent : ((s.torrentSearch && s.torrentSearch.tankorent) || {});
-    var providerMs = Number(providerCfg.timeoutMs || 0);
-    if (!isFinite(providerMs) || providerMs <= 0) providerMs = 18000;
-    providerMs = Math.max(8000, Math.min(45000, Math.round(providerMs)));
-    var explicit = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
-    if (!isFinite(explicit) || explicit <= 0) explicit = 0;
-    if (explicit > 0) explicit = Math.max(8000, Math.min(45000, Math.round(explicit)));
-    // Legacy defaults wrote 45000 for both values; keep runtime fast by default.
-    if (explicit === 45000 && providerMs === 45000) return 18000;
-    var value = explicit > 0 ? Math.min(explicit, providerMs) : providerMs;
-    value = Math.max(8000, Math.min(45000, Math.round(value)));
-    return value;
+    var hard = Number(providerCfg.timeoutMs || 0);
+    if (!isFinite(hard) || hard <= 0) hard = Number(s && s.torrent && s.torrent.search && s.torrent.search.hardTimeoutMs || 0);
+    if (!isFinite(hard) || hard <= 0) hard = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
+    if (!isFinite(hard) || hard <= 0) hard = 45000;
+    hard = Math.max(8000, Math.min(45000, Math.round(hard)));
+    var soft = Number(s && s.torrent && s.torrent.search && s.torrent.search.softTimeoutMs || 10000);
+    if (!isFinite(soft) || soft <= 0) soft = 10000;
+    soft = Math.max(3000, Math.min(hard - 1000, Math.round(soft)));
+    return { softMs: soft, hardMs: hard };
   }
 
   function applySourcesSearchResponse(meta, res) {
@@ -5425,9 +5431,10 @@
     if (token !== state.searchRequestToken) return;
     if (token === state.searchTimedOutToken) return;
 
-    var progressive = !!(res && res.searching && res.done === false);
+    var progressive = !!(res && (res.done === false || String(res.phase || '').toLowerCase() === 'partial'));
     if (!progressive) {
       clearTimeout(state.searchPendingTimer);
+      clearTimeout(state.searchPendingSoftTimer);
       state.searchPendingMeta = null;
       state.searchPendingTimedOut = false;
     }
@@ -5507,6 +5514,7 @@
       state.searchRequestToken += 1;
       state.searchTimedOutToken = -1;
       clearTimeout(state.searchPendingTimer);
+      clearTimeout(state.searchPendingSoftTimer);
       state.searchPendingMeta = null;
       state.searchPendingTimedOut = false;
       bumpSourcesTorrentDiag('search', 'started');
@@ -5539,7 +5547,17 @@
         state.searchPendingMeta = { token: token, append: append, page: page, requestId: reqId };
         state.searchPendingTimedOut = false;
         clearTimeout(state.searchPendingTimer);
-        var waitMs = getSourcesSearchMaxWaitMs();
+        clearTimeout(state.searchPendingSoftTimer);
+        var t = getSourcesSearchTimeouts();
+        var softMs = Number(t && t.softMs || 10000) || 10000;
+        var hardMs = Number(t && t.hardMs || 45000) || 45000;
+        state.searchPendingSoftTimer = setTimeout(function () {
+          var pending = state.searchPendingMeta;
+          if (!pending || pending.token !== token) return;
+          var existing = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
+          if (existing > 0) setSourcesSearchStatus('Still searching slower sources… ' + String(existing) + ' result(s) so far.');
+          else setSourcesSearchStatus('Still searching slower sources…');
+        }, softMs);
         state.searchPendingTimer = setTimeout(function () {
           var pending = state.searchPendingMeta;
           if (!pending || pending.token !== token) return;
@@ -5551,13 +5569,9 @@
           state.searchLoadingMore = false;
           bumpSourcesTorrentDiag('search', 'timeout');
           var existing = Array.isArray(state.searchResultsRaw) ? state.searchResultsRaw.length : 0;
-          var timeoutSec = Math.max(1, Math.round(waitMs / 1000));
-          if (existing > 0) {
-            setSourcesSearchStatus('Search timed out after ' + String(timeoutSec) + 's; showing partial results (' + String(existing) + ').');
-          } else {
-            setSourcesSearchStatus('Search timed out after ' + String(timeoutSec) + 's. Try fewer sources or retry.');
-          }
-        }, waitMs);
+          if (existing > 0) setSourcesSearchStatus('Finalized with partial results.');
+          else setSourcesSearchStatus('Search finalized with no results (slow sources timed out).');
+        }, hardMs);
         return;
       }
       applySourcesSearchResponse({ token: token, append: append, page: page }, res);
@@ -5575,6 +5589,7 @@
       if (token !== state.searchRequestToken) return;
       if (token === state.searchTimedOutToken) return;
       clearTimeout(state.searchPendingTimer);
+      clearTimeout(state.searchPendingSoftTimer);
       state.searchPendingMeta = null;
       state.searchPendingTimedOut = false;
       bumpSourcesTorrentDiag('search', 'error');
@@ -5839,6 +5854,14 @@
           '1337x': oldSites['1337x'] !== false,
           nyaa: oldSites.nyaa !== false,
         }
+      },
+      torrent: {
+        search: {
+          hardTimeoutMs: timeoutMs,
+          maxWaitMs: timeoutMs,
+          softTimeoutMs: 10000,
+          fastFirst: true,
+        }
       }
     });
     setTimeout(function () {
@@ -5927,7 +5950,7 @@
       privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } },
       tankorent: {
         enabled: tankorent.enabled !== false,
-        timeoutMs: Number(tankorent.timeoutMs || torrentSearchRuntime.maxWaitMs || 18000) || 18000,
+        timeoutMs: Number(tankorent.timeoutMs || torrentSearchRuntime.hardTimeoutMs || torrentSearchRuntime.maxWaitMs || 45000) || 45000,
         importPath: String(tankorent.importPath || src.tankorentImportPath || 'C:\\ProgramData\\Jackett\\Indexers').trim(),
         sites: {
           piratebay: sites.piratebay !== false,
@@ -5945,7 +5968,11 @@
           port: Number(torrentSidecar.port || 8765) || 8765
         },
         search: {
-          maxWaitMs: Number(torrentSearchRuntime.maxWaitMs || 18000) || 18000
+          softTimeoutMs: Number(torrentSearchRuntime.softTimeoutMs || 10000) || 10000,
+          hardTimeoutMs: Number(torrentSearchRuntime.hardTimeoutMs || torrentSearchRuntime.maxWaitMs || tankorent.timeoutMs || 45000) || 45000,
+          maxWaitMs: Number(torrentSearchRuntime.maxWaitMs || torrentSearchRuntime.hardTimeoutMs || tankorent.timeoutMs || 45000) || 45000,
+          fastFirst: torrentSearchRuntime.fastFirst !== false,
+          siteBudgets: (torrentSearchRuntime.siteBudgets && typeof torrentSearchRuntime.siteBudgets === 'object') ? torrentSearchRuntime.siteBudgets : {},
         }
       }
     };
