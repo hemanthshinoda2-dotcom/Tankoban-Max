@@ -1,193 +1,301 @@
-"""
-Bitmap cache — threaded QImage decode with LRU eviction and prefetch.
-
-Decode happens on QThreadPool workers. Signals fire on the main thread
-when a page is ready or failed. The cache enforces a byte budget with
-LRU eviction (non-keep entries evicted first).
-"""
-
+import struct
 import time
-from typing import Optional
+from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from PySide6.QtGui import QImage, QPixmap
 
-from archive_handler import ArchiveSession
-from state import ReaderState, WIDE_RATIO_PRIMARY
 
-# Max simultaneous decode tasks
-MAX_DECODE_CONCURRENCY = 2
-
-# Keep-set cap — always keep at least this many entries regardless of LRU
-KEEP_CAP = 12
-
-# Prefetch radius (pages ahead and behind current)
-PREFETCH_RADIUS = 2
+def _u16_be(data: bytes, offset: int) -> int:
+    return struct.unpack_from(">H", data, offset)[0]
 
 
+def _u32_be(data: bytes, offset: int) -> int:
+    return struct.unpack_from(">I", data, offset)[0]
+
+
+def _u16_le(data: bytes, offset: int) -> int:
+    return struct.unpack_from("<H", data, offset)[0]
+
+
+def parse_image_dimensions_fast(data: bytes):
+    try:
+        if len(data) >= 24 and data[0:8] == b"\x89PNG\r\n\x1a\n":
+            return _u32_be(data, 16), _u32_be(data, 20)
+
+        if len(data) >= 10 and data[0:6] in (b"GIF87a", b"GIF89a"):
+            return _u16_be(data, 6), _u16_be(data, 8)
+
+        if len(data) >= 30 and data[0:4] == b"RIFF" and data[8:12] == b"WEBP":
+            chunk = data[12:16]
+            if chunk == b"VP8X" and len(data) >= 30:
+                w = 1 + data[24] + (data[25] << 8) + (data[26] << 16)
+                h = 1 + data[27] + (data[28] << 8) + (data[29] << 16)
+                return w, h
+            if chunk == b"VP8 " and len(data) >= 30:
+                w = _u16_le(data, 26) & 0x3FFF
+                h = _u16_le(data, 28) & 0x3FFF
+                return w, h
+            if chunk == b"VP8L" and len(data) >= 25:
+                b0, b1, b2, b3 = data[21], data[22], data[23], data[24]
+                w = 1 + (((b1 & 0x3F) << 8) | b0)
+                h = 1 + (((b3 & 0x0F) << 10) | (b2 << 2) | ((b1 & 0xC0) >> 6))
+                return w, h
+
+        if len(data) >= 4 and data[0:2] == b"\xff\xd8":
+            offset = 2
+            length = len(data)
+            while offset + 4 <= length:
+                if data[offset] != 0xFF:
+                    offset += 1
+                    continue
+                marker = data[offset + 1]
+                offset += 2
+                if marker in (0xD8, 0xD9):
+                    continue
+                if offset + 2 > length:
+                    break
+                size = _u16_be(data, offset)
+                if size < 2 or offset + size > length:
+                    break
+                if marker in (
+                    0xC0, 0xC1, 0xC2, 0xC3,
+                    0xC5, 0xC6, 0xC7,
+                    0xC9, 0xCA, 0xCB,
+                    0xCD, 0xCE, 0xCF,
+                ):
+                    if offset + 7 <= length:
+                        h = _u16_be(data, offset + 3)
+                        w = _u16_be(data, offset + 5)
+                        return w, h
+                    break
+                offset += size
+    except Exception:
+        return None, None
+    return None, None
+
+
+@dataclass
 class CacheEntry:
-    __slots__ = ("pixmap", "width", "height", "spread", "bytes_estimate", "last_used")
-
-    def __init__(self, pixmap: QPixmap, width: int, height: int, spread: bool):
-        self.pixmap = pixmap
-        self.width = width
-        self.height = height
-        self.spread = spread
-        self.bytes_estimate = width * height * 4  # RGBA
-        self.last_used = time.monotonic()
-
-    def touch(self):
-        self.last_used = time.monotonic()
+    pixmap: QPixmap
+    spread: bool
+    width: int
+    height: int
+    bytes_estimate: int
+    last_used: float
 
 
-class DecodeTask(QRunnable):
-    """Runs on QThreadPool — reads archive bytes and decodes to QImage."""
+class _DecodeSignals(QObject):
+    finished = Signal(object)
 
-    def __init__(self, emitter, archive: ArchiveSession,
-                 page_index: int, volume_token: int, open_token: int):
+
+class _DecodeTask(QRunnable):
+    def __init__(self, session, index: int, volume_token: int):
         super().__init__()
-        self.emitter = emitter
-        self.archive = archive
-        self.page_index = page_index
-        self.volume_token = volume_token
-        self.open_token = open_token
-        self.setAutoDelete(True)
+        self.signals = _DecodeSignals()
+        self.session = session
+        self.index = index
+        self.volume_token = int(volume_token)
 
     def run(self):
         try:
-            raw = self.archive.read_page(self.page_index)
-            img = QImage()
-            if not img.loadFromData(raw):
-                self.emitter.decode_failed.emit(
-                    self.page_index, "QImage.loadFromData failed",
-                    self.volume_token, self.open_token
-                )
-                return
-            pixmap = QPixmap.fromImage(img)
-            self.emitter.decode_ready.emit(
-                self.page_index, pixmap, img.width(), img.height(),
-                self.volume_token, self.open_token
-            )
-        except Exception as e:
-            self.emitter.decode_failed.emit(
-                self.page_index, str(e),
-                self.volume_token, self.open_token
-            )
-
-
-class _DecodeEmitter(QObject):
-    """Signal bridge — DecodeTask emits these from the thread pool,
-    BitmapCache receives them on the main thread via queued connections."""
-    decode_ready = Signal(int, QPixmap, int, int, int, int)   # page, pixmap, w, h, vol_tok, open_tok
-    decode_failed = Signal(int, str, int, int)                # page, error, vol_tok, open_tok
+            data = self.session.get_page_bytes(self.index)
+            w, h = parse_image_dimensions_fast(data)
+            image = QImage()
+            if not image.loadFromData(data):
+                raise RuntimeError("Decode failed")
+            if not w or not h:
+                w = image.width()
+                h = image.height()
+            self.signals.finished.emit({
+                "ok": True,
+                "index": self.index,
+                "volume_token": self.volume_token,
+                "image": image,
+                "width": int(w),
+                "height": int(h),
+            })
+        except Exception as exc:
+            self.signals.finished.emit({
+                "ok": False,
+                "index": self.index,
+                "volume_token": self.volume_token,
+                "error": str(exc),
+            })
 
 
 class BitmapCache(QObject):
-    """Main-thread cache manager. Decodes on background threads,
-    stores QPixmaps, evicts by LRU when over budget."""
+    page_ready = Signal(int)
+    page_failed = Signal(int, str)
 
-    page_ready = Signal(int)       # page_index — ready to paint
-    page_failed = Signal(int, str) # page_index, error message
-
-    def __init__(self, state: ReaderState, parent=None):
+    def __init__(self, parent=None, memory_saver: bool = False, spread_threshold: float = 1.35):
         super().__init__(parent)
-        self.state = state
-        self._cache: dict[int, CacheEntry] = {}
-        self._pending: set[int] = set()    # page indices currently decoding
-        self._archive: Optional[ArchiveSession] = None
+        self.memory_budget_bytes = (256 if memory_saver else 512) * 1024 * 1024
+        self.keep_set_cap = 12
+        self.spread_threshold = float(spread_threshold)
 
-        self._pool = QThreadPool.globalInstance()
-        self._pool.setMaxThreadCount(MAX_DECODE_CONCURRENCY)
+        self._thread_pool = QThreadPool.globalInstance()
+        self._thread_pool.setMaxThreadCount(max(2, min(4, self._thread_pool.maxThreadCount())))
 
-        self._emitter = _DecodeEmitter()
-        self._emitter.decode_ready.connect(self._on_decode_ready)
-        self._emitter.decode_failed.connect(self._on_decode_failed)
+        self._session = None
+        self._volume_token = 0
+        self._page_count = 0
+        self._current_index = -1
 
-    def set_archive(self, archive: ArchiveSession):
-        """Bind to a new archive. Clears all cached data."""
-        self._archive = archive
-        self.clear()
+        self._entries: dict[int, CacheEntry] = {}
+        self._in_flight: set[tuple[int, int]] = set()
+        self._total_bytes = 0
 
-    def clear(self):
-        """Drop all cached pixmaps and cancel pending decodes."""
-        self._cache.clear()
-        self._pending.clear()
+    def get_stats(self) -> tuple[int, int]:
+        """Return (used_bytes, budget_bytes)."""
+        return self._total_bytes, self.memory_budget_bytes
 
-    def get(self, page_index: int) -> Optional[CacheEntry]:
-        """Return cached entry if available, or None. Touches LRU timestamp."""
-        entry = self._cache.get(page_index)
-        if entry is not None:
-            entry.touch()
-        return entry
-
-    def request(self, page_index: int):
-        """Request a page decode. No-op if already cached or pending."""
-        if self._archive is None:
-            return
-        if page_index < 0 or page_index >= self._archive.page_count:
-            return
-        if page_index in self._cache or page_index in self._pending:
-            return
-
-        self._pending.add(page_index)
-        task = DecodeTask(
-            self._emitter, self._archive, page_index,
-            self.state.volume_token, self.state.open_token
-        )
-        self._pool.start(task)
-
-    def prefetch(self, center: int):
-        """Request decode for pages around center within PREFETCH_RADIUS."""
-        if self._archive is None:
-            return
-        for offset in range(PREFETCH_RADIUS + 1):
-            for idx in (center + offset, center - offset):
-                if 0 <= idx < self._archive.page_count:
-                    self.request(idx)
-
-    def total_bytes(self) -> int:
-        return sum(e.bytes_estimate for e in self._cache.values())
-
-    def _evict_if_needed(self):
-        """Evict LRU entries until under budget. Keep at most KEEP_CAP entries."""
-        budget = self.state.memory_budget_bytes()
-        while self.total_bytes() > budget and len(self._cache) > KEEP_CAP:
-            # Find the least-recently-used entry
-            oldest_key = None
-            oldest_time = float("inf")
-            for key, entry in self._cache.items():
-                if entry.last_used < oldest_time:
-                    oldest_time = entry.last_used
-                    oldest_key = key
-            if oldest_key is not None:
-                del self._cache[oldest_key]
-            else:
-                break
-
-    @Slot(int, QPixmap, int, int, int, int)
-    def _on_decode_ready(self, page_index, pixmap, w, h, vol_tok, open_tok):
-        self._pending.discard(page_index)
-
-        # Stale check
-        if vol_tok != self.state.volume_token or open_tok != self.state.open_token:
-            return
-
-        # Detect spread
-        spread = (w / h >= WIDE_RATIO_PRIMARY) if h > 0 else False
-        if spread:
-            self.state.known_spread_indices.add(page_index)
-
-        entry = CacheEntry(pixmap, w, h, spread)
-        self._cache[page_index] = entry
+    def set_memory_saver(self, enabled: bool):
+        self.memory_budget_bytes = (256 if enabled else 512) * 1024 * 1024
         self._evict_if_needed()
 
-        self.page_ready.emit(page_index)
+    def clear(self):
+        self._entries.clear()
+        self._in_flight.clear()
+        self._total_bytes = 0
 
-    @Slot(int, str, int, int)
-    def _on_decode_failed(self, page_index, error, vol_tok, open_tok):
-        self._pending.discard(page_index)
+    def set_session(self, session, volume_token: int, page_count: int):
+        self._session = session
+        self._volume_token = int(volume_token)
+        self._page_count = int(page_count)
+        self._current_index = -1
+        self.clear()
 
-        if vol_tok != self.state.volume_token or open_tok != self.state.open_token:
+    def set_current_index(self, index: int):
+        self._current_index = int(index)
+        self._evict_if_needed()
+
+    def get_entry(self, index: int):
+        entry = self._entries.get(int(index))
+        if entry is None:
+            return None
+        entry.last_used = time.monotonic()
+        return entry
+
+    def get_pixmap(self, index: int):
+        entry = self.get_entry(index)
+        return entry.pixmap if entry is not None else None
+
+    def is_cached(self, index: int) -> bool:
+        return int(index) in self._entries
+
+    def get_cached_spread_indices(self):
+        out = set()
+        for idx, entry in self._entries.items():
+            if bool(entry.spread):
+                out.add(int(idx))
+        return out
+
+    def request_page(self, index: int):
+        index = int(index)
+        if self._session is None:
+            return
+        if index < 0 or index >= self._page_count:
+            return
+        if index in self._entries:
+            self._entries[index].last_used = time.monotonic()
+            self.page_ready.emit(index)
             return
 
-        self.page_failed.emit(page_index, error)
+        key = (self._volume_token, index)
+        if key in self._in_flight:
+            return
+        self._in_flight.add(key)
+
+        task = _DecodeTask(self._session, index, self._volume_token)
+        task.signals.finished.connect(self._on_decode_finished)
+        self._thread_pool.start(task)
+
+    def prefetch_neighbors(self, center_index: int, radius: int = 2):
+        center = int(center_index)
+        for step in range(1, int(radius) + 1):
+            self.request_page(center - step)
+            self.request_page(center + step)
+
+    def _on_decode_finished(self, payload):
+        index = int(payload.get("index", -1))
+        token = int(payload.get("volume_token", -1))
+        self._in_flight.discard((token, index))
+
+        if token != self._volume_token:
+            return
+
+        if not payload.get("ok"):
+            self.page_failed.emit(index, payload.get("error", "Decode failed"))
+            return
+
+        image = payload.get("image")
+        pixmap = QPixmap.fromImage(image)
+        if pixmap.isNull():
+            self.page_failed.emit(index, "Pixmap conversion failed")
+            return
+
+        width = int(payload.get("width") or pixmap.width())
+        height = int(payload.get("height") or pixmap.height())
+        spread = bool(height > 0 and (float(width) / float(height)) > self.spread_threshold)
+        bytes_estimate = max(1, width * height * 4)
+
+        prev = self._entries.get(index)
+        if prev is not None:
+            self._total_bytes -= prev.bytes_estimate
+
+        self._entries[index] = CacheEntry(
+            pixmap=pixmap,
+            spread=spread,
+            width=width,
+            height=height,
+            bytes_estimate=bytes_estimate,
+            last_used=time.monotonic(),
+        )
+        self._total_bytes += bytes_estimate
+        self._evict_if_needed()
+        self.page_ready.emit(index)
+
+    def _evict_if_needed(self):
+        if not self._entries:
+            return
+
+        keep_set = set()
+        if self._current_index >= 0:
+            start = max(0, self._current_index - 5)
+            end = min(self._page_count - 1, self._current_index + 6)
+            for idx in range(start, end + 1):
+                keep_set.add(idx)
+
+        lock_set = set()
+        if self._current_index >= 0:
+            for idx in (self._current_index - 1, self._current_index, self._current_index + 1):
+                if 0 <= idx < self._page_count:
+                    lock_set.add(idx)
+
+        def over_limit() -> bool:
+            return self._total_bytes > self.memory_budget_bytes or len(self._entries) > self.keep_set_cap
+
+        while over_limit() and self._entries:
+            candidate = self._pick_evict_candidate(lock_set, keep_set)
+            if candidate is None:
+                candidate = self._pick_evict_candidate(lock_set, set())
+            if candidate is None:
+                break
+
+            removed = self._entries.pop(candidate, None)
+            if removed is not None:
+                self._total_bytes = max(0, self._total_bytes - removed.bytes_estimate)
+
+    def _pick_evict_candidate(self, lock_set: set[int], protected_set: set[int]):
+        best_index = None
+        best_last_used = None
+        for idx, entry in self._entries.items():
+            if idx in lock_set:
+                continue
+            if idx in protected_set:
+                continue
+            if best_index is None or entry.last_used < best_last_used:
+                best_index = idx
+                best_last_used = entry.last_used
+        return best_index
