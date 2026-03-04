@@ -129,6 +129,55 @@ class WindowControlButton(QPushButton):
         p.end()
 
 
+class ArrowButton(QPushButton):
+    """Painted arrow button — guaranteed identical rendering for left/right."""
+
+    def __init__(self, direction: str, parent=None):
+        super().__init__("", parent)
+        self._direction = direction  # "left" or "right"
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFixedSize(40, 34)
+        self.setStyleSheet(
+            "QPushButton { background: transparent; border: none; border-radius: 10px; }"
+            "QPushButton:hover { background: rgba(255,255,255,30); }"
+        )
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        cx, cy = self.width() / 2, self.height() / 2
+        # Arrow: shaft + chevron head
+        sign = -1 if self._direction == "left" else 1
+        # Shaft endpoints
+        x1, x2 = cx - sign * 8, cx + sign * 8
+        # Chevron head points
+        hx = cx + sign * 8  # tip
+        hy_top, hy_bot = cy - 5, cy + 5
+        hx_back = cx + sign * 3  # base of chevron
+
+        fg = QColor(255, 255, 255) if self.isEnabled() else QColor(255, 255, 255, 80)
+
+        if self.isEnabled():
+            outline_pen = QPen(QColor(0, 0, 0, 200), 1.2)
+            outline_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            outline_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+                p.setPen(outline_pen)
+                p.drawLine(int(x1 + dx), int(cy + dy), int(x2 + dx), int(cy + dy))
+                p.drawLine(int(hx_back + dx), int(hy_top + dy), int(hx + dx), int(cy + dy))
+                p.drawLine(int(hx_back + dx), int(hy_bot + dy), int(hx + dx), int(cy + dy))
+
+        fg_pen = QPen(fg, 1.6)
+        fg_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        fg_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(fg_pen)
+        p.drawLine(int(x1), int(cy), int(x2), int(cy))
+        p.drawLine(int(hx_back), int(hy_top), int(hx), int(cy))
+        p.drawLine(int(hx_back), int(hy_bot), int(hx), int(cy))
+        p.end()
+
+
 MODE_LABELS = {
     "manual": "Manual",
     "twoPage": "Double Page",
@@ -556,12 +605,14 @@ class BottomHud(QFrame):
 
         controls_row.addStretch(1)
 
-        # Right controls
-        self.prev_vol_btn = self._icon_btn("\u2190", "hudBtn", "Previous volume")  # ←
+        # Right controls — painted arrows for guaranteed identical rendering
+        self.prev_vol_btn = ArrowButton("left", self)
+        self.prev_vol_btn.setToolTip("Previous volume")
         self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
         controls_row.addWidget(self.prev_vol_btn, 0)
 
-        self.next_vol_btn = self._icon_btn("\u2192", "hudBtn", "Next volume")  # →
+        self.next_vol_btn = ArrowButton("right", self)
+        self.next_vol_btn.setToolTip("Next volume")
         self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
         controls_row.addWidget(self.next_vol_btn, 0)
 
