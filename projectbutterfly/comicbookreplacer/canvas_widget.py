@@ -131,8 +131,8 @@ class CanvasWidget(QWidget):
             # Portrait width cap
             max_w = canvas_w * self.state.portrait_width_fraction()
 
-        # No-upscale: never wider than natural pixel width
-        draw_w = min(entry.width, max_w)
+        # Fit to max_w (fill the allotted width)
+        draw_w = max_w
 
         # Scale height proportionally
         scale = draw_w / entry.width if entry.width > 0 else 1.0
