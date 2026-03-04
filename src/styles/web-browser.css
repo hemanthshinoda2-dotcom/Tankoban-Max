@@ -292,6 +292,7 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 
 .webTankorentIndexerName {
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -312,6 +313,17 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
 .webTankorentIndexerStatus.status-active {
   color: #81c995;
   border-color: rgba(129, 201, 149, 0.45);
+}
+
+.webTankorentIndexerStatus.status-disabled {
+  color: var(--wb-muted);
+  border-color: var(--wb-border-subtle);
+}
+
+.webTankorentIndexerToggle {
+  width: 100%;
+  min-width: 0;
+  justify-content: flex-start;
 }
 
 #webLibraryView #webHomeView > .continuePanel,

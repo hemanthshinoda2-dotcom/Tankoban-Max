@@ -297,7 +297,12 @@ class VolumeHUD(QWidget):
         self.hide_timer = QTimer(self)
         self.hide_timer.setSingleShot(True)
         self.hide_timer.timeout.connect(self._fade_out)
+        self.fade_anim.finished.connect(self._on_anim_done)
         self.hide()
+
+    def _on_anim_done(self):
+        if self.opacity_effect.opacity() < 0.01:
+            self.hide()
 
     def show_volume(self, volume):
         volume = max(0, min(100, volume))
@@ -333,7 +338,6 @@ class VolumeHUD(QWidget):
         self.fade_anim.setDuration(200)
         self.fade_anim.setStartValue(self.opacity_effect.opacity())
         self.fade_anim.setEndValue(0.0)
-        self.fade_anim.finished.connect(self.hide)
         self.fade_anim.start()
 
 
@@ -363,7 +367,12 @@ class CenterFlash(QWidget):
 
         self.fade_anim = QPropertyAnimation(self.opacity_effect, b"opacity")
         self.fade_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+        self.fade_anim.finished.connect(self._on_anim_done)
         self.hide()
+
+    def _on_anim_done(self):
+        if self.opacity_effect.opacity() < 0.01:
+            self.hide()
 
     def flash(self, icon):
         try:
@@ -393,7 +402,6 @@ class CenterFlash(QWidget):
             self.fade_anim.setDuration(300)
             self.fade_anim.setStartValue(self.opacity_effect.opacity())
             self.fade_anim.setEndValue(0.0)
-            self.fade_anim.finished.connect(self.hide)
             self.fade_anim.start()
         except Exception:
             pass
@@ -1144,6 +1152,10 @@ class MpvContainer(QWidget):
         self.tracks_drawer.raise_()
         self.playlist_drawer.setGeometry(w - 320, 40, 320, h - 130)
         self.playlist_drawer.raise_()
+        # Raise transient overlays above the native render_host HWND
+        self.volume_hud.raise_()
+        self.center_flash.raise_()
+        self.toast.raise_()
 
     # ── overlay / drawer helpers (matches run_player.py) ────────────────
 

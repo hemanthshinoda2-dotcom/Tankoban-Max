@@ -5618,6 +5618,22 @@
       state.searchSourceOptions = rows.map(function (row) {
         return { id: String(row && row.id || '').trim(), name: String(row && row.name || row && row.id || '').trim() };
       }).filter(function (row) { return !!row.id; });
+      if (state.browserSettings && state.browserSettings.tankorent) {
+        state.browserSettings.tankorent.importedIndexers = rows.map(function (row) {
+          var id = String(row && row.id || '').trim();
+          if (!id) return null;
+          return {
+            id: id,
+            name: String(row && row.name || id).trim() || id,
+            status: String(row && row.status || 'active').trim().toLowerCase() || 'active',
+            enabled: row && row.enabled !== false,
+          };
+        }).filter(function (row) { return !!row; });
+        if (!state.browserSettings.tankorent.indexersById || typeof state.browserSettings.tankorent.indexersById !== 'object') {
+          state.browserSettings.tankorent.indexersById = {};
+        }
+        updateTankorentImportedCount();
+      }
       renderSearchSourceOptions();
     }).catch(function () {
       state.searchSourceOptions = [];
@@ -5643,6 +5659,7 @@
 
   function openTorrentProvidersDialog() {
     syncBrowserSettingsControls();
+    loadSourcesSearchIndexers();
     if (el.torrentProvidersPanel) el.torrentProvidersPanel.classList.remove('hidden');
   }
 
@@ -5689,15 +5706,47 @@
     return p.replace(/\//g, '\\');
   }
 
+  function tankorentSiteForIndexerId(rawId) {
+    var rid = String(rawId || '').trim().toLowerCase();
+    if (!rid) return '1337x';
+    if (rid.indexOf('1337') >= 0) return '1337x';
+    if (rid.indexOf('pirate') >= 0 || rid === 'tpb' || rid === 'thepiratebay') return 'piratebay';
+    if (
+      rid.indexOf('nyaa') >= 0
+      || rid.indexOf('anime') >= 0
+      || rid.indexOf('anirena') >= 0
+      || rid.indexOf('animetosho') >= 0
+      || rid.indexOf('anisource') >= 0
+      || rid.indexOf('bangumi') >= 0
+      || rid.indexOf('subsplease') >= 0
+      || rid.indexOf('tokyo') >= 0
+      || rid.indexOf('tosho') >= 0
+    ) return 'nyaa';
+    return '1337x';
+  }
+
+  function getTankorentIndexerStatePatchFromUi() {
+    var out = {};
+    if (!el.tankorentIndexerList) return out;
+    var checks = el.tankorentIndexerList.querySelectorAll('input[data-indexer-id]');
+    for (var i = 0; i < checks.length; i++) {
+      var cb = checks[i];
+      var rid = String(cb && cb.getAttribute('data-indexer-id') || '').trim();
+      if (!rid) continue;
+      out[rid] = { enabled: !!cb.checked };
+    }
+    return out;
+  }
+
   function updateTankorentImportedCount() {
     if (!el.tankorentImportedCount) return;
-    var imported = state.browserSettings
+    var builtins = state.browserSettings
       && state.browserSettings.tankorent
       && Array.isArray(state.browserSettings.tankorent.importedIndexers)
       ? state.browserSettings.tankorent.importedIndexers
       : [];
-    el.tankorentImportedCount.textContent = String(imported.length || 0);
-    renderTankorentIndexerList(imported);
+    el.tankorentImportedCount.textContent = String(builtins.length || 0);
+    renderTankorentIndexerList(builtins);
   }
 
   function renderTankorentIndexerList(importedRows) {
@@ -5709,15 +5758,31 @@
       return;
     }
     el.tankorentIndexerEmpty.classList.add('hidden');
+    var byId = state.browserSettings
+      && state.browserSettings.tankorent
+      && state.browserSettings.tankorent.indexersById
+      && typeof state.browserSettings.tankorent.indexersById === 'object'
+      ? state.browserSettings.tankorent.indexersById
+      : {};
     var html = '';
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i] || {};
-      var name = escapeHtml(String(row.name || row.id || 'indexer'));
+      var rid = String(row.id || '').trim();
+      if (!rid) continue;
+      var name = escapeHtml(String(row.name || rid || 'indexer'));
       var status = String(row.status || '').trim().toLowerCase();
-      var label = status === 'active' ? 'active' : (status || 'unsupported');
+      var label = status === 'active' ? 'active' : (status || 'active');
+      var ridKey = rid.toLowerCase();
+      var indexerState = byId[ridKey];
+      var enabled = true;
+      if (indexerState && typeof indexerState === 'object') enabled = indexerState.enabled !== false;
+      var site = tankorentSiteForIndexerId(rid);
       html += '<div class="webTankorentIndexerRow">'
+        + '<label class="tt-add-check-label webTankorentIndexerToggle">'
+        + '<input type="checkbox" data-indexer-id="' + escapeHtml(ridKey) + '"' + (enabled ? ' checked' : '') + ' />'
         + '<span class="webTankorentIndexerName">' + name + '</span>'
-        + '<span class="webTankorentIndexerStatus status-' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
+        + '</label>'
+        + '<span class="webTankorentIndexerStatus status-' + escapeHtml(label) + '">' + escapeHtml(site) + '</span>'
         + '</div>';
     }
     el.tankorentIndexerList.innerHTML = html;
@@ -5759,18 +5824,20 @@
     var timeoutMs = Number(el.tankorentTimeoutMs && el.tankorentTimeoutMs.value || 45000) || 45000;
     timeoutMs = Math.max(6000, Math.min(120000, Math.round(timeoutMs)));
     if (el.tankorentTimeoutMs) el.tankorentTimeoutMs.value = String(timeoutMs);
-    var importPath = normalizeImportPath(el.tankorentImportPath && el.tankorentImportPath.value);
-    if (el.tankorentImportPath) el.tankorentImportPath.value = importPath;
+    var indexersByIdPatch = getTankorentIndexerStatePatchFromUi();
+    var oldSites = state.browserSettings && state.browserSettings.tankorent && state.browserSettings.tankorent.sites
+      ? state.browserSettings.tankorent.sites
+      : {};
     saveBrowserSettings({
       torrentSearch: { provider: 'tankorent' },
       tankorent: {
         enabled: true,
         timeoutMs: timeoutMs,
-        importPath: importPath,
+        indexersById: indexersByIdPatch,
         sites: {
-          piratebay: !!(el.tankorentSitePiratebay && el.tankorentSitePiratebay.checked),
-          '1337x': !!(el.tankorentSite1337x && el.tankorentSite1337x.checked),
-          nyaa: !!(el.tankorentSiteNyaa && el.tankorentSiteNyaa.checked),
+          piratebay: oldSites.piratebay !== false,
+          '1337x': oldSites['1337x'] !== false,
+          nyaa: oldSites.nyaa !== false,
         }
       }
     });
@@ -5831,6 +5898,9 @@
     var sourcesBrowser = (src.sourcesBrowser && typeof src.sourcesBrowser === 'object') ? src.sourcesBrowser : {};
     var provider = 'tankorent';
     var sites = (tankorent.sites && typeof tankorent.sites === 'object') ? tankorent.sites : {};
+    var indexersById = (tankorent.indexersById && typeof tankorent.indexersById === 'object')
+      ? tankorent.indexersById
+      : ((tsTankorent.indexersById && typeof tsTankorent.indexersById === 'object') ? tsTankorent.indexersById : {});
     var imported = Array.isArray(tankorent.importedIndexers)
       ? tankorent.importedIndexers
       : (Array.isArray(tsTankorent.importedIndexers) ? tsTankorent.importedIndexers : []);
@@ -5864,6 +5934,7 @@
           '1337x': sites['1337x'] !== false,
           nyaa: sites.nyaa !== false,
         },
+        indexersById: indexersById,
         importedIndexers: imported,
       },
       torrentSearch: { provider: provider },
@@ -5898,10 +5969,6 @@
     if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = s.privacy.clearOnExit.cookies;
     if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = s.privacy.clearOnExit.cache;
     if (el.tankorentTimeoutMs) el.tankorentTimeoutMs.value = String(Number(s.tankorent && s.tankorent.timeoutMs || 45000) || 45000);
-    if (el.tankorentSitePiratebay) el.tankorentSitePiratebay.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites.piratebay !== false);
-    if (el.tankorentSite1337x) el.tankorentSite1337x.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites['1337x'] !== false);
-    if (el.tankorentSiteNyaa) el.tankorentSiteNyaa.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites.nyaa !== false);
-    if (el.tankorentImportPath) el.tankorentImportPath.value = String(s.tankorent && s.tankorent.importPath || 'C:\\ProgramData\\Jackett\\Indexers');
     updateTankorentImportedCount();
     applySourcesMinimalFlag();
     state.sourcesBrowserHomeReady = false;
@@ -6540,6 +6607,20 @@
     if (el.torrentProvidersClose) el.torrentProvidersClose.addEventListener('click', closeTorrentProvidersDialog);
     if (el.torrentProvidersSave) el.torrentProvidersSave.addEventListener('click', saveTorrentProvidersSettings);
     if (el.tankorentImportBtn) el.tankorentImportBtn.addEventListener('click', importTankorentIndexersFromFolder);
+    if (el.tankorentIndexerList) {
+      el.tankorentIndexerList.addEventListener('change', function (e) {
+        var cb = e.target && e.target.closest ? e.target.closest('input[data-indexer-id]') : null;
+        if (!cb) return;
+        if (!state.browserSettings) state.browserSettings = normalizeBrowserSettingsForUi({});
+        if (!state.browserSettings.tankorent) state.browserSettings.tankorent = {};
+        if (!state.browserSettings.tankorent.indexersById || typeof state.browserSettings.tankorent.indexersById !== 'object') {
+          state.browserSettings.tankorent.indexersById = {};
+        }
+        var rid = String(cb.getAttribute('data-indexer-id') || '').trim().toLowerCase();
+        if (!rid) return;
+        state.browserSettings.tankorent.indexersById[rid] = { enabled: !!cb.checked };
+      });
+    }
 
     // Settings hub source actions (delegation)
     if (el.hubSourcesList) {

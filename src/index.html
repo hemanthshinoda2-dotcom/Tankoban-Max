@@ -1241,28 +1241,12 @@ COMMON ANCHORS
 
                 <div class="webProvidersSidebarGroup">
                   <div class="settingsLabel">Built-in sources</div>
-                  <label class="tt-add-check-label">
-                    <input id="webTankorentSitePiratebay" type="checkbox" checked />
-                    <span>PirateBay</span>
-                  </label>
-                  <label class="tt-add-check-label">
-                    <input id="webTankorentSite1337x" type="checkbox" checked />
-                    <span>1337x</span>
-                  </label>
-                  <label class="tt-add-check-label">
-                    <input id="webTankorentSiteNyaa" type="checkbox" checked />
-                    <span>Nyaa</span>
-                  </label>
+                  <div class="webProvidersSidebarHint muted tiny">Built-in indexers: <span id="webTankorentImportedCount">0</span></div>
+                  <div id="webTankorentIndexerList" class="webTankorentIndexerList"></div>
+                  <div id="webTankorentIndexerEmpty" class="muted tiny hidden">No built-in indexers.</div>
                 </div>
 
-                <label class="settingsLabel" for="webTankorentImportPath">Indexer JSON folder</label>
-                <input id="webTankorentImportPath" class="search" type="text" placeholder="C:\ProgramData\Jackett\Indexers" autocomplete="off" />
-                <div class="webProvidersSidebarHint muted tiny">Imported indexers: <span id="webTankorentImportedCount">0</span></div>
-                <div id="webTankorentIndexerList" class="webTankorentIndexerList"></div>
-                <div id="webTankorentIndexerEmpty" class="muted tiny hidden">No imported indexers.</div>
-
                 <div class="settingsActions">
-                  <button id="webTankorentImportBtn" class="btn btn-ghost btn-sm" type="button">Import JSON folder</button>
                   <button id="webTorrentProvidersSave" class="btn" type="button">Save</button>
                   <button id="webTorrentProvidersClose" class="btn btn-ghost btn-sm" type="button">Hide</button>
                 </div>
