@@ -11,6 +11,74 @@ from PySide6.QtWidgets import (
 )
 
 
+class OutlinedButton(QPushButton):
+    """QPushButton that draws text with a black outline for readability on any background."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._fg_color = QColor(255, 255, 255)
+        self._fg_disabled = QColor(255, 255, 255, 40)
+
+    def set_fg_color(self, color: QColor):
+        self._fg_color = color
+
+    def paintEvent(self, event):
+        from PySide6.QtWidgets import QStyleOptionButton, QStyle
+        # Draw button background only (hover highlight, etc.)
+        p = QPainter(self)
+        opt = QStyleOptionButton()
+        self.initStyleOption(opt)
+        # Clear text so style only draws background
+        opt.text = ""
+        opt.icon = self.icon()  # keep icon if any
+        self.style().drawControl(QStyle.ControlElement.CE_PushButton, opt, p, self)
+
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        p.setFont(self.font())
+
+        rect = self.contentsRect()
+        text = self.text()
+        if not text:
+            p.end()
+            return
+
+        align = Qt.AlignmentFlag.AlignCenter
+
+        # Black outline: draw text offset in 8 directions
+        p.setPen(QPen(QColor(0, 0, 0, 200), 1))
+        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+            p.drawText(rect.adjusted(dx, dy, dx, dy), align, text)
+
+        # Foreground
+        fg = self._fg_color if self.isEnabled() else self._fg_disabled
+        p.setPen(fg)
+        p.drawText(rect, align, text)
+        p.end()
+
+
+class OutlinedLabel(QLabel):
+    """QLabel that draws text with a black outline."""
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        p.setFont(self.font())
+        rect = self.contentsRect()
+        text = self.text()
+        if not text:
+            p.end()
+            return
+        align = int(self.alignment())
+        p.setPen(QPen(QColor(0, 0, 0, 200), 1))
+        for dx, dy in ((-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)):
+            p.drawText(rect.adjusted(dx, dy, dx, dy), align, text)
+        p.setPen(self.palette().color(self.foregroundRole()))
+        p.drawText(rect, align, text)
+        p.end()
+
+
 MODE_LABELS = {
     "manual": "Manual",
     "twoPage": "Double Page",
@@ -69,13 +137,13 @@ class TopBar(QFrame):
         row.setContentsMargins(12, 8, 12, 8)
         row.setSpacing(10)
 
-        self.back_btn = QPushButton(_SYM_BACK, self)
+        self.back_btn = OutlinedButton(_SYM_BACK, self)
         self.back_btn.setObjectName("backButton")
         self.back_btn.setToolTip("Back")
         self.back_btn.clicked.connect(self.back_clicked.emit)
         row.addWidget(self.back_btn, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        self.title = QLabel("-", self)
+        self.title = OutlinedLabel("-", self)
         self.title.setObjectName("topTitle")
         row.addWidget(self.title, 1)
 
@@ -416,7 +484,7 @@ class BottomHud(QFrame):
         self.next_btn.clicked.connect(self.next_clicked.emit)
         controls_row.addWidget(self.next_btn, 0)
 
-        self.page_text = QLabel("\u2014", self)  # —
+        self.page_text = OutlinedLabel("\u2014", self)  # —
         self.page_text.setObjectName("pageText")
         controls_row.addWidget(self.page_text, 0)
 
@@ -445,10 +513,12 @@ class BottomHud(QFrame):
 
         outer.addLayout(controls_row)
 
-    def _icon_btn(self, text: str, cls: str, tooltip: str) -> QPushButton:
-        btn = QPushButton(text, self)
+    def _icon_btn(self, text: str, cls: str, tooltip: str) -> OutlinedButton:
+        btn = OutlinedButton(text, self)
         btn.setProperty("class", cls)
         btn.setToolTip(tooltip)
+        if cls == "hudSmall":
+            btn.set_fg_color(QColor(176, 176, 176))  # #b0b0b0
         return btn
 
     def _on_slider_pressed(self):
