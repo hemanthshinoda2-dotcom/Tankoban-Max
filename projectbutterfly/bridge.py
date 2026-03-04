@@ -9579,7 +9579,7 @@ class WebTorrentBridge(QObject):
 
 
 class TorrentSearchBridge(QObject):
-    """Torrent search via Jackett or Prowlarr torznab APIs."""
+    """Tankorent-first torrent search bridge with local JSON indexer support."""
     statusChanged = Signal(str)
     searchResultsReady = Signal(str)
 
@@ -9628,9 +9628,9 @@ class TorrentSearchBridge(QObject):
     @staticmethod
     def _normalize_provider_key(value):
         key = str(value or "").strip().lower()
-        if key in ("jackett", "prowlarr", "tankorent"):
-            return key
-        return "jackett"
+        if key == "tankorent":
+            return "tankorent"
+        return "tankorent"
 
     @staticmethod
     def _normalize_provider_config(src):
@@ -9655,60 +9655,252 @@ class TorrentSearchBridge(QObject):
     @staticmethod
     def _normalize_tankorent_config(src):
         s = src if isinstance(src, dict) else {}
-        timeout = int(s.get("timeoutMs") or 25000)
+        timeout = int(s.get("timeoutMs") or 45000)
         if timeout <= 0:
-            timeout = 25000
+            timeout = 45000
         sites = s.get("sites") if isinstance(s.get("sites"), dict) else {}
+        imported = s.get("importedIndexers") if isinstance(s.get("importedIndexers"), list) else []
+        indexers_by_id = s.get("indexersById") if isinstance(s.get("indexersById"), dict) else {}
+        normalized_imported = []
+        for row in imported:
+            if not isinstance(row, dict):
+                continue
+            rid = str(row.get("id") or row.get("key") or row.get("name") or "").strip()
+            if not rid:
+                continue
+            name = str(row.get("name") or rid).strip() or rid
+            normalized_imported.append({
+                "id": rid,
+                "name": name,
+                "categories": row.get("categories") if isinstance(row.get("categories"), list) else [],
+                "language": str(row.get("language") or "").strip(),
+                "seedersSortSupport": bool(row.get("seedersSortSupport", True)),
+                "status": str(row.get("status") or "active").strip() or "active",
+                "unsupportedReason": str(row.get("unsupportedReason") or "").strip(),
+                "adapterType": str(row.get("adapterType") or "torznab").strip() or "torznab",
+                "baseUrl": str(row.get("baseUrl") or "").strip(),
+                "endpointPath": str(row.get("endpointPath") or "/api").strip() or "/api",
+                "apiKey": str(row.get("apiKey") or "").strip(),
+                "enabled": bool(row.get("enabled", True)),
+                "source": str(row.get("source") or "seed").strip() or "seed",
+            })
         return {
             "enabled": bool(s.get("enabled", True)),
             "timeoutMs": timeout,
+            "importPath": str(s.get("importPath") or "C:\\ProgramData\\Jackett\\Indexers").strip() or "C:\\ProgramData\\Jackett\\Indexers",
             "sites": {
                 "piratebay": bool(sites.get("piratebay", True)),
                 "1337x": bool(sites.get("1337x", True)),
                 "nyaa": bool(sites.get("nyaa", True)),
             },
+            "importedIndexers": normalized_imported,
+            "indexersById": indexers_by_id,
         }
+
+    @staticmethod
+    def _seed_indexers_path():
+        return os.path.join(os.path.dirname(__file__), "browser", "data", "tankorent", "indexers.seed.json")
+
+    @staticmethod
+    def _default_import_paths():
+        paths = [
+            r"C:\ProgramData\Jackett\Indexers",
+            os.path.join(os.getenv("LOCALAPPDATA", ""), "Jackett", "Indexers"),
+        ]
+        return [p for p in paths if p]
+
+    @staticmethod
+    def _safe_indexer_id(value):
+        import re as _re
+        return _re.sub(r"[^a-z0-9._-]+", "_", str(value or "").strip().lower()).strip("_")
+
+    def _load_seed_indexers(self):
+        p = self._seed_indexers_path()
+        if not os.path.isfile(p):
+            return []
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            rows = raw if isinstance(raw, list) else []
+        except Exception:
+            return []
+        out = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            rid = self._safe_indexer_id(row.get("id") or row.get("name") or "")
+            if not rid:
+                continue
+            out.append({
+                "id": rid,
+                "name": str(row.get("name") or rid).strip() or rid,
+                "categories": row.get("categories") if isinstance(row.get("categories"), list) else [],
+                "language": str(row.get("language") or "").strip(),
+                "seedersSortSupport": bool(row.get("seedersSortSupport", True)),
+                "status": str(row.get("status") or "active").strip() or "active",
+                "unsupportedReason": str(row.get("unsupportedReason") or "").strip(),
+                "adapterType": str(row.get("adapterType") or "unsupported").strip() or "unsupported",
+                "baseUrl": str(row.get("baseUrl") or "").strip(),
+                "endpointPath": str(row.get("endpointPath") or "/api").strip() or "/api",
+                "apiKey": str(row.get("apiKey") or "").strip(),
+                "enabled": bool(row.get("enabled", True)),
+                "source": str(row.get("source") or "seed").strip() or "seed",
+            })
+        return out
+
+    def _convert_json_file_to_indexer(self, file_path):
+        rid = self._safe_indexer_id(os.path.splitext(os.path.basename(file_path))[0])
+        if not rid:
+            return None
+        base_url = ""
+        endpoint = "/api"
+        api_key = ""
+        name = rid
+        status = "unsupported"
+        reason = "settings_file_only"
+        adapter_type = "unsupported"
+        categories = []
+        language = ""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                name = str(raw.get("name") or raw.get("title") or rid).strip() or rid
+                base_url = str(raw.get("baseUrl") or raw.get("url") or "").strip()
+                endpoint = str(raw.get("endpointPath") or raw.get("endpoint") or "/api").strip() or "/api"
+                api_key = str(raw.get("apiKey") or "").strip()
+                if isinstance(raw.get("categories"), list):
+                    categories = raw.get("categories")
+                language = str(raw.get("language") or "").strip()
+                status = str(raw.get("status") or status).strip() or status
+                adapter_type = str(raw.get("adapterType") or adapter_type).strip() or adapter_type
+                reason = str(raw.get("unsupportedReason") or reason).strip() or reason
+            elif isinstance(raw, list):
+                name = rid
+                for row in raw:
+                    if not isinstance(row, dict):
+                        continue
+                    key = str(row.get("id") or row.get("name") or "").strip().lower()
+                    value = row.get("value")
+                    if key in ("title", "name", "displayname"):
+                        v = str(value or "").strip()
+                        if v:
+                            name = v
+                    elif key in ("sitelink", "baseurl", "siteurl"):
+                        v = str(value or "").strip()
+                        if v:
+                            base_url = v
+                if base_url:
+                    status = "active"
+                    reason = ""
+                    adapter_type = "torznab"
+                else:
+                    status = "unsupported"
+                    reason = "settings_file_only"
+                    adapter_type = "unsupported"
+        except Exception:
+            return None
+
+        return {
+            "id": rid,
+            "name": name,
+            "categories": categories,
+            "language": language,
+            "seedersSortSupport": True,
+            "status": status,
+            "unsupportedReason": reason,
+            "adapterType": adapter_type,
+            "baseUrl": base_url,
+            "endpointPath": endpoint,
+            "apiKey": api_key,
+            "enabled": True,
+            "source": "local_json",
+        }
+
+    def _import_indexers_from_folder(self, folder_path):
+        folder = str(folder_path or "").strip()
+        if not folder:
+            return {"ok": False, "error": "Folder path is required", "indexers": []}
+        if not os.path.isdir(folder):
+            return {"ok": False, "error": "Folder does not exist", "indexers": []}
+        rows = []
+        for name in sorted(os.listdir(folder)):
+            if not name.lower().endswith(".json"):
+                continue
+            full = os.path.join(folder, name)
+            if not os.path.isfile(full):
+                continue
+            item = self._convert_json_file_to_indexer(full)
+            if item:
+                rows.append(item)
+        if not rows:
+            return {"ok": False, "error": "No valid JSON indexers found", "indexers": []}
+        return {"ok": True, "indexers": rows, "folderPath": folder}
+
+    def _merge_indexers(self, base_rows, incoming_rows):
+        merged = []
+        by_id = {}
+        for row in (base_rows if isinstance(base_rows, list) else []):
+            if not isinstance(row, dict):
+                continue
+            rid = self._safe_indexer_id(row.get("id") or row.get("name") or "")
+            if not rid:
+                continue
+            copy = dict(row)
+            copy["id"] = rid
+            by_id[rid] = copy
+            merged.append(copy)
+        for row in (incoming_rows if isinstance(incoming_rows, list) else []):
+            if not isinstance(row, dict):
+                continue
+            rid = self._safe_indexer_id(row.get("id") or row.get("name") or "")
+            if not rid:
+                continue
+            copy = dict(row)
+            copy["id"] = rid
+            if rid in by_id:
+                by_id[rid].update(copy)
+            else:
+                by_id[rid] = copy
+                merged.append(copy)
+        return merged
 
     def _get_provider_config(self):
         s = self._read_settings()
         ts = s.get("torrentSearch") if isinstance(s.get("torrentSearch"), dict) else {}
-        provider_key = self._normalize_provider_key(
-            ts.get("provider") or s.get("torrentSearchProvider") or "jackett"
-        )
-
-        jk_src = ts.get("jackett") if isinstance(ts.get("jackett"), dict) else (
-            s.get("jackett") if isinstance(s.get("jackett"), dict) else {
-            "baseUrl": s.get("jackettBaseUrl"), "apiKey": s.get("jackettApiKey"),
-            "indexer": s.get("jackettIndexer"), "timeoutMs": s.get("jackettTimeoutMs"),
-            "indexersByCategory": s.get("jackettIndexersByCategory"),
-            }
-        )
-        jackett = self._normalize_provider_config(jk_src)
-
-        pw_src = ts.get("prowlarr") if isinstance(ts.get("prowlarr"), dict) else (
-            s.get("prowlarr") if isinstance(s.get("prowlarr"), dict) else {
-            "baseUrl": s.get("prowlarrBaseUrl"), "apiKey": s.get("prowlarrApiKey"),
-            "indexer": s.get("prowlarrIndexer"), "timeoutMs": s.get("prowlarrTimeoutMs"),
-            "indexersByCategory": s.get("prowlarrIndexersByCategory"),
-            }
-        )
-        prowlarr = self._normalize_provider_config(pw_src)
-
-        tk_src = ts.get("tankorent") if isinstance(ts.get("tankorent"), dict) else (
-            s.get("tankorent") if isinstance(s.get("tankorent"), dict) else {}
-        )
+        provider_key = "tankorent"
+        tk_src = ts.get("tankorent") if isinstance(ts.get("tankorent"), dict) else (s.get("tankorent") if isinstance(s.get("tankorent"), dict) else {})
         tankorent = self._normalize_tankorent_config(tk_src)
-
-        current = jackett
-        if provider_key == "prowlarr":
-            current = prowlarr
-        elif provider_key == "tankorent":
-            current = tankorent
+        if not tankorent.get("importedIndexers"):
+            seed = self._load_seed_indexers()
+            if seed:
+                tankorent["importedIndexers"] = seed
+                try:
+                    raw_doc, cfg, wrapped = self._read_settings_document()
+                    if not isinstance(cfg, dict):
+                        cfg = {}
+                    ts_cfg = cfg.setdefault("torrentSearch", {})
+                    tk_cfg = ts_cfg.setdefault("tankorent", {})
+                    tk_cfg["importedIndexers"] = seed
+                    ts_cfg["provider"] = "tankorent"
+                    cfg["torrentSearchProvider"] = "tankorent"
+                    if "tankorent" not in cfg:
+                        cfg["tankorent"] = {}
+                    if isinstance(cfg.get("tankorent"), dict):
+                        cfg["tankorent"]["importedIndexers"] = seed
+                    path = _data_path("web_browser_settings.json")
+                    out_doc = raw_doc if isinstance(raw_doc, dict) else {}
+                    if wrapped:
+                        out_doc["settings"] = cfg
+                    else:
+                        out_doc = cfg
+                    with open(path, "w", encoding="utf-8") as f:
+                        json.dump(out_doc, f, ensure_ascii=False, indent=2)
+                except Exception:
+                    pass
         return {
             "provider": provider_key,
-            "current": current,
-            "jackett": jackett,
-            "prowlarr": prowlarr,
+            "current": tankorent,
             "tankorent": tankorent,
         }
 
@@ -9995,21 +10187,11 @@ class TorrentSearchBridge(QObject):
 
     @staticmethod
     def _provider_fallback_chain(provider_key):
-        key = TorrentSearchBridge._normalize_provider_key(provider_key)
-        if key == "prowlarr":
-            return ["prowlarr", "jackett", "tankorent"]
-        if key == "tankorent":
-            return ["tankorent", "jackett", "prowlarr"]
-        return ["jackett", "prowlarr", "tankorent"]
+        return ["tankorent"]
 
     @staticmethod
     def _provider_cfg(cfg_set, provider_key):
-        key = TorrentSearchBridge._normalize_provider_key(provider_key)
-        if key == "prowlarr":
-            return cfg_set.get("prowlarr", {})
-        if key == "tankorent":
-            return cfg_set.get("tankorent", {})
-        return cfg_set.get("jackett", {})
+        return cfg_set.get("tankorent", {})
 
     def _resolve_tankorent_sites(self, cfg, payload):
         enabled = set()
@@ -10045,6 +10227,74 @@ class TorrentSearchBridge(QObject):
 
         return enabled
 
+    def _resolve_tankorent_imported_indexers(self, cfg, payload):
+        out = []
+        rows = cfg.get("importedIndexers") if isinstance(cfg.get("importedIndexers"), list) else []
+        source_filter = str(payload.get("source") or payload.get("indexer") or "").strip().lower()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            if not bool(row.get("enabled", True)):
+                continue
+            rid = str(row.get("id") or "").strip().lower()
+            name = str(row.get("name") or "").strip().lower()
+            if source_filter and source_filter != "all":
+                if source_filter not in (rid, name):
+                    continue
+            out.append(row)
+        return out
+
+    def _query_tankorent_imported(self, cfg, payload):
+        from urllib.parse import urlencode
+        imported = self._resolve_tankorent_imported_indexers(cfg, payload)
+        if not imported:
+            return []
+        query_text = str(payload.get("query") or "").strip()
+        category = str(payload.get("category") or "all").strip().lower()
+        no_cat = bool(payload.get("noCategoryFilter"))
+        limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
+        page = max(0, int(payload.get("page") or 0))
+        timeout_cfg = {"timeoutMs": int(cfg.get("timeoutMs") or 45000)}
+
+        out = []
+        seen = set()
+        for idx in imported:
+            if not isinstance(idx, dict):
+                continue
+            if str(idx.get("adapterType") or "").strip().lower() == "unsupported":
+                continue
+            base_url = str(idx.get("baseUrl") or "").strip().rstrip("/")
+            if not base_url:
+                continue
+            endpoint = str(idx.get("endpointPath") or "/api").strip() or "/api"
+            if not endpoint.startswith("/"):
+                endpoint = "/" + endpoint
+            params = {"t": "search"}
+            if query_text:
+                params["q"] = query_text
+            if not no_cat:
+                cats = self._get_category_cats(category)
+                if cats:
+                    params["cat"] = cats
+            params["limit"] = str(limit)
+            params["offset"] = str(page * limit)
+            api_key = str(idx.get("apiKey") or "").strip()
+            if api_key:
+                params["apikey"] = api_key
+            url = base_url + endpoint + "?" + urlencode(params)
+            res = self._fetch_text(url, timeout_cfg)
+            if not res.get("ok"):
+                continue
+            parsed = self._parse_items(res.get("body", ""), idx.get("name") or idx.get("id") or "Indexer", "tankorent")
+            for item in parsed:
+                key = str(item.get("magnetUri") or item.get("id") or "").lower()
+                if key and key in seen:
+                    continue
+                if key:
+                    seen.add(key)
+                out.append(item)
+        return out
+
     def _query_tankorent(self, cfg, payload):
         limit = min(self._MAX_LIMIT, max(1, int(payload.get("limit") or self._DEFAULT_LIMIT)))
         page = max(0, int(payload.get("page") or 0))
@@ -10058,8 +10308,9 @@ class TorrentSearchBridge(QObject):
             return {"ok": True, "items": [], "provider": "tankorent", **envelope, "returned": 0}
 
         sites = self._resolve_tankorent_sites(cfg or {}, payload)
-        if not sites:
-            return {"ok": False, "items": [], "error": "No Tankorent sites enabled", "provider": "tankorent", **envelope, "returned": 0}
+        imported_rows = self._resolve_tankorent_imported_indexers(cfg or {}, payload)
+        if not sites and not imported_rows:
+            return {"ok": False, "items": [], "error": "No Tankorent sources enabled", "provider": "tankorent", **envelope, "returned": 0}
 
         try:
             try:
@@ -10068,7 +10319,7 @@ class TorrentSearchBridge(QObject):
                 from projectbutterfly.browser.torrent_scrapers import search_all
 
             req_limit = min(200, max(limit, (page + 1) * limit))
-            rows = search_all(query_text, sites=sites, limit=req_limit)
+            rows = search_all(query_text, sites=sites, limit=req_limit) if sites else []
             start = page * limit
             rows = rows[start:start + limit]
 
@@ -10105,6 +10356,20 @@ class TorrentSearchBridge(QObject):
                     "typeKeys": [t_key] if t_key else [],
                     "typeLabels": [t_label] if t_label else [],
                 })
+            imported_items = self._query_tankorent_imported(cfg or {}, payload)
+            if imported_items:
+                by_key = {}
+                for item in items:
+                    key = str(item.get("magnetUri") or item.get("id") or "").lower()
+                    if key:
+                        by_key[key] = True
+                for item in imported_items:
+                    key = str(item.get("magnetUri") or item.get("id") or "").lower()
+                    if key and by_key.get(key):
+                        continue
+                    if key:
+                        by_key[key] = True
+                    items.append(item)
             return {"ok": True, "items": items, "provider": "tankorent", **envelope, "returned": len(items)}
         except Exception as e:
             return {"ok": False, "items": [], "error": str(e), "provider": "tankorent", **envelope, "returned": 0}
@@ -10377,6 +10642,18 @@ class TorrentSearchBridge(QObject):
             for site_id, name in (("piratebay", "PirateBay"), ("1337x", "1337x"), ("nyaa", "Nyaa")):
                 if bool(sites_cfg.get(site_id, True)):
                     out.append({"id": site_id, "name": name})
+            imported = cfg.get("importedIndexers") if isinstance(cfg.get("importedIndexers"), list) else []
+            for row in imported:
+                if not isinstance(row, dict):
+                    continue
+                if not bool(row.get("enabled", True)):
+                    continue
+                rid = str(row.get("id") or "").strip()
+                if not rid:
+                    continue
+                name = str(row.get("name") or rid).strip() or rid
+                status = str(row.get("status") or "active").strip() or "active"
+                out.append({"id": rid, "name": name, "status": status})
             return json.dumps({"ok": True, "indexers": out, "source": "tankorent", "provider": provider_key})
 
         # Try live API
@@ -10434,22 +10711,24 @@ class TorrentSearchBridge(QObject):
 
     @Slot(str, result=str)
     def saveSettings(self, p="{}"):
-        """Persist Prowlarr/Jackett config from home.html Tools panel."""
+        """Persist Tankorent config from Sources provider panel."""
         try:
             data = json.loads(p) if p else {}
             raw_doc, cfg, wrapped = self._read_settings_document()
             if not isinstance(cfg, dict):
                 cfg = {}
             ts = cfg.setdefault("torrentSearch", {})
-            if "provider" in data:
-                ts["provider"] = self._normalize_provider_key(data.get("provider"))
-                cfg["torrentSearchProvider"] = ts["provider"]
-            for key in ("jackett", "prowlarr", "tankorent"):
-                if key in data and isinstance(data[key], dict):
-                    ts.setdefault(key, {}).update(data[key])
-                    # Backward compatible mirrors.
-                    if key in ("jackett", "prowlarr"):
-                        cfg.setdefault(key, {}).update(data[key])
+            ts["provider"] = "tankorent"
+            cfg["torrentSearchProvider"] = "tankorent"
+
+            tk_payload = {}
+            if isinstance(data.get("tankorent"), dict):
+                tk_payload.update(data.get("tankorent"))
+            if isinstance(data.get("torrentSearch"), dict) and isinstance(data["torrentSearch"].get("tankorent"), dict):
+                tk_payload.update(data["torrentSearch"]["tankorent"])
+            if tk_payload:
+                ts.setdefault("tankorent", {}).update(tk_payload)
+                cfg.setdefault("tankorent", {}).update(tk_payload)
             if "fallbackPolicy" in data and isinstance(data.get("fallbackPolicy"), dict):
                 ts["fallbackPolicy"] = data.get("fallbackPolicy")
 
@@ -10466,8 +10745,61 @@ class TorrentSearchBridge(QObject):
             return json.dumps(_err(str(e)))
 
     @Slot(result=str)
+    @Slot(str, result=str)
+    def importLocalIndexers(self, p="{}"):
+        try:
+            payload = _p(p)
+            folder_path = str(payload.get("folderPath") or "").strip()
+            merge = bool(payload.get("merge", True))
+            if not folder_path:
+                for candidate in self._default_import_paths():
+                    if os.path.isdir(candidate):
+                        folder_path = candidate
+                        break
+            if not folder_path:
+                return json.dumps({"ok": False, "error": "Import folder is not configured"})
+            imported_res = self._import_indexers_from_folder(folder_path)
+            if not imported_res.get("ok"):
+                return json.dumps(imported_res)
+            imported = imported_res.get("indexers") if isinstance(imported_res.get("indexers"), list) else []
+
+            raw_doc, cfg, wrapped = self._read_settings_document()
+            if not isinstance(cfg, dict):
+                cfg = {}
+            ts = cfg.setdefault("torrentSearch", {})
+            tk = ts.setdefault("tankorent", {})
+            tk_norm = self._normalize_tankorent_config(tk)
+            base_rows = tk_norm.get("importedIndexers") if merge else []
+            merged = self._merge_indexers(base_rows, imported)
+            tk["importedIndexers"] = merged
+            tk["importPath"] = folder_path
+            ts["provider"] = "tankorent"
+            cfg["torrentSearchProvider"] = "tankorent"
+            cfg.setdefault("tankorent", {})
+            if isinstance(cfg.get("tankorent"), dict):
+                cfg["tankorent"]["importedIndexers"] = merged
+                cfg["tankorent"]["importPath"] = folder_path
+
+            out_doc = raw_doc if isinstance(raw_doc, dict) else {}
+            if wrapped:
+                out_doc["settings"] = cfg
+            else:
+                out_doc = cfg
+            with open(_data_path("web_browser_settings.json"), "w", encoding="utf-8") as f:
+                json.dump(out_doc, f, ensure_ascii=False, indent=2)
+
+            return json.dumps({
+                "ok": True,
+                "folderPath": folder_path,
+                "importedCount": len(imported),
+                "totalCount": len(merged),
+            })
+        except Exception as e:
+            return json.dumps(_err(str(e)))
+
+    @Slot(result=str)
     def getConfig(self):
-        """Return current Prowlarr/Jackett provider config for the Tools panel."""
+        """Return current Tankorent provider config."""
         try:
             return json.dumps({"ok": True, **self._get_provider_config()})
         except Exception as e:
@@ -12818,6 +13150,7 @@ BRIDGE_SHIM_JS = r"""
         query:           wrap(b.torrentSearch.query, b.torrentSearch),
         health:          wrap(b.torrentSearch.health, b.torrentSearch),
         indexers:        wrap(b.torrentSearch.indexers, b.torrentSearch),
+        importLocalIndexers: wrap(b.torrentSearch.importLocalIndexers, b.torrentSearch),
         saveSettings:    wrap(b.torrentSearch.saveSettings, b.torrentSearch),
         getConfig:       wrap(b.torrentSearch.getConfig, b.torrentSearch),
         onStatusChanged: onEvent(b.torrentSearch.statusChanged),

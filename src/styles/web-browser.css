@@ -221,6 +221,54 @@ body.sourcesMinimalTorrentV1 #torrent-container #tt-body {
   display: inline-flex !important;
 }
 
+#webLibraryView .libSidebar .webProvidersSidebarPanel {
+  display: none;
+}
+
+#webLibraryView .libSidebar .webProvidersSidebarPanel:not(.hidden) {
+  display: block;
+}
+
+.webProvidersSidebarPanel {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 12px;
+  background: rgba(6, 16, 30, 0.92);
+}
+
+.webProvidersSidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.webProvidersSidebarTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.webProvidersSidebarBody {
+  display: grid;
+  gap: 8px;
+}
+
+.webProvidersSidebarGroup {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--wb-border-subtle);
+  border-radius: 10px;
+  background: rgba(12, 22, 36, 0.6);
+}
+
+.webProvidersSidebarHint {
+  padding: 0 2px;
+}
+
 #webLibraryView #webHomeView > .continuePanel,
 #webLibraryView #webHomeDownloadsPanel,
 #webLibraryView #webHomeView > .panel.seriesPanel {

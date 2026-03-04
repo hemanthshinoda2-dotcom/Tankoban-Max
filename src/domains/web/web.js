@@ -142,16 +142,16 @@
     sourceName:       qs('webSourceName'),
     sourceUrl:        qs('webSourceUrl'),
     sourceSaveBtn:    qs('webSourceSaveBtn'),
-    torrentProvidersOverlay: qs('webTorrentProvidersOverlay'),
+    torrentProvidersPanel: qs('webTorrentProvidersPanel'),
     torrentProvidersClose: qs('webTorrentProvidersClose'),
     torrentProvidersSave: qs('webTorrentProvidersSave'),
-    torrentProviderSelect: qs('webTorrentProviderSelect'),
-    jackettBaseUrl: qs('webJackettBaseUrl'),
-    jackettApiKey: qs('webJackettApiKey'),
-    prowlarrBaseUrl: qs('webProwlarrBaseUrl'),
-    prowlarrApiKey: qs('webProwlarrApiKey'),
-    providerOpenJackettUiBtn: qs('webProviderOpenJackettUiBtn'),
-    providerOpenProwlarrUiBtn: qs('webProviderOpenProwlarrUiBtn'),
+    tankorentTimeoutMs: qs('webTankorentTimeoutMs'),
+    tankorentSitePiratebay: qs('webTankorentSitePiratebay'),
+    tankorentSite1337x: qs('webTankorentSite1337x'),
+    tankorentSiteNyaa: qs('webTankorentSiteNyaa'),
+    tankorentImportPath: qs('webTankorentImportPath'),
+    tankorentImportBtn: qs('webTankorentImportBtn'),
+    tankorentImportedCount: qs('webTankorentImportedCount'),
 
     // Settings hub elements
     hubSourcesList:  qs('webHubSourcesList'),
@@ -371,9 +371,14 @@
       sourcesBrowser: { expandedByDefault: true, lastUrl: '', chromeDensity: 'single_row_v1', omniboxMode: 'collapsed_chip' },
       privacy: { doNotTrack: false, clearOnExit: { history: false, downloads: false, cookies: false, cache: false } }
       ,
-      jackett: { baseUrl: '', apiKey: '', indexer: 'all', timeoutMs: 30000, indexersByCategory: { all: 'all', comics: 'all', books: 'all', tv: 'all' } },
-      prowlarr: { baseUrl: '', apiKey: '', indexer: 'all', timeoutMs: 30000, indexersByCategory: { all: 'all', comics: 'all', books: 'all', tv: 'all' } },
-      torrentSearch: { provider: 'jackett' }
+      tankorent: {
+        enabled: true,
+        timeoutMs: 45000,
+        sites: { piratebay: true, '1337x': true, nyaa: true },
+        importPath: 'C:\\ProgramData\\Jackett\\Indexers',
+        importedIndexers: [],
+      },
+      torrentSearch: { provider: 'tankorent' }
     },
     torActive: false,
     torConnecting: false,
@@ -638,6 +643,7 @@
       search: feat && typeof feat.search === 'function' ? feat.search : (api.torrentSearch && api.torrentSearch.query ? api.torrentSearch.query : null),
       health: feat && typeof feat.health === 'function' ? feat.health : (api.torrentSearch && api.torrentSearch.health ? api.torrentSearch.health : null),
       indexers: feat && typeof feat.indexers === 'function' ? feat.indexers : (api.torrentSearch && api.torrentSearch.indexers ? api.torrentSearch.indexers : null),
+      importLocalIndexers: feat && typeof feat.importLocalIndexers === 'function' ? feat.importLocalIndexers : (api.torrentSearch && api.torrentSearch.importLocalIndexers ? api.torrentSearch.importLocalIndexers : null),
       resolveMetadata: feat && typeof feat.resolveMetadata === 'function' ? feat.resolveMetadata : (api.webTorrent && api.webTorrent.resolveMetadata ? api.webTorrent.resolveMetadata : null),
       startResolve: feat && typeof feat.startResolve === 'function' ? feat.startResolve : (api.webTorrent && api.webTorrent.startResolve ? api.webTorrent.startResolve : null),
       getResolveStatus: feat && typeof feat.getResolveStatus === 'function' ? feat.getResolveStatus : (api.webTorrent && api.webTorrent.getResolveStatus ? api.webTorrent.getResolveStatus : null),
@@ -2970,7 +2976,6 @@
     var locked = false;
     if (el.sourcesBrowserDrawer && !el.sourcesBrowserDrawer.classList.contains('hidden')) locked = true;
     if (el.sourcesBrowserTabSearchOverlay && !el.sourcesBrowserTabSearchOverlay.classList.contains('hidden')) locked = true;
-    if (el.torrentProvidersOverlay && !el.torrentProvidersOverlay.classList.contains('hidden')) locked = true;
     if (el.sourcesBrowserCtxOverlay && !el.sourcesBrowserCtxOverlay.classList.contains('hidden')) locked = true;
     state.sourcesBrowserOverlayLocked = locked;
     scheduleSourcesBrowserViewportLayout();
@@ -5394,11 +5399,9 @@
 
   function getSourcesSearchMaxWaitMs() {
     var s = state.browserSettings || {};
-    var providerKey = String(s.torrentSearch && s.torrentSearch.provider || 'jackett').trim().toLowerCase();
+    var providerKey = String(s.torrentSearch && s.torrentSearch.provider || 'tankorent').trim().toLowerCase();
     var providerCfg = {};
-    if (providerKey === 'prowlarr') providerCfg = (s.prowlarr && typeof s.prowlarr === 'object') ? s.prowlarr : {};
-    else if (providerKey === 'tankorent') providerCfg = (s.tankorent && typeof s.tankorent === 'object') ? s.tankorent : ((s.torrentSearch && s.torrentSearch.tankorent) || {});
-    else providerCfg = (s.jackett && typeof s.jackett === 'object') ? s.jackett : {};
+    if (providerKey === 'tankorent') providerCfg = (s.tankorent && typeof s.tankorent === 'object') ? s.tankorent : ((s.torrentSearch && s.torrentSearch.tankorent) || {});
     var providerMs = Number(providerCfg.timeoutMs || 12000);
     if (!isFinite(providerMs) || providerMs <= 0) providerMs = 12000;
     var explicit = Number(s && s.torrent && s.torrent.search && s.torrent.search.maxWaitMs || 0);
@@ -5626,30 +5629,11 @@
 
   function openTorrentProvidersDialog() {
     syncBrowserSettingsControls();
-    if (el.torrentProvidersOverlay) el.torrentProvidersOverlay.classList.remove('hidden');
-    syncSourcesBrowserOverlayLock();
+    if (el.torrentProvidersPanel) el.torrentProvidersPanel.classList.remove('hidden');
   }
 
   function closeTorrentProvidersDialog() {
-    if (el.torrentProvidersOverlay) el.torrentProvidersOverlay.classList.add('hidden');
-    syncSourcesBrowserOverlayLock();
-  }
-
-  function normalizeProviderBaseUrl(raw) {
-    var s = String(raw || '').trim();
-    if (!s) return '';
-    if (!/^https?:\/\//i.test(s)) s = 'http://' + s;
-    try {
-      var u = new URL(s);
-      var proto = /^https?:$/i.test(u.protocol) ? u.protocol.toLowerCase() : 'http:';
-      var host = String(u.host || '').trim();
-      if (!host) return '';
-      var normalized = proto + '//' + host + String(u.pathname || '');
-      normalized = normalized.replace(/\/+$/, '');
-      return normalized;
-    } catch (_e) {
-      return '';
-    }
+    if (el.torrentProvidersPanel) el.torrentProvidersPanel.classList.add('hidden');
   }
 
   function classifyProviderHealthMessage(rawMsg) {
@@ -5669,9 +5653,7 @@
     var srcOps = getSourcesOps();
     if (!srcOps || typeof srcOps.health !== 'function') return Promise.resolve(null);
     return srcOps.health().then(function (res) {
-      var provider = String(res && res.details && res.details.provider || (state.browserSettings && state.browserSettings.torrentSearch && state.browserSettings.torrentSearch.provider) || 'jackett').trim().toLowerCase();
-      if (provider !== 'prowlarr') provider = 'jackett';
-      var pLabel = provider === 'prowlarr' ? 'Prowlarr' : 'Jackett';
+      var pLabel = 'Tankorent';
       if (res && res.ready) {
         if (!options.silent) showToast(pLabel + ' is healthy');
         return res;
@@ -5681,69 +5663,82 @@
       return res;
     }).catch(function (err) {
       if (!options.silent) {
-        var active = String(state.browserSettings && state.browserSettings.torrentSearch && state.browserSettings.torrentSearch.provider || 'jackett').toLowerCase();
-        var label = active === 'prowlarr' ? 'Prowlarr' : 'Jackett';
-        showToast(label + ': ' + classifyProviderHealthMessage(err && err.message));
+        showToast('Tankorent: ' + classifyProviderHealthMessage(err && err.message));
       }
       return null;
     });
   }
 
-  function openProviderWebUi(rawUrl) {
-    var url = normalizeProviderBaseUrl(rawUrl);
-    if (!url) {
-      showToast('Set a valid provider base URL first');
+  function normalizeImportPath(raw) {
+    var p = String(raw || '').trim();
+    if (!p) return 'C:\\ProgramData\\Jackett\\Indexers';
+    return p.replace(/\//g, '\\');
+  }
+
+  function updateTankorentImportedCount() {
+    if (!el.tankorentImportedCount) return;
+    var imported = state.browserSettings
+      && state.browserSettings.tankorent
+      && Array.isArray(state.browserSettings.tankorent.importedIndexers)
+      ? state.browserSettings.tankorent.importedIndexers
+      : [];
+    el.tankorentImportedCount.textContent = String(imported.length || 0);
+  }
+
+  function importTankorentIndexersFromFolder() {
+    var srcOps = getSourcesOps();
+    if (!srcOps || typeof srcOps.importLocalIndexers !== 'function') {
+      showToast('Indexer importer is unavailable');
       return;
     }
-    ensureSourcesModeActive().then(function () {
-      closeTorrentProvidersDialog();
-      forceSourcesViewVisible();
-      applySourcesWorkspace(state.sourcesSubMode === 'downloads' ? 'downloads' : 'search');
-      initSourcesBrowser();
-      if (!getSourcesActiveTab()) {
-        openSourcesTab('', { switchTo: true, focus: false, persist: false, home: true });
-      }
-      var ok = false;
-      try { ok = navigateSourcesBrowser(url, { focus: true }); } catch (_eNow) { ok = false; }
-      if (ok) {
-        showToast('Opened provider UI in TankoBrowser');
+    var folderPath = normalizeImportPath(el.tankorentImportPath && el.tankorentImportPath.value);
+    if (el.tankorentImportPath) el.tankorentImportPath.value = folderPath;
+    showToast('Importing indexers from folder...');
+    srcOps.importLocalIndexers({ folderPath: folderPath, merge: true }).then(function (res) {
+      if (!res || !res.ok) {
+        showToast((res && res.error) || 'Indexer import failed');
         return;
       }
+      var imported = Number(res.importedCount || 0) || 0;
+      var total = Number(res.totalCount || imported) || imported;
+      showToast('Imported ' + String(imported) + ' indexers (' + String(total) + ' total)');
+      saveBrowserSettings({
+        torrentSearch: { provider: 'tankorent' },
+        tankorent: { importPath: folderPath }
+      });
       setTimeout(function () {
-        var okRetry = false;
-        try { okRetry = navigateSourcesBrowser(url, { focus: true }); } catch (_eRetry) { okRetry = false; }
-        if (okRetry) {
-          showToast('Opened provider UI in TankoBrowser');
-          return;
-        }
-        showToast('Unable to open provider UI');
-      }, 220);
+        loadSourcesSearchIndexers();
+        runActiveProviderHealthCheck({ silent: true });
+      }, 120);
+    }).catch(function (err) {
+      showToast('Indexer import failed: ' + String((err && err.message) || err || 'unknown error'));
     });
   }
 
   function saveTorrentProvidersSettings() {
-    var provider = String(el.torrentProviderSelect && el.torrentProviderSelect.value || 'jackett').trim().toLowerCase();
-    if (provider !== 'prowlarr') provider = 'jackett';
-    var jackettBaseUrl = normalizeProviderBaseUrl(el.jackettBaseUrl && el.jackettBaseUrl.value);
-    var prowlarrBaseUrl = normalizeProviderBaseUrl(el.prowlarrBaseUrl && el.prowlarrBaseUrl.value);
-    if (el.jackettBaseUrl) el.jackettBaseUrl.value = jackettBaseUrl;
-    if (el.prowlarrBaseUrl) el.prowlarrBaseUrl.value = prowlarrBaseUrl;
+    var timeoutMs = Number(el.tankorentTimeoutMs && el.tankorentTimeoutMs.value || 45000) || 45000;
+    timeoutMs = Math.max(6000, Math.min(120000, Math.round(timeoutMs)));
+    if (el.tankorentTimeoutMs) el.tankorentTimeoutMs.value = String(timeoutMs);
+    var importPath = normalizeImportPath(el.tankorentImportPath && el.tankorentImportPath.value);
+    if (el.tankorentImportPath) el.tankorentImportPath.value = importPath;
     saveBrowserSettings({
-      torrentSearch: { provider: provider },
-      jackett: {
-        baseUrl: jackettBaseUrl,
-        apiKey: String(el.jackettApiKey && el.jackettApiKey.value || '').trim()
-      },
-      prowlarr: {
-        baseUrl: prowlarrBaseUrl,
-        apiKey: String(el.prowlarrApiKey && el.prowlarrApiKey.value || '').trim()
+      torrentSearch: { provider: 'tankorent' },
+      tankorent: {
+        enabled: true,
+        timeoutMs: timeoutMs,
+        importPath: importPath,
+        sites: {
+          piratebay: !!(el.tankorentSitePiratebay && el.tankorentSitePiratebay.checked),
+          '1337x': !!(el.tankorentSite1337x && el.tankorentSite1337x.checked),
+          nyaa: !!(el.tankorentSiteNyaa && el.tankorentSiteNyaa.checked),
+        }
       }
     });
-    closeTorrentProvidersDialog();
     setTimeout(function () {
       loadSourcesSearchIndexers();
     }, 150);
-    showToast('Torrent provider settings saved');
+    updateTankorentImportedCount();
+    showToast('Tankorent settings saved');
     setTimeout(function () { runActiveProviderHealthCheck({ silent: false }); }, 200);
   }
 
@@ -5787,15 +5782,15 @@
     var dls = (src.downloads && typeof src.downloads === 'object') ? src.downloads : {};
     var privacy = (src.privacy && typeof src.privacy === 'object') ? src.privacy : {};
     var clearOnExit = (privacy.clearOnExit && typeof privacy.clearOnExit === 'object') ? privacy.clearOnExit : {};
-    var jackett = (src.jackett && typeof src.jackett === 'object') ? src.jackett : {};
-    var prowlarr = (src.prowlarr && typeof src.prowlarr === 'object') ? src.prowlarr : {};
+    var tankorent = (src.tankorent && typeof src.tankorent === 'object') ? src.tankorent : {};
     var torrent = (src.torrent && typeof src.torrent === 'object') ? src.torrent : {};
     var torrentSidecar = (torrent.sidecar && typeof torrent.sidecar === 'object') ? torrent.sidecar : {};
     var torrentSearchRuntime = (torrent.search && typeof torrent.search === 'object') ? torrent.search : {};
     var torrentSearch = (src.torrentSearch && typeof src.torrentSearch === 'object') ? src.torrentSearch : {};
     var sourcesBrowser = (src.sourcesBrowser && typeof src.sourcesBrowser === 'object') ? src.sourcesBrowser : {};
-    var provider = String(torrentSearch.provider || src.torrentSearchProvider || 'jackett').trim().toLowerCase();
-    if (provider !== 'prowlarr') provider = 'jackett';
+    var provider = 'tankorent';
+    var sites = (tankorent.sites && typeof tankorent.sites === 'object') ? tankorent.sites : {};
+    var imported = Array.isArray(tankorent.importedIndexers) ? tankorent.importedIndexers : [];
     return {
       defaultSearchEngine: String(src.defaultSearchEngine || 'yandex').trim().toLowerCase() || 'yandex',
       parityV1Enabled: src.parityV1Enabled !== false,
@@ -5817,19 +5812,16 @@
         omniboxMode: String(sourcesBrowser.omniboxMode || 'collapsed_chip').trim().toLowerCase() || 'collapsed_chip'
       },
       privacy: { doNotTrack: !!privacy.doNotTrack, clearOnExit: { history: !!clearOnExit.history, downloads: !!clearOnExit.downloads, cookies: !!clearOnExit.cookies, cache: !!clearOnExit.cache } },
-      jackett: {
-        baseUrl: String(jackett.baseUrl || src.jackettBaseUrl || '').trim(),
-        apiKey: String(jackett.apiKey || src.jackettApiKey || '').trim(),
-        indexer: String(jackett.indexer || src.jackettIndexer || 'all').trim() || 'all',
-        timeoutMs: Number(jackett.timeoutMs || src.jackettTimeoutMs || 30000) || 30000,
-        indexersByCategory: jackett.indexersByCategory && typeof jackett.indexersByCategory === 'object' ? jackett.indexersByCategory : { all: 'all', comics: 'all', books: 'all', tv: 'all' }
-      },
-      prowlarr: {
-        baseUrl: String(prowlarr.baseUrl || src.prowlarrBaseUrl || '').trim(),
-        apiKey: String(prowlarr.apiKey || src.prowlarrApiKey || '').trim(),
-        indexer: String(prowlarr.indexer || src.prowlarrIndexer || 'all').trim() || 'all',
-        timeoutMs: Number(prowlarr.timeoutMs || src.prowlarrTimeoutMs || 30000) || 30000,
-        indexersByCategory: prowlarr.indexersByCategory && typeof prowlarr.indexersByCategory === 'object' ? prowlarr.indexersByCategory : { all: 'all', comics: 'all', books: 'all', tv: 'all' }
+      tankorent: {
+        enabled: tankorent.enabled !== false,
+        timeoutMs: Number(tankorent.timeoutMs || torrentSearchRuntime.maxWaitMs || 45000) || 45000,
+        importPath: String(tankorent.importPath || src.tankorentImportPath || 'C:\\ProgramData\\Jackett\\Indexers').trim(),
+        sites: {
+          piratebay: sites.piratebay !== false,
+          '1337x': sites['1337x'] !== false,
+          nyaa: sites.nyaa !== false,
+        },
+        importedIndexers: imported,
       },
       torrentSearch: { provider: provider },
       torrent: {
@@ -5862,11 +5854,12 @@
     if (el.hubClearOnExitDownloads) el.hubClearOnExitDownloads.checked = s.privacy.clearOnExit.downloads;
     if (el.hubClearOnExitCookies) el.hubClearOnExitCookies.checked = s.privacy.clearOnExit.cookies;
     if (el.hubClearOnExitCache) el.hubClearOnExitCache.checked = s.privacy.clearOnExit.cache;
-    if (el.torrentProviderSelect) el.torrentProviderSelect.value = String(s.torrentSearch && s.torrentSearch.provider || 'jackett');
-    if (el.jackettBaseUrl) el.jackettBaseUrl.value = String(s.jackett && s.jackett.baseUrl || '');
-    if (el.jackettApiKey) el.jackettApiKey.value = String(s.jackett && s.jackett.apiKey || '');
-    if (el.prowlarrBaseUrl) el.prowlarrBaseUrl.value = String(s.prowlarr && s.prowlarr.baseUrl || '');
-    if (el.prowlarrApiKey) el.prowlarrApiKey.value = String(s.prowlarr && s.prowlarr.apiKey || '');
+    if (el.tankorentTimeoutMs) el.tankorentTimeoutMs.value = String(Number(s.tankorent && s.tankorent.timeoutMs || 45000) || 45000);
+    if (el.tankorentSitePiratebay) el.tankorentSitePiratebay.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites.piratebay !== false);
+    if (el.tankorentSite1337x) el.tankorentSite1337x.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites['1337x'] !== false);
+    if (el.tankorentSiteNyaa) el.tankorentSiteNyaa.checked = !!(s.tankorent && s.tankorent.sites && s.tankorent.sites.nyaa !== false);
+    if (el.tankorentImportPath) el.tankorentImportPath.value = String(s.tankorent && s.tankorent.importPath || 'C:\\ProgramData\\Jackett\\Indexers');
+    updateTankorentImportedCount();
     applySourcesMinimalFlag();
     state.sourcesBrowserHomeReady = false;
     ensureSourcesHomeEngineOptions();
@@ -6495,21 +6488,7 @@
     if (el.utilityTorrentProvidersBtn) el.utilityTorrentProvidersBtn.addEventListener('click', openTorrentProvidersDialog);
     if (el.torrentProvidersClose) el.torrentProvidersClose.addEventListener('click', closeTorrentProvidersDialog);
     if (el.torrentProvidersSave) el.torrentProvidersSave.addEventListener('click', saveTorrentProvidersSettings);
-    if (el.torrentProvidersOverlay) {
-      el.torrentProvidersOverlay.addEventListener('click', function (e) {
-        if (e.target === el.torrentProvidersOverlay) closeTorrentProvidersDialog();
-      });
-    }
-    if (el.providerOpenJackettUiBtn) {
-      el.providerOpenJackettUiBtn.addEventListener('click', function () {
-        openProviderWebUi((el.jackettBaseUrl && el.jackettBaseUrl.value) || (state.browserSettings && state.browserSettings.jackett && state.browserSettings.jackett.baseUrl));
-      });
-    }
-    if (el.providerOpenProwlarrUiBtn) {
-      el.providerOpenProwlarrUiBtn.addEventListener('click', function () {
-        openProviderWebUi((el.prowlarrBaseUrl && el.prowlarrBaseUrl.value) || (state.browserSettings && state.browserSettings.prowlarr && state.browserSettings.prowlarr.baseUrl));
-      });
-    }
+    if (el.tankorentImportBtn) el.tankorentImportBtn.addEventListener('click', importTankorentIndexersFromFolder);
 
     // Settings hub source actions (delegation)
     if (el.hubSourcesList) {

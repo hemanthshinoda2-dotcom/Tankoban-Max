@@ -1,0 +1,478 @@
+﻿[
+    {
+        "id":  "0magnet",
+        "name":  "0magnet",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "1337x",
+        "name":  "1337x",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "animetosho",
+        "name":  "animetosho",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "anirena",
+        "name":  "aniRena",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "anisource",
+        "name":  "anisource",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "audiobookbay",
+        "name":  "audiobookbay",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "bangumi-moe",
+        "name":  "bangumi-moe",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "ebookbay",
+        "name":  "ebookbay",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "extratorrent-st",
+        "name":  "extratorrent-st",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "eztv",
+        "name":  "eztv",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "internetarchive",
+        "name":  "internetarchive",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "isohunt2",
+        "name":  "isohunt2",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "kickasstorrents-to",
+        "name":  "kickasstorrents-to",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "kickasstorrents-ws",
+        "name":  "kickasstorrents-ws",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "knaben",
+        "name":  "knaben",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "limetorrents",
+        "name":  "limetorrents",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "magnetcat",
+        "name":  "magnetcat",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "nyaasi",
+        "name":  "nyaasi",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "subsplease",
+        "name":  "subsplease",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "thepiratebay",
+        "name":  "thepiratebay",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "therarbg",
+        "name":  "therarbg",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "tokyotosho",
+        "name":  "tokyotosho",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "torrentcore",
+        "name":  "torrentcore",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "torrentdownload",
+        "name":  "torrentdownload",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "torrentdownloads",
+        "name":  "torrentdownloads",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "torrentgalaxyclone",
+        "name":  "torrentgalaxyclone",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "uindex",
+        "name":  "uindex",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    },
+    {
+        "id":  "yts",
+        "name":  "yts",
+        "categories":  [
+
+                       ],
+        "language":  "",
+        "seedersSortSupport":  true,
+        "status":  "unsupported",
+        "unsupportedReason":  "settings_file_only",
+        "adapterType":  "unsupported",
+        "baseUrl":  "",
+        "endpointPath":  "/api",
+        "apiKey":  "",
+        "enabled":  true,
+        "source":  "seed"
+    }
+]
