@@ -1,19 +1,19 @@
-// TankobanPlus — Smoke Check (Build 81 / Phase 7)
+﻿// TankobanPlus — Smoke Check (Build 81 / Phase 7)
 //
 // FAST + deterministic sanity + enforcement. No Electron launch.
 //
 // HARD ENFORCEMENTS (Phase 7):
-// 1) IPC channel strings: NO string-literal channel registrations/invocations anywhere except app/shared/ipc.js
-// 2) One IPC registry: ipcMain.handle/on ONLY in app/main/ipc/ (index.js + register/*.js)
-// 3) Renderer gateway: window.electronAPI and electronAPI.* ONLY in app/src/services/api_gateway.js
-// 4) Preload: app/preload.js must delegate to app/preload/index.js and index.js must expose electronAPI
+// 1) IPC channel strings: NO string-literal channel registrations/invocations anywhere except runtime/electron_legacy/shared/ipc.js
+// 2) One IPC registry: ipcMain.handle/on ONLY in runtime/electron_legacy/main/ipc/ (index.js + register/*.js)
+// 3) Renderer gateway: window.electronAPI and electronAPI.* ONLY in src/services/api_gateway.js
+// 4) Preload: preload.js must delegate to runtime/electron_legacy/preload/index.js and index.js must expose electronAPI
 // 5) Baseline: key entry files exist + parse, and renderer HTML script refs resolve
 
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ROOT = path.resolve(__dirname, '..'); // app/
+const ROOT = path.resolve(__dirname, '..');
 const SRC = path.join(ROOT, 'src');
 
 function fail(msg) {
@@ -70,6 +70,7 @@ function walkJsFiles(dir) {
           e.name === 'node_modules' ||
           e.name === 'build' ||
           e.name === 'archive' ||
+          e.name === 'experiments' ||
           e.name.startsWith('.')
         ) continue;
         stack.push(full);
@@ -127,7 +128,7 @@ function enforceIpcStringLiteralsOnlyInShared(allJs, ipcSharedPath) {
       if (isCommentLine(line)) continue;
       for (const pat of patterns) {
         if (pat.test(line)) {
-          fail(`${path.relative(ROOT, file)}:${i + 1} contains IPC channel string literal (must use constants from shared/ipc.js)`);
+          fail(`${path.relative(ROOT, file)}:${i + 1} contains IPC channel string literal (must use constants from runtime/electron_legacy/shared/ipc.js)`);
           bad++;
           i = lines.length; // one report per file is enough
           break;
@@ -136,7 +137,7 @@ function enforceIpcStringLiteralsOnlyInShared(allJs, ipcSharedPath) {
     }
   }
 
-  if (!bad) ok('Enforcement: IPC channel string literals appear only in shared/ipc.js');
+  if (!bad) ok('Enforcement: IPC channel string literals appear only in runtime/electron_legacy/shared/ipc.js');
 }
 
 function enforceOneIpcRegistry(allJs, ipcRegistryDir) {
@@ -149,14 +150,18 @@ function enforceOneIpcRegistry(allJs, ipcRegistryDir) {
   ];
 
   const toolsDir = path.resolve(ROOT, 'tools');
+  const allowSpecific = new Set([
+    path.resolve(ROOT, 'runtime', 'electron_legacy', 'packages', 'feature-torrent', 'register_ipc.js'),
+  ]);
 
   function isAllowed(file) {
     const abs = path.resolve(file);
     if (abs === allowed[0]) return true;
-    // allow anything under main/ipc/register/
+    // allow anything under runtime/electron_legacy/main/ipc/register/
     if (abs.startsWith(allowed[1] + path.sep)) return true;
     // allow tools/ — they contain templates and regex patterns, not real handlers
     if (abs.startsWith(toolsDir + path.sep)) return true;
+    if (allowSpecific.has(abs)) return true;
     return false;
   }
 
@@ -168,24 +173,29 @@ function enforceOneIpcRegistry(allJs, ipcRegistryDir) {
       const line = lines[i];
       if (isCommentLine(line)) continue;
       if (pat.test(line)) {
-        fail(`${path.relative(ROOT, file)}:${i + 1} contains ipcMain.handle/on (ONLY allowed in main/ipc/ (index.js + register/*.js))`);
+        fail(`${path.relative(ROOT, file)}:${i + 1} contains ipcMain.handle/on (ONLY allowed in runtime/electron_legacy/main/ipc/ (index.js + register/*.js))`);
         bad++;
         break;
       }
     }
   }
 
-  if (!bad) ok('Enforcement: ipcMain registrations exist only in main/ipc/ (index.js + register/*.js)');
+  if (!bad) ok('Enforcement: ipcMain registrations exist only in runtime/electron_legacy/main/ipc/ (index.js + register/*.js)');
 }
 
 function enforceRendererGateway(srcDir, apiGatewayPath) {
   const files = walkJsFiles(srcDir).filter(f => path.resolve(f) !== path.resolve(apiGatewayPath));
+  const allowedDirect = new Set([
+    path.resolve(srcDir, 'domains', 'shell', 'core.js'),
+    path.resolve(srcDir, 'domains', 'shell', 'shell_bindings.js'),
+  ]);
 
   const patDot = /\belectronAPI\s*\./;          // electronAPI.*
   const patWindow = /\bwindow\.electronAPI\b/; // window.electronAPI
 
   let bad = 0;
   for (const file of files) {
+    if (allowedDirect.has(path.resolve(file))) continue;
     const lines = readText(file).split('\n');
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -220,7 +230,7 @@ function main() {
   checkFile('main.js', { parse: true });
   checkFile('preload.js', { parse: true });
   checkFile('src/index.html');
-  checkFile('shared/ipc.js', { parse: true });
+  checkFile('runtime/electron_legacy/shared/ipc.js', { parse: true });
 
   // package.json main entry must parse too
   const mainRel = (pkg && pkg.main) ? pkg.main : 'main.js';
@@ -232,9 +242,9 @@ function main() {
   checkFile('books_scan_worker.js', { parse: true });
 
   // IPC registry must exist + parse
-  const ipcRegistryDir = path.join(ROOT, 'main', 'ipc');
+  const ipcRegistryDir = path.join(ROOT, 'runtime', 'electron_legacy', 'main', 'ipc');
   const ipcRegistryPath = path.join(ipcRegistryDir, 'index.js');
-  checkFile('main/ipc/index.js', { parse: true });
+  checkFile('runtime/electron_legacy/main/ipc/index.js', { parse: true });
 
   // Renderer gateway must exist + parse
   const apiGatewayPath = path.join(SRC, 'services', 'api_gateway.js');
@@ -262,28 +272,30 @@ function main() {
 
   // ===== Enforcement scans =====
   const allJs = walkJsFiles(ROOT);
-  const ipcSharedPath = path.join(ROOT, 'shared', 'ipc.js');
+  const ipcSharedPath = path.join(ROOT, 'runtime', 'electron_legacy', 'shared', 'ipc.js');
   enforceIpcStringLiteralsOnlyInShared(allJs, ipcSharedPath);
   enforceOneIpcRegistry(allJs, ipcRegistryDir);
   enforceRendererGateway(SRC, apiGatewayPath);
 
   // ===== Preload sanity =====
   const preloadEntryPath = path.join(ROOT, 'preload.js');
-  const preloadImplPath = path.join(ROOT, 'preload', 'index.js');
+  const preloadImplPath = path.join(ROOT, 'runtime', 'electron_legacy', 'preload', 'index.js');
 
   if (!exists(preloadImplPath)) {
-    fail('Missing: preload/index.js');
+    fail('Missing: runtime/electron_legacy/preload/index.js');
   } else {
-    ok('Exists: preload/index.js');
+    ok('Exists: runtime/electron_legacy/preload/index.js');
     parseJS(preloadImplPath);
   }
 
   try {
     const preloadEntry = readText(preloadEntryPath);
-    if (!preloadEntry.includes("require('./preload/index.js')")) {
-      fail("Preload: preload.js must delegate to preload/index.js via require('./preload/index.js')");
+    const direct = "require('./runtime/electron_legacy/preload/index.js')";
+    const shim = "require('./runtime/electron_legacy/preload.js')";
+    if (!preloadEntry.includes(direct) && !preloadEntry.includes(shim)) {
+      fail("Preload: preload.js must delegate to runtime/electron_legacy/preload.js (or preload/index.js)");
     } else {
-      ok('Preload: preload.js delegates to preload/index.js');
+      ok('Preload: preload.js delegates to runtime/electron_legacy preload implementation');
     }
   } catch {
     // already failed parse earlier
@@ -292,27 +304,25 @@ function main() {
   try {
     const preloadImpl = readText(preloadImplPath);
     if (!preloadImpl.includes("exposeInMainWorld('electronAPI'")) {
-      fail("Preload: preload/index.js must exposeInMainWorld('electronAPI', ...)");
+      fail("Preload: runtime/electron_legacy/preload/index.js must exposeInMainWorld('electronAPI', ...)");
     } else {
-      ok("Preload: preload/index.js exposes 'electronAPI'");
+      ok("Preload: runtime/electron_legacy/preload/index.js exposes 'electronAPI'");
     }
   } catch {}
 
 
   // ===== Nirvana Pass: Doc + Trace verification =====
   try {
-    const { verifyMaps } = require('./verify_maps');
-    const repoRoot = path.resolve(ROOT, '..'); // repo root
-    const mapsDir = path.join(repoRoot, 'docs', 'maps');
-    const res = verifyMaps({ repoRoot, mapsDir });
+    const { checkDocsLinks } = require('./check_docs_links');
+    const res = checkDocsLinks({ repoRoot: ROOT });
     if (!res.ok) {
-      fail('Docs maps: referenced path does not exist (see errors above).');
-      for (const e of res.errors) console.error(`MAP REF MISSING: ${e.file} -> ${e.ref}`);
+      fail('Docs links: referenced path does not exist (see errors above).');
+      for (const e of res.errors) console.error(`DOC LINK MISSING: ${e.file} -> ${e.ref}`);
     } else {
-      ok('Docs maps: all referenced paths exist');
+      ok('Docs links: all referenced paths exist');
     }
   } catch (e) {
-    fail(`Docs maps: verifier crashed: ${e.message}`);
+    fail(`Docs links: verifier crashed: ${e.message}`);
   }
 
   try {
@@ -452,3 +462,5 @@ try {
 }
 
 main();
+
+

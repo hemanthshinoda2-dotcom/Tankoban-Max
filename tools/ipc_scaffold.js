@@ -1,9 +1,9 @@
-// IPC Scaffold Tool — Phase 5, Session 14
+﻿// IPC Scaffold Tool — Phase 5, Session 14
 //
 // Auto-generates a new IPC channel stub across all three files:
-//   1. shared/ipc.js          — CHANNEL constant
-//   2. preload/namespaces/*.js — preload method
-//   3. main/ipc/register/*.js  — ipcMain.handle registration
+//   1. runtime/electron_legacy/shared/ipc.js          — CHANNEL constant
+//   2. runtime/electron_legacy/preload/namespaces/*.js — preload method
+//   3. runtime/electron_legacy/main/ipc/register/*.js  — ipcMain.handle registration
 //
 // Usage:
 //   node tools/ipc_scaffold.js --channel VIDEO_GET_METADATA --namespace video --method getMetadata
@@ -76,12 +76,12 @@ function getPaths(args) {
   };
 }
 
-// ── Step 1: Insert into shared/ipc.js ──
+// ── Step 1: Insert into runtime/electron_legacy/shared/ipc.js ──
 
 function insertSharedChannel(src, args) {
   // Safety: check if channel already exists
   if (src.includes(args.channel + ':') || src.includes("'" + args.string + "'")) {
-    abort('CHANNEL.' + args.channel + ' already exists in shared/ipc.js');
+    abort('CHANNEL.' + args.channel + ' already exists in runtime/electron_legacy/shared/ipc.js');
   }
 
   // Find the closing }; of the CHANNEL object (line before `const EVENT`)
@@ -93,11 +93,11 @@ function insertSharedChannel(src, args) {
   if (channelEnd === -1) {
     // Last resort: find the CHANNEL closing brace
     var eventStart = src.indexOf('const EVENT');
-    if (eventStart === -1) abort('Cannot find EVENT definition in shared/ipc.js');
+    if (eventStart === -1) abort('Cannot find EVENT definition in runtime/electron_legacy/shared/ipc.js');
     // Search backward from EVENT for };
     channelEnd = src.lastIndexOf('};', eventStart);
   }
-  if (channelEnd === -1) abort('Cannot find CHANNEL closing brace in shared/ipc.js');
+  if (channelEnd === -1) abort('Cannot find CHANNEL closing brace in runtime/electron_legacy/shared/ipc.js');
 
   // Find the section for this namespace
   var sectionName = args.namespace.charAt(0).toUpperCase() + args.namespace.slice(1);
@@ -249,9 +249,9 @@ function main() {
   var dryRun = args.dryRun || false;
 
   // Validate files exist
-  if (!fs.existsSync(paths.shared)) abort('shared/ipc.js not found');
-  if (!fs.existsSync(paths.preload)) abort('preload/namespaces/' + args.namespace + '.js not found');
-  if (!fs.existsSync(paths.register)) abort('main/ipc/register/' + args.register + '.js not found');
+  if (!fs.existsSync(paths.shared)) abort('runtime/electron_legacy/shared/ipc.js not found');
+  if (!fs.existsSync(paths.preload)) abort('runtime/electron_legacy/preload/namespaces/' + args.namespace + '.js not found');
+  if (!fs.existsSync(paths.register)) abort('runtime/electron_legacy/main/ipc/register/' + args.register + '.js not found');
 
   var isTTY = process.stdout.isTTY;
   var cyan = isTTY ? '\x1b[36m' : '';
@@ -263,7 +263,7 @@ function main() {
   console.log('  Channel:   CHANNEL.' + args.channel);
   console.log('  String:    ' + args.string);
   console.log('  Namespace: ' + args.namespace + '.' + args.method);
-  console.log('  Register:  main/ipc/register/' + args.register + '.js');
+  console.log('  Register:  runtime/electron_legacy/main/ipc/register/' + args.register + '.js');
   console.log('  Domain:    domains.' + args.domain + '.' + args.method);
   console.log('  Mode:      ' + (dryRun ? yellow + 'DRY RUN' + reset : green + 'LIVE' + reset));
   console.log('');
@@ -279,13 +279,13 @@ function main() {
   var newRegister = insertRegisterHandler(registerSrc, args);
 
   if (dryRun) {
-    console.log(cyan + '── shared/ipc.js (new entry) ──' + reset);
+    console.log(cyan + '── runtime/electron_legacy/shared/ipc.js (new entry) ──' + reset);
     console.log('  ' + args.channel + ": '" + args.string + "'");
     console.log('');
-    console.log(cyan + '── preload/namespaces/' + args.namespace + '.js (new method) ──' + reset);
+    console.log(cyan + '── runtime/electron_legacy/preload/namespaces/' + args.namespace + '.js (new method) ──' + reset);
     console.log('  ' + args.method + ': (opts) => ipcRenderer.invoke(CHANNEL.' + args.channel + ', opts)');
     console.log('');
-    console.log(cyan + '── main/ipc/register/' + args.register + '.js (new handler) ──' + reset);
+    console.log(cyan + '── runtime/electron_legacy/main/ipc/register/' + args.register + '.js (new handler) ──' + reset);
     console.log('  ipcMain.handle(CHANNEL.' + args.channel + ', (e, ...args) => domains.' + args.domain + '.' + args.method + '(ctx, e, ...args))');
     console.log('');
     console.log(yellow + 'Dry run complete. No files modified.' + reset);
@@ -296,8 +296,8 @@ function main() {
     console.log(green + 'Done. Stubs generated in all 3 files.' + reset);
     console.log('');
     console.log('Next steps:');
-    console.log('  1. Update the JSDoc comment in shared/ipc.js (replace TODO)');
-    console.log('  2. Implement domains.' + args.domain + '.' + args.method + '() in main/domains/' + args.namespace + '/');
+    console.log('  1. Update the JSDoc comment in runtime/electron_legacy/shared/ipc.js (replace TODO)');
+    console.log('  2. Implement domains.' + args.domain + '.' + args.method + '() in runtime/electron_legacy/main/domains/' + args.namespace + '/');
     console.log('  3. Wire it through api_gateway.js if needed');
     console.log('  4. Run: npm run smoke');
   }
@@ -308,3 +308,5 @@ if (require.main === module) {
 }
 
 module.exports = { insertSharedChannel, insertPreloadMethod, insertRegisterHandler };
+
+

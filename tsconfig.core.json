@@ -10,7 +10,7 @@
     "skipLibCheck": true
   },
   "include": [
-    "packages/core-main/**/*.js",
+    "runtime/electron_legacy/packages/core-main/**/*.js",
     "src/state/app_section_boot.js",
     "tools/enforce_feature_boundaries.js",
     "tools/section_smoke.js",
@@ -22,4 +22,3 @@
     "types/**/*.d.ts"
   ]
 }
-

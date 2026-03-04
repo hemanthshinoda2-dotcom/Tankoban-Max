@@ -1,0 +1,5 @@
+npm start
+npm run start:qt
+npm run start:electron-legacy
+npm run start:legacy:shell
+npm run start:legacy:browser

@@ -2,49 +2,101 @@
   "rules": [
     {
       "name": "Core IPC",
-      "paths": ["shared/ipc.js", "preload/**", "main/ipc/**", "contracts/ipc/**"],
+      "paths": [
+        "runtime/electron_legacy/shared/ipc.js",
+        "runtime/electron_legacy/preload/**",
+        "runtime/electron_legacy/main/ipc/**",
+        "contracts/ipc/**"
+      ],
       "commands": ["npm run ipc:check", "npm run ipc:contracts"]
     },
     {
       "name": "Library",
-      "paths": ["src/domains/library/**", "main/domains/library/**", "packages/feature-library/**"],
+      "paths": [
+        "src/domains/library/**",
+        "runtime/electron_legacy/main/domains/library/**",
+        "runtime/electron_legacy/packages/feature-library/**"
+      ],
       "commands": ["npm run smoke:library", "npm run test:section:library"]
     },
     {
       "name": "Comic Reader",
-      "paths": ["src/domains/reader/**", "main/domains/comic/**", "main/domains/archives/**", "packages/feature-comic-reader/**"],
+      "paths": [
+        "src/domains/reader/**",
+        "runtime/electron_legacy/main/domains/comic/**",
+        "runtime/electron_legacy/main/domains/archives/**",
+        "runtime/electron_legacy/packages/feature-comic-reader/**"
+      ],
       "commands": ["npm run smoke:comic", "npm run test:section:comic"]
     },
     {
       "name": "Book Reader",
-      "paths": ["src/domains/books/**", "main/domains/books/**", "main/domains/books*/**", "packages/feature-book-reader/**"],
+      "paths": [
+        "src/domains/books/**",
+        "runtime/electron_legacy/main/domains/books/**",
+        "runtime/electron_legacy/main/domains/books*/**",
+        "runtime/electron_legacy/packages/feature-book-reader/**"
+      ],
       "commands": ["npm run smoke:book", "npm run test:section:book"]
     },
     {
       "name": "Audiobook",
-      "paths": ["main/domains/audiobooks/**", "main/domains/audiobook*/**", "packages/feature-audiobook/**", "src/domains/books/**"],
+      "paths": [
+        "runtime/electron_legacy/main/domains/audiobooks/**",
+        "runtime/electron_legacy/main/domains/audiobook*/**",
+        "runtime/electron_legacy/packages/feature-audiobook/**",
+        "src/domains/books/**"
+      ],
       "commands": ["npm run smoke:audiobook", "npm run test:section:audiobook"]
     },
     {
       "name": "Video",
-      "paths": ["src/domains/video/**", "main/domains/video*/**", "main/domains/player_core/**", "packages/feature-video/**", "packages/shared-media/**"],
+      "paths": [
+        "src/domains/video/**",
+        "runtime/electron_legacy/main/domains/video*/**",
+        "runtime/electron_legacy/main/domains/player_core/**",
+        "runtime/electron_legacy/packages/feature-video/**",
+        "runtime/electron_legacy/packages/shared-media/**"
+      ],
       "commands": ["npm run smoke:video", "npm run test:section:video"]
     },
     {
       "name": "Browser/Torrent",
-      "paths": ["src/domains/web/**", "main/domains/web*/**", "main/domains/torProxy/**", "packages/feature-browser/**", "packages/feature-torrent/**"],
+      "paths": [
+        "src/domains/web/**",
+        "runtime/electron_legacy/main/domains/web*/**",
+        "runtime/electron_legacy/main/domains/torProxy/**",
+        "runtime/electron_legacy/packages/feature-browser/**",
+        "runtime/electron_legacy/packages/feature-torrent/**"
+      ],
       "commands": ["npm run smoke:browser", "npm run smoke:torrent", "npm run test:section:browser", "npm run test:section:torrent"]
     },
     {
       "name": "Docs Canonical",
-      "paths": ["docs/agent-map.source.md", "tools/generate_agent_docs.js", "CLAUDE.md", "chatgpt.md"],
+      "paths": ["docs/agent-map.source.md", "tools/generate_agent_docs.js", "CLAUDE.md", "chatgpt.md", "CODEX.md", "agents.md"],
       "commands": ["npm run docs:verify-sync"]
     },
     {
       "name": "Boundaries/Fixtures",
-      "paths": ["packages/**", "apps/**", "qa/fixtures/**", "tools/enforce_feature_boundaries.js", "tools/section_smoke.js"],
+      "paths": [
+        "runtime/electron_legacy/packages/**",
+        "runtime/electron_legacy/apps/**",
+        "qa/fixtures/**",
+        "tools/enforce_feature_boundaries.js",
+        "tools/section_smoke.js"
+      ],
       "commands": ["npm run boundaries:check", "npm run fixtures:check"]
+    },
+    {
+      "name": "Repo Architecture Contracts",
+      "paths": [
+        "README.md",
+        "docs/architecture/**",
+        "tools/check_path_status.js",
+        "tools/check_docs_links.js",
+        "resources/manifests/vendor-manifest.json"
+      ],
+      "commands": ["npm run check:path-status", "npm run check:docs-links"]
     }
   ]
 }
-

@@ -1,7 +1,7 @@
-// Enforce package feature boundaries.
+﻿// Enforce package feature boundaries.
 // Rules:
-// 1) files under packages/feature-* cannot import another packages/feature-* internals.
-// 2) files under apps/* cannot import src/main/preload directly; they must use packages/core-main launch entry.
+// 1) files under runtime/electron_legacy/packages/feature-* cannot import another runtime/electron_legacy/packages/feature-* internals.
+// 2) files under runtime/electron_legacy/apps/* cannot import src/main/preload internals directly; they must use runtime/electron_legacy/packages/core-main launch entry.
 //
 // Usage:
 //   node tools/enforce_feature_boundaries.js
@@ -10,11 +10,11 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
-const PACKAGES_DIR = path.join(ROOT, 'packages');
-const APPS_DIR = path.join(ROOT, 'apps');
+const PACKAGES_DIR = path.join(ROOT, 'runtime', 'electron_legacy', 'packages');
+const APPS_DIR = path.join(ROOT, 'runtime', 'electron_legacy', 'apps');
 const RENDERER_DOMAINS_DIR = path.join(ROOT, 'src', 'domains');
-const MAIN_DOMAINS_DIR = path.join(ROOT, 'main', 'domains');
-const OWNERSHIP_DIR = path.join(ROOT, 'docs', 'ownership');
+const MAIN_DOMAINS_DIR = path.join(ROOT, 'runtime', 'electron_legacy', 'main', 'domains');
+const PATH_STATUS_FILE = path.join(ROOT, 'docs', 'architecture', 'path-status.yaml');
 const LEGACY_ALLOWED_CROSS_DOMAIN_IMPORTS = new Set([]);
 
 function walkJsFiles(dir) {
@@ -107,7 +107,7 @@ function main() {
     const src = fs.readFileSync(filePath, 'utf8');
     const specs = extractImportLikeSpecifiers(src);
     for (const spec of specs) {
-      if (spec.includes('packages/feature-')) {
+      if (spec.includes('runtime/electron_legacy/packages/feature-')) {
         const hit = spec.match(/packages\/(feature-[a-z0-9-]+)/i);
         if (hit && hit[1] && hit[1] !== ownerFeature) {
           errors.push(`${path.relative(ROOT, filePath)} imports cross-feature path ${spec}`);
@@ -132,8 +132,8 @@ function main() {
     for (const spec of specs) {
       const bad =
         spec.includes('/src/') ||
-        spec.includes('/main/') ||
-        spec.includes('/preload/') ||
+        spec.includes('/runtime/electron_legacy/main/') ||
+        spec.includes('/runtime/electron_legacy/preload/') ||
         spec.startsWith('../src') ||
         spec.startsWith('../main') ||
         spec.startsWith('../preload');
@@ -183,21 +183,9 @@ function main() {
     }
   }
 
-  // Rule 5: ownership manifests must exist for each section
-  const requiredOwnershipDocs = [
-    'library.md',
-    'comic.md',
-    'book.md',
-    'audiobook.md',
-    'video.md',
-    'browser.md',
-    'torrent.md',
-  ];
-  for (const docName of requiredOwnershipDocs) {
-    const abs = path.join(OWNERSHIP_DIR, docName);
-    if (!fs.existsSync(abs)) {
-      errors.push(`missing ownership manifest docs/ownership/${docName}`);
-    }
+  // Rule 5: path status contract must exist
+  if (!fs.existsSync(PATH_STATUS_FILE)) {
+    errors.push('missing path status contract docs/architecture/path-status.yaml');
   }
 
   if (errors.length) {
@@ -210,3 +198,4 @@ function main() {
 }
 
 main();
+

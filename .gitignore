@@ -29,3 +29,15 @@ Thumbs.db
 
 # === Misc ===
 reference/
+
+# === Python runtime/cache ===
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.venv*/
+
+# === Vendor cache (on-demand downloads) ===
+resources/cache/
+
+# === Generated architecture maps ===
+repo_map.json

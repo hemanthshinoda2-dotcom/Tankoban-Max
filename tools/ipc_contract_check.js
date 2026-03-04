@@ -1,4 +1,4 @@
-// IPC payload contract checker.
+﻿// IPC payload contract checker.
 // Verifies:
 // 1) every CHANNEL key has request + response schema
 // 2) every static EVENT key has payload schema
@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CHANNEL, EVENT } = require('../shared/ipc');
+const { CHANNEL, EVENT } = require('../runtime/electron_legacy/shared/ipc');
 const schemas = require('../contracts/ipc/payload_schemas');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -178,3 +178,4 @@ function main() {
 }
 
 main();
+

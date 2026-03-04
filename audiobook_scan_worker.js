@@ -1,5 +1,2 @@
-/*
-Tankoban Max - Worker entry wrapper for Audiobook scan (FEAT-AUDIOBOOK).
-*/
-
-require('./workers/audiobook_scan_worker_impl.js');
+﻿/* Legacy shim worker wrapper. Canonical path: runtime/electron_legacy/audiobook_scan_worker.js */
+require('./runtime/electron_legacy/audiobook_scan_worker.js');

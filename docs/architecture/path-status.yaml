@@ -1,0 +1,49 @@
+paths:
+  - path: archive
+    status: archive
+    owner: repo-governance
+  - path: build
+    status: active
+    owner: release
+  - path: contracts
+    status: active
+    owner: tooling
+  - path: docs
+    status: active
+    owner: repo-governance
+  - path: experiments
+    status: experimental
+    owner: experiments
+  - path: native
+    status: experimental
+    owner: experiments
+  - path: player_qt
+    status: active
+    owner: video-runtime
+  - path: projectbutterfly
+    status: active
+    owner: qt-runtime
+  - path: qa
+    status: active
+    owner: qa
+  - path: reference
+    status: archive
+    owner: docs
+  - path: resources
+    status: active
+    owner: runtime-assets
+  - path: runtime
+    status: legacy
+    owner: electron-legacy
+  - path: scripts
+    status: active
+    owner: tooling
+  - path: src
+    status: active
+    owner: renderer
+  - path: tools
+    status: active
+    owner: tooling
+  - path: types
+    status: active
+    owner: tooling

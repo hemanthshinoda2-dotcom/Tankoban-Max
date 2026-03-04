@@ -47,7 +47,15 @@ function main() {
   }
   ok('package.json present');
 
-  const expected = ['main.js', 'preload.js', 'src/index.html', 'src/renderer.js', 'src/styles.css'];
+  const expected = [
+    'package.json',
+    'start_butterfly.bat',
+    'projectbutterfly/app.py',
+    'src/index.html',
+    'runtime/electron_legacy/main.js',
+    'runtime/electron_legacy/preload.js',
+    'runtime/electron_legacy/shared/ipc.js',
+  ];
   for (const f of expected) {
     if (!exists(f)) {
       console.error(`ERROR missing expected file: ${f}`);

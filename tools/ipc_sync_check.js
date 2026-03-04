@@ -1,6 +1,6 @@
-// IPC Sync Validator — Phase 1, Session 1
+﻿// IPC Sync Validator — Phase 1, Session 1
 //
-// Cross-references shared/ipc.js, preload/index.js, and main/ipc/register/*.js
+// Cross-references runtime/electron_legacy/shared/ipc.js, runtime/electron_legacy/preload/index.js, and runtime/electron_legacy/main/ipc/register/*.js
 // to detect dead channels, missing handlers, undefined references, and orphaned files.
 //
 // Usage:
@@ -24,7 +24,7 @@ function globSync(dir, pattern) {
     .map(f => path.join(dir, f));
 }
 
-// ── Step 1: Parse shared/ipc.js ──
+// ── Step 1: Parse runtime/electron_legacy/shared/ipc.js ──
 
 function parseIpcDefinitions(filePath) {
   const src = readText(filePath);
@@ -84,7 +84,7 @@ function scanMainHandlers(ipcIndexPath, registerDir) {
   const handled = new Set();
   const fileMap = new Map(); // channel -> file that handles it
 
-  // Scan main/ipc/index.js itself (for inline registrations like HEALTH_PING)
+  // Scan runtime/electron_legacy/main/ipc/index.js itself (for inline registrations like HEALTH_PING)
   const indexSrc = readText(ipcIndexPath);
   const handleRe = /ipcMain\.handle\(\s*CHANNEL\.([A-Z_][A-Z0-9_]*)/g;
   let m;
@@ -170,10 +170,10 @@ function check({ appRoot }) {
   const errors = [];
   const warnings = [];
 
-  const sharedPath = path.join(appRoot, 'shared', 'ipc.js');
-  const preloadPath = path.join(appRoot, 'preload', 'index.js');
-  const ipcIndexPath = path.join(appRoot, 'main', 'ipc', 'index.js');
-  const registerDir = path.join(appRoot, 'main', 'ipc', 'register');
+  const sharedPath = path.join(appRoot, 'runtime', 'electron_legacy', 'shared', 'ipc.js');
+  const preloadPath = path.join(appRoot, 'runtime', 'electron_legacy', 'preload', 'index.js');
+  const ipcIndexPath = path.join(appRoot, 'runtime', 'electron_legacy', 'main', 'ipc', 'index.js');
+  const registerDir = path.join(appRoot, 'runtime', 'electron_legacy', 'main', 'ipc', 'register');
 
   // Parse definitions
   const { channels, events, dynamicEvents } = parseIpcDefinitions(sharedPath);
@@ -195,14 +195,14 @@ function check({ appRoot }) {
   // ── Undefined CHANNEL references in preload ──
   for (const ref of channelRefs) {
     if (!channels.has(ref)) {
-      errors.push(`UNDEFINED: preload references CHANNEL.${ref} which is not defined in shared/ipc.js`);
+      errors.push(`UNDEFINED: preload references CHANNEL.${ref} which is not defined in runtime/electron_legacy/shared/ipc.js`);
     }
   }
 
   // ── Undefined EVENT references in preload ──
   for (const ref of eventRefs) {
     if (!events.has(ref) && !dynamicEvents.includes(ref)) {
-      errors.push(`UNDEFINED: preload references EVENT.${ref} which is not defined in shared/ipc.js`);
+      errors.push(`UNDEFINED: preload references EVENT.${ref} which is not defined in runtime/electron_legacy/shared/ipc.js`);
     }
   }
 
@@ -237,7 +237,7 @@ function check({ appRoot }) {
 
   // ── Orphaned register files ──
   for (const file of orphanedFiles) {
-    warnings.push(`ORPHANED FILE: main/ipc/register/${file} exists but is not loaded by main/ipc/index.js`);
+    warnings.push(`ORPHANED FILE: runtime/electron_legacy/main/ipc/register/${file} exists but is not loaded by runtime/electron_legacy/main/ipc/index.js`);
   }
 
   // ── Dynamic events info (not errors, just FYI) ──
@@ -307,3 +307,5 @@ if (require.main === module) {
 }
 
 module.exports = { check };
+
+

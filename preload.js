@@ -1,8 +1,5 @@
-/**
- * TankobanPlus — Preload Entry (Build 79, Phase 5)
- * 
- * Thin wrapper that delegates to organized preload implementation.
- * This file remains the preload entry point referenced by main.
- */
-
-require('./preload/index.js');
+﻿/*
+Legacy shim preload entrypoint.
+Canonical Electron preload now lives in runtime/electron_legacy/preload.js.
+*/
+require('./runtime/electron_legacy/preload.js');

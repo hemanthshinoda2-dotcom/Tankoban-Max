@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "cacheRoot": "resources/cache",
+  "vendors": [
+    {
+      "id": "mpv-windows",
+      "platform": "win32",
+      "status": "external-script",
+      "notes": "Fetched by scripts/windows/ensure_mpv_windows.bat"
+    },
+    {
+      "id": "tor-windows",
+      "platform": "win32",
+      "status": "external-script",
+      "notes": "Fetched by npm run fetch:tor"
+    },
+    {
+      "id": "qbittorrent-windows",
+      "platform": "win32",
+      "status": "disabled",
+      "notes": "Deprecated in Qt-first runtime; kept for emergency legacy fallback only."
+    },
+    {
+      "id": "prowlarr-windows",
+      "platform": "win32",
+      "status": "disabled",
+      "notes": "Deprecated in Qt-first runtime; use Tankorent stack."
+    }
+  ]
+}

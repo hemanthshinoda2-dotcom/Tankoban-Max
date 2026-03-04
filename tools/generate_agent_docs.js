@@ -1,6 +1,6 @@
 // Generate canonical agent docs from a single source.
 // Source: docs/agent-map.source.md
-// Targets: CLAUDE.md, chatgpt.md
+// Targets: CLAUDE.md, chatgpt.md, CODEX.md
 //
 // Usage:
 //   node tools/generate_agent_docs.js
@@ -13,6 +13,7 @@ const SOURCE = path.join(ROOT, 'docs', 'agent-map.source.md');
 const TARGETS = [
   path.join(ROOT, 'CLAUDE.md'),
   path.join(ROOT, 'chatgpt.md'),
+  path.join(ROOT, 'CODEX.md'),
 ];
 
 function main() {
@@ -29,4 +30,3 @@ function main() {
 }
 
 main();
-

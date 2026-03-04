@@ -1,5 +1,2 @@
-/*
-Tankoban Max - Worker entry wrapper for Books scan.
-*/
-
-require('./workers/books_scan_worker_impl.js');
+﻿/* Legacy shim worker wrapper. Canonical path: runtime/electron_legacy/books_scan_worker.js */
+require('./runtime/electron_legacy/books_scan_worker.js');

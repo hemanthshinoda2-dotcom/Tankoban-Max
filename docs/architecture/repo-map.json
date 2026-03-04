@@ -1,0 +1,4436 @@
+{
+  "generatedAt": "2026-03-04T12:53:04.719Z",
+  "source": "git ls-files",
+  "entries": [
+    {
+      "path": "projectbutterfly/app.py",
+      "purpose": "Qt runtime entrypoint (canonical runtime).",
+      "danger": "high"
+    },
+    {
+      "path": "src/index.html",
+      "purpose": "Primary renderer HTML loaded by Qt shell.",
+      "danger": "high"
+    },
+    {
+      "path": "runtime/electron_legacy/main.js",
+      "purpose": "Legacy Electron entrypoint.",
+      "danger": "medium"
+    },
+    {
+      "path": "runtime/electron_legacy/shared/ipc.js",
+      "purpose": "Electron legacy IPC contract constants.",
+      "danger": "high"
+    },
+    {
+      "path": ".github/workflows/browser-ui-visual-qa.yml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": ".github/workflows/quality-gates.yml",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": ".gitignore",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "CLAUDE.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "CODEX.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "HG_RESTORE_README.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "THIRD_PARTY_NOTICES.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "agents.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/docs/browser-rewrite-progress.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/docs/chromium-browser-parity-plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/docs/qbittorrent-quasi-parity-implementation-plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/docs/web-torrent-quasi-parity-plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/AI_RESTRUCTURING_PLAN.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/CODEMAP.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/MASTER_DEFACTORING_EXECUTION_PLAN.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/WEBBROWSERPLAN.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/WEB_BROWSER_ISSUES.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/docs-legacy/root/audiobookplan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/SESSION_2_STATUS.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/.gitignore",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/binding.gyp",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/index.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/native/src/addon.cc",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/package-lock.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/preload.js",
+      "purpose": "Root compatibility shim to legacy preload.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/renderer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/experiments/mpv-holy-grail/styles.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/holygrailplan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/main/domains/holyGrail/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/main/ipc/register/holy_grail.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/native/holy_grail/binding.gyp",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/native/holy_grail/build/Release/holy_grail.node",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/native/holy_grail/package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/native/holy_grail/src/addon.cc",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/index.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/package-lock.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/player_settings.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/preload.js",
+      "purpose": "Root compatibility shim to legacy preload.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/preload_hg.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/adapter.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/center_flash.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/context_menu.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/diagnostics.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/drawer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/holy_grail_backend.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/html5_backend.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/hud.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/player_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/playlist.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/toast.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/top_strip.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/tracks_drawer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/utils.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/renderer/volume_hud.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/start.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/player_hg/styles/player.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/preload/namespaces/holy_grail.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/tools/build_holy_grail.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/holy-grail-experiment/tools/validate_holy_grail_artifacts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/tankoweb/TANKOWEB.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/tankoweb/TANKOWEB_PROGRESS.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "archive/tankoweb/home.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "build/icon.ico",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "build/icon.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "build_portable_folder.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "chatgpt.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "contracts/ipc/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "contracts/ipc/payload_schemas.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "dist_install_and_run.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/adr/0001-section-boot-model.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/adr/0002-ipc-contract-boundary.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/adr/0003-canonical-agent-docs.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/adr/0004-real-section-isolation.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/adr/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/agent-map.source.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/browser-build0/generated_baseline_report.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/browser-build0/manual_parity_checklist.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/projectbutterfly/BUTTERFLY.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/projectbutterfly/PROGRESS.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/projectbutterfly/TANKOWEB.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/history/projectbutterfly/TANKOWEB_PROGRESS.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/audiobook.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/book.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/browser.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/comic.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/library.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/torrent.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/ownership/video.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt-chrome-core-parity-scorecard.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt-chrome-core-parity-spec.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt-web-contract.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt-web-parity-matrix.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt_sources_torrent_gap_matrix.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt_sources_torrent_parity_contract.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt_torrent_parity_gap_matrix.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/qt_torrent_parity_spec.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/sources_mode_first_class_contract.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/sources_mode_retained_divergences.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/sources_torrent_gap_matrix.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "docs/sources_torrent_recovery_contract.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/archive_session.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/bitmap_cache.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/canvas_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/click_flash.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/comic_reader_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/end_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/goto_page_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/hud/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/hud_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/image_filters.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/input_keyboard.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/input_pointer.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/launcher.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/loupe_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/mega_settings.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/page_layout.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/path_picker.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/progress.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/render_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/render_portrait.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/render_two_page.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/requirements.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/scroll_physics.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/settings_store.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/state.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/state_machine.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/toast_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/comicbookreader_qt/volume_nav_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/native_holy_grail/binding.gyp",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/native_holy_grail/build/Release/holy_grail.node",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/native_holy_grail/package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/native_holy_grail/src/addon.cc",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/index.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/package-lock.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/preload.js",
+      "purpose": "Root compatibility shim to legacy preload.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/preload_hg.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/adapter.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/center_flash.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/context_menu.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/diagnostics.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/drawer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/holy_grail_backend.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/html5_backend.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/hud.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/player_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/playlist.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/toast.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/top_strip.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/tracks_drawer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/utils.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/renderer/volume_hud.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/start.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "experiments/holy-grail/player_hg/styles/player.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "install_and_run.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "package-lock.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "package.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/TankobanPlayer.spec",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/build_player.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/install_qt_player.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/install_windows.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/luffy_app_icon.ico",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/luffy_app_icon.png",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/requirements.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "player_qt/run_player.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/ADDING_MEDIA_PROFILE.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/fixtures/phase1/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/fixtures/phase1/baseline_manifest.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/fixtures/phase1/books_baseline.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/fixtures/phase1/comics_baseline.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/fixtures/phase1/video_baseline.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/progress.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/scripts/capture_phase1_baseline.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/scripts/verify_phase1_parity.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/common.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/profiles.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/runtime.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/service.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/store.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/QTRoute/src/types.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/_test_final.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/book_reader_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_annotations.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_appearance.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_bookmarks.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_dict.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_hud.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_nav.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_progress.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_ruler.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_search.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_sidebar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/books_state.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/engine_base.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/engine_epub.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/engine_pdf.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/engine_txt.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_back_button.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_controller.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_engine_base.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_engine_edge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_engine_system.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_progress.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_settings_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/books_reader/tts_text_extractor.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/bookmarks_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/browser_page.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/chrome_browser.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/context_menu.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/bookmarks.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/downloads.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/history.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/newtab.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/settings.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/tankorent/indexers.seed.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data/torrents.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/data_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/downloads_shelf.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/find_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/nav_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/omnibox.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/permission_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/search_engines.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/shortcuts.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/state_store.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/status_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/tab_bar.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/tab_state.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/theme.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/torrent_add_dialog.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/browser/torrent_scrapers.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/cf_solver.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/chromium_host.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/chromium_host_process.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/archive_session.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/bitmap_cache.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/canvas_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/click_flash.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/comic_reader_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/end_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/goto_page_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/hud/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/hud_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/image_filters.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/input_keyboard.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/input_pointer.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/keys_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/launcher.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/loupe_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/mega_settings.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/overlay_anim.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/page_layout.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/path_picker.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/reader_constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/render_core.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/render_portrait.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/render_two_page.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/requirements.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/scroll_physics.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/settings_store.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/speed_slider_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/state.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/state_machine.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/toast_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/comicbookreplacer/volume_nav_overlay.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/data/player_settings.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/ebook_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/flaresolverr_bridge.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/constants.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/context_menu.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/continue_tile.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/data_provider.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/detail_view.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/flow_layout.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/home_view.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/launcher.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/media_adapter.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/plan.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/progress.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/scan_worker.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/series_card.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/sidebar_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/thumb_extractor.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/thumb_provider.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/library_widget/unified_widget.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/player_ui.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/qbit_process.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/storage.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_omnibox_ranking.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_permission_rules.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_qt_integration.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_session_migration.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_tab_model.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_torrent_file_priorities.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_torrent_resolve_start_configured.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_torrent_search_provider_fallback.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_torrent_state_transitions.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_torrent_streamable_manifest.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tests/browser/test_url_fixup_and_sanitization.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/tor_proxy.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/torrent_service.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/torrent_sidecar/__init__.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/torrent_sidecar/manager.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "projectbutterfly/torrent_sidecar/service.py",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/baselines/section_harness.torrent.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/baselines/section_smoke.all.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/baselines/section_smoke.torrent.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/baselines/section_smoke.video.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/audiobooks/library/Book-One/Chapter-001.mp3",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/books/library/Author-Alpha/Book-001.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/browser/sources.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/comics/library/Series-Alpha/Volume-001.cbz",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/contracts/ipc_contract_samples.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/manifest.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/torrent/magnets.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/fixtures/video/library/Show-Alpha/Episode-001.mp4",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/manual/qt_browser_chrome_core_checklist.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/manual/qt_torrent_parity_checklist.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/manual/sources_first_class_mode_checklist.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/download-shelf-states.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/history-dropdown.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/home-panel-transition.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/omnibox-idle.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/omnibox-typing-suggestions-ghost.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/permission-and-siteinfo.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/split-view-transition.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/tabs-crashed.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/tabs-loading.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/tabs-normal.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "qa/visual/browser-ui/baseline/tabs-pinned.png.b64.txt",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "run_portable.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/audiobook-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/book-reader-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/browser-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/comic-reader-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/library-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/shell-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/torrent-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/apps/video-player-app/main.js",
+      "purpose": "Root compatibility shim to legacy Electron runtime.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/audiobook_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/books_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/library_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/archives/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/audiobookPairing/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/audiobookProgress/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/audiobooks/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/books/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksAnnotations/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksBookmarks/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksDisplayNames/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksOpds/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksProgress/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksSettings/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksTtsEdge/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksTtsProgress/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/booksUi/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/clipboard/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/comic/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/export/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/files/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/folder_thumbs.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/holyGrail/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/library/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/player_core/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/progress/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/seriesSettings/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/shell/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/thumbs/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torProxy/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/common.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/nyaa.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/piratebay.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/torznab.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/adapters/x1337.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/torrentSearch/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/video/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/videoDisplayNames/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/videoProgress/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/videoSettings/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/videoUi/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webAdblock/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webBookmarks/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webBrowserSettings/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webData/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webHistory/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webPermissionPrompts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webPermissions/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webSearchHistory/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webSession/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webSources/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webTorrent/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/webUserscripts/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/domains/window/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/archives.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/audiobook_pairing.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/audiobook_progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/audiobooks.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_annotations.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_bookmarks.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_display_names.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_opds.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_settings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_tts_edge.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_tts_progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/books_ui_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/export.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/files.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/folder_thumbnails.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/health_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/holy_grail.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/page_thumbnails.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/player_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/series_settings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/shell.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/tor_proxy.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/torrent_search.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video_display_names.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video_posters.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video_progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video_settings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/video_ui_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_adblock.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_bookmarks.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_browser_actions.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_browser_settings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_data.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_find.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_history.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_permissions.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_search_history.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_session.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_sources.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_torrent.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/web_userscripts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/ipc/register/window.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/main/lib/storage.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/README.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-ipc-contracts/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-logging/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-main/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-main/launch_section_app.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-main/library_bridge.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-preload/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-storage/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/core-testing/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-audiobook/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-book-reader/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-browser/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-comic-reader/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-library/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-torrent/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-torrent/register_ipc.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-torrent/service_bridge.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/feature-video/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/shared-media/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/shared-ui/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/packages/shared-workers/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload.js",
+      "purpose": "Root compatibility shim to legacy preload.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/index.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/_legacy.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/audiobooks.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/books.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/books_metadata.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/holy_grail.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/media.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/player.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/series.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/shell.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/video.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/web.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/preload/namespaces/window.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/video_scan_worker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/audiobook_scan_worker_impl.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/books_scan_worker_impl.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/library_scan_worker_impl.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/shared/fs_safe.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/shared/ids.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/shared/ignore.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "runtime/electron_legacy/workers/video_scan_worker_impl.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/build_windows_exe.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/download_mpv_windows.ps1",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/ensure_deps_windows.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/ensure_mpv_windows.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/ensure_torrent_deps.ps1",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "scripts/windows/install_and_run.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/audiobook_player_overlay.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/books_opds.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/listening_player.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/listening_shell.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/engine_epub.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/engine_foliate.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/engine_pdf.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/engine_txt.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_annotations.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_appearance.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_audiobook.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_audiobook_pairing.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_bookmarks.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_bus.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_dict.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_keyboard.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_nav.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_overlays.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_ruler.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_search.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_sidebar.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_standalone_boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/reader_toc.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/tts_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/tts_engine_edge.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/tts_engine_edge_direct.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/books/reader/tts_engine_webspeech.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/host_bridge_bootstrap.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/index.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/renderer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/styles.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/torrent-tab.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/browser_host/aspect_embed/torrent-tab.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/library/library.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/bitmaps.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/hud_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/input_keyboard.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/input_pointer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/mega_settings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/open.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/reader_view.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/render_core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/render_portrait.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/render_two_page.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/state_machine.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/reader/volume_nav_overlay.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/shell/core.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/shell/shell_bindings.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/build14_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/video.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/video_search.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/video/video_utils.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_contract.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_context_menu.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_downloads.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_find.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_hub.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_nav_omnibox.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_panels.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_standalone.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_tabs_state.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/domains/web/web_module_torrent_tab.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ebook_reader.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/services/api_gateway.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/services/health/monitor.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/state/app_section_boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/state/bootstrap.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/state/deferred_modules.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/state/mode_router.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/state/reader.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/audiobook-player.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/books-reader.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/comic-reader.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/overhaul.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/styles.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/theme-light.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/ui-bridge.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/ui-tokens.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/video-library-match.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/video-player.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/styles/web-browser.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ui/command_palette.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ui/control_adapters.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ui/icons.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ui/icons_sprite.svg",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/ui/shoelace_boot.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/LICENSE",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/comic-book.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/dict.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/epub.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/epubcfi.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/eslint.config.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/fb2.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/fixed-layout.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/footnotes.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/mobi.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/opds.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/overlayer.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/paginator.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/pdf.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/progress.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/quote-image.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/reader.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/rollup.config.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/search.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/text-walker.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/tts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/ui/menu.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/ui/tree.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/uri-template.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/fflate.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/annotation_layer_builder.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78ms-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/78ms-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/83pv-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90ms-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90ms-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90msp-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90msp-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90pv-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/90pv-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Add-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Add-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Add-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Add-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-0.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-1.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-3.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-4.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-5.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-6.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-CNS1-UCS2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-0.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-1.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-3.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-4.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-5.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-GB1-UCS2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-0.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-1.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-3.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-4.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-5.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-6.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Japan1-UCS2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Korea1-0.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Korea1-1.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Korea1-2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Adobe-Korea1-UCS2.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/B5pc-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/B5pc-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS1-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS1-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS2-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/CNS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETHK-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETHK-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETen-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETen-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETenms-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/ETenms-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Ext-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Ext-RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Ext-RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Ext-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GB-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GB-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GB-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GB-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBK-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBK-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBK2K-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBK2K-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBKp-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBKp-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBT-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBT-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBT-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBT-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBTpc-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBTpc-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBpc-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/GBpc-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKdla-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKdla-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKdlb-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKdlb-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKgccs-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKgccs-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKm314-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKm314-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKm471-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKm471-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKscs-B5-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/HKscs-B5-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Hankaku.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Hiragana.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-Johab-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-Johab-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCms-UHC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCms-UHC-HW-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCms-UHC-HW-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCms-UHC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCpc-EUC-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/KSCpc-EUC-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Katakana.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/LICENSE",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/NWP-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/NWP-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/RKSJ-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/RKSJ-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/Roman.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UCS2-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UCS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF16-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF16-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF8-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniCNS-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UCS2-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UCS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF16-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF16-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF8-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniGB-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UCS2-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UCS2-HW-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UCS2-HW-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UCS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF16-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF16-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF8-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF16-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF16-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF8-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJIS2004-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISPro-UCS2-HW-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISPro-UCS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISPro-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISX0213-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISX0213-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISX02132004-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniJISX02132004-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UCS2-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UCS2-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF16-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF16-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF32-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF32-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF8-H.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/UniKS-UTF8-V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/V.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/cmaps/WP-Symbol.bcmap",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/pdf.mjs",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/pdf.mjs.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/pdf.worker.mjs",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/pdf.worker.mjs.map",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitDingbats.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitFixed.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitFixedBold.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitFixedBoldItalic.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitFixedItalic.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitSerif.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitSerifBold.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitSerifBoldItalic.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitSerifItalic.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/FoxitSymbol.pfb",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LICENSE_FOXIT",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LICENSE_LIBERATION",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LiberationSans-Bold.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LiberationSans-BoldItalic.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LiberationSans-Italic.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/standard_fonts/LiberationSans-Regular.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/pdfjs/text_layer_builder.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/vendor/zip.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/foliate/view.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/LICENSE",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/ReadiumCSS-after.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/ReadiumCSS-before.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/ReadiumCSS-default.css",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/AccessibleDfA-Bold.woff2",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/AccessibleDfA-Italic.woff2",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/AccessibleDfA-Regular.woff",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/AccessibleDfA-Regular.woff2",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/AccessibleDfA.otf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/LICENSE-AccessibleDfa",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/LICENSE-IaWriterDuospace.md",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/vendor/readiumcss/fonts/iAWriterDuospace-Regular.ttf",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "src/webview_popup_preload.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "start_butterfly.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "start_comic_reader.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/books_phase8_verify.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_nav_shortcut_audit.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_omni_build7_audit.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_parity_baseline.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_parity_checklist.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_parity_contract_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_stability_log_scan.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_tabs_polish_audit.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/browser_visual_qa_fixture.html",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/build_holy_grail.bat",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/css_usage_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/dead_export_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/doctor.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/enforce_feature_boundaries.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/fetch_tor.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/fixture_manifest.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/generate_agent_docs.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/impact_map.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/impact_map.rules.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/ipc_contract_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/ipc_scaffold.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/ipc_sync_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/release_prep.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/repo_map.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/section_definitions.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/section_smoke.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/section_test_harness.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/smoke_check.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/validate_holy_grail_artifacts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/validate_player_artifacts.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/verify_agent_docs.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/verify_maps.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/verify_renderer_load_order.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/verify_trace.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/visual-qa/browser_ui_compare.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tools/visual-qa/browser_ui_visual_qa.js",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "tsconfig.core.json",
+      "purpose": "Project file.",
+      "danger": "low"
+    },
+    {
+      "path": "types/tanko-contracts.d.ts",
+      "purpose": "Project file.",
+      "danger": "low"
+    }
+  ]
+}

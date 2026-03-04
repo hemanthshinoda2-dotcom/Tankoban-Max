@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -13,9 +13,9 @@ const files = [
   'src/domains/web/web_module_tabs_state.js',
   'src/domains/web/web_module_nav_omnibox.js',
   'src/domains/web/web_module_downloads.js',
-  'preload/namespaces/web.js',
-  'main/index.js',
-  'main/domains/webSources/index.js'
+  'runtime/electron_legacy/preload/namespaces/web.js',
+  'runtime/electron_legacy/main/index.js',
+  'runtime/electron_legacy/main/domains/webSources/index.js'
 ];
 
 const probes = [
@@ -25,15 +25,15 @@ const probes = [
   ['pinned_tabs', 'src/domains/web/web.js', /function\s+pinTab\s*\(/i],
   ['omnibox_scheme_sanitization', 'src/domains/web/web.js', /never pass through arbitrary schemes/i],
   ['omnibox_inline_autocomplete', 'src/domains/web/web.js', /Inline autocomplete ghost text/i],
-  ['download_progress_listener_preload', 'preload/namespaces/web.js', /WEB_DOWNLOAD_PROGRESS/i],
+  ['download_progress_listener_preload', 'runtime/electron_legacy/preload/namespaces/web.js', /WEB_DOWNLOAD_PROGRESS/i],
   ['download_progress_listener_renderer', 'src/domains/web/web.js', /onDownloadProgress\s*\(/i],
   ['clear_download_history_backend_call', 'src/domains/web/web.js', /api\.webSources\.clearDownloadHistory\(/i],
   ['webview_crash_detection', 'src/domains/web/web.js', /render-process-gone/i],
   ['webview_fail_load_handler', 'src/domains/web/web.js', /did-fail-load/i],
-  ['main_permission_request_handler', 'main/index.js', /setPermissionRequestHandler\s*\(/i],
-  ['main_permission_check_handler', 'main/index.js', /setPermissionCheckHandler\s*\(/i],
-  ['main_navigation_filter_will_navigate', 'main/index.js', /will-navigate/i],
-  ['main_navigation_filter_will_redirect', 'main/index.js', /will-redirect/i],
+  ['main_permission_request_handler', 'runtime/electron_legacy/main/index.js', /setPermissionRequestHandler\s*\(/i],
+  ['main_permission_check_handler', 'runtime/electron_legacy/main/index.js', /setPermissionCheckHandler\s*\(/i],
+  ['main_navigation_filter_will_navigate', 'runtime/electron_legacy/main/index.js', /will-navigate/i],
+  ['main_navigation_filter_will_redirect', 'runtime/electron_legacy/main/index.js', /will-redirect/i],
 ];
 
 function read(rel) { return fs.readFileSync(path.join(root, rel)); }
@@ -74,3 +74,4 @@ lines.push('');
 
 fs.writeFileSync(outPath, lines.join('\n'), 'utf8');
 console.log(`Wrote ${path.relative(root, outPath)}`);
+

@@ -1,4 +1,4 @@
-// Tankoban Max - Phase 8 verifier
+﻿// Tankoban Max - Phase 8 verifier
 // Verifies Books release-readiness contracts that smoke_check.js does not fully cover.
 
 const fs = require('fs');
@@ -64,16 +64,16 @@ function extractObjectBlock(text, key) {
 }
 
 function assertBooksWiring() {
-  const sharedPath = 'shared/ipc.js';
+  const sharedPath = 'runtime/electron_legacy/shared/ipc.js';
   const registerFiles = [
-    'main/ipc/register/books.js',
-    'main/ipc/register/books_progress.js',
-    'main/ipc/register/books_settings.js',
-    'main/ipc/register/books_ui_state.js',
-    'main/ipc/register/books_bookmarks.js',
-    'main/ipc/register/books_tts_edge.js',
+    'runtime/electron_legacy/main/ipc/register/books.js',
+    'runtime/electron_legacy/main/ipc/register/books_progress.js',
+    'runtime/electron_legacy/main/ipc/register/books_settings.js',
+    'runtime/electron_legacy/main/ipc/register/books_ui_state.js',
+    'runtime/electron_legacy/main/ipc/register/books_bookmarks.js',
+    'runtime/electron_legacy/main/ipc/register/books_tts_edge.js',
   ];
-  const preloadPath = 'preload/index.js';
+  const preloadPath = 'runtime/electron_legacy/preload/index.js';
   const gatewayPath = 'src/services/api_gateway.js';
 
   const shared = readText(sharedPath);
@@ -83,7 +83,7 @@ function assertBooksWiring() {
 
   const channels = extractBooksChannels(shared);
   if (!channels.length) {
-    fail('No BOOKS_* channels found in shared/ipc.js');
+    fail('No BOOKS_* channels found in runtime/electron_legacy/shared/ipc.js');
     return;
   }
   ok(`Found ${channels.length} BOOKS_* channel constants`);
@@ -97,10 +97,10 @@ function assertBooksWiring() {
   }
 
   if (missingRegister.length) fail(`Missing register wiring for: ${missingRegister.join(', ')}`);
-  else ok('All BOOKS_* channels are wired in main/ipc/register/*.js');
+  else ok('All BOOKS_* channels are wired in runtime/electron_legacy/main/ipc/register/*.js');
 
   if (missingPreload.length) fail(`Missing preload wiring for: ${missingPreload.join(', ')}`);
-  else ok('All BOOKS_* channels are wired in preload/index.js');
+  else ok('All BOOKS_* channels are wired in runtime/electron_legacy/preload/index.js');
 
   const gatewayContract = {
     books: [
@@ -143,7 +143,7 @@ function assertBooksWiring() {
 
   // Event bridge checks.
   for (const eventName of ['BOOKS_UPDATED', 'BOOKS_SCAN_STATUS']) {
-    if (!shared.includes(eventName)) fail(`Missing event constant in shared/ipc.js: ${eventName}`);
+    if (!shared.includes(eventName)) fail(`Missing event constant in runtime/electron_legacy/shared/ipc.js: ${eventName}`);
     else ok(`Event constant present: ${eventName}`);
   }
   if (!preload.includes('onBooksUpdated') || !preload.includes('onBooksScanStatus')) {
@@ -159,7 +159,7 @@ function assertPackaging() {
   const files = (pkg.build && Array.isArray(pkg.build.files)) ? pkg.build.files : [];
   const fileAssoc = (pkg.build && Array.isArray(pkg.build.fileAssociations)) ? pkg.build.fileAssociations : [];
 
-  for (const rel of ['books_scan_worker.js', 'workers/**/*', 'main/**/*', 'src/**/*']) {
+  for (const rel of ['books_scan_worker.js', 'workers/**/*', 'runtime/electron_legacy/main/**/*', 'src/**/*']) {
     if (!files.includes(rel)) fail(`package.json build.files missing: ${rel}`);
     else ok(`package.json build.files includes: ${rel}`);
   }
@@ -201,15 +201,15 @@ function assertSmokeCoverage() {
 
 function main() {
   for (const rel of [
-    'shared/ipc.js',
-    'preload/index.js',
+    'runtime/electron_legacy/shared/ipc.js',
+    'runtime/electron_legacy/preload/index.js',
     'src/services/api_gateway.js',
-    'main/ipc/register/books.js',
-    'main/ipc/register/books_progress.js',
-    'main/ipc/register/books_settings.js',
-    'main/ipc/register/books_ui_state.js',
-    'main/ipc/register/books_bookmarks.js',
-    'main/ipc/register/books_tts_edge.js',
+    'runtime/electron_legacy/main/ipc/register/books.js',
+    'runtime/electron_legacy/main/ipc/register/books_progress.js',
+    'runtime/electron_legacy/main/ipc/register/books_settings.js',
+    'runtime/electron_legacy/main/ipc/register/books_ui_state.js',
+    'runtime/electron_legacy/main/ipc/register/books_bookmarks.js',
+    'runtime/electron_legacy/main/ipc/register/books_tts_edge.js',
     'tools/smoke_check.js',
     'package.json',
   ]) {
@@ -229,3 +229,5 @@ function main() {
 }
 
 main();
+
+
