@@ -157,6 +157,9 @@ class ComicReaderWidget(QWidget):
         self.bottom_hud.fit_clicked.connect(self._toggle_image_fit)
         self.bottom_hud.width_clicked.connect(self._cycle_portrait_width)
         self.bottom_hud.gap_changed.connect(self._on_hud_gap_changed)
+        self.bottom_hud.minimize_clicked.connect(self._on_hud_minimize)
+        self.bottom_hud.fullscreen_clicked.connect(self.toggle_fullscreen_window)
+        self.bottom_hud.close_clicked.connect(self._on_hud_close)
         self.manual_scroller.drag_progress.connect(self._on_manual_scroller_drag_progress)
 
         # Context menu: DefaultContextMenu so contextMenuEvent fires on right-click
@@ -1772,6 +1775,16 @@ class ComicReaderWidget(QWidget):
             win.showNormal()
         else:
             win.showFullScreen()
+
+    def _on_hud_minimize(self):
+        win = self.window()
+        if win is not None:
+            win.showMinimized()
+
+    def _on_hud_close(self):
+        win = self.window()
+        if win is not None:
+            win.close()
 
     def adjust_mangaplus_zoom(self, delta_pct: int):
         if not self.is_mangaplus_mode():

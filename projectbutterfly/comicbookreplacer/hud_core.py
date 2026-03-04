@@ -22,8 +22,8 @@ MODE_LABELS = {
 # Plain text symbols for HUD buttons (avoid Unicode emoji rendering on Windows)
 _SYM_BACK = "<"
 _SYM_PREV = "|<"
-_SYM_PLAY = ">"
-_SYM_PAUSE = "||"
+_SYM_PLAY = "\u25b6"   # ▶
+_SYM_PAUSE = "\u23f8"  # ⏸
 _SYM_NEXT = ">|"
 _SYM_PREV_VOL = "<<"
 _SYM_NEXT_VOL = ">>"
@@ -289,6 +289,9 @@ class BottomHud(QFrame):
     fit_clicked = Signal()
     width_clicked = Signal()
     gap_changed = Signal(int)
+    minimize_clicked = Signal()
+    fullscreen_clicked = Signal()
+    close_clicked = Signal()
     seek_preview = Signal(int)
     seek_commit = Signal(int)
     scrub_drag_changed = Signal(bool)
@@ -310,98 +313,80 @@ class BottomHud(QFrame):
               border: none;
               border-radius: 10px;
               padding: 6px 14px;
-              font-size: 20px;
+              font-size: 18px;
               font-weight: bold;
-              min-height: 32px;
+              min-height: 30px;
             }
             QPushButton.hudBtn:hover {
               background: rgba(255,255,255,30);
             }
             QPushButton.hudSmall {
-              color: #e0e0e0;
+              color: #b0b0b0;
               background: transparent;
               border: none;
-              border-radius: 9px;
-              padding: 5px 10px;
-              font-size: 18px;
+              border-radius: 8px;
+              padding: 4px 8px;
+              font-size: 14px;
               font-weight: bold;
-              min-height: 28px;
-              min-width: 28px;
+              min-height: 24px;
+              min-width: 24px;
             }
             QPushButton.hudSmall:hover {
               background: rgba(255,255,255,20);
               color: #ffffff;
             }
             QPushButton.hudSmall:disabled {
-              color: rgba(255,255,255,20);
+              color: rgba(255,255,255,15);
             }
             QLabel#pageText {
               color: #ffffff;
               background: transparent;
-              font-size: 16px;
+              font-size: 14px;
               font-weight: bold;
+              font-family: monospace;
             }
             """
         )
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(12, 8, 12, 10)
-        outer.setSpacing(8)
+        outer.setContentsMargins(12, 6, 12, 8)
+        outer.setSpacing(6)
+
+        # --- Scrub row: scrub bar + quick actions ---
+        scrub_row = QHBoxLayout()
+        scrub_row.setContentsMargins(0, 0, 0, 0)
+        scrub_row.setSpacing(6)
 
         self.slider = BookmarkScrubBar(self)
         self.slider.value_changed.connect(self._on_slider_value_changed)
         self.slider.slider_pressed.connect(self._on_slider_pressed)
         self.slider.slider_released.connect(self._on_slider_released)
-        outer.addWidget(self.slider, 0)
+        scrub_row.addWidget(self.slider, 1)
 
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(5)
-
-        self.prev_vol_btn = self._icon_btn(_SYM_PREV_VOL, "hudSmall", "Previous volume")
-        self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
-        row.addWidget(self.prev_vol_btn, 0)
-
-        self.prev_btn = self._icon_btn(_SYM_PREV, "hudBtn", "Previous page")
-        self.prev_btn.clicked.connect(self.prev_clicked.emit)
-        row.addWidget(self.prev_btn, 0)
-
-        self.play_btn = self._icon_btn(_SYM_PLAY, "hudBtn", "Play / Pause")
-        self.play_btn.clicked.connect(self.play_clicked.emit)
-        row.addWidget(self.play_btn, 0)
-
-        self.next_btn = self._icon_btn(_SYM_NEXT, "hudBtn", "Next page")
-        self.next_btn.clicked.connect(self.next_clicked.emit)
-        row.addWidget(self.next_btn, 0)
-
-        self.next_vol_btn = self._icon_btn(_SYM_NEXT_VOL, "hudSmall", "Next volume")
-        self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
-        row.addWidget(self.next_vol_btn, 0)
-
-        self.mode_btn = self._icon_btn(_SYM_MODE, "hudBtn", "Cycle mode")
+        # Quick actions next to scrub bar (matching original: modes, navigate, fit, width)
+        self.mode_btn = self._icon_btn("\u25eb", "hudSmall", "Modes")  # ◫
         self.mode_btn.clicked.connect(self.mode_clicked.emit)
-        row.addWidget(self.mode_btn, 0)
+        scrub_row.addWidget(self.mode_btn, 0)
 
-        # Quick action buttons
-        self.nav_btn = self._icon_btn("=", "hudSmall", "Volume navigator")
+        self.nav_btn = self._icon_btn("\u2261", "hudSmall", "Navigate volumes")  # ≡
         self.nav_btn.clicked.connect(self.navigate_clicked.emit)
-        row.addWidget(self.nav_btn, 0)
+        scrub_row.addWidget(self.nav_btn, 0)
 
-        self.fit_btn = self._icon_btn("[]", "hudSmall", "Toggle image fit")
+        self.fit_btn = self._icon_btn("\u2922", "hudSmall", "Image fit")  # ⤢
         self.fit_btn.clicked.connect(self.fit_clicked.emit)
-        row.addWidget(self.fit_btn, 0)
+        scrub_row.addWidget(self.fit_btn, 0)
 
-        self.width_btn = self._icon_btn("<>", "hudSmall", "Cycle portrait width")
+        self.width_btn = self._icon_btn("\u2194", "hudSmall", "Portrait width")  # ↔
         self.width_btn.clicked.connect(self.width_clicked.emit)
-        row.addWidget(self.width_btn, 0)
+        scrub_row.addWidget(self.width_btn, 0)
 
         # Row gap control (visible only in twoPageScroll mode)
         self._gap_widget = QWidget(self)
         gap_lay = QHBoxLayout(self._gap_widget)
         gap_lay.setContentsMargins(0, 0, 0, 0)
         gap_lay.setSpacing(2)
-        self._gap_dec = self._icon_btn("-", "hudSmall", "Decrease row gap")
+        self._gap_dec = self._icon_btn("\u2212", "hudSmall", "Decrease row gap")  # −
         self._gap_label = QLabel("16px", self)
-        self._gap_label.setStyleSheet("color: #ccc; font-size: 12px; background: transparent;")
+        self._gap_label.setStyleSheet("color: #999; font-size: 11px; background: transparent;")
         self._gap_inc = self._icon_btn("+", "hudSmall", "Increase row gap")
         self._gap_dec.clicked.connect(lambda: self.gap_changed.emit(-4))
         self._gap_inc.clicked.connect(lambda: self.gap_changed.emit(4))
@@ -409,15 +394,56 @@ class BottomHud(QFrame):
         gap_lay.addWidget(self._gap_label)
         gap_lay.addWidget(self._gap_inc)
         self._gap_widget.setVisible(False)
-        row.addWidget(self._gap_widget, 0)
+        scrub_row.addWidget(self._gap_widget, 0)
 
-        row.addStretch(1)
+        outer.addLayout(scrub_row)
 
-        self.page_text = QLabel("-", self)
+        # --- Controls row: left (prev/play/next/page) + right (prevVol/nextVol/min/fs/close) ---
+        controls_row = QHBoxLayout()
+        controls_row.setContentsMargins(0, 0, 0, 0)
+        controls_row.setSpacing(4)
+
+        # Left controls
+        self.prev_btn = self._icon_btn("\u27e8", "hudBtn", "Previous page")  # ⟨
+        self.prev_btn.clicked.connect(self.prev_clicked.emit)
+        controls_row.addWidget(self.prev_btn, 0)
+
+        self.play_btn = self._icon_btn("\u25b6", "hudBtn", "Play / Pause")  # ▶
+        self.play_btn.clicked.connect(self.play_clicked.emit)
+        controls_row.addWidget(self.play_btn, 0)
+
+        self.next_btn = self._icon_btn("\u27e9", "hudBtn", "Next page")  # ⟩
+        self.next_btn.clicked.connect(self.next_clicked.emit)
+        controls_row.addWidget(self.next_btn, 0)
+
+        self.page_text = QLabel("\u2014", self)  # —
         self.page_text.setObjectName("pageText")
-        row.addWidget(self.page_text, 0)
+        controls_row.addWidget(self.page_text, 0)
 
-        outer.addLayout(row)
+        controls_row.addStretch(1)
+
+        # Right controls
+        self.prev_vol_btn = self._icon_btn("\u2190", "hudSmall", "Previous volume")  # ←
+        self.prev_vol_btn.clicked.connect(self.prev_vol_clicked.emit)
+        controls_row.addWidget(self.prev_vol_btn, 0)
+
+        self.next_vol_btn = self._icon_btn("\u2192", "hudSmall", "Next volume")  # →
+        self.next_vol_btn.clicked.connect(self.next_vol_clicked.emit)
+        controls_row.addWidget(self.next_vol_btn, 0)
+
+        self.min_btn = self._icon_btn("_", "hudSmall", "Minimize")
+        self.min_btn.clicked.connect(self.minimize_clicked.emit)
+        controls_row.addWidget(self.min_btn, 0)
+
+        self.fs_btn = self._icon_btn("\u26f6", "hudSmall", "Fullscreen")  # ⛶
+        self.fs_btn.clicked.connect(self.fullscreen_clicked.emit)
+        controls_row.addWidget(self.fs_btn, 0)
+
+        self.close_btn = self._icon_btn("\u00d7", "hudSmall", "Close")  # ×
+        self.close_btn.clicked.connect(self.close_clicked.emit)
+        controls_row.addWidget(self.close_btn, 0)
+
+        outer.addLayout(controls_row)
 
     def _icon_btn(self, text: str, cls: str, tooltip: str) -> QPushButton:
         btn = QPushButton(text, self)
