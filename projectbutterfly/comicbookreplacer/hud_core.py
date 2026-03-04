@@ -505,11 +505,11 @@ class BottomHud(QFrame):
               background: transparent;
               border: none;
               border-radius: 8px;
-              padding: 4px 8px;
-              font-size: 14px;
+              padding: 6px 10px;
+              font-size: 20px;
               font-weight: bold;
-              min-height: 24px;
-              min-width: 24px;
+              min-height: 30px;
+              min-width: 30px;
             }
             QPushButton.hudSmall:hover {
               background: rgba(255,255,255,20);
