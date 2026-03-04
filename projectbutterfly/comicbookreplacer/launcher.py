@@ -25,12 +25,18 @@ def main():
     # Dark window background
     app.setStyle("Fusion")
 
+    # Default test comic — auto-launches without any user interaction
+    DEFAULT_TEST_COMIC = r"D:\Hemanth's Folder\Manga\One Piece Color\One Piece - Digital Colored Comics v001 (Just Kidding Productions).cbz"
+
     # Determine file to open
     file_path = None
     for arg in sys.argv[1:]:
         if os.path.isfile(arg) and arg.lower().endswith((".cbz", ".zip")):
             file_path = arg
             break
+
+    if file_path is None and os.path.isfile(DEFAULT_TEST_COMIC):
+        file_path = DEFAULT_TEST_COMIC
 
     if file_path is None:
         file_path, _ = QFileDialog.getOpenFileName(
