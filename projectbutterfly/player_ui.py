@@ -10,11 +10,11 @@ Architecture (matches run_player.py — NO full-covering overlay widget):
     ├── render_host (QWidget — native HWND, mpv renders here via wid)
     ├── TopStrip (title + minimize/fullscreen/close, raised above render_host)
     ├── BottomHUD (transport, scrubber, chips, raised above render_host)
-    ├── VolumeHUD (floating volume indicator)
-    ├── CenterFlash (play/pause/seek icon flash)
-    ├── ToastHUD (stacking notifications)
     ├── TracksDrawer (audio/subtitle selection + delays)
     └── PlaylistDrawer (episode list)
+    VolumeHUD   ← top-level Tool window (WindowStaysOnTopHint), floats above mpv
+    CenterFlash ← top-level Tool window (WindowStaysOnTopHint), floats above mpv
+    ToastHUD    ← manager; each toast label is its own top-level Tool window
 """
 
 import os
@@ -247,12 +247,20 @@ class ChipButton(QPushButton):
 # ════════════════════════════════════════════════════════════════════════
 
 class VolumeHUD(QWidget):
-    """Animated volume indicator overlay."""
+    """Animated volume indicator overlay — top-level transparent window."""
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    def __init__(self, container):
+        # No Qt parent: this is a top-level tool window so it floats above
+        # the native mpv HWND regardless of D3D11/OpenGL rendering.
+        super().__init__(None)
+        self._container = container
+        self.setWindowFlags(
+            Qt.WindowType.Tool |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 10, 14, 10)
@@ -260,7 +268,7 @@ class VolumeHUD(QWidget):
 
         self.symbol_label = QLabel("\u25d5")
         self.symbol_label.setStyleSheet(
-            "font-size: 18px; color: rgba(255,255,255,0.95);"
+            "font-size: 18px; color: rgba(255,255,255,0.95); background: transparent;"
         )
         layout.addWidget(self.symbol_label)
 
@@ -275,12 +283,12 @@ class VolumeHUD(QWidget):
 
         self.percent_label = QLabel("100%")
         self.percent_label.setStyleSheet(
-            "font-size: 13px; font-weight: bold; color: rgba(255,255,255,0.95);"
+            "font-size: 13px; font-weight: bold; color: rgba(255,255,255,0.95); background: transparent;"
         )
         layout.addWidget(self.percent_label)
 
         self.setStyleSheet("""
-            QWidget {
+            VolumeHUD {
                 background: rgba(0, 0, 0, 0.68);
                 border-radius: 4px;
                 border: 2px solid rgba(255, 255, 255, 0.35);
@@ -318,10 +326,12 @@ class VolumeHUD(QWidget):
         else:
             self.symbol_label.setText("\u25d5")
 
-        parent = self.parent()
-        if parent:
+        c = self._container
+        if c:
             self.adjustSize()
-            self.move((parent.width() - self.width()) // 2, parent.height() // 3)
+            g = c.mapToGlobal(QPoint(0, 0))
+            self.move(g.x() + (c.width() - self.width()) // 2,
+                      g.y() + c.height() // 3)
 
         self.show()
         self.raise_()
@@ -346,12 +356,18 @@ class VolumeHUD(QWidget):
 # ════════════════════════════════════════════════════════════════════════
 
 class CenterFlash(QWidget):
-    """Large icon flash in the center (play/pause/seek feedback)."""
+    """Large icon flash in the center — top-level transparent window."""
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    def __init__(self, container):
+        super().__init__(None)
+        self._container = container
+        self.setWindowFlags(
+            Qt.WindowType.Tool |
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint
+        )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self.label = QLabel("\u25b6", self)
         self.label.setStyleSheet("""
@@ -378,12 +394,13 @@ class CenterFlash(QWidget):
         try:
             self.label.setText(icon)
             self.label.adjustSize()
-            parent = self.parent()
-            if parent:
+            c = self._container
+            if c:
                 self.resize(self.label.size())
+                g = c.mapToGlobal(QPoint(0, 0))
                 self.move(
-                    (parent.width() - self.width()) // 2,
-                    (parent.height() - self.height()) // 2,
+                    g.x() + (c.width() - self.width()) // 2,
+                    g.y() + (c.height() - self.height()) // 2,
                 )
             self.show()
             self.raise_()
@@ -412,18 +429,23 @@ class CenterFlash(QWidget):
 # ════════════════════════════════════════════════════════════════════════
 
 class ToastHUD(QWidget):
-    """Stacking toast notification overlay."""
+    """Stacking toast notification overlay — each label is a top-level window."""
 
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+    def __init__(self, container):
+        super().__init__(None)
+        self._container = container
         self._toasts = []
-        self.hide()
 
     def show_toast(self, text, duration_ms=2000):
         try:
-            lbl = QLabel(text, self.parent())
+            lbl = QLabel(text)
+            lbl.setWindowFlags(
+                Qt.WindowType.Tool |
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.WindowStaysOnTopHint
+            )
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             lbl.setStyleSheet("""
                 background: rgba(10, 10, 10, 0.82);
                 color: rgba(255, 255, 255, 0.95);
@@ -434,10 +456,11 @@ class ToastHUD(QWidget):
             """)
             lbl.adjustSize()
 
-            parent = self.parent()
-            if parent:
-                x = parent.width() - lbl.width() - 20
-                y = 60 + len(self._toasts) * 40
+            c = self._container
+            if c:
+                g = c.mapToGlobal(QPoint(0, 0))
+                x = g.x() + c.width() - lbl.width() - 20
+                y = g.y() + 60 + len(self._toasts) * 40
                 lbl.move(x, y)
 
             lbl.show()
@@ -1067,14 +1090,13 @@ class MpvContainer(QWidget):
         # ── Control widgets (direct children, positioned absolutely) ────
         self.top_strip = TopStrip(self)
         self.bottom_hud = BottomHUD(self)
-        # Overlay widgets are children of render_host (the native HWND), not of
-        # MpvContainer.  On Windows, alien Qt widgets cannot paint above a native
-        # child HWND sibling.  By parenting overlays to render_host they become
-        # native HWNDs inside it and raise_() correctly puts them above mpv's
-        # own rendering surface.
-        self.volume_hud = VolumeHUD(self.render_host)
-        self.center_flash = CenterFlash(self.render_host)
-        self.toast = ToastHUD(self.render_host)
+        # Overlay widgets are top-level tool windows (not child widgets).
+        # Child widgets — even native HWNDs — are not reliably composited above
+        # mpv's D3D11 rendering surface.  Top-level Tool windows with
+        # WindowStaysOnTopHint float above everything.
+        self.volume_hud = VolumeHUD(self)
+        self.center_flash = CenterFlash(self)
+        self.toast = ToastHUD(self)
         self.tracks_drawer = TracksDrawer(self)
         self.playlist_drawer = PlaylistDrawer(self)
 
@@ -1157,10 +1179,7 @@ class MpvContainer(QWidget):
         self.tracks_drawer.raise_()
         self.playlist_drawer.setGeometry(w - 320, 40, 320, h - 130)
         self.playlist_drawer.raise_()
-        # Raise transient overlays above the native render_host HWND
-        self.volume_hud.raise_()
-        self.center_flash.raise_()
-        self.toast.raise_()
+        # volume_hud, center_flash, toast are top-level windows — no raise needed
 
     # ── overlay / drawer helpers (matches run_player.py) ────────────────
 

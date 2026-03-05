@@ -5962,9 +5962,9 @@
       },
       torrentSearch: { provider: provider },
       torrent: {
-        backendMode: String(torrent.backendMode || src.torrentBackendMode || 'qbit').trim().toLowerCase() || 'qbit',
+        backendMode: String(torrent.backendMode || src.torrentBackendMode || 'sidecar').trim().toLowerCase() || 'sidecar',
         sidecar: {
-          enabled: !!torrentSidecar.enabled,
+          enabled: torrentSidecar.enabled !== false,
           port: Number(torrentSidecar.port || 8765) || 8765
         },
         search: {

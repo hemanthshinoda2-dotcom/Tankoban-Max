@@ -7802,6 +7802,8 @@ class WebTorrentBridge(QObject):
         super().__init__(parent)
         self._qbit_mgr = None         # QBitProcessManager (lazy)
         self._qbit = None             # QBitClient (lazy)
+        self._sidecar_mgr = None      # TorrentSidecarManager (lazy)
+        self._sidecar = None          # WebTorrentSidecarClient (lazy)
         self._active = {}             # id -> { info_hash, entry, ... }
         self._pending = {}            # resolveId -> { info_hash, info }
         self._id_to_hash = {}         # wtr_xxx -> qBit info hash
@@ -7900,8 +7902,87 @@ class WebTorrentBridge(QObject):
             return "seeding"
         return "downloading"
 
-    def _ensure_qbit(self):
+    def _read_torrent_backend_config(self):
+        cfg = {
+            "backendMode": "sidecar",
+            "allowQbitFallback": False,
+            "sidecar": {"enabled": True, "port": 8765},
+        }
+        try:
+            path = storage.data_path("web_browser_settings.json")
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            settings = raw.get("settings") if isinstance(raw, dict) and isinstance(raw.get("settings"), dict) else raw
+            if isinstance(settings, dict):
+                torrent_cfg = settings.get("torrent")
+                if isinstance(torrent_cfg, dict):
+                    mode = str(torrent_cfg.get("backendMode", "") or "").strip().lower()
+                    if mode in ("sidecar", "qbit"):
+                        cfg["backendMode"] = mode
+                    cfg["allowQbitFallback"] = bool(torrent_cfg.get("allowQbitFallback", False))
+                    sidecar_cfg = torrent_cfg.get("sidecar")
+                    if isinstance(sidecar_cfg, dict):
+                        merged = dict(cfg["sidecar"])
+                        merged.update(sidecar_cfg)
+                        cfg["sidecar"] = merged
+        except Exception:
+            pass
+        # Product default: sidecar-only path unless explicitly allowed for debug.
+        allow_qbit_mode = str(os.environ.get("TANKO_TORRENT_ALLOW_QBIT", "")).strip() == "1"
+        if not allow_qbit_mode and cfg.get("backendMode") == "qbit":
+            cfg["backendMode"] = "sidecar"
+            cfg["allowQbitFallback"] = False
+        return cfg
+
+    def _ensure_sidecar(self):
+        if self._sidecar is not None:
+            try:
+                if self._sidecar.app_version():
+                    return self._sidecar
+            except Exception:
+                pass
+            self._sidecar = None
+
+        cfg = self._read_torrent_backend_config()
+        sidecar_cfg = cfg.get("sidecar") if isinstance(cfg.get("sidecar"), dict) else {}
+        if not bool(sidecar_cfg.get("enabled", True)):
+            return None
+
+        port = int(sidecar_cfg.get("port", 8765) or 8765)
+        if port < 1024 or port > 65535:
+            port = 8765
+        if self._sidecar_mgr is None or int(getattr(self._sidecar_mgr, "port", 0) or 0) != port:
+            from torrent_sidecar.manager import TorrentSidecarManager
+            self._sidecar_mgr = TorrentSidecarManager(port=port)
+
+        ok = self._sidecar_mgr.ensure_running(start_if_needed=True, timeout_ms=8000)
+        if not ok:
+            status = self._sidecar_mgr.get_status() if self._sidecar_mgr else {}
+            print("[WebTorrentBridge] sidecar failed to start: " + str(status.get("message", "")))
+            return None
+
+        from torrent_sidecar.client import WebTorrentSidecarClient
+        candidate = WebTorrentSidecarClient(self._sidecar_mgr.base_url)
+        if not candidate.app_version():
+            print("[WebTorrentBridge] sidecar health probe failed at " + str(self._sidecar_mgr.base_url))
+            return None
+
+        # If qBit manager exists from an old session, stop it so sidecar is exclusive.
+        if self._qbit_mgr:
+            try:
+                self._qbit_mgr.stop()
+            except Exception:
+                pass
+            self._qbit_mgr = None
+
+        self._sidecar = candidate
+        self._qbit = candidate
+        return self._sidecar
+
+    def _ensure_qbit_native(self):
         """Lazy-start qBittorrent process and create API client."""
+        if self._qbit is not None and self._qbit.__class__.__name__ == "WebTorrentSidecarClient":
+            self._qbit = None
         if self._qbit is not None:
             try:
                 if self._qbit.app_version():
@@ -7955,6 +8036,17 @@ class WebTorrentBridge(QObject):
 
         self._qbit = candidate
         return self._qbit
+
+    def _ensure_qbit(self):
+        cfg = self._read_torrent_backend_config()
+        mode = str(cfg.get("backendMode", "sidecar") or "sidecar").strip().lower()
+        if mode == "sidecar":
+            sidecar = self._ensure_sidecar()
+            if sidecar is not None:
+                return sidecar
+            if not bool(cfg.get("allowQbitFallback", False)):
+                return None
+        return self._ensure_qbit_native()
 
     def _start_poll(self):
         if self._poll_thread and self._poll_thread.is_alive():
@@ -9629,6 +9721,12 @@ class WebTorrentBridge(QObject):
                 self._qbit_mgr.stop()
             except Exception:
                 pass
+        if self._sidecar_mgr:
+            try:
+                self._sidecar_mgr.stop()
+            except Exception:
+                pass
+        self._sidecar = None
         self._qbit = None
 
 

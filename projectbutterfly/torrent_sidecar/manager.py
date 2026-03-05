@@ -1,16 +1,14 @@
-﻿"""Torrent sidecar manager (Phase 2 scaffold).
+﻿"""Torrent sidecar manager (Phase 2 runtime).
 
-This module intentionally keeps current runtime behavior unchanged.
-It provides a safe manager interface that can be wired into WebTorrentBridge
-once sidecar endpoints are fully implemented and packaged.
+Starts and monitors the local Node/WebTorrent sidecar used by WebTorrentBridge.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -47,7 +45,12 @@ class TorrentSidecarManager:
             with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
                 body = resp.read().decode("utf-8", errors="replace")
             data = json.loads(body)
-            return bool(isinstance(data, dict) and data.get("ok") is True)
+            if not isinstance(data, dict):
+                return False
+            if data.get("ok") is not True:
+                return False
+            # Sidecar must report ready=true; old Python scaffold uses ready=false.
+            return bool(data.get("ready") is True)
         except Exception:
             return False
 
@@ -61,19 +64,37 @@ class TorrentSidecarManager:
             return False
 
         if self._proc is None or self._proc.poll() is not None:
-            script_path = Path(__file__).with_name("service.py")
-            if not script_path.exists():
+            # Phase 2 runtime: Node/WebTorrent sidecar only.
+            node_bin = shutil.which("node") or shutil.which("node.exe")
+            node_script = Path(__file__).with_name("service_node.js")
+            args = None
+            if node_bin and node_script.exists():
+                data_dir = ""
+                try:
+                    import storage
+                    data_dir = storage.data_path("torrent_sidecar")
+                except Exception:
+                    data_dir = ""
+                args = [
+                    str(node_bin),
+                    str(node_script),
+                    "--host",
+                    self.host,
+                    "--port",
+                    str(self.port),
+                ]
+                if data_dir:
+                    args.extend(["--data-dir", data_dir])
+            elif not node_bin:
+                self._last_message = "node_not_found"
+                return False
+            elif not node_script.exists():
+                self._last_message = "service_node_missing"
+                return False
+            if not args:
                 self._last_message = "service_script_missing"
                 return False
 
-            args = [
-                sys.executable,
-                str(script_path),
-                "--host",
-                self.host,
-                "--port",
-                str(self.port),
-            ]
             creationflags = 0
             startupinfo = None
             if os.name == "nt":
@@ -102,7 +123,7 @@ class TorrentSidecarManager:
                 self._last_message = f"start_failed: {e}"
                 return False
 
-        deadline = time.time() + (max(500, int(timeout_ms or 2500)) / 1000.0)
+        deadline = time.time() + (max(1000, int(timeout_ms or 6000)) / 1000.0)
         while time.time() < deadline:
             if self._probe_health(timeout_sec=0.8):
                 self._last_message = "healthy"
@@ -135,3 +156,4 @@ class TorrentSidecarManager:
             message=str(self._last_message or ""),
             pid=pid,
         ).__dict__.copy()
+
